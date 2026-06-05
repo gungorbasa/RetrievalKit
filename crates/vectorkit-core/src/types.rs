@@ -81,6 +81,40 @@ pub struct SearchTrace {
     pub filter_matched: bool,
 }
 
+/// BM25 keyword search request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeywordQuery {
+    pub text: String,
+    pub top_k: usize,
+    pub filter: Option<Filter>,
+}
+
+impl KeywordQuery {
+    /// Creates a keyword search request without metadata filters.
+    pub fn new(text: impl Into<String>, top_k: usize) -> Self {
+        Self {
+            text: text.into(),
+            top_k,
+            filter: None,
+        }
+    }
+
+    /// Adds a metadata filter to the keyword search request.
+    pub fn with_filter(mut self, filter: Filter) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+}
+
+/// Single ranked BM25 search result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeywordHit {
+    pub chunk_id: ChunkId,
+    pub document_id: String,
+    pub score: f32,
+    pub matched_terms: Vec<String>,
+}
+
 /// Vector scoring mode used by exact search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VectorMetric {

@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
+use crate::bm25::{Bm25Config, Bm25Index};
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
 use crate::metadata::Metadata;
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, SearchHit, SearchQuery, SearchTrace, VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, KeywordHit, KeywordQuery, SearchHit, SearchQuery,
+    SearchTrace, VectorMetric,
 };
 
 #[derive(Debug, Clone)]
@@ -14,17 +16,28 @@ pub struct ExactVectorIndex {
     chunks: Vec<Chunk>,
     next_chunk_id: ChunkId,
     document_versions: BTreeMap<String, u64>,
+    bm25: Bm25Index,
 }
 
 impl ExactVectorIndex {
     /// Creates an empty exact vector index with a fixed embedding dimension.
     pub fn new(dimension: usize, metric: VectorMetric) -> Self {
+        Self::with_bm25_config(dimension, metric, Bm25Config::default())
+    }
+
+    /// Creates an empty exact vector index with custom BM25 settings.
+    pub fn with_bm25_config(
+        dimension: usize,
+        metric: VectorMetric,
+        bm25_config: Bm25Config,
+    ) -> Self {
         Self {
             dimension,
             metric,
             chunks: Vec::new(),
             next_chunk_id: 0,
             document_versions: BTreeMap::new(),
+            bm25: Bm25Index::new(bm25_config),
         }
     }
 
@@ -65,6 +78,8 @@ impl ExactVectorIndex {
             .entry(chunk.document_id.clone())
             .and_modify(|version| *version = (*version).max(chunk.version))
             .or_insert(chunk.version);
+        self.bm25
+            .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         self.chunks.push(chunk);
         Ok(())
     }
@@ -93,6 +108,7 @@ impl ExactVectorIndex {
         for chunk in &mut self.chunks {
             if chunk.document_id == document.id {
                 chunk.deleted = true;
+                self.bm25.deactivate_chunk(chunk.chunk_id);
             }
         }
 
@@ -100,6 +116,7 @@ impl ExactVectorIndex {
         for chunk_input in chunk_inputs {
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
+            self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
             self.chunks.push(Chunk {
                 chunk_id,
                 document_id: document.id.clone(),
@@ -125,6 +142,7 @@ impl ExactVectorIndex {
         for chunk in &mut self.chunks {
             if chunk.document_id == document_id && !chunk.deleted {
                 chunk.deleted = true;
+                self.bm25.deactivate_chunk(chunk.chunk_id);
                 deleted_count += 1;
             }
         }
@@ -174,6 +192,41 @@ impl ExactVectorIndex {
                 .then_with(|| left.chunk_id.cmp(&right.chunk_id))
         });
         hits.truncate(query.top_k);
+
+        Ok(hits)
+    }
+
+    /// Performs BM25 keyword search over active chunks.
+    pub fn keyword_search(&self, query: &KeywordQuery) -> Result<Vec<KeywordHit>> {
+        if query.top_k == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut hits = Vec::new();
+        for keyword_hit in self.bm25.search_all(&query.text) {
+            let Some(chunk) = self.chunk(keyword_hit.chunk_id) else {
+                continue;
+            };
+
+            if chunk.deleted {
+                continue;
+            }
+
+            if !matches_filter(query.filter.as_ref(), chunk)? {
+                continue;
+            }
+
+            hits.push(KeywordHit {
+                chunk_id: chunk.chunk_id,
+                document_id: chunk.document_id.clone(),
+                score: keyword_hit.score,
+                matched_terms: keyword_hit.matched_terms,
+            });
+
+            if hits.len() == query.top_k {
+                break;
+            }
+        }
 
         Ok(hits)
     }
@@ -350,6 +403,118 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn keyword_search_returns_bm25_hits_with_matched_terms() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("Swift local search", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("Rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .keyword_search(&KeywordQuery::new("swift search", 10))
+            .unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 0);
+        assert_eq!(hits[0].document_id, "doc-1");
+        assert_eq!(hits[0].matched_terms, vec!["search", "swift"]);
+        assert!(hits[0].score > 0.0);
+    }
+
+    #[test]
+    fn keyword_search_excludes_superseded_chunks() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("old codename alpha", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("new codename beta", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let alpha_hits = index
+            .keyword_search(&KeywordQuery::new("alpha", 10))
+            .unwrap();
+        let beta_hits = index
+            .keyword_search(&KeywordQuery::new("beta", 10))
+            .unwrap();
+
+        assert!(alpha_hits.is_empty());
+        assert_eq!(beta_hits.len(), 1);
+        assert_eq!(beta_hits[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn keyword_search_excludes_deleted_documents() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("private exact phrase", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        assert_eq!(index.delete_document("doc-1"), 1);
+
+        let hits = index
+            .keyword_search(&KeywordQuery::new("exact phrase", 10))
+            .unwrap();
+
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn keyword_search_applies_metadata_filters_before_top_k() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut notes_document = document("doc-1");
+        notes_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                notes_document,
+                vec![chunk_input("shared rare token", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let mut transcript_document = document("doc-2");
+        transcript_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index
+            .upsert_document(
+                transcript_document,
+                vec![chunk_input("shared rare token", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let query = KeywordQuery::new("shared token", 1).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("transcript".to_owned()),
+        });
+
+        let hits = index.keyword_search(&query).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].document_id, "doc-2");
     }
 
     #[test]

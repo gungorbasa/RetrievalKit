@@ -105,6 +105,8 @@ Wrappers should not reimplement retrieval logic. They should call the Rust core 
 - Prefer mature, well-maintained crates for serialization, error handling, testing, and benchmarking.
 - Do not add a dependency to avoid writing a small amount of straightforward code.
 - Do add a dependency when it materially improves correctness, safety, performance, or platform integration.
+- Performance-critical code may use external crates when they are mature, benchmarked, and likely faster or safer than local code.
+- Avoid custom implementations for complex performance-sensitive primitives when a proven crate exists; prefer local code for simple logic.
 - Avoid dependencies that make iOS/macOS packaging difficult unless the tradeoff is documented.
 
 ## Agent Workflow

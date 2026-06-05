@@ -1,12 +1,19 @@
+use std::collections::BTreeMap;
+
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
-use crate::types::{Chunk, ChunkId, SearchHit, SearchQuery, SearchTrace, VectorMetric};
+use crate::metadata::Metadata;
+use crate::types::{
+    Chunk, ChunkId, ChunkInput, Document, SearchHit, SearchQuery, SearchTrace, VectorMetric,
+};
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
     dimension: usize,
     metric: VectorMetric,
     chunks: Vec<Chunk>,
+    next_chunk_id: ChunkId,
+    document_versions: BTreeMap<String, u64>,
 }
 
 impl ExactVectorIndex {
@@ -15,6 +22,8 @@ impl ExactVectorIndex {
             dimension,
             metric,
             chunks: Vec::new(),
+            next_chunk_id: 0,
+            document_versions: BTreeMap::new(),
         }
     }
 
@@ -36,8 +45,66 @@ impl ExactVectorIndex {
 
     pub fn add_chunk(&mut self, chunk: Chunk) -> Result<()> {
         self.validate_dimension(chunk.embedding.len())?;
+        self.next_chunk_id = self.next_chunk_id.max(chunk.chunk_id.saturating_add(1));
+        self.document_versions
+            .entry(chunk.document_id.clone())
+            .and_modify(|version| *version = (*version).max(chunk.version))
+            .or_insert(chunk.version);
         self.chunks.push(chunk);
         Ok(())
+    }
+
+    pub fn upsert_document(
+        &mut self,
+        document: Document,
+        chunk_inputs: Vec<ChunkInput>,
+    ) -> Result<Vec<ChunkId>> {
+        for chunk in &chunk_inputs {
+            self.validate_dimension(chunk.embedding.len())?;
+        }
+
+        let version = self
+            .document_versions
+            .get(&document.id)
+            .copied()
+            .unwrap_or(0)
+            + 1;
+
+        for chunk in &mut self.chunks {
+            if chunk.document_id == document.id {
+                chunk.deleted = true;
+            }
+        }
+
+        let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
+        for chunk_input in chunk_inputs {
+            let chunk_id = self.allocate_chunk_id();
+            chunk_ids.push(chunk_id);
+            self.chunks.push(Chunk {
+                chunk_id,
+                document_id: document.id.clone(),
+                text: chunk_input.text,
+                embedding: chunk_input.embedding,
+                metadata: merge_metadata(&document.metadata, chunk_input.metadata),
+                deleted: false,
+                version,
+            });
+        }
+
+        self.document_versions.insert(document.id, version);
+
+        Ok(chunk_ids)
+    }
+
+    pub fn delete_document(&mut self, document_id: &str) -> usize {
+        let mut deleted_count = 0;
+        for chunk in &mut self.chunks {
+            if chunk.document_id == document_id && !chunk.deleted {
+                chunk.deleted = true;
+                deleted_count += 1;
+            }
+        }
+        deleted_count
     }
 
     pub fn chunk(&self, chunk_id: ChunkId) -> Option<&Chunk> {
@@ -95,6 +162,12 @@ impl ExactVectorIndex {
             })
         }
     }
+
+    fn allocate_chunk_id(&mut self) -> ChunkId {
+        let chunk_id = self.next_chunk_id;
+        self.next_chunk_id = self.next_chunk_id.saturating_add(1);
+        chunk_id
+    }
 }
 
 fn matches_filter(filter: Option<&Filter>, chunk: &Chunk) -> Result<bool> {
@@ -102,6 +175,12 @@ fn matches_filter(filter: Option<&Filter>, chunk: &Chunk) -> Result<bool> {
         Some(filter) => filter.matches(&chunk.metadata),
         None => Ok(true),
     }
+}
+
+fn merge_metadata(document_metadata: &Metadata, chunk_metadata: Metadata) -> Metadata {
+    let mut metadata = document_metadata.clone();
+    metadata.extend(chunk_metadata);
+    metadata
 }
 
 #[cfg(test)]
@@ -118,6 +197,22 @@ mod tests {
             metadata: Metadata::new(),
             deleted: false,
             version: 1,
+        }
+    }
+
+    fn document(document_id: &str) -> Document {
+        Document {
+            id: document_id.to_owned(),
+            text: format!("document {document_id}"),
+            metadata: Metadata::new(),
+        }
+    }
+
+    fn chunk_input(text: &str, embedding: Vec<f32>) -> ChunkInput {
+        ChunkInput {
+            text: text.to_owned(),
+            embedding,
+            metadata: Metadata::new(),
         }
     }
 
@@ -216,5 +311,127 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn upsert_document_assigns_internal_chunk_ids_and_version() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+
+        let chunk_ids = index
+            .upsert_document(
+                document("doc-1"),
+                vec![
+                    chunk_input("first", vec![1.0, 0.0]),
+                    chunk_input("second", vec![0.0, 1.0]),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(chunk_ids, vec![0, 1]);
+        assert_eq!(index.chunk(0).unwrap().version, 1);
+        assert_eq!(index.chunk(1).unwrap().version, 1);
+    }
+
+    #[test]
+    fn upsert_document_marks_old_chunks_deleted() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let old_chunk_ids = index
+            .upsert_document(document("doc-1"), vec![chunk_input("old", vec![1.0, 0.0])])
+            .unwrap();
+
+        let new_chunk_ids = index
+            .upsert_document(document("doc-1"), vec![chunk_input("new", vec![2.0, 0.0])])
+            .unwrap();
+
+        assert_eq!(old_chunk_ids, vec![0]);
+        assert_eq!(new_chunk_ids, vec![1]);
+        assert!(index.chunk(0).unwrap().deleted);
+        assert_eq!(index.chunk(1).unwrap().version, 2);
+
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn delete_document_removes_active_chunks_from_search() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![
+                    chunk_input("first", vec![1.0, 0.0]),
+                    chunk_input("second", vec![0.0, 1.0]),
+                ],
+            )
+            .unwrap();
+
+        let deleted_count = index.delete_document("doc-1");
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
+
+        assert_eq!(deleted_count, 2);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn upsert_document_validates_all_chunks_before_mutating_existing_document() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(document("doc-1"), vec![chunk_input("old", vec![1.0, 0.0])])
+            .unwrap();
+
+        let error = index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("invalid", vec![1.0, 0.0, 0.0])],
+            )
+            .unwrap_err();
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
+
+        assert_eq!(
+            error,
+            VectorKitError::InvalidDimension {
+                expected: 2,
+                actual: 3
+            }
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 0);
+        assert!(!index.chunk(0).unwrap().deleted);
+    }
+
+    #[test]
+    fn upsert_document_merges_document_and_chunk_metadata_for_filters() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut document = document("doc-1");
+        document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+
+        let mut chunk = chunk_input("first", vec![1.0, 0.0]);
+        chunk.metadata.insert(
+            "section".to_owned(),
+            MetadataValue::String("intro".to_owned()),
+        );
+
+        index.upsert_document(document, vec![chunk]).unwrap();
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::All(vec![
+            Filter::Equals {
+                field: "source".to_owned(),
+                value: MetadataValue::String("notes".to_owned()),
+            },
+            Filter::Equals {
+                field: "section".to_owned(),
+                value: MetadataValue::String("intro".to_owned()),
+            },
+        ]));
+
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 0);
     }
 }

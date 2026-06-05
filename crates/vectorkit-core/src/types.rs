@@ -22,6 +22,13 @@ pub struct Chunk {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ChunkInput {
+    pub text: String,
+    pub embedding: Vec<f32>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SearchQuery {
     pub embedding: Vec<f32>,
     pub top_k: usize,

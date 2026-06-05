@@ -69,10 +69,17 @@ pub(crate) enum EncodedQuery {
 }
 
 pub(crate) fn encode_query(encoding: VectorEncoding, embedding: &[f32]) -> Result<EncodedQuery> {
+    encode_query_owned(encoding, embedding.to_vec())
+}
+
+pub(crate) fn encode_query_owned(
+    encoding: VectorEncoding,
+    embedding: Vec<f32>,
+) -> Result<EncodedQuery> {
     match encoding {
-        VectorEncoding::F32 => Ok(EncodedQuery::F32(embedding.to_vec())),
-        VectorEncoding::F16 => Ok(EncodedQuery::F16(encode_f16(embedding))),
-        VectorEncoding::BF16 => Ok(EncodedQuery::BF16(encode_bf16(embedding))),
+        VectorEncoding::F32 => Ok(EncodedQuery::F32(embedding)),
+        VectorEncoding::F16 => Ok(EncodedQuery::F16(encode_f16(&embedding))),
+        VectorEncoding::BF16 => Ok(EncodedQuery::BF16(encode_bf16(&embedding))),
         VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
             Err(VectorKitError::UnsupportedVectorEncoding {
                 encoding: encoding.as_str().to_owned(),
@@ -89,7 +96,7 @@ pub(crate) fn score(metric: VectorMetric, query: &[f32], chunk: &[f32]) -> f32 {
 fn score_f32(metric: VectorMetric, query: &[f32], chunk: &[f32]) -> f32 {
     match metric {
         VectorMetric::DotProduct => simd_dot_product(query, chunk),
-        VectorMetric::Cosine => simd_cosine_similarity(query, chunk),
+        VectorMetric::Cosine => simd_dot_product(query, chunk),
     }
 }
 
@@ -99,8 +106,8 @@ fn score_f16(metric: VectorMetric, query: &[f16], chunk: &[f16]) -> f32 {
             .map(|distance| distance as f32)
             .filter(|score| score.is_finite())
             .unwrap_or(0.0),
-        VectorMetric::Cosine => <f16 as SpatialSimilarity>::cos(query, chunk)
-            .map(|distance| 1.0 - distance as f32)
+        VectorMetric::Cosine => <f16 as SpatialSimilarity>::dot(query, chunk)
+            .map(|distance| distance as f32)
             .filter(|score| score.is_finite())
             .unwrap_or(0.0),
     }
@@ -112,8 +119,8 @@ fn score_bf16(metric: VectorMetric, query: &[bf16], chunk: &[bf16]) -> f32 {
             .map(|distance| distance as f32)
             .filter(|score| score.is_finite())
             .unwrap_or(0.0),
-        VectorMetric::Cosine => <bf16 as SpatialSimilarity>::cos(query, chunk)
-            .map(|distance| 1.0 - distance as f32)
+        VectorMetric::Cosine => <bf16 as SpatialSimilarity>::dot(query, chunk)
+            .map(|distance| distance as f32)
             .filter(|score| score.is_finite())
             .unwrap_or(0.0),
     }
@@ -134,11 +141,16 @@ fn simd_dot_product(query: &[f32], chunk: &[f32]) -> f32 {
         .unwrap_or_else(|| scalar_dot_product(query, chunk))
 }
 
-fn simd_cosine_similarity(query: &[f32], chunk: &[f32]) -> f32 {
-    <f32 as SpatialSimilarity>::cos(query, chunk)
-        .map(|distance| 1.0 - distance as f32)
-        .filter(|score| score.is_finite())
-        .unwrap_or_else(|| scalar_cosine_similarity(query, chunk))
+pub(crate) fn normalize(vector: &mut [f32]) {
+    let squared_norm = scalar_dot_product(vector, vector);
+    if squared_norm == 0.0 {
+        return;
+    }
+
+    let inverse_norm = squared_norm.sqrt().recip();
+    for value in vector {
+        *value *= inverse_norm;
+    }
 }
 
 fn encode_f16(embedding: &[f32]) -> Vec<f16> {
@@ -162,6 +174,7 @@ fn scalar_dot_product(left: &[f32], right: &[f32]) -> f32 {
         .sum()
 }
 
+#[cfg(test)]
 fn scalar_cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
     let dot = scalar_dot_product(left, right);
     let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
@@ -197,12 +210,16 @@ mod tests {
     }
 
     #[test]
-    fn simsimd_cosine_matches_scalar_score() {
+    fn normalized_cosine_uses_dot_product_score() {
         let left = [1.0, 2.0, 3.0, 4.0];
         let right = [4.0, 3.0, 2.0, 1.0];
+        let mut normalized_left = left;
+        let mut normalized_right = right;
+        normalize(&mut normalized_left);
+        normalize(&mut normalized_right);
 
         assert_close(
-            score(VectorMetric::Cosine, &left, &right),
+            score(VectorMetric::Cosine, &normalized_left, &normalized_right),
             scalar_score(VectorMetric::Cosine, &left, &right),
         );
     }
@@ -216,8 +233,28 @@ mod tests {
     }
 
     #[test]
-    fn simsimd_cosine_falls_back_for_zero_vector() {
+    fn normalized_cosine_dot_score_returns_zero_for_zero_vector() {
         assert_eq!(score(VectorMetric::Cosine, &[0.0, 0.0], &[1.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn normalize_leaves_zero_vectors_unchanged() {
+        let mut vector = [0.0, 0.0];
+
+        normalize(&mut vector);
+
+        assert_eq!(vector, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn normalize_scales_vectors_to_unit_length() {
+        let mut vector = [3.0, 4.0];
+
+        normalize(&mut vector);
+
+        assert_close(scalar_dot_product(&vector, &vector), 1.0);
+        assert_close(vector[0], 0.6);
+        assert_close(vector[1], 0.8);
     }
 
     #[test]

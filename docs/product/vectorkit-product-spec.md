@@ -172,7 +172,8 @@ Rules:
 - `chunk_id` is an internal integer ID.
 - `document_id` is caller-owned.
 - All embeddings in one index must have the same dimension.
-- All vectors must be normalized if cosine similarity is configured.
+- If cosine similarity is configured, the index normalizes stored vectors on
+  insert and normalizes query vectors once before search.
 - Updates create a new version and mark old chunks inactive.
 - Deleted chunks must be filtered from every final result set.
 
@@ -326,7 +327,8 @@ Properties:
 
 Rules:
 
-- Store normalized vectors after conversion to `f16`.
+- Normalize source vectors before conversion to `f16`, then store the encoded
+  normalized values.
 - Benchmark recall against `F32` exact search.
 - Exact search over `f16` is exact relative to stored `f16`, not exact relative to original `f32`.
 
@@ -947,7 +949,7 @@ Expected fast path:
 
 ```text
 query embedding already available
-  -> normalized f32 query vector
+  -> normalize f32 query vector when metric is cosine
   -> planner chooses exact-all or exact-filtered
   -> exact vector scoring
   -> BM25 candidate retrieval when hybrid

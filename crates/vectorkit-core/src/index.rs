@@ -119,7 +119,7 @@ impl ExactVectorIndex {
         self.bm25
             .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         self.register_chunk_offset(chunk.chunk_id, self.chunks.len());
-        self.encoded_vectors.push(&chunk.embedding);
+        self.push_embedding(&chunk.embedding);
         self.chunks.push(StoredChunk {
             chunk_id: chunk.chunk_id,
             document_id: chunk.document_id,
@@ -165,7 +165,7 @@ impl ExactVectorIndex {
             chunk_ids.push(chunk_id);
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
             self.register_chunk_offset(chunk_id, self.chunks.len());
-            self.encoded_vectors.push(&chunk_input.embedding);
+            self.push_embedding(&chunk_input.embedding);
             self.chunks.push(StoredChunk {
                 chunk_id,
                 document_id: document.id.clone(),
@@ -213,7 +213,7 @@ impl ExactVectorIndex {
         if query.top_k == 0 {
             return Ok(Vec::new());
         }
-        let encoded_query = scoring::encode_query(self.vector_encoding, &query.embedding)?;
+        let encoded_query = self.encode_query_embedding(&query.embedding)?;
 
         let mut hits = Vec::with_capacity(query.top_k);
         for (offset, chunk) in self.chunks.iter().enumerate() {
@@ -314,6 +314,28 @@ impl ExactVectorIndex {
         }
         self.chunk_offsets[chunk_id] = Some(offset);
     }
+
+    fn push_embedding(&mut self, embedding: &[f32]) {
+        match self.metric {
+            VectorMetric::DotProduct => self.encoded_vectors.push(embedding),
+            VectorMetric::Cosine => {
+                let mut normalized = embedding.to_vec();
+                scoring::normalize(&mut normalized);
+                self.encoded_vectors.push(&normalized);
+            }
+        }
+    }
+
+    fn encode_query_embedding(&self, embedding: &[f32]) -> Result<scoring::EncodedQuery> {
+        match self.metric {
+            VectorMetric::DotProduct => scoring::encode_query(self.vector_encoding, embedding),
+            VectorMetric::Cosine => {
+                let mut normalized = embedding.to_vec();
+                scoring::normalize(&mut normalized);
+                scoring::encode_query_owned(self.vector_encoding, normalized)
+            }
+        }
+    }
 }
 
 fn matches_filter(filter: Option<&Filter>, chunk: &StoredChunk) -> Result<bool> {
@@ -400,6 +422,13 @@ mod tests {
             embedding,
             metadata: Metadata::new(),
         }
+    }
+
+    fn assert_close(left: f32, right: f32) {
+        assert!(
+            (left - right).abs() <= 1e-5,
+            "expected {left} to be close to {right}"
+        );
     }
 
     #[test]
@@ -565,19 +594,45 @@ mod tests {
     }
 
     #[test]
+    fn cosine_search_normalizes_stored_vectors_and_queries() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index.add_chunk(chunk(1, "doc-1", vec![10.0, 0.0])).unwrap();
+        index.add_chunk(chunk(2, "doc-2", vec![0.0, 2.0])).unwrap();
+
+        let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+        assert_close(hits[0].score, 1.0);
+    }
+
+    #[test]
+    fn dot_product_search_keeps_raw_vector_magnitudes() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index.add_chunk(chunk(1, "doc-1", vec![10.0, 0.0])).unwrap();
+
+        let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+        assert_close(hits[0].score, 50.0);
+    }
+
+    #[test]
     fn exact_search_scores_f16_encoded_vectors() {
         let mut index = ExactVectorIndex::try_with_config(
             IndexConfig::new(2, VectorMetric::Cosine).with_vector_encoding(VectorEncoding::F16),
         )
         .unwrap();
-        index.add_chunk(chunk(1, "doc-1", vec![1.0, 0.0])).unwrap();
-        index.add_chunk(chunk(2, "doc-2", vec![0.0, 1.0])).unwrap();
+        index.add_chunk(chunk(1, "doc-1", vec![10.0, 0.0])).unwrap();
+        index.add_chunk(chunk(2, "doc-2", vec![0.0, 2.0])).unwrap();
 
-        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 1)).unwrap();
+        let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
 
         assert_eq!(index.vector_encoding(), VectorEncoding::F16);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+        assert_close(hits[0].score, 1.0);
     }
 
     #[test]
@@ -586,14 +641,15 @@ mod tests {
             IndexConfig::new(2, VectorMetric::Cosine).with_vector_encoding(VectorEncoding::BF16),
         )
         .unwrap();
-        index.add_chunk(chunk(1, "doc-1", vec![1.0, 0.0])).unwrap();
-        index.add_chunk(chunk(2, "doc-2", vec![0.0, 1.0])).unwrap();
+        index.add_chunk(chunk(1, "doc-1", vec![10.0, 0.0])).unwrap();
+        index.add_chunk(chunk(2, "doc-2", vec![0.0, 2.0])).unwrap();
 
-        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 1)).unwrap();
+        let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
 
         assert_eq!(index.vector_encoding(), VectorEncoding::BF16);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+        assert_close(hits[0].score, 1.0);
     }
 
     #[test]

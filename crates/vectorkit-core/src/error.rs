@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 pub enum VectorKitError {
     InvalidDimension { expected: usize, actual: usize },
     InvalidRange { field: String },
+    UnsupportedVectorEncoding { encoding: String },
 }
 
 impl Display for VectorKitError {
@@ -18,6 +19,9 @@ impl Display for VectorKitError {
             }
             Self::InvalidRange { field } => {
                 write!(f, "invalid range filter for metadata field '{field}'")
+            }
+            Self::UnsupportedVectorEncoding { encoding } => {
+                write!(f, "unsupported vector encoding '{encoding}'")
             }
         }
     }

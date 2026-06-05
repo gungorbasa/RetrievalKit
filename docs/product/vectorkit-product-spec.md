@@ -277,7 +277,9 @@ Storage API:
 pub enum VectorEncoding {
     F32,
     F16,
+    BF16,
     I8ScalarQuantized,
+    BinaryQuantized,
 }
 ```
 
@@ -285,9 +287,13 @@ Recommended support order:
 
 1. `F32`
 2. `F16`
-3. `I8ScalarQuantized`
+3. `BF16`
+4. `I8ScalarQuantized`
+5. `BinaryQuantized`
 
-Do not implement product quantization, binary vectors, or int4 in V1 unless benchmarks prove they are required.
+Do not implement product quantization or int4 in V1 unless benchmarks prove they are required.
+
+`BinaryQuantized` means one bit per dimension. For example, a 768-dimensional embedding can be stored as 768 bits, or 96 bytes, before any metadata or alignment overhead. This is a size-constrained candidate retrieval format and must be benchmarked against `F32` exact search before becoming a default.
 
 #### F32 Encoding
 
@@ -693,7 +699,9 @@ Supported Swift storage options:
 enum VectorEncoding {
     case f32
     case f16
+    case bf16
     case i8ScalarQuantized(scope: QuantizationScope = .perVector)
+    case binaryQuantized
 }
 ```
 
@@ -991,7 +999,9 @@ Vector encodings:
 ```text
 F32
 F16
+BF16
 I8ScalarQuantized
+BinaryQuantized
 ```
 
 Metrics:

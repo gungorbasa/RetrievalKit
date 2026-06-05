@@ -115,6 +115,31 @@ pub struct KeywordHit {
     pub matched_terms: Vec<String>,
 }
 
+/// Configuration for an exact vector index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexConfig {
+    pub dimension: usize,
+    pub metric: VectorMetric,
+    pub vector_encoding: VectorEncoding,
+}
+
+impl IndexConfig {
+    /// Creates an index configuration using `F32` vector storage.
+    pub fn new(dimension: usize, metric: VectorMetric) -> Self {
+        Self {
+            dimension,
+            metric,
+            vector_encoding: VectorEncoding::F32,
+        }
+    }
+
+    /// Sets the stored vector representation.
+    pub fn with_vector_encoding(mut self, vector_encoding: VectorEncoding) -> Self {
+        self.vector_encoding = vector_encoding;
+        self
+    }
+}
+
 /// Vector scoring mode used by exact search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VectorMetric {
@@ -122,49 +147,29 @@ pub enum VectorMetric {
     Cosine,
 }
 
-impl VectorMetric {
-    pub(crate) fn score(self, query: &[f32], chunk: &[f32]) -> f32 {
+/// Stored vector representation used by an index.
+///
+/// Public callers can continue to provide `f32` embeddings while the index
+/// chooses a storage/scoring representation. `BinaryQuantized` represents the
+/// future 1-bit-per-dimension form, such as 768 bits for a 768-dimensional
+/// embedding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VectorEncoding {
+    F32,
+    F16,
+    BF16,
+    I8ScalarQuantized,
+    BinaryQuantized,
+}
+
+impl VectorEncoding {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
-            Self::DotProduct => dot_product(query, chunk),
-            Self::Cosine => cosine_similarity(query, chunk),
+            Self::F32 => "F32",
+            Self::F16 => "F16",
+            Self::BF16 => "BF16",
+            Self::I8ScalarQuantized => "I8ScalarQuantized",
+            Self::BinaryQuantized => "BinaryQuantized",
         }
-    }
-}
-
-fn dot_product(left: &[f32], right: &[f32]) -> f32 {
-    left.iter()
-        .zip(right)
-        .map(|(left, right)| left * right)
-        .sum()
-}
-
-fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
-    let dot = dot_product(left, right);
-    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
-    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
-
-    if left_norm == 0.0 || right_norm == 0.0 {
-        return 0.0;
-    }
-
-    dot / (left_norm * right_norm)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dot_product_scores_vectors() {
-        assert_eq!(
-            VectorMetric::DotProduct.score(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]),
-            32.0
-        );
-    }
-
-    #[test]
-    fn cosine_scores_vectors() {
-        assert_eq!(VectorMetric::Cosine.score(&[1.0, 0.0], &[1.0, 0.0]), 1.0);
-        assert_eq!(VectorMetric::Cosine.score(&[0.0, 0.0], &[1.0, 0.0]), 0.0);
     }
 }

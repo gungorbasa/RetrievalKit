@@ -17,6 +17,7 @@ pub struct ExactVectorIndex {
 }
 
 impl ExactVectorIndex {
+    /// Creates an empty exact vector index with a fixed embedding dimension.
     pub fn new(dimension: usize, metric: VectorMetric) -> Self {
         Self {
             dimension,
@@ -27,22 +28,36 @@ impl ExactVectorIndex {
         }
     }
 
+    /// Returns the required embedding dimension for indexed chunks and queries.
     pub fn dimension(&self) -> usize {
         self.dimension
     }
 
+    /// Returns the vector metric used for scoring.
     pub fn metric(&self) -> VectorMetric {
         self.metric
     }
 
+    /// Returns the total number of stored chunks, including tombstoned chunks.
     pub fn len(&self) -> usize {
         self.chunks.len()
     }
 
+    /// Returns true when no chunks have been stored.
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
+    /// Returns the number of chunks currently eligible for search results.
+    pub fn active_chunk_count(&self) -> usize {
+        self.chunks.iter().filter(|chunk| !chunk.deleted).count()
+    }
+
+    /// Adds a prebuilt chunk directly.
+    ///
+    /// Most callers should use `upsert_document` so VectorKit can assign
+    /// internal chunk IDs and enforce document version tombstones. This method
+    /// remains useful for tests and future persistence-loading paths.
     pub fn add_chunk(&mut self, chunk: Chunk) -> Result<()> {
         self.validate_dimension(chunk.embedding.len())?;
         self.next_chunk_id = self.next_chunk_id.max(chunk.chunk_id.saturating_add(1));
@@ -54,6 +69,11 @@ impl ExactVectorIndex {
         Ok(())
     }
 
+    /// Adds or replaces all chunks for a caller-owned document ID.
+    ///
+    /// Existing chunks for the document are tombstoned before new chunks are
+    /// appended. The returned `ChunkId` values are internal IDs assigned by the
+    /// index and are stable for those stored chunks.
     pub fn upsert_document(
         &mut self,
         document: Document,
@@ -96,6 +116,10 @@ impl ExactVectorIndex {
         Ok(chunk_ids)
     }
 
+    /// Tombstones all active chunks for a caller-owned document ID.
+    ///
+    /// Returns the number of chunks newly marked deleted. Repeated deletes are
+    /// idempotent and return zero once no active chunks remain.
     pub fn delete_document(&mut self, document_id: &str) -> usize {
         let mut deleted_count = 0;
         for chunk in &mut self.chunks {
@@ -107,10 +131,12 @@ impl ExactVectorIndex {
         deleted_count
     }
 
+    /// Returns a stored chunk by its internal ID.
     pub fn chunk(&self, chunk_id: ChunkId) -> Option<&Chunk> {
         self.chunks.iter().find(|chunk| chunk.chunk_id == chunk_id)
     }
 
+    /// Performs exact vector search over active chunks.
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
         self.validate_dimension(query.embedding.len())?;
 
@@ -268,6 +294,19 @@ mod tests {
     }
 
     #[test]
+    fn active_chunk_count_excludes_deleted_chunks() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index.add_chunk(chunk(1, "doc-1", vec![1.0, 0.0])).unwrap();
+
+        let mut deleted = chunk(2, "doc-2", vec![0.0, 1.0]);
+        deleted.deleted = true;
+        index.add_chunk(deleted).unwrap();
+
+        assert_eq!(index.len(), 2);
+        assert_eq!(index.active_chunk_count(), 1);
+    }
+
+    #[test]
     fn exact_search_is_deterministic_for_tied_scores() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         index
@@ -333,6 +372,21 @@ mod tests {
     }
 
     #[test]
+    fn manual_add_chunk_advances_next_internal_chunk_id() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index.add_chunk(chunk(10, "doc-1", vec![1.0, 0.0])).unwrap();
+
+        let chunk_ids = index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("first", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        assert_eq!(chunk_ids, vec![11]);
+    }
+
+    #[test]
     fn upsert_document_marks_old_chunks_deleted() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         let old_chunk_ids = index
@@ -355,6 +409,25 @@ mod tests {
     }
 
     #[test]
+    fn upsert_document_with_zero_chunks_tombstones_old_chunks() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(document("doc-1"), vec![chunk_input("old", vec![1.0, 0.0])])
+            .unwrap();
+
+        let new_chunk_ids = index
+            .upsert_document(document("doc-1"), Vec::new())
+            .unwrap();
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
+
+        assert!(new_chunk_ids.is_empty());
+        assert_eq!(index.len(), 1);
+        assert_eq!(index.active_chunk_count(), 0);
+        assert!(index.chunk(0).unwrap().deleted);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
     fn delete_document_removes_active_chunks_from_search() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         index
@@ -372,6 +445,24 @@ mod tests {
 
         assert_eq!(deleted_count, 2);
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn delete_document_is_idempotent_for_unknown_or_deleted_documents() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+
+        assert_eq!(index.delete_document("missing-doc"), 0);
+
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("first", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        assert_eq!(index.delete_document("doc-1"), 1);
+        assert_eq!(index.delete_document("doc-1"), 0);
+        assert_eq!(index.active_chunk_count(), 0);
     }
 
     #[test]
@@ -433,5 +524,30 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 0);
+    }
+
+    #[test]
+    fn chunk_metadata_overrides_document_metadata() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut document = document("doc-1");
+        document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("document".to_owned()),
+        );
+
+        let mut chunk = chunk_input("first", vec![1.0, 0.0]);
+        chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("chunk".to_owned()),
+        );
+
+        index.upsert_document(document, vec![chunk]).unwrap();
+
+        let hit_chunk = index.chunk(0).unwrap();
+
+        assert_eq!(
+            hit_chunk.metadata.get("source"),
+            Some(&MetadataValue::String("chunk".to_owned()))
+        );
     }
 }

@@ -3,6 +3,11 @@ use crate::metadata::Metadata;
 
 pub type ChunkId = u64;
 
+/// Caller-owned document data.
+///
+/// The `id` must be stable across app launches and is used for update,
+/// delete, and result grouping. VectorKit assigns internal `ChunkId` values,
+/// but it does not generate document IDs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub id: String,
@@ -10,6 +15,11 @@ pub struct Document {
     pub metadata: Metadata,
 }
 
+/// Stored retrievable unit with an internal numeric ID.
+///
+/// Chunks are the search result unit. Callers should usually provide
+/// `ChunkInput` values through `ExactVectorIndex::upsert_document` and let the
+/// index assign `chunk_id` values.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
     pub chunk_id: ChunkId,
@@ -21,6 +31,7 @@ pub struct Chunk {
     pub version: u64,
 }
 
+/// Caller-provided chunk data used when indexing or replacing a document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChunkInput {
     pub text: String,
@@ -28,6 +39,7 @@ pub struct ChunkInput {
     pub metadata: Metadata,
 }
 
+/// Exact vector search request.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchQuery {
     pub embedding: Vec<f32>,
@@ -36,6 +48,7 @@ pub struct SearchQuery {
 }
 
 impl SearchQuery {
+    /// Creates a vector search request without metadata filters.
     pub fn new(embedding: Vec<f32>, top_k: usize) -> Self {
         Self {
             embedding,
@@ -44,12 +57,14 @@ impl SearchQuery {
         }
     }
 
+    /// Adds a metadata filter to the search request.
     pub fn with_filter(mut self, filter: Filter) -> Self {
         self.filter = Some(filter);
         self
     }
 }
 
+/// Single ranked search result.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchHit {
     pub chunk_id: ChunkId,
@@ -58,6 +73,7 @@ pub struct SearchHit {
     pub trace: SearchTrace,
 }
 
+/// Debug data explaining why a chunk appeared in the result set.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchTrace {
     pub vector_score: f32,
@@ -65,6 +81,7 @@ pub struct SearchTrace {
     pub filter_matched: bool,
 }
 
+/// Vector scoring mode used by exact search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VectorMetric {
     DotProduct,

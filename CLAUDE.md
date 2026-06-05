@@ -1,0 +1,9 @@
+# CLAUDE.md
+
+This repository uses `AGENTS.md` as the canonical instruction file for all coding agents.
+
+Claude should read and follow the root `AGENTS.md` before making changes.
+
+For Rust changes, also read `docs/agents/rust.md`.
+
+If instructions conflict, prefer the user's latest explicit instruction, then `AGENTS.md`, then language-specific files.

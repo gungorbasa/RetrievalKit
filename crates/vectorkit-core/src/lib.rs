@@ -13,5 +13,5 @@ pub use index::ExactVectorIndex;
 pub use metadata::{Metadata, MetadataValue};
 pub use types::{
     Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
-    SearchQuery, SearchTrace, VectorEncoding, VectorMetric,
+    SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };

@@ -15,17 +15,33 @@ pub struct Document {
     pub metadata: Metadata,
 }
 
-/// Stored retrievable unit with an internal numeric ID.
+/// Caller-provided retrievable unit with an internal numeric ID.
 ///
 /// Chunks are the search result unit. Callers should usually provide
 /// `ChunkInput` values through `ExactVectorIndex::upsert_document` and let the
-/// index assign `chunk_id` values.
+/// index assign `chunk_id` values. The searchable index encodes `embedding`
+/// into its configured vector store and does not retain this source vector in
+/// hot chunk metadata.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
     pub chunk_id: ChunkId,
     pub document_id: String,
     pub text: String,
     pub embedding: Vec<f32>,
+    pub metadata: Metadata,
+    pub deleted: bool,
+    pub version: u64,
+}
+
+/// Indexed chunk metadata retained by the searchable index.
+///
+/// Vector values are stored separately in the encoded vector store. This keeps
+/// search metadata and display data separate from the hot vector layout.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredChunk {
+    pub chunk_id: ChunkId,
+    pub document_id: String,
+    pub text: String,
     pub metadata: Metadata,
     pub deleted: bool,
     pub version: u64,

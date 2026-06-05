@@ -180,7 +180,7 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("seed: {}", report.config.seed);
     println!("encoded_vector_mb: {:.3}", mib(report.encoded_vector_bytes));
     println!(
-        "source_embedding_mb: {:.3}",
+        "retained_source_f32_mb: {:.3}",
         mib(report.source_embedding_bytes)
     );
     println!(
@@ -201,7 +201,7 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | encoded MB | source f32 MB | total vec MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | encoded MB | retained f32 MB | total vec MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | hits | checksum |"
     );
     println!("|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 
@@ -470,8 +470,8 @@ fn encoded_vector_bytes(chunks: usize, dimension: usize, encoding: VectorEncodin
     chunks * dimension * encoded_bytes_per_value(encoding)
 }
 
-fn source_embedding_bytes(chunks: usize, dimension: usize) -> usize {
-    chunks * dimension * std::mem::size_of::<f32>()
+fn source_embedding_bytes(_chunks: usize, _dimension: usize) -> usize {
+    0
 }
 
 fn encoded_bytes_per_value(encoding: VectorEncoding) -> usize {
@@ -644,6 +644,6 @@ mod tests {
     fn estimates_vector_memory_by_encoding() {
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F32), 320);
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F16), 160);
-        assert_eq!(source_embedding_bytes(10, 8), 320);
+        assert_eq!(source_embedding_bytes(10, 8), 0);
     }
 }

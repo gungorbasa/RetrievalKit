@@ -8,7 +8,7 @@ use crate::metadata::Metadata;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
     Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
-    SearchQuery, SearchTrace, VectorEncoding, VectorMetric,
+    SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub struct ExactVectorIndex {
     dimension: usize,
     metric: VectorMetric,
     vector_encoding: VectorEncoding,
-    chunks: Vec<Chunk>,
+    chunks: Vec<StoredChunk>,
     encoded_vectors: EncodedVectorStore,
     chunk_offsets: Vec<Option<usize>>,
     next_chunk_id: ChunkId,
@@ -120,7 +120,14 @@ impl ExactVectorIndex {
             .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         self.register_chunk_offset(chunk.chunk_id, self.chunks.len());
         self.encoded_vectors.push(&chunk.embedding);
-        self.chunks.push(chunk);
+        self.chunks.push(StoredChunk {
+            chunk_id: chunk.chunk_id,
+            document_id: chunk.document_id,
+            text: chunk.text,
+            metadata: chunk.metadata,
+            deleted: chunk.deleted,
+            version: chunk.version,
+        });
         Ok(())
     }
 
@@ -159,11 +166,10 @@ impl ExactVectorIndex {
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
             self.register_chunk_offset(chunk_id, self.chunks.len());
             self.encoded_vectors.push(&chunk_input.embedding);
-            self.chunks.push(Chunk {
+            self.chunks.push(StoredChunk {
                 chunk_id,
                 document_id: document.id.clone(),
                 text: chunk_input.text,
-                embedding: chunk_input.embedding,
                 metadata: merge_metadata(&document.metadata, chunk_input.metadata),
                 deleted: false,
                 version,
@@ -192,7 +198,7 @@ impl ExactVectorIndex {
     }
 
     /// Returns a stored chunk by its internal ID.
-    pub fn chunk(&self, chunk_id: ChunkId) -> Option<&Chunk> {
+    pub fn chunk(&self, chunk_id: ChunkId) -> Option<&StoredChunk> {
         let offset = self
             .chunk_offsets
             .get(usize::try_from(chunk_id).ok()?)?
@@ -310,7 +316,7 @@ impl ExactVectorIndex {
     }
 }
 
-fn matches_filter(filter: Option<&Filter>, chunk: &Chunk) -> Result<bool> {
+fn matches_filter(filter: Option<&Filter>, chunk: &StoredChunk) -> Result<bool> {
     match filter {
         Some(filter) => filter.matches(&chunk.metadata),
         None => Ok(true),

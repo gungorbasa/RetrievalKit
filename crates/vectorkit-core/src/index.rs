@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::bm25::{Bm25Config, Bm25Index};
@@ -170,7 +171,7 @@ impl ExactVectorIndex {
             return Ok(Vec::new());
         }
 
-        let mut hits = Vec::new();
+        let mut hits = Vec::with_capacity(query.top_k);
         for chunk in &self.chunks {
             if chunk.deleted {
                 continue;
@@ -181,25 +182,23 @@ impl ExactVectorIndex {
             }
 
             let score = self.metric.score(&query.embedding, &chunk.embedding);
-            hits.push(SearchHit {
-                chunk_id: chunk.chunk_id,
-                document_id: chunk.document_id.clone(),
-                score,
-                trace: SearchTrace {
-                    vector_score: score,
-                    keyword_score: None,
-                    filter_matched: true,
+            push_bounded_hit(
+                &mut hits,
+                query.top_k,
+                SearchHit {
+                    chunk_id: chunk.chunk_id,
+                    document_id: chunk.document_id.clone(),
+                    score,
+                    trace: SearchTrace {
+                        vector_score: score,
+                        keyword_score: None,
+                        filter_matched: true,
+                    },
                 },
-            });
+            );
         }
 
-        hits.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
-                .then_with(|| left.chunk_id.cmp(&right.chunk_id))
-        });
-        hits.truncate(query.top_k);
+        sort_hits(&mut hits);
 
         Ok(hits)
     }
@@ -279,6 +278,46 @@ fn merge_metadata(document_metadata: &Metadata, chunk_metadata: Metadata) -> Met
     let mut metadata = document_metadata.clone();
     metadata.extend(chunk_metadata);
     metadata
+}
+
+fn push_bounded_hit(hits: &mut Vec<SearchHit>, top_k: usize, candidate: SearchHit) {
+    if hits.len() < top_k {
+        hits.push(candidate);
+        return;
+    }
+
+    let Some(worst_index) = worst_hit_index(hits) else {
+        return;
+    };
+
+    if hit_ranks_before(&candidate, &hits[worst_index]) {
+        hits[worst_index] = candidate;
+    }
+}
+
+fn worst_hit_index(hits: &[SearchHit]) -> Option<usize> {
+    let mut worst_index = 0;
+    for index in 1..hits.len() {
+        if hit_ranks_before(&hits[worst_index], &hits[index]) {
+            worst_index = index;
+        }
+    }
+    Some(worst_index)
+}
+
+fn sort_hits(hits: &mut [SearchHit]) {
+    hits.sort_by(compare_hits);
+}
+
+fn compare_hits(left: &SearchHit, right: &SearchHit) -> Ordering {
+    right
+        .score
+        .total_cmp(&left.score)
+        .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+}
+
+fn hit_ranks_before(left: &SearchHit, right: &SearchHit) -> bool {
+    compare_hits(left, right).is_lt()
 }
 
 #[cfg(test)]
@@ -397,6 +436,30 @@ mod tests {
     }
 
     #[test]
+    fn exact_search_keeps_bounded_top_k_with_stable_ordering() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .add_chunk(chunk(40, "doc-40", vec![4.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(10, "doc-10", vec![1.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(20, "doc-20", vec![4.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(30, "doc-30", vec![3.0, 0.0]))
+            .unwrap();
+
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 2)).unwrap();
+
+        assert_eq!(
+            hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
+            vec![20, 40]
+        );
+    }
+
+    #[test]
     fn exact_search_applies_metadata_filters() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         let mut notes_chunk = chunk(1, "doc-1", vec![1.0, 0.0]);
@@ -422,6 +485,34 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn exact_search_applies_metadata_filters_before_bounded_top_k() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut filtered_out = chunk(1, "doc-1", vec![10.0, 0.0]);
+        filtered_out.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index.add_chunk(filtered_out).unwrap();
+
+        let mut matching = chunk(2, "doc-2", vec![1.0, 0.0]);
+        matching.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index.add_chunk(matching).unwrap();
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 1).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("notes".to_owned()),
+        });
+
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 2);
     }
 
     #[test]

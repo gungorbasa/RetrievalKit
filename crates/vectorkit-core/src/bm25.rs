@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use crate::types::ChunkId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -202,9 +204,9 @@ fn inverse_document_frequency(active_count: usize, document_frequency: usize) ->
 }
 
 fn tokenize(text: &str, stop_words: &BTreeSet<String>) -> Vec<String> {
-    text.split(|character: char| !character.is_ascii_alphanumeric())
+    text.unicode_words()
         .filter_map(|token| {
-            let token = token.to_ascii_lowercase();
+            let token = token.to_lowercase();
             (!token.is_empty() && !stop_words.contains(&token)).then_some(token)
         })
         .collect()
@@ -265,5 +267,17 @@ mod tests {
         let hits = index.search_all("the");
 
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn bm25_tokenizer_keeps_unicode_words() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(1, "İstanbul'da hızlı arama", true);
+
+        let hits = index.search_all("hızlı arama");
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+        assert_eq!(hits[0].matched_terms, vec!["arama", "hızlı"]);
     }
 }

@@ -7,3 +7,4 @@ repository.workspace = true
 
 [dependencies]
 simsimd = "6.5.16"
+unicode-segmentation = "1.13.3"

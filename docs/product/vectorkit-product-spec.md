@@ -1144,6 +1144,16 @@ Success criteria:
 
 - You can answer whether exact search meets the target for 1K, 10K, 25K, and 50K chunks.
 
+### Deferred Optimization Decisions
+
+Decide these after the benchmark harness can measure latency, memory, and recall:
+
+- `I8ScalarQuantized` support: define quantization scope, score rescaling, recall gates, and reranking rules before implementation.
+- Faster BM25 maps/sets: evaluate `rustc-hash`, `hashbrown`, or another hasher against the current deterministic `BTreeMap`/`BTreeSet` implementation.
+- External BM25 engine: evaluate the `bm25` crate or Tantivy BM25/tokenizer stack only if benchmarks show the local BM25 implementation is a bottleneck or search quality needs language-aware stemming/normalization.
+
+Do not replace simple deterministic structures just because a faster crate exists. Use benchmark results to justify the dependency and keep final ranking deterministic.
+
 ### Milestone 4: Swift Wrapper
 
 Deliverables:

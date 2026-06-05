@@ -14,6 +14,7 @@ pub struct ExactVectorIndex {
     dimension: usize,
     metric: VectorMetric,
     chunks: Vec<Chunk>,
+    chunk_offsets: Vec<Option<usize>>,
     next_chunk_id: ChunkId,
     document_versions: BTreeMap<String, u64>,
     bm25: Bm25Index,
@@ -35,6 +36,7 @@ impl ExactVectorIndex {
             dimension,
             metric,
             chunks: Vec::new(),
+            chunk_offsets: Vec::new(),
             next_chunk_id: 0,
             document_versions: BTreeMap::new(),
             bm25: Bm25Index::new(bm25_config),
@@ -80,6 +82,7 @@ impl ExactVectorIndex {
             .or_insert(chunk.version);
         self.bm25
             .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
+        self.register_chunk_offset(chunk.chunk_id, self.chunks.len());
         self.chunks.push(chunk);
         Ok(())
     }
@@ -117,6 +120,7 @@ impl ExactVectorIndex {
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
+            self.register_chunk_offset(chunk_id, self.chunks.len());
             self.chunks.push(Chunk {
                 chunk_id,
                 document_id: document.id.clone(),
@@ -151,7 +155,11 @@ impl ExactVectorIndex {
 
     /// Returns a stored chunk by its internal ID.
     pub fn chunk(&self, chunk_id: ChunkId) -> Option<&Chunk> {
-        self.chunks.iter().find(|chunk| chunk.chunk_id == chunk_id)
+        let offset = self
+            .chunk_offsets
+            .get(usize::try_from(chunk_id).ok()?)?
+            .as_ref()?;
+        self.chunks.get(*offset)
     }
 
     /// Performs exact vector search over active chunks.
@@ -246,6 +254,17 @@ impl ExactVectorIndex {
         let chunk_id = self.next_chunk_id;
         self.next_chunk_id = self.next_chunk_id.saturating_add(1);
         chunk_id
+    }
+
+    fn register_chunk_offset(&mut self, chunk_id: ChunkId, offset: usize) {
+        let Some(chunk_id) = usize::try_from(chunk_id).ok() else {
+            return;
+        };
+
+        if self.chunk_offsets.len() <= chunk_id {
+            self.chunk_offsets.resize(chunk_id + 1, None);
+        }
+        self.chunk_offsets[chunk_id] = Some(offset);
     }
 }
 
@@ -534,6 +553,43 @@ mod tests {
         assert_eq!(chunk_ids, vec![0, 1]);
         assert_eq!(index.chunk(0).unwrap().version, 1);
         assert_eq!(index.chunk(1).unwrap().version, 1);
+    }
+
+    #[test]
+    fn chunk_lookup_returns_none_for_missing_internal_id() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index.add_chunk(chunk(10, "doc-1", vec![1.0, 0.0])).unwrap();
+
+        assert!(index.chunk(9).is_none());
+        assert!(index.chunk(11).is_none());
+    }
+
+    #[test]
+    fn chunk_lookup_supports_sparse_manual_chunk_ids() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index.add_chunk(chunk(10, "doc-1", vec![1.0, 0.0])).unwrap();
+
+        let found = index.chunk(10).unwrap();
+
+        assert_eq!(found.chunk_id, 10);
+        assert_eq!(found.document_id, "doc-1");
+    }
+
+    #[test]
+    fn chunk_lookup_returns_tombstoned_chunks_for_debug_access() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(document("doc-1"), vec![chunk_input("old", vec![1.0, 0.0])])
+            .unwrap();
+        index
+            .upsert_document(document("doc-1"), vec![chunk_input("new", vec![0.0, 1.0])])
+            .unwrap();
+
+        let old_chunk = index.chunk(0).unwrap();
+        let new_chunk = index.chunk(1).unwrap();
+
+        assert!(old_chunk.deleted);
+        assert!(!new_chunk.deleted);
     }
 
     #[test]

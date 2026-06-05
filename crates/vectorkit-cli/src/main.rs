@@ -109,6 +109,7 @@ impl Default for MatrixBenchConfig {
                 VectorEncoding::F32,
                 VectorEncoding::F16,
                 VectorEncoding::BF16,
+                VectorEncoding::I8ScalarQuantized,
             ],
             metric: VectorMetric::Cosine,
             seed: 42,
@@ -433,8 +434,9 @@ fn parse_encoding(value: &str) -> Result<VectorEncoding, CliError> {
         "f32" => Ok(VectorEncoding::F32),
         "f16" => Ok(VectorEncoding::F16),
         "bf16" => Ok(VectorEncoding::BF16),
+        "i8" | "i8-scalar" | "i8-scalar-quantized" => Ok(VectorEncoding::I8ScalarQuantized),
         _ => Err(CliError::InvalidArgument(format!(
-            "unsupported encoding '{value}', expected f32, f16, or bf16"
+            "unsupported encoding '{value}', expected f32, f16, bf16, or i8"
         ))),
     }
 }
@@ -468,6 +470,7 @@ fn metric_name(metric: VectorMetric) -> &'static str {
 
 fn encoded_vector_bytes(chunks: usize, dimension: usize, encoding: VectorEncoding) -> usize {
     chunks * dimension * encoded_bytes_per_value(encoding)
+        + chunks * encoded_sidecar_bytes_per_vector(encoding)
 }
 
 fn source_embedding_bytes(_chunks: usize, _dimension: usize) -> usize {
@@ -480,6 +483,16 @@ fn encoded_bytes_per_value(encoding: VectorEncoding) -> usize {
         VectorEncoding::F16 | VectorEncoding::BF16 => 2,
         VectorEncoding::I8ScalarQuantized => 1,
         VectorEncoding::BinaryQuantized => 0,
+    }
+}
+
+fn encoded_sidecar_bytes_per_vector(encoding: VectorEncoding) -> usize {
+    match encoding {
+        VectorEncoding::I8ScalarQuantized => std::mem::size_of::<f32>(),
+        VectorEncoding::F32
+        | VectorEncoding::F16
+        | VectorEncoding::BF16
+        | VectorEncoding::BinaryQuantized => 0,
     }
 }
 
@@ -502,7 +515,7 @@ impl CliError {
                 "  --dimension <n>    default 384",
                 "  --queries <n>      default 100",
                 "  --top-k <n>        default 10",
-                "  --encoding <kind>  f32, f16, or bf16; default f32",
+                "  --encoding <kind>  f32, f16, bf16, or i8; default f32",
                 "  --metric <kind>    cosine or dot; default cosine",
                 "  --seed <n>         default 42",
                 "",
@@ -511,7 +524,7 @@ impl CliError {
                 "  --dimensions <list>   comma list; default 384,768,1536",
                 "  --queries <n>         default 100",
                 "  --top-k <list>        comma list; default 5,10",
-                "  --encodings <list>    comma list of f32,f16,bf16; default f32,f16,bf16",
+                "  --encodings <list>    comma list of f32,f16,bf16,i8; default f32,f16,bf16,i8",
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
             ]
@@ -586,7 +599,7 @@ mod tests {
             "--top-k",
             "5",
             "--encoding",
-            "f16",
+            "i8",
             "--metric",
             "dot",
             "--seed",
@@ -600,7 +613,7 @@ mod tests {
         assert_eq!(config.dimension, 768);
         assert_eq!(config.queries, 50);
         assert_eq!(config.top_k, 5);
-        assert_eq!(config.encoding, VectorEncoding::F16);
+        assert_eq!(config.encoding, VectorEncoding::I8ScalarQuantized);
         assert_eq!(config.metric, VectorMetric::DotProduct);
         assert_eq!(config.seed, 7);
     }
@@ -625,7 +638,7 @@ mod tests {
             "--top-k",
             "5,10",
             "--encodings",
-            "f32,bf16",
+            "f32,i8",
         ]
         .map(str::to_owned);
 
@@ -636,7 +649,7 @@ mod tests {
         assert_eq!(config.top_ks, vec![5, 10]);
         assert_eq!(
             config.encodings,
-            vec![VectorEncoding::F32, VectorEncoding::BF16]
+            vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
         );
     }
 
@@ -644,6 +657,10 @@ mod tests {
     fn estimates_vector_memory_by_encoding() {
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F32), 320);
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F16), 160);
+        assert_eq!(
+            encoded_vector_bytes(10, 8, VectorEncoding::I8ScalarQuantized),
+            120
+        );
         assert_eq!(source_embedding_bytes(10, 8), 0);
     }
 }

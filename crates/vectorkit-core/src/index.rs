@@ -144,6 +144,8 @@ impl ExactVectorIndex {
         for chunk in &chunk_inputs {
             self.validate_dimension(chunk.embedding.len())?;
         }
+        self.encoded_vectors
+            .reserve_rows(chunk_inputs.len(), self.dimension);
 
         let version = self
             .document_versions
@@ -647,6 +649,24 @@ mod tests {
         let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
 
         assert_eq!(index.vector_encoding(), VectorEncoding::BF16);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+        assert_close(hits[0].score, 1.0);
+    }
+
+    #[test]
+    fn exact_search_scores_i8_scalar_quantized_vectors() {
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::Cosine)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        index.add_chunk(chunk(1, "doc-1", vec![10.0, 0.0])).unwrap();
+        index.add_chunk(chunk(2, "doc-2", vec![0.0, 2.0])).unwrap();
+
+        let hits = index.search(&SearchQuery::new(vec![5.0, 0.0], 1)).unwrap();
+
+        assert_eq!(index.vector_encoding(), VectorEncoding::I8ScalarQuantized);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
         assert_close(hits[0].score, 1.0);

@@ -8,6 +8,7 @@ pub(crate) enum EncodedVectorStore {
     F32(Vec<f32>),
     F16(Vec<f16>),
     BF16(Vec<bf16>),
+    I8ScalarQuantized { values: Vec<i8>, scales: Vec<f32> },
 }
 
 impl EncodedVectorStore {
@@ -16,10 +17,24 @@ impl EncodedVectorStore {
             VectorEncoding::F32 => Ok(Self::F32(Vec::new())),
             VectorEncoding::F16 => Ok(Self::F16(Vec::new())),
             VectorEncoding::BF16 => Ok(Self::BF16(Vec::new())),
-            VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
-                Err(VectorKitError::UnsupportedVectorEncoding {
-                    encoding: encoding.as_str().to_owned(),
-                })
+            VectorEncoding::I8ScalarQuantized => Ok(Self::I8ScalarQuantized {
+                values: Vec::new(),
+                scales: Vec::new(),
+            }),
+            VectorEncoding::BinaryQuantized => Err(VectorKitError::UnsupportedVectorEncoding {
+                encoding: encoding.as_str().to_owned(),
+            }),
+        }
+    }
+
+    pub fn reserve_rows(&mut self, rows: usize, dimension: usize) {
+        match self {
+            Self::F32(vectors) => vectors.reserve(rows.saturating_mul(dimension)),
+            Self::F16(vectors) => vectors.reserve(rows.saturating_mul(dimension)),
+            Self::BF16(vectors) => vectors.reserve(rows.saturating_mul(dimension)),
+            Self::I8ScalarQuantized { values, scales } => {
+                values.reserve(rows.saturating_mul(dimension));
+                scales.reserve(rows);
             }
         }
     }
@@ -32,6 +47,11 @@ impl EncodedVectorStore {
             }
             Self::BF16(vectors) => {
                 vectors.extend(embedding.iter().map(|&value| bf16::from_f32(value)));
+            }
+            Self::I8ScalarQuantized { values, scales } => {
+                let encoded = encode_i8_scalar_quantized(embedding);
+                values.extend_from_slice(&encoded.values);
+                scales.push(encoded.scale);
             }
         }
     }
@@ -56,6 +76,15 @@ impl EncodedVectorStore {
             (Self::BF16(vectors), EncodedQuery::BF16(query)) => vectors
                 .get(start..end)
                 .map(|chunk| score_bf16(metric, query, chunk)),
+            (
+                Self::I8ScalarQuantized { values, scales },
+                EncodedQuery::I8ScalarQuantized(query),
+            ) => values
+                .get(start..end)
+                .zip(scales.get(row))
+                .map(|(chunk, &chunk_scale)| {
+                    score_i8_scalar_quantized(metric, query, chunk, chunk_scale)
+                }),
             _ => None,
         }
     }
@@ -66,6 +95,13 @@ pub(crate) enum EncodedQuery {
     F32(Vec<f32>),
     F16(Vec<f16>),
     BF16(Vec<bf16>),
+    I8ScalarQuantized(ScalarQuantizedVector),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ScalarQuantizedVector {
+    values: Vec<i8>,
+    scale: f32,
 }
 
 pub(crate) fn encode_query(encoding: VectorEncoding, embedding: &[f32]) -> Result<EncodedQuery> {
@@ -80,11 +116,12 @@ pub(crate) fn encode_query_owned(
         VectorEncoding::F32 => Ok(EncodedQuery::F32(embedding)),
         VectorEncoding::F16 => Ok(EncodedQuery::F16(encode_f16(&embedding))),
         VectorEncoding::BF16 => Ok(EncodedQuery::BF16(encode_bf16(&embedding))),
-        VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
-            Err(VectorKitError::UnsupportedVectorEncoding {
-                encoding: encoding.as_str().to_owned(),
-            })
-        }
+        VectorEncoding::I8ScalarQuantized => Ok(EncodedQuery::I8ScalarQuantized(
+            encode_i8_scalar_quantized(&embedding),
+        )),
+        VectorEncoding::BinaryQuantized => Err(VectorKitError::UnsupportedVectorEncoding {
+            encoding: encoding.as_str().to_owned(),
+        }),
     }
 }
 
@@ -126,6 +163,15 @@ fn score_bf16(metric: VectorMetric, query: &[bf16], chunk: &[bf16]) -> f32 {
     }
 }
 
+fn score_i8_scalar_quantized(
+    _metric: VectorMetric,
+    query: &ScalarQuantizedVector,
+    chunk: &[i8],
+    chunk_scale: f32,
+) -> f32 {
+    simd_dot_product_i8(&query.values, chunk) * query.scale * chunk_scale
+}
+
 #[cfg(test)]
 pub(crate) fn scalar_score(metric: VectorMetric, query: &[f32], chunk: &[f32]) -> f32 {
     match metric {
@@ -139,6 +185,13 @@ fn simd_dot_product(query: &[f32], chunk: &[f32]) -> f32 {
         .map(|distance| distance as f32)
         .filter(|score| score.is_finite())
         .unwrap_or_else(|| scalar_dot_product(query, chunk))
+}
+
+fn simd_dot_product_i8(query: &[i8], chunk: &[i8]) -> f32 {
+    <i8 as SpatialSimilarity>::dot(query, chunk)
+        .map(|distance| distance as f32)
+        .filter(|score| score.is_finite())
+        .unwrap_or_else(|| scalar_dot_product_i8(query, chunk))
 }
 
 pub(crate) fn normalize(vector: &mut [f32]) {
@@ -167,10 +220,44 @@ fn encode_bf16(embedding: &[f32]) -> Vec<bf16> {
         .collect()
 }
 
+fn encode_i8_scalar_quantized(embedding: &[f32]) -> ScalarQuantizedVector {
+    let max_abs = embedding
+        .iter()
+        .map(|value| value.abs())
+        .fold(0.0, f32::max);
+
+    if max_abs == 0.0 {
+        return ScalarQuantizedVector {
+            values: vec![0; embedding.len()],
+            scale: 0.0,
+        };
+    }
+
+    let scale = max_abs / i8::MAX as f32;
+    let inverse_scale = scale.recip();
+    let values = embedding
+        .iter()
+        .map(|value| {
+            (value * inverse_scale)
+                .round()
+                .clamp(i8::MIN as f32, i8::MAX as f32) as i8
+        })
+        .collect();
+
+    ScalarQuantizedVector { values, scale }
+}
+
 fn scalar_dot_product(left: &[f32], right: &[f32]) -> f32 {
     left.iter()
         .zip(right)
         .map(|(left, right)| left * right)
+        .sum()
+}
+
+fn scalar_dot_product_i8(left: &[i8], right: &[i8]) -> f32 {
+    left.iter()
+        .zip(right)
+        .map(|(left, right)| *left as f32 * *right as f32)
         .sum()
 }
 
@@ -186,7 +273,6 @@ fn scalar_cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
 
     dot / (left_norm * right_norm)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,6 +366,55 @@ mod tests {
         assert_close(
             vectors
                 .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            1.0,
+        );
+    }
+
+    #[test]
+    fn i8_scalar_quantized_vectors_score_with_rescaled_dot_product() {
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::I8ScalarQuantized).unwrap();
+        vectors.push(&[1.0, 0.0]);
+        let query = encode_query(VectorEncoding::I8ScalarQuantized, &[1.0, 0.0]).unwrap();
+
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            1.0,
+        );
+    }
+
+    #[test]
+    fn i8_scalar_quantized_zero_vectors_score_zero() {
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::I8ScalarQuantized).unwrap();
+        vectors.push(&[0.0, 0.0]);
+        let query = encode_query(VectorEncoding::I8ScalarQuantized, &[1.0, 0.0]).unwrap();
+
+        assert_eq!(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            0.0
+        );
+    }
+
+    #[test]
+    fn i8_scalar_quantized_store_scores_rows_by_offset() {
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::I8ScalarQuantized).unwrap();
+        vectors.push(&[1.0, 0.0]);
+        vectors.push(&[0.0, 1.0]);
+        let query = encode_query(VectorEncoding::I8ScalarQuantized, &[0.0, 1.0]).unwrap();
+
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            0.0,
+        );
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 1, 2)
                 .unwrap(),
             1.0,
         );

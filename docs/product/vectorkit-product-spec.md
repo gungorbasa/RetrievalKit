@@ -346,9 +346,9 @@ Use `I8ScalarQuantized` only when the app needs much smaller indexes.
 
 Properties:
 
-- 1 byte per dimension plus quantization parameters.
+- 1 byte per dimension plus one `f32` scale per vector.
 - About 75% vector storage reduction compared with `F32`.
-- Lower recall risk than `F32`/`F16`.
+- Higher recall risk than `F32`/`F16`.
 - Best used for candidate retrieval, followed by reranking with better vectors if available.
 
 Quantization metadata:
@@ -356,7 +356,6 @@ Quantization metadata:
 ```rust
 pub struct ScalarQuantizationParams {
     pub scale: f32,
-    pub zero_point: i8,
 }
 ```
 
@@ -373,11 +372,13 @@ Default:
 
 ```text
 I8 scope: per-vector
+I8 mode: symmetric
 ```
 
 Rules:
 
 - Normalize source vectors before quantization when metric is cosine.
+- Use symmetric quantization with `zero_point = 0` for the first implementation.
 - Store quantization parameters in a compact sidecar section.
 - Benchmark recall against `F32` exact search.
 - Prefer `I8ScalarQuantized` for first-stage retrieval, not final quality ranking.

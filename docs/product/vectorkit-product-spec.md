@@ -971,7 +971,19 @@ Hot path rules:
 
 Create a benchmark CLI before adding indexing complexity.
 
-Required benchmark command:
+Initial synthetic benchmark command:
+
+```bash
+vectorkit bench synthetic --chunks 10000 --dimension 768 --queries 100 --encoding f32
+```
+
+Initial synthetic matrix command:
+
+```bash
+vectorkit bench matrix --chunks 10000 --dimensions 384,768,1536 --top-k 5,10 --encodings f32,f16,bf16
+```
+
+Later file-backed benchmark command:
 
 ```bash
 vectorkit bench --index ./data --queries ./queries.jsonl --out ./bench.json

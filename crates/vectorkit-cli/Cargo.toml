@@ -1,0 +1,13 @@
+[package]
+name = "vectorkit-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "vectorkit"
+path = "src/main.rs"
+
+[dependencies]
+vectorkit-core = { path = "../vectorkit-core" }

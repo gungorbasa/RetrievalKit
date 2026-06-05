@@ -4,19 +4,59 @@ use crate::error::{Result, VectorKitError};
 use crate::types::{VectorEncoding, VectorMetric};
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum EncodedVector {
+pub(crate) enum EncodedVectorStore {
     F32(Vec<f32>),
     F16(Vec<f16>),
     BF16(Vec<bf16>),
 }
 
-impl EncodedVector {
-    pub fn score(&self, metric: VectorMetric, query: &EncodedQuery) -> f32 {
+impl EncodedVectorStore {
+    pub fn new(encoding: VectorEncoding) -> Result<Self> {
+        match encoding {
+            VectorEncoding::F32 => Ok(Self::F32(Vec::new())),
+            VectorEncoding::F16 => Ok(Self::F16(Vec::new())),
+            VectorEncoding::BF16 => Ok(Self::BF16(Vec::new())),
+            VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
+                Err(VectorKitError::UnsupportedVectorEncoding {
+                    encoding: encoding.as_str().to_owned(),
+                })
+            }
+        }
+    }
+
+    pub fn push(&mut self, embedding: &[f32]) {
+        match self {
+            Self::F32(vectors) => vectors.extend_from_slice(embedding),
+            Self::F16(vectors) => {
+                vectors.extend(embedding.iter().map(|&value| f16::from_f32(value)))
+            }
+            Self::BF16(vectors) => {
+                vectors.extend(embedding.iter().map(|&value| bf16::from_f32(value)));
+            }
+        }
+    }
+
+    pub fn score_at(
+        &self,
+        metric: VectorMetric,
+        query: &EncodedQuery,
+        row: usize,
+        dimension: usize,
+    ) -> Option<f32> {
+        let start = row.checked_mul(dimension)?;
+        let end = start.checked_add(dimension)?;
+
         match (self, query) {
-            (Self::F32(chunk), EncodedQuery::F32(query)) => score_f32(metric, query, chunk),
-            (Self::F16(chunk), EncodedQuery::F16(query)) => score_f16(metric, query, chunk),
-            (Self::BF16(chunk), EncodedQuery::BF16(query)) => score_bf16(metric, query, chunk),
-            _ => 0.0,
+            (Self::F32(vectors), EncodedQuery::F32(query)) => vectors
+                .get(start..end)
+                .map(|chunk| score_f32(metric, query, chunk)),
+            (Self::F16(vectors), EncodedQuery::F16(query)) => vectors
+                .get(start..end)
+                .map(|chunk| score_f16(metric, query, chunk)),
+            (Self::BF16(vectors), EncodedQuery::BF16(query)) => vectors
+                .get(start..end)
+                .map(|chunk| score_bf16(metric, query, chunk)),
+            _ => None,
         }
     }
 }
@@ -26,19 +66,6 @@ pub(crate) enum EncodedQuery {
     F32(Vec<f32>),
     F16(Vec<f16>),
     BF16(Vec<bf16>),
-}
-
-pub(crate) fn encode_vector(encoding: VectorEncoding, embedding: &[f32]) -> Result<EncodedVector> {
-    match encoding {
-        VectorEncoding::F32 => Ok(EncodedVector::F32(embedding.to_vec())),
-        VectorEncoding::F16 => Ok(EncodedVector::F16(encode_f16(embedding))),
-        VectorEncoding::BF16 => Ok(EncodedVector::BF16(encode_bf16(embedding))),
-        VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
-            Err(VectorKitError::UnsupportedVectorEncoding {
-                encoding: encoding.as_str().to_owned(),
-            })
-        }
-    }
 }
 
 pub(crate) fn encode_query(encoding: VectorEncoding, embedding: &[f32]) -> Result<EncodedQuery> {
@@ -195,27 +222,60 @@ mod tests {
 
     #[test]
     fn f16_encoded_vectors_score_without_decoding_index_to_f32() {
-        let chunk = encode_vector(VectorEncoding::F16, &[1.0, 0.0]).unwrap();
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::F16).unwrap();
+        vectors.push(&[1.0, 0.0]);
         let query = encode_query(VectorEncoding::F16, &[1.0, 0.0]).unwrap();
 
-        assert_close(chunk.score(VectorMetric::Cosine, &query), 1.0);
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            1.0,
+        );
     }
 
     #[test]
     fn bf16_encoded_vectors_score_without_decoding_index_to_f32() {
-        let chunk = encode_vector(VectorEncoding::BF16, &[1.0, 0.0]).unwrap();
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::BF16).unwrap();
+        vectors.push(&[1.0, 0.0]);
         let query = encode_query(VectorEncoding::BF16, &[1.0, 0.0]).unwrap();
 
-        assert_close(chunk.score(VectorMetric::Cosine, &query), 1.0);
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            1.0,
+        );
     }
 
     #[test]
     fn unsupported_vector_encodings_return_errors() {
         assert_eq!(
-            encode_vector(VectorEncoding::BinaryQuantized, &[1.0]).unwrap_err(),
+            EncodedVectorStore::new(VectorEncoding::BinaryQuantized).unwrap_err(),
             VectorKitError::UnsupportedVectorEncoding {
                 encoding: "BinaryQuantized".to_owned()
             }
+        );
+    }
+
+    #[test]
+    fn contiguous_store_scores_rows_by_offset() {
+        let mut vectors = EncodedVectorStore::new(VectorEncoding::F32).unwrap();
+        vectors.push(&[1.0, 0.0]);
+        vectors.push(&[0.0, 1.0]);
+        let query = encode_query(VectorEncoding::F32, &[0.0, 1.0]).unwrap();
+
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 0, 2)
+                .unwrap(),
+            0.0,
+        );
+        assert_close(
+            vectors
+                .score_at(VectorMetric::Cosine, &query, 1, 2)
+                .unwrap(),
+            1.0,
         );
     }
 }

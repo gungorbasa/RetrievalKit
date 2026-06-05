@@ -5,7 +5,7 @@ use crate::bm25::{Bm25Config, Bm25Index};
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
 use crate::metadata::Metadata;
-use crate::scoring::{self, EncodedVector};
+use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
     Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
     SearchQuery, SearchTrace, VectorEncoding, VectorMetric,
@@ -17,7 +17,7 @@ pub struct ExactVectorIndex {
     metric: VectorMetric,
     vector_encoding: VectorEncoding,
     chunks: Vec<Chunk>,
-    encoded_vectors: Vec<EncodedVector>,
+    encoded_vectors: EncodedVectorStore,
     chunk_offsets: Vec<Option<usize>>,
     next_chunk_id: ChunkId,
     document_versions: BTreeMap<String, u64>,
@@ -37,13 +37,12 @@ impl ExactVectorIndex {
 
     /// Creates an empty exact vector index with configured vector and BM25 settings.
     pub fn try_with_config_and_bm25(config: IndexConfig, bm25_config: Bm25Config) -> Result<Self> {
-        validate_supported_encoding(config.vector_encoding)?;
-        Ok(Self::from_parts(
+        Self::from_parts(
             config.dimension,
             config.metric,
             config.vector_encoding,
             bm25_config,
-        ))
+        )
     }
 
     /// Creates an empty exact vector index with custom BM25 settings.
@@ -53,6 +52,7 @@ impl ExactVectorIndex {
         bm25_config: Bm25Config,
     ) -> Self {
         Self::from_parts(dimension, metric, VectorEncoding::F32, bm25_config)
+            .expect("F32 vector encoding is supported")
     }
 
     fn from_parts(
@@ -60,18 +60,18 @@ impl ExactVectorIndex {
         metric: VectorMetric,
         vector_encoding: VectorEncoding,
         bm25_config: Bm25Config,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             dimension,
             metric,
             vector_encoding,
             chunks: Vec::new(),
-            encoded_vectors: Vec::new(),
+            encoded_vectors: EncodedVectorStore::new(vector_encoding)?,
             chunk_offsets: Vec::new(),
             next_chunk_id: 0,
             document_versions: BTreeMap::new(),
             bm25: Bm25Index::new(bm25_config),
-        }
+        })
     }
 
     /// Returns the required embedding dimension for indexed chunks and queries.
@@ -111,7 +111,6 @@ impl ExactVectorIndex {
     /// remains useful for tests and future persistence-loading paths.
     pub fn add_chunk(&mut self, chunk: Chunk) -> Result<()> {
         self.validate_dimension(chunk.embedding.len())?;
-        let encoded_vector = scoring::encode_vector(self.vector_encoding, &chunk.embedding)?;
         self.next_chunk_id = self.next_chunk_id.max(chunk.chunk_id.saturating_add(1));
         self.document_versions
             .entry(chunk.document_id.clone())
@@ -120,8 +119,8 @@ impl ExactVectorIndex {
         self.bm25
             .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         self.register_chunk_offset(chunk.chunk_id, self.chunks.len());
+        self.encoded_vectors.push(&chunk.embedding);
         self.chunks.push(chunk);
-        self.encoded_vectors.push(encoded_vector);
         Ok(())
     }
 
@@ -138,10 +137,6 @@ impl ExactVectorIndex {
         for chunk in &chunk_inputs {
             self.validate_dimension(chunk.embedding.len())?;
         }
-        let encoded_inputs = chunk_inputs
-            .iter()
-            .map(|chunk| scoring::encode_vector(self.vector_encoding, &chunk.embedding))
-            .collect::<Result<Vec<_>>>()?;
 
         let version = self
             .document_versions
@@ -158,11 +153,12 @@ impl ExactVectorIndex {
         }
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
-        for (chunk_input, encoded_vector) in chunk_inputs.into_iter().zip(encoded_inputs) {
+        for chunk_input in chunk_inputs {
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
             self.register_chunk_offset(chunk_id, self.chunks.len());
+            self.encoded_vectors.push(&chunk_input.embedding);
             self.chunks.push(Chunk {
                 chunk_id,
                 document_id: document.id.clone(),
@@ -172,7 +168,6 @@ impl ExactVectorIndex {
                 deleted: false,
                 version,
             });
-            self.encoded_vectors.push(encoded_vector);
         }
 
         self.document_versions.insert(document.id, version);
@@ -224,10 +219,12 @@ impl ExactVectorIndex {
                 continue;
             }
 
-            let Some(encoded_vector) = self.encoded_vectors.get(offset) else {
+            let Some(score) =
+                self.encoded_vectors
+                    .score_at(self.metric, &encoded_query, offset, self.dimension)
+            else {
                 continue;
             };
-            let score = encoded_vector.score(self.metric, &encoded_query);
             push_bounded_hit(
                 &mut hits,
                 query.top_k,
@@ -310,17 +307,6 @@ impl ExactVectorIndex {
             self.chunk_offsets.resize(chunk_id + 1, None);
         }
         self.chunk_offsets[chunk_id] = Some(offset);
-    }
-}
-
-fn validate_supported_encoding(encoding: VectorEncoding) -> Result<()> {
-    match encoding {
-        VectorEncoding::F32 | VectorEncoding::F16 | VectorEncoding::BF16 => Ok(()),
-        VectorEncoding::I8ScalarQuantized | VectorEncoding::BinaryQuantized => {
-            Err(VectorKitError::UnsupportedVectorEncoding {
-                encoding: encoding.as_str().to_owned(),
-            })
-        }
     }
 }
 

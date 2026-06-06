@@ -24,9 +24,17 @@ implemented, or superseded by the product spec.
 - Retrieval must stay fast on local devices. Avoid hot-path JSON, SQLite,
   network calls, avoidable allocation, and broad string lookups.
 
-## Current Size Goal
+## Current Size, RAM, and Speed Goal
 
-- User wants roughly `24K` vectors plus related data under `20 MB`.
+- Hard goal: roughly `24K` vectors plus required local data must stay under
+  `20 MB` total persisted size. This means vectors plus chunk metadata, required
+  display/retrieval data, BM25 data if enabled, headers, tombstones, and version
+  data. Do not treat the target as vector-only.
+- RAM matters too. Prefer compact in-memory layouts and avoid loading full text
+  or broad string-heavy structures on the hot retrieval path unless benchmarks
+  prove the cost is acceptable.
+- Speed remains a first-class requirement. Size reductions are not useful if
+  they push target-device retrieval outside the low-latency budget.
 - `24K x 384d` with `I8ScalarQuantized` is the most practical near-term target.
 - `24K x 768d` with `I8ScalarQuantized` is tight because vector payload alone is
   about `17.7 MiB`, leaving little room for chunks, metadata, BM25, headers, and

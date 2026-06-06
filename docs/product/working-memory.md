@@ -129,14 +129,19 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
   full default FFI benchmark locally.
 - `scripts/build-xcframework.sh` packages `vectorkit-ffi` as
-  `target/apple/VectorKitFFI.xcframework`. The macOS-only path is verified
-  locally. Full iOS packaging requires installing
-  `aarch64-apple-ios` and `aarch64-apple-ios-sim`.
+  `target/apple/VectorKitFFI.xcframework`. The full Apple package is verified
+  locally with `ios-arm64`, `ios-arm64-simulator`, and `macos-arm64` slices.
+  The iOS simulator slice is arm64-only; `x86_64-apple-ios` is intentionally
+  not used.
+- A minimal SwiftUI iOS benchmark app exists at
+  `wrappers/swift/VectorKitIOSBench`. It links the local XCFramework, exposes
+  smoke and full default benchmark buttons, and the generic iOS Simulator build
+  succeeds locally.
 
 ## Likely Next Tasks
 
-- Install the missing Apple Rust targets, run the full XCFramework build, then
-  add an iOS benchmark app target that links `VectorKitFFI.xcframework`.
+- Run the iOS benchmark app on physical iPhone/iPad hardware and compare device
+  latency against the macOS SwiftPM and Rust benchmark reports.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

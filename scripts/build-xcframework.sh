@@ -74,6 +74,7 @@ build_with_deployment_target() {
         cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target"
       ;;
     ios-simulator)
+      IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
       IPHONESIMULATOR_DEPLOYMENT_TARGET="$min_version" \
         cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target"
       ;;

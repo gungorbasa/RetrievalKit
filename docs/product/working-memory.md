@@ -120,9 +120,15 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   uses metadata candidate offsets when available, still verifies the actual
   filter predicate for correctness, and falls back to active-offset scans for
   filter shapes that cannot be fully narrowed by the metadata index.
+- A `vectorkit-ffi` crate now exposes `vectorkit_bench_synthetic_json` and
+  `vectorkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
+  benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
+  unfiltered and `filter_every=10` filtered searches.
 
 ## Likely Next Tasks
 
+- Add a Swift macOS command-line harness that links `vectorkit-ffi` and prints
+  the JSON benchmark report.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

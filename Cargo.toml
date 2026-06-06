@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/vectorkit-core", "crates/vectorkit-cli"]
+members = [
+    "crates/vectorkit-core",
+    "crates/vectorkit-cli",
+    "crates/vectorkit-ffi",
+]
 resolver = "2"
 
 [workspace.package]

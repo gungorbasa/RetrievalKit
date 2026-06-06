@@ -1,5 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use crate::bm25::{Bm25Config, Bm25Index};
 use crate::error::{Result, VectorKitError};
@@ -8,9 +12,19 @@ use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
 use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexSizeEstimate, KeywordHit, KeywordQuery,
-    SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport, IndexSizeEstimate,
+    KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding,
+    VectorMetric,
 };
+
+const FORMAT_VERSION: u32 = 1;
+const CREATED_WITH: &str = "vectorkit";
+const MANIFEST_FILE: &str = "manifest.json";
+const MANIFEST_TMP_FILE: &str = "manifest.json.tmp";
+const VECTORS_FILE: &str = "vectors.vec";
+const CHUNKS_FILE: &str = "chunks.bin";
+const BM25_FILE: &str = "bm25.bin";
+const TOMBSTONES_FILE: &str = "tombstones.bin";
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
@@ -129,6 +143,161 @@ impl ExactVectorIndex {
             bm25_bytes: self.bm25.estimated_payload_bytes(),
             metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
         }
+    }
+
+    /// Saves the loaded index to a local directory and returns actual file sizes.
+    pub fn save_to_dir(&self, directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
+        let directory = directory.as_ref();
+        fs::create_dir_all(directory)
+            .map_err(|_| persistence_error("create directory", directory))?;
+
+        let vectors_path = directory.join(VECTORS_FILE);
+        let chunks_path = directory.join(CHUNKS_FILE);
+        let bm25_path = directory.join(BM25_FILE);
+        let tombstones_path = directory.join(TOMBSTONES_FILE);
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let manifest_tmp_path = directory.join(MANIFEST_TMP_FILE);
+
+        write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
+        write_json_file(&chunks_path, &self.chunks)?;
+        write_json_file(
+            &bm25_path,
+            &PersistedBm25Summary {
+                rebuilt_from_chunks: true,
+                active_chunk_count: self.active_chunk_count(),
+            },
+        )?;
+        write_file(
+            &tombstones_path,
+            &self
+                .chunks
+                .iter()
+                .map(|chunk| u8::from(chunk.deleted))
+                .collect::<Vec<_>>(),
+        )?;
+
+        let manifest = PersistedManifest {
+            format_version: FORMAT_VERSION,
+            created_with: CREATED_WITH.to_owned(),
+            dimension: self.dimension,
+            metric: self.metric,
+            vector_count: self.chunks.len(),
+            active_chunk_count: self.active_chunk_count(),
+            has_bm25: true,
+            vector_encoding: self.vector_encoding,
+            vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
+            chunk_bytes: file_size(&chunks_path)?,
+            bm25_bytes: file_size(&bm25_path)?,
+            tombstone_bytes: file_size(&tombstones_path)?,
+            normalization: match self.metric {
+                VectorMetric::Cosine => "unit_l2",
+                VectorMetric::DotProduct => "none",
+            }
+            .to_owned(),
+        };
+
+        write_json_file(&manifest_tmp_path, &manifest)?;
+        fs::rename(&manifest_tmp_path, &manifest_path)
+            .map_err(|_| persistence_error("publish manifest", &manifest_path))?;
+
+        Self::persisted_file_sizes(directory)
+    }
+
+    /// Loads a previously saved local index directory.
+    pub fn load_from_dir(directory: impl AsRef<Path>) -> Result<Self> {
+        let directory = directory.as_ref();
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let manifest: PersistedManifest = read_json_file(&manifest_path)?;
+        manifest.validate()?;
+
+        let vectors_path = directory.join(VECTORS_FILE);
+        let chunks_path = directory.join(CHUNKS_FILE);
+        let bm25_path = directory.join(BM25_FILE);
+        let tombstones_path = directory.join(TOMBSTONES_FILE);
+
+        require_file(&bm25_path)?;
+        validate_file_size(&chunks_path, manifest.chunk_bytes)?;
+        validate_file_size(&bm25_path, manifest.bm25_bytes)?;
+        validate_file_size(&tombstones_path, manifest.tombstone_bytes)?;
+        let vector_bytes = read_file(&vectors_path)?;
+        if vector_bytes.len() != manifest.vector_bytes {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "manifest vector bytes {} do not match vectors file bytes {}",
+                    manifest.vector_bytes,
+                    vector_bytes.len()
+                ),
+            });
+        }
+
+        let encoded_vectors = EncodedVectorStore::from_payload_bytes(
+            manifest.vector_encoding,
+            manifest.vector_count,
+            manifest.dimension,
+            &vector_bytes,
+        )?;
+        let chunks: Vec<StoredChunk> = read_json_file(&chunks_path)?;
+        if chunks.len() != manifest.vector_count {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "manifest vector count {} does not match chunk count {}",
+                    manifest.vector_count,
+                    chunks.len()
+                ),
+            });
+        }
+
+        let tombstones = read_file(&tombstones_path)?;
+        if tombstones.len() != chunks.len() {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "tombstone count {} does not match chunk count {}",
+                    tombstones.len(),
+                    chunks.len()
+                ),
+            });
+        }
+        for (offset, (chunk, tombstone)) in chunks.iter().zip(&tombstones).enumerate() {
+            if chunk.deleted != (*tombstone != 0) {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!("chunk {offset} tombstone does not match chunk record"),
+                });
+            }
+        }
+
+        let mut index = Self::from_parts(
+            manifest.dimension,
+            manifest.metric,
+            manifest.vector_encoding,
+            Bm25Config::default(),
+        )?;
+        index.encoded_vectors = encoded_vectors;
+        index.chunks = chunks;
+        index.rebuild_derived_state();
+
+        if index.active_chunk_count() != manifest.active_chunk_count {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "manifest active chunk count {} does not match loaded active chunk count {}",
+                    manifest.active_chunk_count,
+                    index.active_chunk_count()
+                ),
+            });
+        }
+
+        Ok(index)
+    }
+
+    /// Returns actual file sizes for a saved index directory.
+    pub fn persisted_file_sizes(directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
+        let directory = directory.as_ref();
+        Ok(IndexFileSizeReport {
+            manifest_bytes: file_size(&directory.join(MANIFEST_FILE))?,
+            vectors_bytes: file_size(&directory.join(VECTORS_FILE))?,
+            chunks_bytes: file_size(&directory.join(CHUNKS_FILE))?,
+            bm25_bytes: file_size(&directory.join(BM25_FILE))?,
+            tombstones_bytes: file_size(&directory.join(TOMBSTONES_FILE))?,
+        })
     }
 
     /// Adds a prebuilt chunk directly.
@@ -369,6 +538,31 @@ impl ExactVectorIndex {
         }
     }
 
+    fn rebuild_derived_state(&mut self) {
+        self.chunk_offsets.clear();
+        self.metadata_filter_index = MetadataFilterIndex::default();
+        self.document_versions.clear();
+        self.bm25 = Bm25Index::new(Bm25Config::default());
+        self.next_chunk_id = 0;
+
+        for offset in 0..self.chunks.len() {
+            let chunk_id = self.chunks[offset].chunk_id;
+            self.next_chunk_id = self.next_chunk_id.max(chunk_id.saturating_add(1));
+            self.register_chunk_offset(chunk_id, offset);
+
+            let chunk = &self.chunks[offset];
+            self.document_versions
+                .entry(chunk.document_id.clone())
+                .and_modify(|version| *version = (*version).max(chunk.version))
+                .or_insert(chunk.version);
+            self.bm25
+                .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
+            if !chunk.deleted {
+                self.metadata_filter_index.insert(offset, &chunk.metadata);
+            }
+        }
+    }
+
     fn score_search_candidate(
         &self,
         offset: usize,
@@ -412,6 +606,109 @@ impl ExactVectorIndex {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedManifest {
+    format_version: u32,
+    created_with: String,
+    dimension: usize,
+    metric: VectorMetric,
+    vector_count: usize,
+    active_chunk_count: usize,
+    has_bm25: bool,
+    vector_encoding: VectorEncoding,
+    vector_bytes: usize,
+    chunk_bytes: u64,
+    bm25_bytes: u64,
+    tombstone_bytes: u64,
+    normalization: String,
+}
+
+impl PersistedManifest {
+    fn validate(&self) -> Result<()> {
+        if self.format_version != FORMAT_VERSION {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("unsupported format version {}", self.format_version),
+            });
+        }
+
+        if self.created_with != CREATED_WITH {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("unsupported index creator '{}'", self.created_with),
+            });
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedBm25Summary {
+    rebuilt_from_chunks: bool,
+    active_chunk_count: usize,
+}
+
+fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    let bytes =
+        serde_json::to_vec_pretty(value).map_err(|error| VectorKitError::InvalidFormat {
+            message: format!("could not serialize '{}': {error}", path.display()),
+        })?;
+    write_file(path, &bytes)
+}
+
+fn read_json_file<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
+    let bytes = read_file(path)?;
+    serde_json::from_slice(&bytes).map_err(|error| VectorKitError::InvalidFormat {
+        message: format!("could not parse '{}': {error}", path.display()),
+    })
+}
+
+fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    fs::write(path, bytes).map_err(|_| persistence_error("write", path))
+}
+
+fn read_file(path: &Path) -> Result<Vec<u8>> {
+    fs::read(path).map_err(|_| persistence_error("read", path))
+}
+
+fn require_file(path: &Path) -> Result<()> {
+    if path.is_file() {
+        Ok(())
+    } else {
+        Err(persistence_error("find required file", path))
+    }
+}
+
+fn file_size(path: &Path) -> Result<u64> {
+    fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .map_err(|_| persistence_error("stat", path))
+}
+
+fn validate_file_size(path: &Path, expected: u64) -> Result<()> {
+    let actual = file_size(path)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(VectorKitError::InvalidFormat {
+            message: format!(
+                "manifest file size {expected} does not match '{}' size {actual}",
+                path.display()
+            ),
+        })
+    }
+}
+
+fn persistence_error(operation: &str, path: &Path) -> VectorKitError {
+    VectorKitError::Persistence {
+        operation: operation.to_owned(),
+        path: display_path(path),
+    }
+}
+
+fn display_path(path: &Path) -> String {
+    PathBuf::from(path).display().to_string()
 }
 
 fn matches_filter(filter: Option<&Filter>, chunk: &StoredChunk) -> Result<bool> {
@@ -498,6 +795,13 @@ mod tests {
             embedding,
             metadata: Metadata::new(),
         }
+    }
+
+    fn temp_index_dir(name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("vectorkit-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        path
     }
 
     fn assert_close(left: f32, right: f32) {
@@ -600,6 +904,110 @@ mod tests {
             estimate.total_bytes(),
             estimate.vector_bytes + estimate.auxiliary_bytes()
         );
+    }
+
+    #[test]
+    fn saved_index_round_trips_vector_keyword_filter_and_tombstones() {
+        let directory = temp_index_dir("round-trip");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+
+        let mut notes_document = document("doc-1");
+        notes_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                notes_document,
+                vec![chunk_input("Swift exact local search", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let mut transcript_document = document("doc-2");
+        transcript_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index
+            .upsert_document(
+                transcript_document,
+                vec![chunk_input("Rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        index.delete_document("doc-2");
+
+        let file_sizes = index.save_to_dir(&directory).unwrap();
+        assert!(file_sizes.manifest_bytes > 0);
+        assert!(file_sizes.vectors_bytes > 0);
+        assert!(file_sizes.chunks_bytes > 0);
+        assert!(file_sizes.bm25_bytes > 0);
+        assert_eq!(file_sizes.tombstones_bytes, 2);
+        assert_eq!(
+            ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),
+            file_sizes
+        );
+
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(loaded.dimension(), 2);
+        assert_eq!(loaded.metric(), VectorMetric::Cosine);
+        assert_eq!(loaded.vector_encoding(), VectorEncoding::F32);
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded.active_chunk_count(), 1);
+        assert!(loaded.chunk(1).unwrap().deleted);
+
+        let vector_hits = loaded
+            .search(&SearchQuery::new(vec![1.0, 0.0], 10))
+            .unwrap();
+        assert_eq!(
+            vector_hits
+                .iter()
+                .map(|hit| hit.chunk_id)
+                .collect::<Vec<_>>(),
+            vec![0]
+        );
+
+        let keyword_hits = loaded
+            .keyword_search(&KeywordQuery::new("swift local", 10))
+            .unwrap();
+        assert_eq!(keyword_hits.len(), 1);
+        assert_eq!(keyword_hits[0].chunk_id, 0);
+
+        let filtered_hits = loaded
+            .search(
+                &SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+                    field: "source".to_owned(),
+                    value: MetadataValue::String("notes".to_owned()),
+                }),
+            )
+            .unwrap();
+        assert_eq!(filtered_hits.len(), 1);
+        assert_eq!(filtered_hits[0].chunk_id, 0);
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn saved_i8_index_round_trips_encoded_vector_search() {
+        let directory = temp_index_dir("i8-round-trip");
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::Cosine)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        index.add_chunk(chunk(0, "doc-1", vec![1.0, 0.0])).unwrap();
+        index.add_chunk(chunk(1, "doc-2", vec![0.0, 1.0])).unwrap();
+
+        index.save_to_dir(&directory).unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+
+        assert_eq!(loaded.vector_encoding(), VectorEncoding::I8ScalarQuantized);
+        let hits = loaded.search(&SearchQuery::new(vec![0.0, 1.0], 1)).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]

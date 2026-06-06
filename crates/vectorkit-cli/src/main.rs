@@ -1,11 +1,12 @@
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexSizeEstimate, Metadata, MetadataValue,
-    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexSizeEstimate, Metadata,
+    MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -39,6 +40,7 @@ struct SyntheticBenchConfig {
     metric: VectorMetric,
     seed: u64,
     filter_every: Option<usize>,
+    persist_dir: Option<PathBuf>,
     footprint: FootprintConfig,
 }
 
@@ -61,6 +63,7 @@ impl Default for SyntheticBenchConfig {
             metric: VectorMetric::Cosine,
             seed: 42,
             filter_every: None,
+            persist_dir: None,
             footprint: FootprintConfig::default(),
         }
     }
@@ -99,6 +102,7 @@ impl SyntheticBenchConfig {
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
                 "--filter-every" => config.filter_every = Some(parse_positive(value, flag)?),
+                "--persist-dir" => config.persist_dir = Some(PathBuf::from(value)),
                 "--budget-mb" => {
                     config.footprint.budget_bytes = parse_mib(value, flag)?;
                 }
@@ -136,6 +140,7 @@ struct MatrixBenchConfig {
     metric: VectorMetric,
     seed: u64,
     filter_every: Option<usize>,
+    persist_dir: Option<PathBuf>,
     footprint: FootprintConfig,
 }
 
@@ -155,6 +160,7 @@ impl Default for MatrixBenchConfig {
             metric: VectorMetric::Cosine,
             seed: 42,
             filter_every: None,
+            persist_dir: None,
             footprint: FootprintConfig::default(),
         }
     }
@@ -182,6 +188,7 @@ impl MatrixBenchConfig {
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
                 "--filter-every" => config.filter_every = Some(parse_positive(value, flag)?),
+                "--persist-dir" => config.persist_dir = Some(PathBuf::from(value)),
                 "--budget-mb" => {
                     config.footprint.budget_bytes = parse_mib(value, flag)?;
                 }
@@ -214,6 +221,7 @@ struct SyntheticBenchReport {
     config: SyntheticBenchConfig,
     footprint: FootprintEstimate,
     index_size: IndexSizeEstimate,
+    persisted_file_sizes: Option<IndexFileSizeReport>,
     source_embedding_bytes: usize,
     build_duration: Duration,
     query_min: Duration,
@@ -330,6 +338,29 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
         "current_metadata_filter_payload_mb: {:.3}",
         mib(report.index_size.metadata_filter_bytes)
     );
+    if let Some(file_sizes) = report.persisted_file_sizes {
+        println!(
+            "persisted_total_index_mb: {:.3}",
+            mib_u64(file_sizes.total_bytes())
+        );
+        println!(
+            "persisted_manifest_mb: {:.3}",
+            mib_u64(file_sizes.manifest_bytes)
+        );
+        println!(
+            "persisted_vectors_mb: {:.3}",
+            mib_u64(file_sizes.vectors_bytes)
+        );
+        println!(
+            "persisted_chunks_mb: {:.3}",
+            mib_u64(file_sizes.chunks_bytes)
+        );
+        println!("persisted_bm25_mb: {:.3}", mib_u64(file_sizes.bm25_bytes));
+        println!(
+            "persisted_tombstones_mb: {:.3}",
+            mib_u64(file_sizes.tombstones_bytes)
+        );
+    }
     println!("build_ms: {:.3}", millis(report.build_duration));
     println!("query_min_ms: {:.3}", millis(report.query_min));
     println!("query_avg_ms: {:.3}", millis(report.query_avg));
@@ -345,15 +376,24 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | persisted MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
         for top_k in &config.top_ks {
             for encoding in &config.encodings {
+                let persist_dir = config.persist_dir.as_ref().map(|base| {
+                    base.join(format!(
+                        "chunks-{}-dim-{}-topk-{}-{}",
+                        config.chunks,
+                        dimension,
+                        top_k,
+                        encoding_name(*encoding)
+                    ))
+                });
                 let report = benchmark_synthetic(SyntheticBenchConfig {
                     chunks: config.chunks,
                     dimension: *dimension,
@@ -363,11 +403,12 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     metric: config.metric,
                     seed: config.seed,
                     filter_every: config.filter_every,
+                    persist_dir,
                     footprint: config.footprint.clone(),
                 })?;
 
                 println!(
-                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
                     report.config.chunks,
                     report.config.dimension,
                     report.config.top_k,
@@ -378,6 +419,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     mib(report.footprint.auxiliary_bytes()),
                     mib(report.footprint.total_bytes()),
                     mib(report.index_size.total_bytes()),
+                    persisted_mb_cell(report.persisted_file_sizes),
                     signed_mib(
                         report
                             .footprint
@@ -404,6 +446,11 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
 fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchReport, CliError> {
     let (index, build_duration) = build_synthetic_index(&config, config.encoding)?;
     let index_size = index.size_estimate();
+    let persisted_file_sizes = config
+        .persist_dir
+        .as_ref()
+        .map(|directory| index.save_to_dir(directory))
+        .transpose()?;
     let f32_ground_truth = if config.encoding == VectorEncoding::F32 {
         None
     } else {
@@ -455,6 +502,7 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
     Ok(SyntheticBenchReport {
         footprint: estimate_footprint(&config),
         index_size,
+        persisted_file_sizes,
         source_embedding_bytes: source_embedding_bytes(config.chunks, config.dimension),
         build_duration,
         query_min,
@@ -628,6 +676,10 @@ fn mib(bytes: usize) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
 }
 
+fn mib_u64(bytes: u64) -> f64 {
+    bytes as f64 / 1024.0 / 1024.0
+}
+
 fn signed_mib(bytes: isize) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
 }
@@ -751,6 +803,12 @@ fn filter_every_name(filter_every: Option<usize>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn persisted_mb_cell(file_sizes: Option<IndexFileSizeReport>) -> String {
+    file_sizes
+        .map(|file_sizes| format!("{:.3}", mib_u64(file_sizes.total_bytes())))
+        .unwrap_or_else(|| "n/a".to_owned())
+}
+
 fn encoded_vector_bytes(chunks: usize, dimension: usize, encoding: VectorEncoding) -> usize {
     chunks * dimension * encoded_bytes_per_value(encoding)
         + chunks * encoded_sidecar_bytes_per_vector(encoding)
@@ -814,6 +872,7 @@ impl CliError {
                 "  --metric <kind>    cosine or dot; default cosine",
                 "  --seed <n>         default 42",
                 "  --filter-every <n> indexed equality filter with roughly 1/n selectivity",
+                "  --persist-dir <path> save built index and report actual file sizes",
                 "  --budget-mb <n>    footprint budget in MiB; default 20",
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
                 "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
@@ -828,6 +887,7 @@ impl CliError {
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
                 "  --filter-every <n>    indexed equality filter with roughly 1/n selectivity",
+                "  --persist-dir <path>  save built indexes and report actual file sizes",
                 "  --budget-mb <n>       footprint budget in MiB; default 20",
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
                 "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
@@ -911,6 +971,8 @@ mod tests {
             "7",
             "--filter-every",
             "10",
+            "--persist-dir",
+            "/tmp/vectorkit-synthetic",
             "--budget-mb",
             "12.5",
             "--avg-chunk-data-bytes",
@@ -932,6 +994,10 @@ mod tests {
         assert_eq!(config.metric, VectorMetric::DotProduct);
         assert_eq!(config.seed, 7);
         assert_eq!(config.filter_every, Some(10));
+        assert_eq!(
+            config.persist_dir,
+            Some(PathBuf::from("/tmp/vectorkit-synthetic"))
+        );
         assert_eq!(config.footprint.budget_bytes, 13_107_200);
         assert_eq!(config.footprint.avg_chunk_data_bytes, 128);
         assert_eq!(config.footprint.avg_metadata_bytes, 16);
@@ -961,6 +1027,8 @@ mod tests {
             "f32,i8",
             "--filter-every",
             "100",
+            "--persist-dir",
+            "/tmp/vectorkit-matrix",
         ]
         .map(str::to_owned);
 
@@ -974,6 +1042,10 @@ mod tests {
             vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
         );
         assert_eq!(config.filter_every, Some(100));
+        assert_eq!(
+            config.persist_dir,
+            Some(PathBuf::from("/tmp/vectorkit-matrix"))
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use crate::filter::Filter;
 use crate::metadata::Metadata;
+use serde::{Deserialize, Serialize};
 
 pub type ChunkId = u64;
 
@@ -37,7 +38,7 @@ pub struct Chunk {
 ///
 /// Vector values are stored separately in the encoded vector store. This keeps
 /// search metadata and display data separate from the hot vector layout.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StoredChunk {
     pub chunk_id: ChunkId,
     pub document_id: String,
@@ -157,7 +158,7 @@ impl IndexConfig {
 }
 
 /// Vector scoring mode used by exact search.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VectorMetric {
     DotProduct,
     Cosine,
@@ -169,7 +170,7 @@ pub enum VectorMetric {
 /// chooses a storage/scoring representation. `BinaryQuantized` represents the
 /// future 1-bit-per-dimension form, such as 768 bits for a 768-dimensional
 /// embedding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VectorEncoding {
     F32,
     F16,
@@ -227,5 +228,24 @@ impl IndexSizeEstimate {
 
     pub fn total_bytes(&self) -> usize {
         self.vector_bytes + self.auxiliary_bytes()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndexFileSizeReport {
+    pub manifest_bytes: u64,
+    pub vectors_bytes: u64,
+    pub chunks_bytes: u64,
+    pub bm25_bytes: u64,
+    pub tombstones_bytes: u64,
+}
+
+impl IndexFileSizeReport {
+    pub fn total_bytes(&self) -> u64 {
+        self.manifest_bytes
+            + self.vectors_bytes
+            + self.chunks_bytes
+            + self.bm25_bytes
+            + self.tombstones_bytes
     }
 }

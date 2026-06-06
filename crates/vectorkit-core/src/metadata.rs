@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 pub type Metadata = BTreeMap<String, MetadataValue>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MetadataValue {
     String(String),
     Integer(i64),

@@ -99,6 +99,107 @@ impl EncodedVectorStore {
             }
         }
     }
+
+    pub fn to_payload_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::F32(vectors) => vectors
+                .iter()
+                .flat_map(|value| value.to_le_bytes())
+                .collect(),
+            Self::F16(vectors) => vectors
+                .iter()
+                .flat_map(|value| value.0.to_le_bytes())
+                .collect(),
+            Self::BF16(vectors) => vectors
+                .iter()
+                .flat_map(|value| value.0.to_le_bytes())
+                .collect(),
+            Self::I8ScalarQuantized { values, scales } => {
+                let mut bytes = Vec::with_capacity(
+                    values.len() * std::mem::size_of::<i8>()
+                        + scales.len() * std::mem::size_of::<f32>(),
+                );
+                bytes.extend(values.iter().map(|value| *value as u8));
+                bytes.extend(scales.iter().flat_map(|value| value.to_le_bytes()));
+                bytes
+            }
+        }
+    }
+
+    pub fn from_payload_bytes(
+        encoding: VectorEncoding,
+        vector_count: usize,
+        dimension: usize,
+        bytes: &[u8],
+    ) -> Result<Self> {
+        let value_count =
+            vector_count
+                .checked_mul(dimension)
+                .ok_or_else(|| VectorKitError::InvalidFormat {
+                    message: "vector count and dimension overflow".to_owned(),
+                })?;
+
+        match encoding {
+            VectorEncoding::F32 => {
+                expect_payload_len(bytes, value_count * std::mem::size_of::<f32>())?;
+                Ok(Self::F32(
+                    bytes
+                        .chunks_exact(std::mem::size_of::<f32>())
+                        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk size")))
+                        .collect(),
+                ))
+            }
+            VectorEncoding::F16 => {
+                expect_payload_len(bytes, value_count * std::mem::size_of::<f16>())?;
+                Ok(Self::F16(
+                    bytes
+                        .chunks_exact(std::mem::size_of::<u16>())
+                        .map(|chunk| f16(u16::from_le_bytes(chunk.try_into().expect("chunk size"))))
+                        .collect(),
+                ))
+            }
+            VectorEncoding::BF16 => {
+                expect_payload_len(bytes, value_count * std::mem::size_of::<bf16>())?;
+                Ok(Self::BF16(
+                    bytes
+                        .chunks_exact(std::mem::size_of::<u16>())
+                        .map(|chunk| {
+                            bf16(u16::from_le_bytes(chunk.try_into().expect("chunk size")))
+                        })
+                        .collect(),
+                ))
+            }
+            VectorEncoding::I8ScalarQuantized => {
+                let values_len = value_count;
+                let scales_len = vector_count * std::mem::size_of::<f32>();
+                expect_payload_len(bytes, values_len + scales_len)?;
+                let (values, scale_bytes) = bytes.split_at(values_len);
+                Ok(Self::I8ScalarQuantized {
+                    values: values.iter().map(|value| *value as i8).collect(),
+                    scales: scale_bytes
+                        .chunks_exact(std::mem::size_of::<f32>())
+                        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk size")))
+                        .collect(),
+                })
+            }
+            VectorEncoding::BinaryQuantized => Err(VectorKitError::UnsupportedVectorEncoding {
+                encoding: encoding.as_str().to_owned(),
+            }),
+        }
+    }
+}
+
+fn expect_payload_len(bytes: &[u8], expected: usize) -> Result<()> {
+    if bytes.len() == expected {
+        Ok(())
+    } else {
+        Err(VectorKitError::InvalidFormat {
+            message: format!(
+                "vector payload size mismatch: expected {expected} bytes, got {}",
+                bytes.len()
+            ),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

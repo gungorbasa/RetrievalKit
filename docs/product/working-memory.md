@@ -42,6 +42,7 @@ implemented, or superseded by the product spec.
 - `24K x 1536d` cannot fit under `20 MB` with current I8 storage.
 - Full chunk text should likely stay outside the hot index if the `20 MB` target
   includes user-visible data.
+- Current size/speed report: `docs/product/size-speed-report.md`.
 
 Approximate vector-only sizes for `24K` vectors:
 

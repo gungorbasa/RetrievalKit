@@ -36,6 +36,15 @@ struct SyntheticBenchConfig {
     encoding: VectorEncoding,
     metric: VectorMetric,
     seed: u64,
+    footprint: FootprintConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FootprintConfig {
+    budget_bytes: usize,
+    avg_chunk_data_bytes: usize,
+    avg_metadata_bytes: usize,
+    avg_bm25_terms_per_chunk: usize,
 }
 
 impl Default for SyntheticBenchConfig {
@@ -48,6 +57,18 @@ impl Default for SyntheticBenchConfig {
             encoding: VectorEncoding::F32,
             metric: VectorMetric::Cosine,
             seed: 42,
+            footprint: FootprintConfig::default(),
+        }
+    }
+}
+
+impl Default for FootprintConfig {
+    fn default() -> Self {
+        Self {
+            budget_bytes: 20 * 1024 * 1024,
+            avg_chunk_data_bytes: 256,
+            avg_metadata_bytes: 32,
+            avg_bm25_terms_per_chunk: 24,
         }
     }
 }
@@ -73,6 +94,18 @@ impl SyntheticBenchConfig {
                 "--encoding" => config.encoding = parse_encoding(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
+                "--budget-mb" => {
+                    config.footprint.budget_bytes = parse_mib(value, flag)?;
+                }
+                "--avg-chunk-data-bytes" => {
+                    config.footprint.avg_chunk_data_bytes = parse_nonnegative(value, flag)?;
+                }
+                "--avg-metadata-bytes" => {
+                    config.footprint.avg_metadata_bytes = parse_nonnegative(value, flag)?;
+                }
+                "--avg-bm25-terms" => {
+                    config.footprint.avg_bm25_terms_per_chunk = parse_nonnegative(value, flag)?;
+                }
                 "--help" | "-h" => return Err(CliError::usage()),
                 _ => {
                     return Err(CliError::InvalidArgument(format!(
@@ -97,6 +130,7 @@ struct MatrixBenchConfig {
     encodings: Vec<VectorEncoding>,
     metric: VectorMetric,
     seed: u64,
+    footprint: FootprintConfig,
 }
 
 impl Default for MatrixBenchConfig {
@@ -114,6 +148,7 @@ impl Default for MatrixBenchConfig {
             ],
             metric: VectorMetric::Cosine,
             seed: 42,
+            footprint: FootprintConfig::default(),
         }
     }
 }
@@ -139,6 +174,18 @@ impl MatrixBenchConfig {
                 "--encodings" => config.encodings = parse_encoding_list(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
+                "--budget-mb" => {
+                    config.footprint.budget_bytes = parse_mib(value, flag)?;
+                }
+                "--avg-chunk-data-bytes" => {
+                    config.footprint.avg_chunk_data_bytes = parse_nonnegative(value, flag)?;
+                }
+                "--avg-metadata-bytes" => {
+                    config.footprint.avg_metadata_bytes = parse_nonnegative(value, flag)?;
+                }
+                "--avg-bm25-terms" => {
+                    config.footprint.avg_bm25_terms_per_chunk = parse_nonnegative(value, flag)?;
+                }
                 "--help" | "-h" => return Err(CliError::usage()),
                 _ => {
                     return Err(CliError::InvalidArgument(format!(
@@ -157,7 +204,7 @@ impl MatrixBenchConfig {
 #[derive(Debug, Clone)]
 struct SyntheticBenchReport {
     config: SyntheticBenchConfig,
-    encoded_vector_bytes: usize,
+    footprint: FootprintEstimate,
     source_embedding_bytes: usize,
     build_duration: Duration,
     query_min: Duration,
@@ -168,6 +215,34 @@ struct SyntheticBenchReport {
     recall_at_k_vs_f32: f64,
     total_hits: usize,
     top_hit_checksum: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FootprintEstimate {
+    vector_bytes: usize,
+    chunk_fixed_bytes: usize,
+    chunk_data_bytes: usize,
+    metadata_bytes: usize,
+    bm25_bytes: usize,
+    overhead_bytes: usize,
+}
+
+impl FootprintEstimate {
+    fn auxiliary_bytes(&self) -> usize {
+        self.chunk_fixed_bytes
+            + self.chunk_data_bytes
+            + self.metadata_bytes
+            + self.bm25_bytes
+            + self.overhead_bytes
+    }
+
+    fn total_bytes(&self) -> usize {
+        self.vector_bytes + self.auxiliary_bytes()
+    }
+
+    fn budget_headroom_bytes(&self, budget_bytes: usize) -> isize {
+        budget_bytes as isize - self.total_bytes() as isize
+    }
 }
 
 fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
@@ -181,14 +256,46 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("encoding: {}", encoding_name(report.config.encoding));
     println!("metric: {}", metric_name(report.config.metric));
     println!("seed: {}", report.config.seed);
-    println!("encoded_vector_mb: {:.3}", mib(report.encoded_vector_bytes));
+    println!("vector_mb: {:.3}", mib(report.footprint.vector_bytes));
+    println!(
+        "estimated_auxiliary_mb: {:.3}",
+        mib(report.footprint.auxiliary_bytes())
+    );
+    println!(
+        "estimated_total_index_mb: {:.3}",
+        mib(report.footprint.total_bytes())
+    );
+    println!(
+        "budget_headroom_mb: {:.3}",
+        signed_mib(
+            report
+                .footprint
+                .budget_headroom_bytes(report.config.footprint.budget_bytes)
+        )
+    );
+    println!(
+        "budget_mb: {:.3}",
+        mib(report.config.footprint.budget_bytes)
+    );
+    println!(
+        "avg_chunk_data_bytes: {}",
+        report.config.footprint.avg_chunk_data_bytes
+    );
+    println!(
+        "avg_metadata_bytes: {}",
+        report.config.footprint.avg_metadata_bytes
+    );
+    println!(
+        "avg_bm25_terms_per_chunk: {}",
+        report.config.footprint.avg_bm25_terms_per_chunk
+    );
     println!(
         "retained_source_f32_mb: {:.3}",
         mib(report.source_embedding_bytes)
     );
     println!(
         "total_vector_mb_current: {:.3}",
-        mib(report.encoded_vector_bytes + report.source_embedding_bytes)
+        mib(report.footprint.vector_bytes + report.source_embedding_bytes)
     );
     println!("build_ms: {:.3}", millis(report.build_duration));
     println!("query_min_ms: {:.3}", millis(report.query_min));
@@ -205,10 +312,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | encoded MB | retained f32 MB | total vec MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | vector MB | aux MB | est total MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
@@ -222,18 +329,25 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     encoding: *encoding,
                     metric: config.metric,
                     seed: config.seed,
+                    footprint: config.footprint.clone(),
                 })?;
 
                 println!(
-                    "| {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
                     report.config.chunks,
                     report.config.dimension,
                     report.config.top_k,
                     encoding_name(report.config.encoding),
                     metric_name(report.config.metric),
-                    mib(report.encoded_vector_bytes),
+                    mib(report.footprint.vector_bytes),
+                    mib(report.footprint.auxiliary_bytes()),
+                    mib(report.footprint.total_bytes()),
+                    signed_mib(
+                        report
+                            .footprint
+                            .budget_headroom_bytes(report.config.footprint.budget_bytes)
+                    ),
                     mib(report.source_embedding_bytes),
-                    mib(report.encoded_vector_bytes + report.source_embedding_bytes),
                     millis(report.build_duration),
                     millis(report.query_min),
                     millis(report.query_avg),
@@ -295,11 +409,7 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
     let p95 = percentile(query_durations, 95);
 
     Ok(SyntheticBenchReport {
-        encoded_vector_bytes: encoded_vector_bytes(
-            config.chunks,
-            config.dimension,
-            config.encoding,
-        ),
+        footprint: estimate_footprint(&config),
         source_embedding_bytes: source_embedding_bytes(config.chunks, config.dimension),
         build_duration,
         query_min,
@@ -312,6 +422,19 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         top_hit_checksum,
         config,
     })
+}
+
+fn estimate_footprint(config: &SyntheticBenchConfig) -> FootprintEstimate {
+    FootprintEstimate {
+        vector_bytes: encoded_vector_bytes(config.chunks, config.dimension, config.encoding),
+        chunk_fixed_bytes: config.chunks * chunk_fixed_bytes_per_chunk(),
+        chunk_data_bytes: config.chunks * config.footprint.avg_chunk_data_bytes,
+        metadata_bytes: config.chunks * config.footprint.avg_metadata_bytes,
+        bm25_bytes: config.chunks
+            * config.footprint.avg_bm25_terms_per_chunk
+            * bm25_bytes_per_posting(),
+        overhead_bytes: index_overhead_bytes(),
+    }
 }
 
 fn build_synthetic_index(
@@ -425,6 +548,10 @@ fn mib(bytes: usize) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
 }
 
+fn signed_mib(bytes: isize) -> f64 {
+    bytes as f64 / 1024.0 / 1024.0
+}
+
 fn parse_positive(value: &str, name: &str) -> Result<usize, CliError> {
     let parsed = value
         .parse::<usize>()
@@ -437,6 +564,26 @@ fn parse_positive(value: &str, name: &str) -> Result<usize, CliError> {
     }
 
     Ok(parsed)
+}
+
+fn parse_nonnegative(value: &str, name: &str) -> Result<usize, CliError> {
+    value
+        .parse::<usize>()
+        .map_err(|_| CliError::InvalidArgument(format!("invalid numeric value for '{name}'")))
+}
+
+fn parse_mib(value: &str, name: &str) -> Result<usize, CliError> {
+    let parsed = value
+        .parse::<f64>()
+        .map_err(|_| CliError::InvalidArgument(format!("invalid MiB value for '{name}'")))?;
+
+    if parsed <= 0.0 {
+        return Err(CliError::InvalidArgument(format!(
+            "'{name}' must be greater than zero"
+        )));
+    }
+
+    Ok((parsed * 1024.0 * 1024.0).round() as usize)
 }
 
 fn parse_positive_list(value: &str, name: &str) -> Result<Vec<usize>, CliError> {
@@ -527,6 +674,18 @@ fn source_embedding_bytes(_chunks: usize, _dimension: usize) -> usize {
     0
 }
 
+fn chunk_fixed_bytes_per_chunk() -> usize {
+    64
+}
+
+fn bm25_bytes_per_posting() -> usize {
+    8
+}
+
+fn index_overhead_bytes() -> usize {
+    4096
+}
+
 fn encoded_bytes_per_value(encoding: VectorEncoding) -> usize {
     match encoding {
         VectorEncoding::F32 => 4,
@@ -568,6 +727,10 @@ impl CliError {
                 "  --encoding <kind>  f32, f16, bf16, or i8; default f32",
                 "  --metric <kind>    cosine or dot; default cosine",
                 "  --seed <n>         default 42",
+                "  --budget-mb <n>    footprint budget in MiB; default 20",
+                "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
+                "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
+                "  --avg-bm25-terms <n>        estimated BM25 postings per chunk; default 24",
                 "",
                 "matrix options:",
                 "  --chunks <n>          default 1000",
@@ -577,6 +740,10 @@ impl CliError {
                 "  --encodings <list>    comma list of f32,f16,bf16,i8; default f32,f16,bf16,i8",
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
+                "  --budget-mb <n>       footprint budget in MiB; default 20",
+                "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
+                "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
+                "  --avg-bm25-terms <n>        estimated BM25 postings per chunk; default 24",
             ]
             .join("\n"),
         )
@@ -654,6 +821,14 @@ mod tests {
             "dot",
             "--seed",
             "7",
+            "--budget-mb",
+            "12.5",
+            "--avg-chunk-data-bytes",
+            "128",
+            "--avg-metadata-bytes",
+            "16",
+            "--avg-bm25-terms",
+            "12",
         ]
         .map(str::to_owned);
 
@@ -666,6 +841,10 @@ mod tests {
         assert_eq!(config.encoding, VectorEncoding::I8ScalarQuantized);
         assert_eq!(config.metric, VectorMetric::DotProduct);
         assert_eq!(config.seed, 7);
+        assert_eq!(config.footprint.budget_bytes, 13_107_200);
+        assert_eq!(config.footprint.avg_chunk_data_bytes, 128);
+        assert_eq!(config.footprint.avg_metadata_bytes, 16);
+        assert_eq!(config.footprint.avg_bm25_terms_per_chunk, 12);
     }
 
     #[test]
@@ -712,6 +891,36 @@ mod tests {
             120
         );
         assert_eq!(source_embedding_bytes(10, 8), 0);
+    }
+
+    #[test]
+    fn estimates_total_footprint_components() {
+        let config = SyntheticBenchConfig {
+            chunks: 10,
+            dimension: 8,
+            encoding: VectorEncoding::I8ScalarQuantized,
+            footprint: FootprintConfig {
+                budget_bytes: 1024,
+                avg_chunk_data_bytes: 100,
+                avg_metadata_bytes: 10,
+                avg_bm25_terms_per_chunk: 2,
+            },
+            ..SyntheticBenchConfig::default()
+        };
+
+        let estimate = estimate_footprint(&config);
+
+        assert_eq!(estimate.vector_bytes, 120);
+        assert_eq!(estimate.chunk_fixed_bytes, 640);
+        assert_eq!(estimate.chunk_data_bytes, 1_000);
+        assert_eq!(estimate.metadata_bytes, 100);
+        assert_eq!(estimate.bm25_bytes, 160);
+        assert_eq!(estimate.overhead_bytes, 4_096);
+        assert_eq!(estimate.total_bytes(), 6_116);
+        assert_eq!(
+            estimate.budget_headroom_bytes(config.footprint.budget_bytes),
+            -5_092
+        );
     }
 
     #[test]

@@ -41,6 +41,9 @@ implemented, or superseded by the product spec.
 - `24K x 384d` with `F16` is close but over budget at `21.470 MiB`.
 - `24K x 768d` with `I8ScalarQuantized` is also close but over budget at
   `21.561 MiB`; vector payload alone is about `17.7 MiB`.
+- With compact vector-only persistence (`persist_bm25=false`) and compact chunk
+  metadata encoding, `24K x 768d I8ScalarQuantized` filtered measured locally at
+  `19.581 MiB`, with `chunks.bin` down to about `1.888 MiB`.
 - `24K x 1536d` cannot fit under `20 MB` with current I8 storage.
 - Full chunk text should likely stay outside the hot index if the `20 MB` target
   includes user-visible data.
@@ -140,6 +143,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `wrappers/swift/VectorKitIOSBench`. It links the local XCFramework, exposes
   smoke, full default, and compact vector-only benchmark buttons, and the
   generic iOS Simulator build succeeds locally.
+- `chunks.bin` now writes a v2 payload with a metadata field dictionary and
+  compact varint integer/timestamp metadata values. The loader still accepts the
+  older v1 chunk payload.
 
 ## Likely Next Tasks
 

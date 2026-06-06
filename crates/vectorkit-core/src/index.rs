@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::bm25::{Bm25Config, Bm25Index};
+use crate::bm25::{Bm25Config, Bm25Index, PersistedBm25Index};
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
 use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
@@ -160,13 +160,7 @@ impl ExactVectorIndex {
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
         write_json_file(&chunks_path, &self.chunks)?;
-        write_json_file(
-            &bm25_path,
-            &PersistedBm25Summary {
-                rebuilt_from_chunks: true,
-                active_chunk_count: self.active_chunk_count(),
-            },
-        )?;
+        write_json_file(&bm25_path, &self.bm25.to_persisted())?;
         write_file(
             &tombstones_path,
             &self
@@ -215,7 +209,6 @@ impl ExactVectorIndex {
         let bm25_path = directory.join(BM25_FILE);
         let tombstones_path = directory.join(TOMBSTONES_FILE);
 
-        require_file(&bm25_path)?;
         validate_file_size(&chunks_path, manifest.chunk_bytes)?;
         validate_file_size(&bm25_path, manifest.bm25_bytes)?;
         validate_file_size(&tombstones_path, manifest.tombstone_bytes)?;
@@ -264,6 +257,8 @@ impl ExactVectorIndex {
                 });
             }
         }
+        let persisted_bm25: PersistedBm25Index = read_json_file(&bm25_path)?;
+        validate_bm25_state_matches_chunks(&persisted_bm25, &chunks)?;
 
         let mut index = Self::from_parts(
             manifest.dimension,
@@ -273,7 +268,8 @@ impl ExactVectorIndex {
         )?;
         index.encoded_vectors = encoded_vectors;
         index.chunks = chunks;
-        index.rebuild_derived_state();
+        index.bm25 = Bm25Index::from_persisted(Bm25Config::default(), persisted_bm25)?;
+        index.rebuild_derived_state_from_loaded_bm25();
 
         if index.active_chunk_count() != manifest.active_chunk_count {
             return Err(VectorKitError::InvalidFormat {
@@ -538,11 +534,10 @@ impl ExactVectorIndex {
         }
     }
 
-    fn rebuild_derived_state(&mut self) {
+    fn rebuild_derived_state_from_loaded_bm25(&mut self) {
         self.chunk_offsets.clear();
         self.metadata_filter_index = MetadataFilterIndex::default();
         self.document_versions.clear();
-        self.bm25 = Bm25Index::new(Bm25Config::default());
         self.next_chunk_id = 0;
 
         for offset in 0..self.chunks.len() {
@@ -555,8 +550,6 @@ impl ExactVectorIndex {
                 .entry(chunk.document_id.clone())
                 .and_modify(|version| *version = (*version).max(chunk.version))
                 .or_insert(chunk.version);
-            self.bm25
-                .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
             if !chunk.deleted {
                 self.metadata_filter_index.insert(offset, &chunk.metadata);
             }
@@ -643,12 +636,6 @@ impl PersistedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistedBm25Summary {
-    rebuilt_from_chunks: bool,
-    active_chunk_count: usize,
-}
-
 fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let bytes =
         serde_json::to_vec_pretty(value).map_err(|error| VectorKitError::InvalidFormat {
@@ -672,14 +659,6 @@ fn read_file(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|_| persistence_error("read", path))
 }
 
-fn require_file(path: &Path) -> Result<()> {
-    if path.is_file() {
-        Ok(())
-    } else {
-        Err(persistence_error("find required file", path))
-    }
-}
-
 fn file_size(path: &Path) -> Result<u64> {
     fs::metadata(path)
         .map(|metadata| metadata.len())
@@ -698,6 +677,40 @@ fn validate_file_size(path: &Path, expected: u64) -> Result<()> {
             ),
         })
     }
+}
+
+fn validate_bm25_state_matches_chunks(
+    bm25: &PersistedBm25Index,
+    chunks: &[StoredChunk],
+) -> Result<()> {
+    let chunk_by_id = chunks
+        .iter()
+        .map(|chunk| (chunk.chunk_id, chunk))
+        .collect::<BTreeMap<_, _>>();
+
+    for chunk_id in bm25.active_chunk_ids() {
+        let Some(chunk) = chunk_by_id.get(chunk_id) else {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("bm25 active chunk {chunk_id} is missing from chunk records"),
+            });
+        };
+
+        if chunk.deleted {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("bm25 active chunk {chunk_id} is tombstoned"),
+            });
+        }
+    }
+
+    for chunk_id in bm25.chunk_length_ids() {
+        if !chunk_by_id.contains_key(chunk_id) {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("bm25 length chunk {chunk_id} is missing from chunk records"),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 fn persistence_error(operation: &str, path: &Path) -> VectorKitError {
@@ -941,7 +954,7 @@ mod tests {
         assert!(file_sizes.manifest_bytes > 0);
         assert!(file_sizes.vectors_bytes > 0);
         assert!(file_sizes.chunks_bytes > 0);
-        assert!(file_sizes.bm25_bytes > 0);
+        assert!(file_sizes.bm25_bytes > 100);
         assert_eq!(file_sizes.tombstones_bytes, 2);
         assert_eq!(
             ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),

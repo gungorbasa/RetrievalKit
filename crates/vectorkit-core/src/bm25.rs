@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::error::{Result, VectorKitError};
 use crate::types::ChunkId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +36,13 @@ pub(crate) struct Bm25Hit {
 #[derive(Debug, Clone)]
 pub(crate) struct Bm25Index {
     config: Bm25Config,
+    postings: BTreeMap<String, BTreeMap<ChunkId, usize>>,
+    chunk_lengths: BTreeMap<ChunkId, usize>,
+    active_chunks: BTreeSet<ChunkId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct PersistedBm25Index {
     postings: BTreeMap<String, BTreeMap<ChunkId, usize>>,
     chunk_lengths: BTreeMap<ChunkId, usize>,
     active_chunks: BTreeSet<ChunkId>,
@@ -76,6 +85,24 @@ impl Bm25Index {
 
     pub fn deactivate_chunk(&mut self, chunk_id: ChunkId) {
         self.active_chunks.remove(&chunk_id);
+    }
+
+    pub fn from_persisted(config: Bm25Config, persisted: PersistedBm25Index) -> Result<Self> {
+        persisted.validate()?;
+        Ok(Self {
+            config,
+            postings: persisted.postings,
+            chunk_lengths: persisted.chunk_lengths,
+            active_chunks: persisted.active_chunks,
+        })
+    }
+
+    pub fn to_persisted(&self) -> PersistedBm25Index {
+        PersistedBm25Index {
+            postings: self.postings.clone(),
+            chunk_lengths: self.chunk_lengths.clone(),
+            active_chunks: self.active_chunks.clone(),
+        }
     }
 
     pub fn search_all(&self, query: &str) -> Vec<Bm25Hit> {
@@ -198,6 +225,52 @@ impl Bm25Index {
     }
 }
 
+impl PersistedBm25Index {
+    pub fn active_chunk_ids(&self) -> impl Iterator<Item = &ChunkId> {
+        self.active_chunks.iter()
+    }
+
+    pub fn chunk_length_ids(&self) -> impl Iterator<Item = &ChunkId> {
+        self.chunk_lengths.keys()
+    }
+
+    fn validate(&self) -> Result<()> {
+        for chunk_id in &self.active_chunks {
+            if !self.chunk_lengths.contains_key(chunk_id) {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!("bm25 active chunk {chunk_id} has no stored chunk length"),
+                });
+            }
+        }
+
+        for (term, postings) in &self.postings {
+            if term.is_empty() {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "bm25 term cannot be empty".to_owned(),
+                });
+            }
+
+            for (chunk_id, term_frequency) in postings {
+                if *term_frequency == 0 {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!(
+                            "bm25 term '{term}' has zero frequency for chunk {chunk_id}"
+                        ),
+                    });
+                }
+
+                if !self.chunk_lengths.contains_key(chunk_id) {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!("bm25 term '{term}' references missing chunk {chunk_id}"),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 fn bm25_term_score(
     term_frequency: usize,
     chunk_length: usize,
@@ -295,5 +368,22 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
         assert_eq!(hits[0].matched_terms, vec!["arama", "hızlı"]);
+    }
+
+    #[test]
+    fn persisted_bm25_state_round_trips_keyword_results() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(1, "Swift local search", true);
+        index.add_chunk(2, "Rust vector core", true);
+        index.deactivate_chunk(2);
+
+        let restored =
+            Bm25Index::from_persisted(Bm25Config::default(), index.to_persisted()).unwrap();
+
+        let hits = restored.search_all("swift search");
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 1);
+        assert!(restored.search_all("rust").is_empty());
     }
 }

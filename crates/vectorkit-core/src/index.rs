@@ -167,7 +167,7 @@ impl ExactVectorIndex {
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
         write_file(&chunks_path, &encode_chunks(&self.chunks)?)?;
-        write_json_file(&bm25_path, &self.bm25.to_persisted())?;
+        write_file(&bm25_path, &self.bm25.to_persisted().to_payload_bytes()?)?;
         write_file(
             &tombstones_path,
             &self
@@ -264,7 +264,7 @@ impl ExactVectorIndex {
                 });
             }
         }
-        let persisted_bm25: PersistedBm25Index = read_json_file(&bm25_path)?;
+        let persisted_bm25 = PersistedBm25Index::from_payload_bytes(&read_file(&bm25_path)?)?;
         validate_bm25_state_matches_chunks(&persisted_bm25, &chunks)?;
 
         let mut index = Self::from_parts(

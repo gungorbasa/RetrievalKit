@@ -6,6 +6,9 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::error::{Result, VectorKitError};
 use crate::types::ChunkId;
 
+const BM25_MAGIC: &[u8; 4] = b"VKBM";
+const BM25_FORMAT_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bm25Config {
     /// Term frequency saturation parameter. V1 default is `1.2`.
@@ -226,6 +229,111 @@ impl Bm25Index {
 }
 
 impl PersistedBm25Index {
+    pub fn to_payload_bytes(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(BM25_MAGIC);
+        write_u32(&mut bytes, BM25_FORMAT_VERSION);
+        write_u32(
+            &mut bytes,
+            checked_usize_to_u32(self.postings.len(), "bm25 term count")?,
+        );
+        for (term, postings) in &self.postings {
+            write_string(&mut bytes, term)?;
+            write_u32(
+                &mut bytes,
+                checked_usize_to_u32(postings.len(), "bm25 posting count")?,
+            );
+            for (chunk_id, term_frequency) in postings {
+                write_u64(&mut bytes, *chunk_id);
+                write_u32(
+                    &mut bytes,
+                    checked_usize_to_u32(*term_frequency, "bm25 term frequency")?,
+                );
+            }
+        }
+
+        write_u32(
+            &mut bytes,
+            checked_usize_to_u32(self.chunk_lengths.len(), "bm25 chunk length count")?,
+        );
+        for (chunk_id, length) in &self.chunk_lengths {
+            write_u64(&mut bytes, *chunk_id);
+            write_u32(
+                &mut bytes,
+                checked_usize_to_u32(*length, "bm25 chunk length")?,
+            );
+        }
+
+        write_u32(
+            &mut bytes,
+            checked_usize_to_u32(self.active_chunks.len(), "bm25 active chunk count")?,
+        );
+        for chunk_id in &self.active_chunks {
+            write_u64(&mut bytes, *chunk_id);
+        }
+
+        Ok(bytes)
+    }
+
+    pub fn from_payload_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut reader = Bm25ByteReader::new(bytes);
+        if reader.read_exact(BM25_MAGIC.len())? != BM25_MAGIC {
+            return Err(VectorKitError::InvalidFormat {
+                message: "bm25 file has invalid magic".to_owned(),
+            });
+        }
+
+        let format_version = reader.read_u32()?;
+        if format_version != BM25_FORMAT_VERSION {
+            return Err(VectorKitError::InvalidFormat {
+                message: format!("unsupported bm25 file version {format_version}"),
+            });
+        }
+
+        let term_count = checked_u32_to_usize(reader.read_u32()?, "bm25 term count")?;
+        let mut postings = BTreeMap::new();
+        for _ in 0..term_count {
+            let term = reader.read_string()?;
+            let posting_count = checked_u32_to_usize(reader.read_u32()?, "bm25 posting count")?;
+            let mut term_postings = BTreeMap::new();
+            for _ in 0..posting_count {
+                term_postings.insert(
+                    reader.read_u64()?,
+                    checked_u32_to_usize(reader.read_u32()?, "bm25 term frequency")?,
+                );
+            }
+            postings.insert(term, term_postings);
+        }
+
+        let chunk_length_count =
+            checked_u32_to_usize(reader.read_u32()?, "bm25 chunk length count")?;
+        let mut chunk_lengths = BTreeMap::new();
+        for _ in 0..chunk_length_count {
+            chunk_lengths.insert(
+                reader.read_u64()?,
+                checked_u32_to_usize(reader.read_u32()?, "bm25 chunk length")?,
+            );
+        }
+
+        let active_chunk_count =
+            checked_u32_to_usize(reader.read_u32()?, "bm25 active chunk count")?;
+        let mut active_chunks = BTreeSet::new();
+        for _ in 0..active_chunk_count {
+            active_chunks.insert(reader.read_u64()?);
+        }
+
+        reader.finish()?;
+        let persisted = Self {
+            postings,
+            chunk_lengths,
+            active_chunks,
+        };
+        persisted.validate()?;
+        Ok(persisted)
+    }
+
     pub fn active_chunk_ids(&self) -> impl Iterator<Item = &ChunkId> {
         self.active_chunks.iter()
     }
@@ -269,6 +377,99 @@ impl PersistedBm25Index {
 
         Ok(())
     }
+}
+
+fn write_string(bytes: &mut Vec<u8>, value: &str) -> Result<()> {
+    write_u32(
+        bytes,
+        checked_usize_to_u32(value.len(), "bm25 string length")?,
+    );
+    bytes.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn write_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_u64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+struct Bm25ByteReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Bm25ByteReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn read_string(&mut self) -> Result<String> {
+        let len = checked_u32_to_usize(self.read_u32()?, "bm25 string length")?;
+        let bytes = self.read_exact(len)?;
+        String::from_utf8(bytes.to_vec()).map_err(|error| VectorKitError::InvalidFormat {
+            message: format!("invalid UTF-8 string in bm25 file: {error}"),
+        })
+    }
+
+    fn read_u32(&mut self) -> Result<u32> {
+        Ok(u32::from_le_bytes(
+            self.read_exact(std::mem::size_of::<u32>())?
+                .try_into()
+                .expect("u32 chunk size"),
+        ))
+    }
+
+    fn read_u64(&mut self) -> Result<u64> {
+        Ok(u64::from_le_bytes(
+            self.read_exact(std::mem::size_of::<u64>())?
+                .try_into()
+                .expect("u64 chunk size"),
+        ))
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<&'a [u8]> {
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| VectorKitError::InvalidFormat {
+                message: "bm25 reader offset overflow".to_owned(),
+            })?;
+        let Some(bytes) = self.bytes.get(self.offset..end) else {
+            return Err(VectorKitError::InvalidFormat {
+                message: "bm25 file ended unexpectedly".to_owned(),
+            });
+        };
+        self.offset = end;
+        Ok(bytes)
+    }
+
+    fn finish(&self) -> Result<()> {
+        if self.offset == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "bm25 file has {} trailing bytes",
+                    self.bytes.len() - self.offset
+                ),
+            })
+        }
+    }
+}
+
+fn checked_usize_to_u32(value: usize, label: &str) -> Result<u32> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in u32"),
+    })
+}
+
+fn checked_u32_to_usize(value: u32, label: &str) -> Result<usize> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in usize"),
+    })
 }
 
 fn bm25_term_score(
@@ -377,13 +578,21 @@ mod tests {
         index.add_chunk(2, "Rust vector core", true);
         index.deactivate_chunk(2);
 
-        let restored =
-            Bm25Index::from_persisted(Bm25Config::default(), index.to_persisted()).unwrap();
+        let bytes = index.to_persisted().to_payload_bytes().unwrap();
+        let persisted = PersistedBm25Index::from_payload_bytes(&bytes).unwrap();
+        let restored = Bm25Index::from_persisted(Bm25Config::default(), persisted).unwrap();
 
         let hits = restored.search_all("swift search");
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
         assert!(restored.search_all("rust").is_empty());
+    }
+
+    #[test]
+    fn persisted_bm25_state_rejects_bad_magic() {
+        let error = PersistedBm25Index::from_payload_bytes(b"NOPE").unwrap_err();
+
+        assert!(matches!(error, VectorKitError::InvalidFormat { .. }));
     }
 }

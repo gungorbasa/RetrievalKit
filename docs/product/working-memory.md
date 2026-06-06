@@ -101,6 +101,9 @@ versus about `9.1 ms` for F32 on the same machine.
 - Late result materialization is implemented for exact vector search. The hot
   loop keeps only `chunk_id`, `offset`, and score, then builds final `SearchHit`
   values after sorting the winning candidates.
+- Active-offset scanning is implemented for unfiltered exact vector search. The
+  index keeps a derived `active_offsets` list so tombstoned rows are not scanned
+  after upserts, deletes, or persistence reload.
 
 ## Likely Next Tasks
 

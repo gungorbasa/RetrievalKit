@@ -41,6 +41,7 @@ pub struct ExactVectorIndex {
     chunks: Vec<StoredChunk>,
     encoded_vectors: EncodedVectorStore,
     chunk_offsets: Vec<Option<usize>>,
+    active_offsets: Vec<usize>,
     metadata_filter_index: MetadataFilterIndex,
     next_chunk_id: ChunkId,
     document_versions: BTreeMap<String, u64>,
@@ -91,6 +92,7 @@ impl ExactVectorIndex {
             chunks: Vec::new(),
             encoded_vectors: EncodedVectorStore::new(vector_encoding)?,
             chunk_offsets: Vec::new(),
+            active_offsets: Vec::new(),
             metadata_filter_index: MetadataFilterIndex::default(),
             next_chunk_id: 0,
             document_versions: BTreeMap::new(),
@@ -125,7 +127,7 @@ impl ExactVectorIndex {
 
     /// Returns the number of chunks currently eligible for search results.
     pub fn active_chunk_count(&self) -> usize {
-        self.chunks.iter().filter(|chunk| !chunk.deleted).count()
+        self.active_offsets.len()
     }
 
     /// Returns an approximate payload byte breakdown for the currently loaded index.
@@ -146,7 +148,8 @@ impl ExactVectorIndex {
                 .sum(),
             tombstone_bytes: self.chunks.len() * std::mem::size_of::<bool>(),
             version_bytes: self.chunks.len() * std::mem::size_of::<u64>(),
-            chunk_offset_bytes: self.chunk_offsets.len() * std::mem::size_of::<Option<usize>>(),
+            chunk_offset_bytes: self.chunk_offsets.len() * std::mem::size_of::<Option<usize>>()
+                + self.active_offsets.len() * std::mem::size_of::<usize>(),
             bm25_bytes: self.bm25.estimated_payload_bytes(),
             metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
         }
@@ -329,6 +332,7 @@ impl ExactVectorIndex {
             version: chunk.version,
         };
         if !stored_chunk.deleted {
+            self.active_offsets.push(offset);
             self.metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
         }
@@ -359,15 +363,18 @@ impl ExactVectorIndex {
             .unwrap_or(0)
             + 1;
 
+        let mut deactivated_offsets = Vec::new();
         for (offset, chunk) in self.chunks.iter_mut().enumerate() {
             if chunk.document_id == document.id {
                 if !chunk.deleted {
                     self.metadata_filter_index.remove(offset, &chunk.metadata);
+                    deactivated_offsets.push(offset);
                 }
                 chunk.deleted = true;
                 self.bm25.deactivate_chunk(chunk.chunk_id);
             }
         }
+        self.remove_active_offsets(&deactivated_offsets);
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
         for chunk_input in chunk_inputs {
@@ -385,6 +392,7 @@ impl ExactVectorIndex {
                 deleted: false,
                 version,
             };
+            self.active_offsets.push(offset);
             self.metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
             self.chunks.push(stored_chunk);
@@ -401,14 +409,17 @@ impl ExactVectorIndex {
     /// idempotent and return zero once no active chunks remain.
     pub fn delete_document(&mut self, document_id: &str) -> usize {
         let mut deleted_count = 0;
+        let mut deactivated_offsets = Vec::new();
         for (offset, chunk) in self.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id && !chunk.deleted {
                 self.metadata_filter_index.remove(offset, &chunk.metadata);
                 chunk.deleted = true;
                 self.bm25.deactivate_chunk(chunk.chunk_id);
+                deactivated_offsets.push(offset);
                 deleted_count += 1;
             }
         }
+        self.remove_active_offsets(&deactivated_offsets);
         deleted_count
     }
 
@@ -445,7 +456,7 @@ impl ExactVectorIndex {
                 }
             }
             None => {
-                for offset in 0..self.chunks.len() {
+                for offset in self.active_offsets.iter().copied() {
                     self.score_search_candidate(offset, query, &encoded_query, &mut candidates)?;
                 }
             }
@@ -519,6 +530,15 @@ impl ExactVectorIndex {
         self.chunk_offsets[chunk_id] = Some(offset);
     }
 
+    fn remove_active_offsets(&mut self, offsets: &[usize]) {
+        if offsets.is_empty() {
+            return;
+        }
+
+        self.active_offsets
+            .retain(|active_offset| !offsets.contains(active_offset));
+    }
+
     fn push_embedding(&mut self, embedding: &[f32]) {
         match self.metric {
             VectorMetric::DotProduct => self.encoded_vectors.push(embedding),
@@ -543,6 +563,7 @@ impl ExactVectorIndex {
 
     fn rebuild_derived_state_from_loaded_bm25(&mut self) {
         self.chunk_offsets.clear();
+        self.active_offsets.clear();
         self.metadata_filter_index = MetadataFilterIndex::default();
         self.document_versions.clear();
         self.next_chunk_id = 0;
@@ -558,6 +579,7 @@ impl ExactVectorIndex {
                 .and_modify(|version| *version = (*version).max(chunk.version))
                 .or_insert(chunk.version);
             if !chunk.deleted {
+                self.active_offsets.push(offset);
                 self.metadata_filter_index.insert(offset, &chunk.metadata);
             }
         }
@@ -1199,7 +1221,7 @@ mod tests {
         assert_eq!(estimate.version_bytes, std::mem::size_of::<u64>());
         assert_eq!(
             estimate.chunk_offset_bytes,
-            2 * std::mem::size_of::<Option<usize>>()
+            2 * std::mem::size_of::<Option<usize>>() + std::mem::size_of::<usize>()
         );
         assert!(estimate.bm25_bytes > 0);
         assert!(estimate.metadata_filter_bytes > 0);
@@ -1864,6 +1886,7 @@ mod tests {
         assert_eq!(old_chunk_ids, vec![0]);
         assert_eq!(new_chunk_ids, vec![1]);
         assert!(index.chunk(0).unwrap().deleted);
+        assert_eq!(index.active_offsets, vec![1]);
         assert_eq!(index.chunk(1).unwrap().version, 2);
 
         let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
@@ -1887,6 +1910,7 @@ mod tests {
         assert!(new_chunk_ids.is_empty());
         assert_eq!(index.len(), 1);
         assert_eq!(index.active_chunk_count(), 0);
+        assert!(index.active_offsets.is_empty());
         assert!(index.chunk(0).unwrap().deleted);
         assert!(hits.is_empty());
     }
@@ -1908,6 +1932,7 @@ mod tests {
         let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
 
         assert_eq!(deleted_count, 2);
+        assert!(index.active_offsets.is_empty());
         assert!(hits.is_empty());
     }
 

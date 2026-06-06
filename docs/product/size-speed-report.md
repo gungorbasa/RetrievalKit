@@ -5,179 +5,177 @@ Date: 2026-06-06
 ## Goal
 
 Keep roughly `24K` vectors plus required local retrieval/display data under a
-`20 MiB` persisted footprint while keeping retrieval fast on local devices. RAM
-usage is also important, so the same compact layout should be friendly to
+`20 MiB` persisted footprint while keeping retrieval fast on local devices.
+RAM usage is also important, so the same compact layout should be friendly to
 in-memory search.
 
 This report uses `MiB` (`1024 * 1024` bytes). A strict decimal `20 MB` budget is
 about `19.07 MiB`, so it is tighter than the numbers below by about `0.93 MiB`.
 
-## Method
+## Current Measured Format
 
-Benchmarks were run with:
+The benchmark now saves a real local index and reports persisted file sizes.
+The measured package contains:
+
+- `manifest.json`: small format and configuration metadata.
+- `vectors.vec`: raw encoded vector payload.
+- `chunks.bin`: compact binary chunk records with text and metadata payloads.
+- `bm25.bin`: binary BM25 state, including postings, chunk lengths, and active
+  chunk ids.
+- `tombstones.bin`: binary tombstone state.
+
+The format is intentionally simple and local-first. It does not include HNSW,
+ANN graph data, server state, sync state, or external database files.
+
+## Benchmark Method
+
+The main matrix was run with actual persistence enabled:
 
 ```bash
+rm -rf /tmp/vectorkit-report-matrix
 cargo run --release -p vectorkit-cli -- bench matrix \
   --chunks 24000 \
   --dimensions 384,768 \
   --queries 100 \
   --top-k 5,10 \
   --encodings f32,f16,i8 \
+  --persist-dir /tmp/vectorkit-report-matrix \
   --budget-mb 20 \
   --avg-chunk-data-bytes 256 \
   --avg-metadata-bytes 32 \
   --avg-bm25-terms 24
 ```
 
-The CLI currently reports an estimate, not actual disk files, because index
-persistence is not implemented yet. The estimate is intentionally explicit:
+The `avg-*` flags still feed the conservative estimator columns printed by the
+CLI. The conclusions below use the actual saved file sizes from the persisted
+index, not the old estimate.
 
-```text
-vector bytes:
-  F32 = chunks * dim * 4
-  F16/BF16 = chunks * dim * 2
-  I8 = chunks * dim + chunks * 4 scale bytes
+Detailed file breakdowns were then run for the closest configurations:
 
-auxiliary bytes:
-  fixed chunk record = chunks * 64
-  chunk data = chunks * avg_chunk_data_bytes
-  metadata = chunks * avg_metadata_bytes
-  BM25 = chunks * avg_bm25_terms_per_chunk * 8
-  file/header overhead = 4096
+```bash
+cargo run --release -p vectorkit-cli -- bench synthetic \
+  --chunks 24000 \
+  --dimension 384 \
+  --queries 100 \
+  --top-k 10 \
+  --encoding i8 \
+  --persist-dir /tmp/vectorkit-report-384-i8 \
+  --budget-mb 20 \
+  --avg-chunk-data-bytes 256 \
+  --avg-metadata-bytes 32 \
+  --avg-bm25-terms 24
 ```
 
-The default compact-data estimate is:
+The same command shape was used for `384d F16` and `768d I8`.
 
-```text
-avg chunk data bytes: 256
-avg metadata bytes: 32
-avg BM25 terms per chunk: 24
-```
+## Persisted Size, Speed, And Recall
 
-## Baseline Results
+Headroom is calculated from actual persisted size: `20 MiB - persisted MiB`.
 
-Baseline assumes vectors plus compact chunk data, metadata, and BM25 postings.
+| chunks | dim | top_k | encoding | persisted MiB | headroom MiB | avg ms | p95 ms | recall@k vs F32 |
+|---:|---:|---:|:---|---:|---:|---:|---:|---:|
+| 24K | 384 | 5 | F32 | 39.048 | -19.048 | 3.574 | 3.699 | 1.0000 |
+| 24K | 384 | 5 | F16 | 21.470 | -1.470 | 3.689 | 3.811 | 1.0000 |
+| 24K | 384 | 5 | I8 | 12.772 | 7.228 | 3.954 | 4.088 | 0.9900 |
+| 24K | 384 | 10 | F32 | 39.048 | -19.048 | 3.813 | 3.941 | 1.0000 |
+| 24K | 384 | 10 | F16 | 21.470 | -1.470 | 3.881 | 3.990 | 0.9990 |
+| 24K | 384 | 10 | I8 | 12.772 | 7.228 | 4.646 | 4.749 | 0.9940 |
+| 24K | 768 | 5 | F32 | 74.204 | -54.204 | 6.585 | 6.780 | 1.0000 |
+| 24K | 768 | 5 | F16 | 39.048 | -19.048 | 6.661 | 6.756 | 1.0000 |
+| 24K | 768 | 5 | I8 | 21.561 | -1.561 | 7.041 | 7.165 | 0.9900 |
+| 24K | 768 | 10 | F32 | 74.204 | -54.204 | 6.840 | 6.963 | 1.0000 |
+| 24K | 768 | 10 | F16 | 39.048 | -19.048 | 6.852 | 7.023 | 1.0000 |
+| 24K | 768 | 10 | I8 | 21.561 | -1.561 | 7.786 | 7.945 | 0.9940 |
 
-| chunks | dim | encoding | vector MiB | aux MiB | est total MiB | headroom vs 20 MiB |
-|---:|---:|:---|---:|---:|---:|---:|
-| 24K | 384 | F32 | 35.156 | 12.455 | 47.611 | -27.611 |
-| 24K | 384 | F16 | 17.578 | 12.455 | 30.033 | -10.033 |
-| 24K | 384 | I8 | 8.881 | 12.455 | 21.336 | -1.336 |
-| 24K | 768 | F32 | 70.312 | 12.455 | 82.768 | -62.768 |
-| 24K | 768 | F16 | 35.156 | 12.455 | 47.611 | -27.611 |
-| 24K | 768 | I8 | 17.670 | 12.455 | 30.125 | -10.125 |
+## File Breakdown For Key Configurations
 
-Conclusion: with BM25 and `256 B` average chunk data, no current encoding fits
-the full `24K` target under `20 MiB`. `384d I8` is close, missing by about
-`1.34 MiB`. `768d I8` is not close enough.
+`manifest.json` rounded to `0.000 MiB` in these runs, so the table focuses on
+the material files.
 
-## Speed and Recall
+| config | total MiB | vectors MiB | chunks MiB | BM25 MiB | tombstones MiB | headroom MiB |
+|:---|---:|---:|---:|---:|---:|---:|
+| 24K x 384d I8 | 12.772 | 8.881 | 1.751 | 2.118 | 0.023 | 7.228 |
+| 24K x 384d F16 | 21.470 | 17.578 | 1.751 | 2.118 | 0.023 | -1.470 |
+| 24K x 768d I8 | 21.561 | 17.670 | 1.751 | 2.118 | 0.023 | -1.561 |
 
-Same baseline run, release build, synthetic vectors, cosine search, `100`
-queries.
+The main storage bottleneck is still vector payload. After binary chunk and BM25
+persistence, the non-vector persisted data in this synthetic benchmark is about
+`3.89 MiB` for `24K` chunks. That makes `384d I8` comfortable, but leaves
+`384d F16` and `768d I8` just over the `20 MiB` target.
 
-| dim | top_k | encoding | avg ms | p95 ms | recall@k vs F32 |
-|---:|---:|:---|---:|---:|---:|
-| 384 | 5 | F32 | 3.594 | 3.696 | 1.0000 |
-| 384 | 5 | F16 | 3.771 | 4.129 | 1.0000 |
-| 384 | 5 | I8 | 3.890 | 4.012 | 0.9900 |
-| 384 | 10 | F32 | 3.785 | 3.902 | 1.0000 |
-| 384 | 10 | F16 | 3.860 | 3.983 | 0.9990 |
-| 384 | 10 | I8 | 4.625 | 4.775 | 0.9940 |
-| 768 | 5 | F32 | 6.575 | 6.738 | 1.0000 |
-| 768 | 5 | F16 | 6.671 | 6.781 | 1.0000 |
-| 768 | 5 | I8 | 7.029 | 7.176 | 0.9900 |
-| 768 | 10 | F32 | 6.794 | 6.956 | 1.0000 |
-| 768 | 10 | F16 | 6.863 | 6.975 | 1.0000 |
-| 768 | 10 | I8 | 7.699 | 7.822 | 0.9940 |
+## Comparison Against The Old Estimator
 
-Conclusion: `24K x 384d I8` is fast enough in the current exact full-scan
-benchmark. `24K x 768d I8` is also likely fast enough, but it misses the size
-budget with current storage assumptions.
+The earlier report used a conservative estimate with `256 B` chunk data, `32 B`
+metadata, and `24` BM25 terms per chunk. Actual binary persistence is materially
+smaller for the synthetic data shape:
 
-## Footprint Sensitivity
+| config | old estimate MiB | persisted MiB | delta MiB |
+|:---|---:|---:|---:|
+| 24K x 384d I8 | 21.336 | 12.772 | -8.564 |
+| 24K x 384d F16 | 30.033 | 21.470 | -8.563 |
+| 24K x 768d I8 | 30.125 | 21.561 | -8.564 |
 
-### I8 Without BM25 In The Compact Package
+This improvement comes from real binary chunk/BM25 persistence and the current
+synthetic payloads being smaller than the conservative placeholder assumptions.
+It should not be treated as proof that arbitrary real app data will have the
+same footprint.
 
-Assumptions:
+## Conclusions
 
-```text
-avg chunk data bytes: 256
-avg metadata bytes: 32
-avg BM25 terms per chunk: 0
-```
+`24K x 384d I8ScalarQuantized` is now the clear first compact target. It
+persists at `12.772 MiB`, leaving `7.228 MiB` of headroom under a `20 MiB`
+budget while retaining `0.9900` recall at `top_k=5` and `0.9940` recall at
+`top_k=10` against F32 on the synthetic benchmark.
 
-| chunks | dim | encoding | vector MiB | aux MiB | est total MiB | headroom vs 20 MiB |
-|---:|---:|:---|---:|---:|---:|---:|
-| 24K | 384 | I8 | 8.881 | 8.061 | 16.941 | 3.059 |
-| 24K | 768 | I8 | 17.670 | 8.061 | 25.730 | -5.730 |
+`24K x 384d F16` is close but still misses the budget at `21.470 MiB`. It is
+quality-preserving in the current synthetic run, but needs about `1.47 MiB` of
+additional savings to fit.
 
-Conclusion: `384d I8` fits if BM25 is omitted from the compact package.
-`768d I8` still does not fit.
+`24K x 768d I8ScalarQuantized` is also close but misses the budget at
+`21.561 MiB`. It needs about `1.56 MiB` of additional savings or fewer chunks
+under the same data shape.
 
-### I8 With Smaller Chunk Data And BM25
+`24K x 768d F16`, `24K x 384d F32`, and `24K x 768d F32` are not viable for the
+sub-`20 MiB` package target without changing the target, reducing chunks, or
+removing required persisted data.
 
-Assumptions:
+Retrieval-only latency is acceptable on this development machine for the tested
+exact full-scan shapes. The relevant compact target, `384d I8`, measured
+`4.646 ms` average and `4.749 ms` p95 at `top_k=10`. These are not iPhone or
+Swift wrapper numbers, so target-device validation is still required.
 
-```text
-avg chunk data bytes: 128
-avg metadata bytes: 32
-avg BM25 terms per chunk: 24
-```
+## Remaining Risks
 
-| chunks | dim | encoding | vector MiB | aux MiB | est total MiB | headroom vs 20 MiB |
-|---:|---:|:---|---:|---:|---:|---:|
-| 24K | 384 | I8 | 8.881 | 9.525 | 18.406 | 1.594 |
-| 24K | 768 | I8 | 17.670 | 9.525 | 27.195 | -7.195 |
-
-Conclusion: `384d I8` fits if chunk data averages around `128 B` even with BM25.
-`768d I8` still does not fit.
-
-### Minimum Current I8 Shape
-
-Assumptions:
-
-```text
-avg chunk data bytes: 128
-avg metadata bytes: 16
-avg BM25 terms per chunk: 0
-```
-
-| chunks | dim | encoding | vector MiB | aux MiB | est total MiB | headroom vs 20 MiB |
-|---:|---:|:---|---:|---:|---:|---:|
-| 24K | 384 | I8 | 8.881 | 4.765 | 13.645 | 6.355 |
-| 24K | 768 | I8 | 17.670 | 4.765 | 22.434 | -2.434 |
-
-Conclusion: even a very compact `768d I8` package misses `20 MiB`. To make
-`768d + data` fit, VectorKit likely needs `BinaryQuantized`, fewer chunks, lower
-dimension vectors, or a much smaller definition of required data.
+- The benchmark uses synthetic chunk text and sparse metadata. Real app payloads
+  may make `chunks.bin` materially larger.
+- Real BM25 term distributions can differ from synthetic text, especially with
+  longer documents, different languages, or more repeated terms.
+- The benchmark measures retrieval-only latency. It does not include embedding
+  generation, Swift wrapper overhead, UI work, or full app lifecycle costs.
+- Current memory reporting is payload-oriented. It is not a complete allocator
+  resident-set-size measurement.
+- Persistence load timing is not yet part of the benchmark report.
+- Recall is measured against synthetic vectors. Real corpus quality and user
+  query distributions still need a fixture-backed benchmark.
 
 ## Recommendation
 
-For the current `24K + data < 20 MiB` target:
+Use `24K x 384d I8ScalarQuantized` as the first sub-`20 MiB` persisted package
+target, with exact vector search, real BM25 state, compact chunk records, and
+tombstones included.
 
-1. Use `384d` embeddings with `I8ScalarQuantized` for the first compact target.
-2. Keep full chunk text outside the hot compact index. Store only compact
-   display/retrieval data in the package.
-3. Treat BM25 as optional for the sub-20 MiB target unless its postings can be
-   compacted enough to keep total size below budget.
-4. Add persistence with file-size reporting as soon as practical, because the
-   estimator should be replaced by actual saved file sizes.
-5. Explore `BinaryQuantized` only if `768d + required data < 20 MiB` becomes a
-   hard requirement.
+Keep `384d F16` as the quality-preserving fallback when the product can tolerate
+roughly `21.5 MiB`, or if a later compression pass can recover at least
+`1.5 MiB` without complicating the format.
+
+Do not prioritize `768d` for the first compact target. `768d I8` is close, but
+it is still over budget before real metadata and platform overhead are counted.
+It should wait until after realistic corpus benchmarks show the quality gain is
+worth the extra size work.
 
 ## Next Implementation Step
 
-Add persistence-size instrumentation around the eventual saved index format:
-
-```text
-vectors file bytes
-chunk metadata/data file bytes
-BM25 file bytes
-tombstone/version bytes
-total package bytes
-loaded RAM bytes
-```
-
-Until persistence exists, the CLI footprint estimator should remain in the
-benchmark output and be updated whenever the storage model changes.
+Add a realistic fixture-backed benchmark that persists actual representative
+chunk text, metadata, and BM25 state. The current synthetic report proves the
+storage format can meet the target for `384d I8`, but the product decision needs
+realistic corpus data before locking the compact package contract.

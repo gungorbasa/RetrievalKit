@@ -35,10 +35,12 @@ implemented, or superseded by the product spec.
   prove the cost is acceptable.
 - Speed remains a first-class requirement. Size reductions are not useful if
   they push target-device retrieval outside the low-latency budget.
-- `24K x 384d` with `I8ScalarQuantized` is the most practical near-term target.
-- `24K x 768d` with `I8ScalarQuantized` is tight because vector payload alone is
-  about `17.7 MiB`, leaving little room for chunks, metadata, BM25, headers, and
-  tombstones.
+- `24K x 384d` with `I8ScalarQuantized` is the first practical compact target.
+  With current binary persistence, it saves at `12.772 MiB` including vectors,
+  chunks, BM25, tombstones, and manifest.
+- `24K x 384d` with `F16` is close but over budget at `21.470 MiB`.
+- `24K x 768d` with `I8ScalarQuantized` is also close but over budget at
+  `21.561 MiB`; vector payload alone is about `17.7 MiB`.
 - `24K x 1536d` cannot fit under `20 MB` with current I8 storage.
 - Full chunk text should likely stay outside the hot index if the `20 MB` target
   includes user-visible data.
@@ -98,10 +100,9 @@ For `24K`, expected exact I8 retrieval is roughly:
 
 ## Likely Next Tasks
 
-- Add a storage-size estimator or disk-size benchmark output that separates:
-  vector bytes, chunk metadata bytes, BM25 bytes, tombstone/version bytes, and
-  total estimated index bytes.
-- After persistence exists, replace estimates with actual file-size reporting
-  using saved index files.
-- Benchmark the real target explicitly: `24K`, `384d/768d`, `top_k=5/10`,
-  `I8ScalarQuantized`, with recall and size estimates.
+- Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
+  distributions, then persist and report actual file sizes.
+- Add persistence load timing and payload/RSS memory reporting to the benchmark
+  output.
+- Validate the compact target on a target Apple device through the Swift
+  wrapper once the wrapper can load persisted indexes.

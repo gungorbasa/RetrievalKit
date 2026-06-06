@@ -38,6 +38,7 @@ The default config is owned by `vectorkit-ffi` and currently runs:
 - `f32`, `f16`, and `i8`
 - unfiltered search
 - filtered search with `filter_every=10`
+- persistence save/load metrics and post-load search latency
 
 You can override it with either `--config '<json>'` or
 `--config-file config.json`. Add `--raw` to print compact JSON.

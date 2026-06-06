@@ -1,3 +1,5 @@
 /target/
 /.build/
 **/.build/
+**/*.xcodeproj/project.xcworkspace/
+**/*.xcodeproj/xcuserdata/

@@ -123,7 +123,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - A `vectorkit-ffi` crate now exposes `vectorkit_bench_synthetic_json` and
   `vectorkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
   benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
-  unfiltered and `filter_every=10` filtered searches.
+  unfiltered and `filter_every=10` filtered searches. FFI benchmark rows now
+  also include persistence save time, load time, persisted file sizes, and
+  post-load search latency by default.
 - A SwiftPM macOS command-line harness exists at
   `wrappers/swift/VectorKitBench`. It links `vectorkit-ffi`, supports
   `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
@@ -148,7 +150,6 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   older devices that may not report `dotprod`.
 - Explore parallel exact scan only after target-device benchmarks show remaining
   CPU pressure.
-- Add persistence load timing and payload/RSS memory reporting to the benchmark
-  output.
+- Add payload/RSS memory reporting to the benchmark output.
 - Validate the compact target on a target Apple device through the Swift
   wrapper once the wrapper can load persisted indexes.

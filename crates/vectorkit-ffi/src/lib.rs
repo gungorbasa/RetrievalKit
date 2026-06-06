@@ -1,19 +1,24 @@
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter};
+use std::fs;
+use std::io;
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 use std::ptr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use simsimd::capabilities;
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, Metadata, MetadataValue, SearchHit, SearchQuery,
-    VectorEncoding, VectorMetric,
+    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, Metadata, MetadataValue,
+    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
+static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Runs VectorKit's synthetic device benchmark and returns a heap-allocated
 /// UTF-8 JSON string. Call `vectorkit_string_free` when the caller is done.
@@ -129,6 +134,86 @@ fn benchmark_one(
 ) -> Result<BenchmarkRun, BenchError> {
     let (index, build_duration) = build_synthetic_index(config, dimension, encoding, filter_every)?;
     let index_size = index.size_estimate();
+    let search_measurement = benchmark_searches(
+        config,
+        dimension,
+        encoding,
+        filter_every,
+        &index,
+        ground_truth,
+    )?;
+    let persistence = config
+        .include_persistence
+        .then(|| benchmark_persistence(config, dimension, encoding, filter_every, &index))
+        .transpose()?;
+
+    let stats = search_measurement.stats;
+
+    Ok(BenchmarkRun {
+        chunks: config.chunks,
+        dimension,
+        top_k: config.top_k,
+        encoding: encoding_name(encoding).to_owned(),
+        metric: metric_name(config.metric).to_owned(),
+        filter_every,
+        vector_payload_bytes: index_size.vector_bytes,
+        total_payload_bytes: index_size.total_bytes(),
+        build_ms: millis(build_duration),
+        min_ms: stats.min_ms,
+        avg_ms: stats.avg_ms,
+        p50_ms: stats.p50_ms,
+        p95_ms: stats.p95_ms,
+        max_ms: stats.max_ms,
+        recall_at_k_vs_f32: search_measurement.recall_at_k_vs_f32,
+        total_hits: stats.total_hits,
+        top_hit_checksum: stats.top_hit_checksum,
+        persistence,
+    })
+}
+
+fn benchmark_persistence(
+    config: &BenchmarkConfig,
+    dimension: usize,
+    encoding: VectorEncoding,
+    filter_every: Option<usize>,
+    index: &ExactVectorIndex,
+) -> Result<BenchmarkPersistence, BenchError> {
+    let directory = TemporaryBenchmarkDirectory::create(dimension, encoding, filter_every)?;
+
+    let save_start = Instant::now();
+    let file_sizes = index.save_to_dir(directory.path())?;
+    let save_duration = save_start.elapsed();
+
+    let load_start = Instant::now();
+    let loaded_index = ExactVectorIndex::load_from_dir(directory.path())?;
+    let load_duration = load_start.elapsed();
+
+    let post_load_search = benchmark_searches(
+        config,
+        dimension,
+        encoding,
+        filter_every,
+        &loaded_index,
+        None,
+    )?
+    .stats;
+
+    Ok(BenchmarkPersistence {
+        save_ms: millis(save_duration),
+        load_ms: millis(load_duration),
+        file_sizes: PersistedFileSizes::from(file_sizes),
+        post_load_search,
+    })
+}
+
+fn benchmark_searches(
+    config: &BenchmarkConfig,
+    dimension: usize,
+    encoding: VectorEncoding,
+    filter_every: Option<usize>,
+    index: &ExactVectorIndex,
+    ground_truth: Option<&ExactVectorIndex>,
+) -> Result<SearchMeasurement, BenchError> {
     let mut query_durations = Vec::with_capacity(config.queries);
     let mut recall_sum = 0.0;
     let mut total_hits = 0usize;
@@ -160,24 +245,17 @@ fn benchmark_one(
         }
     }
 
-    Ok(BenchmarkRun {
-        chunks: config.chunks,
-        dimension,
-        top_k: config.top_k,
-        encoding: encoding_name(encoding).to_owned(),
-        metric: metric_name(config.metric).to_owned(),
-        filter_every,
-        vector_payload_bytes: index_size.vector_bytes,
-        total_payload_bytes: index_size.total_bytes(),
-        build_ms: millis(build_duration),
-        min_ms: millis(*query_durations.iter().min().unwrap_or(&Duration::ZERO)),
-        avg_ms: millis(average_duration(&query_durations)),
-        p50_ms: millis(percentile(query_durations.clone(), 50)),
-        p95_ms: millis(percentile(query_durations.clone(), 95)),
-        max_ms: millis(*query_durations.iter().max().unwrap_or(&Duration::ZERO)),
+    Ok(SearchMeasurement {
+        stats: SearchLatencyStats {
+            min_ms: millis(*query_durations.iter().min().unwrap_or(&Duration::ZERO)),
+            avg_ms: millis(average_duration(&query_durations)),
+            p50_ms: millis(percentile(query_durations.clone(), 50)),
+            p95_ms: millis(percentile(query_durations.clone(), 95)),
+            max_ms: millis(*query_durations.iter().max().unwrap_or(&Duration::ZERO)),
+            total_hits,
+            top_hit_checksum,
+        },
         recall_at_k_vs_f32: recall_sum / config.queries as f64,
-        total_hits,
-        top_hit_checksum,
     })
 }
 
@@ -421,6 +499,7 @@ struct BenchmarkConfig {
     seed: u64,
     include_unfiltered: bool,
     include_filtered: bool,
+    include_persistence: bool,
     filter_every: Option<usize>,
 }
 
@@ -526,6 +605,7 @@ impl Default for BenchmarkConfig {
             seed: 42,
             include_unfiltered: true,
             include_filtered: true,
+            include_persistence: true,
             filter_every: Some(10),
         }
     }
@@ -574,6 +654,56 @@ struct BenchmarkRun {
     recall_at_k_vs_f32: f64,
     total_hits: usize,
     top_hit_checksum: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    persistence: Option<BenchmarkPersistence>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct BenchmarkPersistence {
+    save_ms: f64,
+    load_ms: f64,
+    file_sizes: PersistedFileSizes,
+    post_load_search: SearchLatencyStats,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct PersistedFileSizes {
+    total_bytes: u64,
+    manifest_bytes: u64,
+    vectors_bytes: u64,
+    chunks_bytes: u64,
+    bm25_bytes: u64,
+    tombstones_bytes: u64,
+}
+
+impl From<IndexFileSizeReport> for PersistedFileSizes {
+    fn from(value: IndexFileSizeReport) -> Self {
+        Self {
+            total_bytes: value.total_bytes(),
+            manifest_bytes: value.manifest_bytes,
+            vectors_bytes: value.vectors_bytes,
+            chunks_bytes: value.chunks_bytes,
+            bm25_bytes: value.bm25_bytes,
+            tombstones_bytes: value.tombstones_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SearchLatencyStats {
+    min_ms: f64,
+    avg_ms: f64,
+    p50_ms: f64,
+    p95_ms: f64,
+    max_ms: f64,
+    total_hits: usize,
+    top_hit_checksum: u64,
+}
+
+#[derive(Debug, Clone)]
+struct SearchMeasurement {
+    stats: SearchLatencyStats,
+    recall_at_k_vs_f32: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -588,6 +718,7 @@ struct FfiResponse {
 #[derive(Debug)]
 enum BenchError {
     InvalidConfig(String),
+    Io(io::Error),
     Json(serde_json::Error),
     Core(vectorkit_core::VectorKitError),
     Panic,
@@ -597,6 +728,7 @@ impl Display for BenchError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidConfig(message) => write!(f, "{message}"),
+            Self::Io(error) => write!(f, "{error}"),
             Self::Json(error) => write!(f, "{error}"),
             Self::Core(error) => write!(f, "{error}"),
             Self::Panic => write!(f, "benchmark panicked"),
@@ -605,6 +737,12 @@ impl Display for BenchError {
 }
 
 impl Error for BenchError {}
+
+impl From<io::Error> for BenchError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
 
 impl From<serde_json::Error> for BenchError {
     fn from(value: serde_json::Error) -> Self {
@@ -615,6 +753,49 @@ impl From<serde_json::Error> for BenchError {
 impl From<vectorkit_core::VectorKitError> for BenchError {
     fn from(value: vectorkit_core::VectorKitError) -> Self {
         Self::Core(value)
+    }
+}
+
+#[derive(Debug)]
+struct TemporaryBenchmarkDirectory {
+    path: PathBuf,
+}
+
+impl TemporaryBenchmarkDirectory {
+    fn create(
+        dimension: usize,
+        encoding: VectorEncoding,
+        filter_every: Option<usize>,
+    ) -> Result<Self, BenchError> {
+        let filter_label = filter_every
+            .map(|value| format!("filter-{value}"))
+            .unwrap_or_else(|| "unfiltered".to_owned());
+        let unique_id = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "vectorkit-ffi-bench-{}-{}-{}d-{}-{}",
+            std::process::id(),
+            unique_id,
+            dimension,
+            encoding_name(encoding),
+            filter_label
+        ));
+
+        if path.exists() {
+            fs::remove_dir_all(&path)?;
+        }
+        fs::create_dir_all(&path)?;
+
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+
+impl Drop for TemporaryBenchmarkDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
     }
 }
 
@@ -694,6 +875,7 @@ mod tests {
         assert_eq!(config.dimensions, vec![384, 768]);
         assert!(config.include_unfiltered);
         assert!(config.include_filtered);
+        assert!(config.include_persistence);
     }
 
     #[test]
@@ -722,6 +904,23 @@ mod tests {
             .runs
             .iter()
             .any(|run| run.encoding == "i8-scalar-quantized" && run.filter_every == Some(4)));
+        assert!(report.runs.iter().all(|run| run.persistence.is_some()));
+    }
+
+    #[test]
+    fn benchmark_json_can_skip_persistence_metrics() {
+        let report = run_benchmark(BenchmarkConfig {
+            chunks: 16,
+            dimensions: vec![8],
+            queries: 2,
+            top_k: 2,
+            include_filtered: false,
+            include_persistence: false,
+            ..BenchmarkConfig::default()
+        })
+        .unwrap();
+
+        assert!(report.runs.iter().all(|run| run.persistence.is_none()));
     }
 
     #[test]
@@ -752,5 +951,7 @@ mod tests {
         assert!(json.contains("\"encoding\":\"f32\""));
         assert!(json.contains("\"encoding\":\"f16\""));
         assert!(json.contains("\"encoding\":\"i8-scalar-quantized\""));
+        assert!(json.contains("\"persistence\""));
+        assert!(json.contains("\"post_load_search\""));
     }
 }

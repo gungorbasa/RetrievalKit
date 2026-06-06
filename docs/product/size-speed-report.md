@@ -237,6 +237,27 @@ cargo run --release -p vectorkit-cli -- bench matrix \
 | 24K | 768 | 10 | F16 | 5.584 | 5.701 | 1.0000 |
 | 24K | 768 | 10 | I8 | 1.029 | 1.091 | 0.9920 |
 
+The same command with `--filter-every 10` measures an indexed equality filter
+with roughly `1/10` selectivity. Compared with the previous generic filtered
+I8 path, the filtered I8 fast path improved `384d` substantially and kept
+`768d` roughly flat-to-slightly faster:
+
+```bash
+cargo run --release -p vectorkit-cli -- bench matrix \
+  --chunks 24000 \
+  --dimensions 384,768 \
+  --queries 200 \
+  --top-k 10 \
+  --encodings i8 \
+  --filter-every 10 \
+  --budget-mb 20
+```
+
+| chunks | dim | top_k | filter | previous avg ms | new avg ms | avg gain | previous p95 ms | new p95 ms | p95 gain |
+|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|
+| 24K | 384 | 10 | 1/10 equality | 0.702 | 0.508 | 27.6% | 0.792 | 0.566 | 28.5% |
+| 24K | 768 | 10 | 1/10 equality | 0.818 | 0.810 | 1.0% | 0.900 | 0.884 | 1.8% |
+
 Conclusion: on Apple hardware with `FEAT_DotProd`, `I8ScalarQuantized` is now
 both the best compact storage option and the fastest exact full-scan scoring
 option in the current benchmark. Late result materialization also improves F32

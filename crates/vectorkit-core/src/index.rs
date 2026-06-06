@@ -441,13 +441,6 @@ impl ExactVectorIndex {
         }
         let encoded_query = self.encode_query_embedding(&query.embedding)?;
 
-        if query.filter.is_none() {
-            if let Some(hits) = self.search_i8_unfiltered(query.top_k, &encoded_query) {
-                return Ok(hits);
-            }
-        }
-
-        let mut candidates = Vec::with_capacity(query.top_k);
         let candidate_offsets = query
             .filter
             .as_ref()
@@ -455,6 +448,16 @@ impl ExactVectorIndex {
             .transpose()?
             .flatten();
 
+        if let Some(hits) = self.search_i8_offsets(
+            query.top_k,
+            &encoded_query,
+            query.filter.as_ref(),
+            &candidate_offsets,
+        )? {
+            return Ok(hits);
+        }
+
+        let mut candidates = Vec::with_capacity(query.top_k);
         match candidate_offsets {
             Some(offsets) => {
                 for offset in offsets {
@@ -473,40 +476,106 @@ impl ExactVectorIndex {
         Ok(self.materialize_search_hits(&candidates))
     }
 
-    fn search_i8_unfiltered(
+    fn search_i8_offsets(
         &self,
         top_k: usize,
         encoded_query: &scoring::EncodedQuery,
-    ) -> Option<Vec<SearchHit>> {
-        let (values, scales) = self.encoded_vectors.i8_scalar_quantized_parts()?;
-        let (query_values, query_scale) = encoded_query.i8_scalar_quantized_parts()?;
+        filter: Option<&Filter>,
+        candidate_offsets: &Option<Vec<usize>>,
+    ) -> Result<Option<Vec<SearchHit>>> {
+        let Some((values, scales)) = self.encoded_vectors.i8_scalar_quantized_parts() else {
+            return Ok(None);
+        };
+        let Some((query_values, query_scale)) = encoded_query.i8_scalar_quantized_parts() else {
+            return Ok(None);
+        };
+        let i8_parts = I8ScoringParts {
+            query_values,
+            query_scale,
+            values,
+            scales,
+        };
+
         let mut candidates = Vec::with_capacity(top_k);
+        let offsets = candidate_offsets
+            .as_deref()
+            .unwrap_or(self.active_offsets.as_slice());
 
-        for offset in self.active_offsets.iter().copied() {
-            let chunk = &self.chunks[offset];
-            debug_assert!(!chunk.deleted);
+        match filter {
+            Some(filter) => {
+                for offset in offsets.iter().copied() {
+                    let Some(chunk) = self.chunks.get(offset) else {
+                        continue;
+                    };
 
-            let start = offset.checked_mul(self.dimension)?;
-            let end = start.checked_add(self.dimension)?;
-            let chunk_values = values.get(start..end)?;
-            let chunk_scale = *scales.get(offset)?;
-            let score =
-                scoring::dot_product_i8(query_values, chunk_values) * query_scale * chunk_scale;
+                    if chunk.deleted || !filter.matches(&chunk.metadata)? {
+                        continue;
+                    }
 
-            push_bounded_candidate(
-                &mut candidates,
-                top_k,
-                ScoredCandidate {
-                    chunk_id: chunk.chunk_id,
-                    offset,
-                    score,
-                },
-            );
+                    self.push_i8_candidate(
+                        &mut candidates,
+                        top_k,
+                        offset,
+                        chunk.chunk_id,
+                        i8_parts,
+                    );
+                }
+            }
+            None => {
+                for offset in offsets.iter().copied() {
+                    let Some(chunk) = self.chunks.get(offset) else {
+                        continue;
+                    };
+                    debug_assert!(!chunk.deleted);
+                    self.push_i8_candidate(
+                        &mut candidates,
+                        top_k,
+                        offset,
+                        chunk.chunk_id,
+                        i8_parts,
+                    );
+                }
+            }
         }
 
         sort_scored_candidates(&mut candidates);
 
-        Some(self.materialize_search_hits(&candidates))
+        Ok(Some(self.materialize_search_hits(&candidates)))
+    }
+
+    fn push_i8_candidate(
+        &self,
+        candidates: &mut Vec<ScoredCandidate>,
+        top_k: usize,
+        offset: usize,
+        chunk_id: ChunkId,
+        i8_parts: I8ScoringParts<'_>,
+    ) {
+        let Some(start) = offset.checked_mul(self.dimension) else {
+            return;
+        };
+        let Some(end) = start.checked_add(self.dimension) else {
+            return;
+        };
+        let Some(chunk_values) = i8_parts.values.get(start..end) else {
+            return;
+        };
+        let Some(&chunk_scale) = i8_parts.scales.get(offset) else {
+            return;
+        };
+        let score = scoring::dot_product_i8(i8_parts.query_values, chunk_values)
+            * i8_parts.query_scale
+            * chunk_scale;
+
+        push_bounded_candidate(
+            candidates,
+            top_k,
+            ScoredCandidate {
+                chunk_id,
+                offset,
+                score,
+            },
+        );
     }
 
     /// Performs BM25 keyword search over active chunks.
@@ -1085,6 +1154,14 @@ struct ScoredCandidate {
     chunk_id: ChunkId,
     offset: usize,
     score: f32,
+}
+
+#[derive(Clone, Copy)]
+struct I8ScoringParts<'a> {
+    query_values: &'a [i8],
+    query_scale: f32,
+    values: &'a [i8],
+    scales: &'a [f32],
 }
 
 fn push_bounded_candidate(
@@ -1744,7 +1821,7 @@ mod tests {
     }
 
     #[test]
-    fn i8_filtered_search_stays_on_generic_filter_path() {
+    fn i8_filtered_fast_path_applies_metadata_filter() {
         let mut index = ExactVectorIndex::try_with_config(
             IndexConfig::new(2, VectorMetric::DotProduct)
                 .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
@@ -1772,6 +1849,51 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 2);
+    }
+
+    #[test]
+    fn i8_filtered_fast_path_handles_full_scan_filter_fallback() {
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::DotProduct)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        let mut notes_chunk = chunk(1, "doc-1", vec![10.0, 0.0]);
+        notes_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index.add_chunk(notes_chunk).unwrap();
+
+        let mut transcript_chunk = chunk(2, "doc-2", vec![1.0, 0.0]);
+        transcript_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index.add_chunk(transcript_chunk).unwrap();
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::All(vec![
+            Filter::Any(vec![
+                Filter::Range {
+                    field: "score".to_owned(),
+                    lower: Some(MetadataValue::Float(f64::NAN)),
+                    upper: None,
+                },
+                Filter::Equals {
+                    field: "source".to_owned(),
+                    value: MetadataValue::String("transcript".to_owned()),
+                },
+            ]),
+            Filter::Exists {
+                field: "source".to_owned(),
+            },
+        ]));
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(
+            hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
+            vec![2]
+        );
     }
 
     #[test]

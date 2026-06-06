@@ -87,6 +87,10 @@ unfiltered I8 fast path:
 For isolated scoring kernels, `50K x 768d I8` measured about `1.25 ms` average
 versus about `9.1 ms` for F32 on the same machine.
 
+With an indexed equality filter at roughly `1/10` selectivity, `24K` vectors,
+`top_k=10`, and `200` synthetic queries, filtered `I8ScalarQuantized` measured
+about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
+
 ## Deferred Exploration
 
 - Optional rerank vector store for compressed encodings is deferred.
@@ -108,6 +112,10 @@ versus about `9.1 ms` for F32 on the same machine.
 - A specialized unfiltered `I8ScalarQuantized` search path is implemented. It
   borrows the contiguous I8 values and scale arrays directly, skips generic
   filter checks, and keeps final result materialization after top-k selection.
+- The specialized I8 search path now also handles filtered vector searches. It
+  uses metadata candidate offsets when available, still verifies the actual
+  filter predicate for correctness, and falls back to active-offset scans for
+  filter shapes that cannot be fully narrowed by the metadata index.
 
 ## Likely Next Tasks
 
@@ -115,8 +123,6 @@ versus about `9.1 ms` for F32 on the same machine.
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
   older devices that may not report `dotprod`.
-- Extend the I8 fast path to filtered searches only after the unfiltered path is
-  stable and benchmarked on target devices.
 - Explore parallel exact scan only after target-device benchmarks show remaining
   CPU pressure.
 - Add persistence load timing and payload/RSS memory reporting to the benchmark

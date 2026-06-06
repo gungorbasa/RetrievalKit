@@ -74,18 +74,18 @@ Headroom is calculated from actual persisted size: `20 MiB - persisted MiB`.
 
 | chunks | dim | top_k | encoding | persisted MiB | headroom MiB | avg ms | p95 ms | recall@k vs F32 |
 |---:|---:|---:|:---|---:|---:|---:|---:|---:|
-| 24K | 384 | 5 | F32 | 39.048 | -19.048 | 3.574 | 3.699 | 1.0000 |
-| 24K | 384 | 5 | F16 | 21.470 | -1.470 | 3.689 | 3.811 | 1.0000 |
-| 24K | 384 | 5 | I8 | 12.772 | 7.228 | 3.954 | 4.088 | 0.9900 |
-| 24K | 384 | 10 | F32 | 39.048 | -19.048 | 3.813 | 3.941 | 1.0000 |
-| 24K | 384 | 10 | F16 | 21.470 | -1.470 | 3.881 | 3.990 | 0.9990 |
-| 24K | 384 | 10 | I8 | 12.772 | 7.228 | 4.646 | 4.749 | 0.9940 |
-| 24K | 768 | 5 | F32 | 74.204 | -54.204 | 6.585 | 6.780 | 1.0000 |
-| 24K | 768 | 5 | F16 | 39.048 | -19.048 | 6.661 | 6.756 | 1.0000 |
-| 24K | 768 | 5 | I8 | 21.561 | -1.561 | 7.041 | 7.165 | 0.9900 |
-| 24K | 768 | 10 | F32 | 74.204 | -54.204 | 6.840 | 6.963 | 1.0000 |
-| 24K | 768 | 10 | F16 | 39.048 | -19.048 | 6.852 | 7.023 | 1.0000 |
-| 24K | 768 | 10 | I8 | 21.561 | -1.561 | 7.786 | 7.945 | 0.9940 |
+| 24K | 384 | 5 | F32 | 39.048 | -19.048 | 2.161 | 2.306 | 1.0000 |
+| 24K | 384 | 5 | F16 | 21.470 | -1.470 | 2.385 | 2.519 | 1.0000 |
+| 24K | 384 | 5 | I8 | 12.772 | 7.228 | 0.489 | 0.528 | 0.9920 |
+| 24K | 384 | 10 | F32 | 39.048 | -19.048 | 2.528 | 2.648 | 1.0000 |
+| 24K | 384 | 10 | F16 | 21.470 | -1.470 | 2.729 | 2.803 | 0.9995 |
+| 24K | 384 | 10 | I8 | 12.772 | 7.228 | 0.863 | 0.926 | 0.9895 |
+| 24K | 768 | 5 | F32 | 74.204 | -54.204 | 5.234 | 5.373 | 1.0000 |
+| 24K | 768 | 5 | F16 | 39.048 | -19.048 | 5.385 | 5.535 | 1.0000 |
+| 24K | 768 | 5 | I8 | 21.561 | -1.561 | 0.862 | 0.909 | 0.9900 |
+| 24K | 768 | 10 | F32 | 74.204 | -54.204 | 5.547 | 5.703 | 1.0000 |
+| 24K | 768 | 10 | F16 | 39.048 | -19.048 | 6.331 | 8.664 | 1.0000 |
+| 24K | 768 | 10 | I8 | 21.561 | -1.561 | 1.355 | 1.435 | 0.9920 |
 
 ## File Breakdown For Key Configurations
 
@@ -141,8 +141,9 @@ removing required persisted data.
 
 Retrieval-only latency is acceptable on this development machine for the tested
 exact full-scan shapes. The relevant compact target, `384d I8`, measured
-`4.646 ms` average and `4.749 ms` p95 at `top_k=10`. These are not iPhone or
-Swift wrapper numbers, so target-device validation is still required.
+`0.863 ms` average and `0.926 ms` p95 at `top_k=10` after the AArch64 dotprod
+backend and late result materialization. These are not iPhone or Swift wrapper
+numbers, so target-device validation is still required.
 
 ## Remaining Risks
 
@@ -205,17 +206,19 @@ The end-to-end exact search benchmark also improved:
 
 | chunks | dim | top_k | encoding | avg ms | p95 ms | recall@k vs F32 |
 |---:|---:|---:|:---|---:|---:|---:|
-| 24K | 384 | 10 | F32 | 3.964 | 4.234 | 1.0000 |
-| 24K | 384 | 10 | F16 | 3.848 | 3.954 | 0.9995 |
-| 24K | 384 | 10 | I8 | 1.721 | 1.790 | 0.9895 |
-| 24K | 768 | 10 | F32 | 6.891 | 7.031 | 1.0000 |
-| 24K | 768 | 10 | F16 | 6.861 | 7.066 | 1.0000 |
-| 24K | 768 | 10 | I8 | 1.973 | 2.026 | 0.9920 |
+| 24K | 384 | 10 | F32 | 2.528 | 2.648 | 1.0000 |
+| 24K | 384 | 10 | F16 | 2.729 | 2.803 | 0.9995 |
+| 24K | 384 | 10 | I8 | 0.863 | 0.926 | 0.9895 |
+| 24K | 768 | 10 | F32 | 5.547 | 5.703 | 1.0000 |
+| 24K | 768 | 10 | F16 | 6.331 | 8.664 | 1.0000 |
+| 24K | 768 | 10 | I8 | 1.355 | 1.435 | 0.9920 |
 
 Conclusion: on Apple hardware with `FEAT_DotProd`, `I8ScalarQuantized` is now
 both the best compact storage option and the fastest exact full-scan scoring
-option in the current benchmark. Keep the runtime fallback because not every
-AArch64 target has dot-product support.
+option in the current benchmark. Late result materialization also improves F32
+and F16 by avoiding `SearchHit` construction for candidates that do not survive
+top-k. Keep the runtime fallback because not every AArch64 target has
+dot-product support.
 
 ## Recommendation
 

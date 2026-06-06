@@ -430,7 +430,7 @@ impl ExactVectorIndex {
         }
         let encoded_query = self.encode_query_embedding(&query.embedding)?;
 
-        let mut hits = Vec::with_capacity(query.top_k);
+        let mut candidates = Vec::with_capacity(query.top_k);
         let candidate_offsets = query
             .filter
             .as_ref()
@@ -441,19 +441,19 @@ impl ExactVectorIndex {
         match candidate_offsets {
             Some(offsets) => {
                 for offset in offsets {
-                    self.score_search_candidate(offset, query, &encoded_query, &mut hits)?;
+                    self.score_search_candidate(offset, query, &encoded_query, &mut candidates)?;
                 }
             }
             None => {
                 for offset in 0..self.chunks.len() {
-                    self.score_search_candidate(offset, query, &encoded_query, &mut hits)?;
+                    self.score_search_candidate(offset, query, &encoded_query, &mut candidates)?;
                 }
             }
         }
 
-        sort_hits(&mut hits);
+        sort_scored_candidates(&mut candidates);
 
-        Ok(hits)
+        Ok(self.materialize_search_hits(&candidates))
     }
 
     /// Performs BM25 keyword search over active chunks.
@@ -568,7 +568,7 @@ impl ExactVectorIndex {
         offset: usize,
         query: &SearchQuery,
         encoded_query: &scoring::EncodedQuery,
-        hits: &mut Vec<SearchHit>,
+        hits: &mut Vec<ScoredCandidate>,
     ) -> Result<()> {
         let Some(chunk) = self.chunks.get(offset) else {
             return Ok(());
@@ -589,22 +589,36 @@ impl ExactVectorIndex {
             return Ok(());
         };
 
-        push_bounded_hit(
+        push_bounded_candidate(
             hits,
             query.top_k,
-            SearchHit {
+            ScoredCandidate {
                 chunk_id: chunk.chunk_id,
-                document_id: chunk.document_id.clone(),
+                offset,
                 score,
-                trace: SearchTrace {
-                    vector_score: score,
-                    keyword_score: None,
-                    filter_matched: true,
-                },
             },
         );
 
         Ok(())
+    }
+
+    fn materialize_search_hits(&self, candidates: &[ScoredCandidate]) -> Vec<SearchHit> {
+        candidates
+            .iter()
+            .filter_map(|candidate| {
+                let chunk = self.chunks.get(candidate.offset)?;
+                Some(SearchHit {
+                    chunk_id: candidate.chunk_id,
+                    document_id: chunk.document_id.clone(),
+                    score: candidate.score,
+                    trace: SearchTrace {
+                        vector_score: candidate.score,
+                        keyword_score: None,
+                        filter_matched: true,
+                    },
+                })
+            })
+            .collect()
     }
 }
 
@@ -1002,7 +1016,18 @@ fn merge_metadata(document_metadata: &Metadata, chunk_metadata: Metadata) -> Met
     metadata
 }
 
-fn push_bounded_hit(hits: &mut Vec<SearchHit>, top_k: usize, candidate: SearchHit) {
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ScoredCandidate {
+    chunk_id: ChunkId,
+    offset: usize,
+    score: f32,
+}
+
+fn push_bounded_candidate(
+    hits: &mut Vec<ScoredCandidate>,
+    top_k: usize,
+    candidate: ScoredCandidate,
+) {
     if hits.len() < top_k {
         hits.push(candidate);
         return;
@@ -1017,7 +1042,7 @@ fn push_bounded_hit(hits: &mut Vec<SearchHit>, top_k: usize, candidate: SearchHi
     }
 }
 
-fn worst_hit_index(hits: &[SearchHit]) -> Option<usize> {
+fn worst_hit_index(hits: &[ScoredCandidate]) -> Option<usize> {
     let mut worst_index = 0;
     for index in 1..hits.len() {
         if hit_ranks_before(&hits[worst_index], &hits[index]) {
@@ -1027,18 +1052,18 @@ fn worst_hit_index(hits: &[SearchHit]) -> Option<usize> {
     Some(worst_index)
 }
 
-fn sort_hits(hits: &mut [SearchHit]) {
+fn sort_scored_candidates(hits: &mut [ScoredCandidate]) {
     hits.sort_by(compare_hits);
 }
 
-fn compare_hits(left: &SearchHit, right: &SearchHit) -> Ordering {
+fn compare_hits(left: &ScoredCandidate, right: &ScoredCandidate) -> Ordering {
     right
         .score
         .total_cmp(&left.score)
         .then_with(|| left.chunk_id.cmp(&right.chunk_id))
 }
 
-fn hit_ranks_before(left: &SearchHit, right: &SearchHit) -> bool {
+fn hit_ranks_before(left: &ScoredCandidate, right: &ScoredCandidate) -> bool {
     compare_hits(left, right).is_lt()
 }
 

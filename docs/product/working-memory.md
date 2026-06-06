@@ -76,12 +76,12 @@ Approximate vector-only sizes for `24K` vectors:
 ## Recent Benchmark Takeaways
 
 For `24K` vectors, `top_k=10`, `200` synthetic queries after the AArch64 I8
-dotprod backend:
+dotprod backend and late result materialization:
 
 | dim | F32 avg | F16 avg | I8 avg | I8 recall@10 vs F32 |
 |---:|---:|---:|---:|---:|
-| 384 | ~4.0 ms | ~3.8 ms | ~1.7 ms | 0.9895 |
-| 768 | ~6.9 ms | ~6.9 ms | ~2.0 ms | 0.9920 |
+| 384 | ~2.5 ms | ~2.7 ms | ~0.9 ms | 0.9895 |
+| 768 | ~5.5 ms | ~6.3 ms | ~1.4 ms | 0.9920 |
 
 For isolated scoring kernels, `50K x 768d I8` measured about `1.25 ms` average
 versus about `9.1 ms` for F32 on the same machine.
@@ -95,6 +95,12 @@ versus about `9.1 ms` for F32 on the same machine.
   `I8`, `I8 + F16 rerank`, and `I8 + F32 rerank`.
 - Reranking adds small CPU cost for `top_k * overfetch` candidates but
   significant memory/disk cost from the second vector store.
+
+## Completed Optimizations
+
+- Late result materialization is implemented for exact vector search. The hot
+  loop keeps only `chunk_id`, `offset`, and score, then builds final `SearchHit`
+  values after sorting the winning candidates.
 
 ## Likely Next Tasks
 

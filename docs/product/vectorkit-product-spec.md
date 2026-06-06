@@ -977,14 +977,18 @@ Create a benchmark CLI before adding indexing complexity.
 Initial synthetic benchmark command:
 
 ```bash
-vectorkit bench synthetic --chunks 10000 --dimension 768 --queries 100 --encoding f32
+vectorkit bench synthetic --chunks 10000 --dimension 768 --queries 100 --encoding i8
 ```
 
 Initial synthetic matrix command:
 
 ```bash
-vectorkit bench matrix --chunks 10000 --dimensions 384,768,1536 --top-k 5,10 --encodings f32,f16,bf16
+vectorkit bench matrix --chunks 10000 --dimensions 384,768,1536 --top-k 5,10 --encodings f32,f16,bf16,i8
 ```
+
+Synthetic and matrix reports must include recall@k against `F32` exact search
+for every non-`F32` encoding. `F32` reports recall as `1.0` because it is the
+ground-truth baseline.
 
 Later file-backed benchmark command:
 

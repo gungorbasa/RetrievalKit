@@ -4,7 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::time::{Duration, Instant};
 
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, IndexConfig, Metadata, SearchQuery, VectorEncoding, VectorMetric,
+    Chunk, ExactVectorIndex, IndexConfig, Metadata, SearchHit, SearchQuery, VectorEncoding,
+    VectorMetric,
 };
 
 fn main() {
@@ -164,6 +165,7 @@ struct SyntheticBenchReport {
     query_p50: Duration,
     query_p95: Duration,
     query_max: Duration,
+    recall_at_k_vs_f32: f64,
     total_hits: usize,
     top_hit_checksum: u64,
 }
@@ -194,6 +196,7 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("query_p50_ms: {:.3}", millis(report.query_p50));
     println!("query_p95_ms: {:.3}", millis(report.query_p95));
     println!("query_max_ms: {:.3}", millis(report.query_max));
+    println!("recall_at_k_vs_f32: {:.4}", report.recall_at_k_vs_f32);
     println!("total_hits: {}", report.total_hits);
     println!("top_hit_checksum: {}", report.top_hit_checksum);
 
@@ -202,9 +205,11 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | encoded MB | retained f32 MB | total vec MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | encoded MB | retained f32 MB | total vec MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
-    println!("|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    println!(
+        "|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    );
 
     for dimension in &config.dimensions {
         for top_k in &config.top_ks {
@@ -220,7 +225,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                 })?;
 
                 println!(
-                    "| {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
                     report.config.chunks,
                     report.config.dimension,
                     report.config.top_k,
@@ -235,6 +240,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     millis(report.query_p50),
                     millis(report.query_p95),
                     millis(report.query_max),
+                    report.recall_at_k_vs_f32,
                     report.total_hits,
                     report.top_hit_checksum,
                 );
@@ -246,26 +252,15 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
 }
 
 fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchReport, CliError> {
-    let index_config =
-        IndexConfig::new(config.dimension, config.metric).with_vector_encoding(config.encoding);
-    let mut index = ExactVectorIndex::try_with_config(index_config)?;
-
-    let build_start = Instant::now();
-    for chunk_id in 0..config.chunks {
-        let embedding = generate_normalized_vector(config.dimension, config.seed, chunk_id as u64);
-        index.add_chunk(Chunk {
-            chunk_id: chunk_id as u64,
-            document_id: format!("synthetic-doc-{chunk_id}"),
-            text: format!("synthetic chunk {chunk_id} topic {}", chunk_id % 17),
-            embedding,
-            metadata: Metadata::new(),
-            deleted: false,
-            version: 1,
-        })?;
-    }
-    let build_duration = build_start.elapsed();
+    let (index, build_duration) = build_synthetic_index(&config, config.encoding)?;
+    let f32_ground_truth = if config.encoding == VectorEncoding::F32 {
+        None
+    } else {
+        Some(build_synthetic_index(&config, VectorEncoding::F32)?.0)
+    };
 
     let mut query_durations = Vec::with_capacity(config.queries);
+    let mut recall_sum = 0.0;
     let mut total_hits = 0usize;
     let mut top_hit_checksum = 0u64;
 
@@ -275,8 +270,17 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
             generate_query_vector(config.dimension, config.seed, target_chunk as u64, query_id);
 
         let start = Instant::now();
-        let hits = index.search(&SearchQuery::new(query, config.top_k))?;
+        let hits = index.search(&SearchQuery::new(query.clone(), config.top_k))?;
         query_durations.push(start.elapsed());
+
+        recall_sum += match &f32_ground_truth {
+            Some(ground_truth) => {
+                let ground_truth_hits =
+                    ground_truth.search(&SearchQuery::new(query, config.top_k))?;
+                recall_at_k(&hits, &ground_truth_hits)
+            }
+            None => 1.0,
+        };
 
         total_hits += hits.len();
         if let Some(hit) = hits.first() {
@@ -303,10 +307,56 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         query_p50: p50,
         query_p95: p95,
         query_max,
+        recall_at_k_vs_f32: recall_sum / config.queries as f64,
         total_hits,
         top_hit_checksum,
         config,
     })
+}
+
+fn build_synthetic_index(
+    config: &SyntheticBenchConfig,
+    encoding: VectorEncoding,
+) -> Result<(ExactVectorIndex, Duration), CliError> {
+    let index_config =
+        IndexConfig::new(config.dimension, config.metric).with_vector_encoding(encoding);
+    let mut index = ExactVectorIndex::try_with_config(index_config)?;
+
+    let build_start = Instant::now();
+    for chunk_id in 0..config.chunks {
+        index.add_chunk(synthetic_chunk(config.dimension, config.seed, chunk_id))?;
+    }
+
+    Ok((index, build_start.elapsed()))
+}
+
+fn synthetic_chunk(dimension: usize, seed: u64, chunk_id: usize) -> Chunk {
+    Chunk {
+        chunk_id: chunk_id as u64,
+        document_id: format!("synthetic-doc-{chunk_id}"),
+        text: format!("synthetic chunk {chunk_id} topic {}", chunk_id % 17),
+        embedding: generate_normalized_vector(dimension, seed, chunk_id as u64),
+        metadata: Metadata::new(),
+        deleted: false,
+        version: 1,
+    }
+}
+
+fn recall_at_k(hits: &[SearchHit], ground_truth_hits: &[SearchHit]) -> f64 {
+    if ground_truth_hits.is_empty() {
+        return 1.0;
+    }
+
+    let matching_hits = hits
+        .iter()
+        .filter(|hit| {
+            ground_truth_hits
+                .iter()
+                .any(|ground_truth_hit| ground_truth_hit.chunk_id == hit.chunk_id)
+        })
+        .count();
+
+    matching_hits as f64 / ground_truth_hits.len() as f64
 }
 
 fn generate_query_vector(
@@ -662,5 +712,31 @@ mod tests {
             120
         );
         assert_eq!(source_embedding_bytes(10, 8), 0);
+    }
+
+    #[test]
+    fn recall_at_k_counts_overlap_with_f32_ground_truth() {
+        let hits = vec![search_hit(1), search_hit(2), search_hit(3), search_hit(4)];
+        let ground_truth_hits = vec![search_hit(2), search_hit(4), search_hit(6), search_hit(8)];
+
+        assert_eq!(recall_at_k(&hits, &ground_truth_hits), 0.5);
+    }
+
+    #[test]
+    fn recall_at_k_is_complete_when_ground_truth_is_empty() {
+        assert_eq!(recall_at_k(&[search_hit(1)], &[]), 1.0);
+    }
+
+    fn search_hit(chunk_id: u64) -> SearchHit {
+        SearchHit {
+            chunk_id,
+            document_id: format!("doc-{chunk_id}"),
+            score: 1.0,
+            trace: vectorkit_core::SearchTrace {
+                vector_score: 1.0,
+                keyword_score: None,
+                filter_matched: true,
+            },
+        }
     }
 }

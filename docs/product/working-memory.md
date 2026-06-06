@@ -128,11 +128,15 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `wrappers/swift/VectorKitBench`. It links `vectorkit-ffi`, supports
   `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
   full default FFI benchmark locally.
+- `scripts/build-xcframework.sh` packages `vectorkit-ffi` as
+  `target/apple/VectorKitFFI.xcframework`. The macOS-only path is verified
+  locally. Full iOS packaging requires installing
+  `aarch64-apple-ios`, `aarch64-apple-ios-sim`, and `x86_64-apple-ios`.
 
 ## Likely Next Tasks
 
-- Package the Rust FFI library for iOS/macOS as an XCFramework so the same
-  benchmark harness can run from an iOS app target.
+- Install the missing Apple Rust targets, run the full XCFramework build, then
+  add an iOS benchmark app target that links `VectorKitFFI.xcframework`.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

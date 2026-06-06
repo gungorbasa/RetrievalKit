@@ -409,7 +409,9 @@ small retrieval vectors
   -> rerank top candidates with f16/f32
 ```
 
-Do not require the rerank vector store in V1. Make it an opt-in storage mode.
+Do not require the rerank vector store in V1. Keep it in the later exploration
+column until real-data benchmarks show `I8ScalarQuantized` needs higher final
+quality than its first-pass results provide.
 
 ### Chunk Store
 
@@ -1165,9 +1167,13 @@ Success criteria:
 
 ### Deferred Optimization Decisions
 
-Decide these after the benchmark harness can measure latency, memory, and recall:
+Decide these after the benchmark harness can measure latency, memory, disk size,
+and recall:
 
-- `I8ScalarQuantized` support: define quantization scope, score rescaling, recall gates, and reranking rules before implementation.
+- Optional rerank vector store for compressed encodings: evaluate only after
+  real-data benchmarks show `I8ScalarQuantized` needs better final quality.
+  Measure disk size, memory, recall, and latency for `I8`, `I8 + F16 rerank`,
+  and `I8 + F32 rerank` before implementation.
 - Faster BM25 maps/sets: evaluate `rustc-hash`, `hashbrown`, or another hasher against the current deterministic `BTreeMap`/`BTreeSet` implementation.
 - External BM25 engine: evaluate the `bm25` crate or Tantivy BM25/tokenizer stack only if benchmarks show the local BM25 implementation is a bottleneck or search quality needs language-aware stemming/normalization.
 

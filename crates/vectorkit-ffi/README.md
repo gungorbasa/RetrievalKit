@@ -22,6 +22,7 @@ Passing `NULL` or an empty string uses the default benchmark config:
   "include_unfiltered": true,
   "include_filtered": true,
   "include_persistence": true,
+  "persist_bm25": true,
   "filter_every": 10
 }
 ```
@@ -37,3 +38,7 @@ row also includes:
 - `load_ms`
 - persisted file sizes by component
 - post-load search latency for the same query set
+
+Set `persist_bm25` to `false` to measure a compact vector-only persisted
+profile. Vector search and metadata filters still reload, but keyword and
+hybrid search need BM25 to be persisted or rebuilt separately.

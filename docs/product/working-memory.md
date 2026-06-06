@@ -125,7 +125,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
   unfiltered and `filter_every=10` filtered searches. FFI benchmark rows now
   also include persistence save time, load time, persisted file sizes, and
-  post-load search latency by default.
+  post-load search latency by default. `persist_bm25=false` measures a compact
+  vector-only persistence profile.
 - A SwiftPM macOS command-line harness exists at
   `wrappers/swift/VectorKitBench`. It links `vectorkit-ffi`, supports
   `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
@@ -137,8 +138,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   not used.
 - A minimal SwiftUI iOS benchmark app exists at
   `wrappers/swift/VectorKitIOSBench`. It links the local XCFramework, exposes
-  smoke and full default benchmark buttons, and the generic iOS Simulator build
-  succeeds locally.
+  smoke, full default, and compact vector-only benchmark buttons, and the
+  generic iOS Simulator build succeeds locally.
 
 ## Likely Next Tasks
 

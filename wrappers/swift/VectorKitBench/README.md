@@ -39,6 +39,10 @@ The default config is owned by `vectorkit-ffi` and currently runs:
 - unfiltered search
 - filtered search with `filter_every=10`
 - persistence save/load metrics and post-load search latency
+- full BM25 persistence by default
 
 You can override it with either `--config '<json>'` or
 `--config-file config.json`. Add `--raw` to print compact JSON.
+
+Use `{"persist_bm25":false}` to measure the compact vector-only persistence
+profile.

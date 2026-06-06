@@ -37,6 +37,7 @@ final class BenchmarkViewModel: ObservableObject {
 enum BenchmarkMode {
     case smallSmoke
     case fullDefault
+    case compactDefault
 
     var title: String {
         switch self {
@@ -44,6 +45,8 @@ enum BenchmarkMode {
             return "smoke"
         case .fullDefault:
             return "default"
+        case .compactDefault:
+            return "compact"
         }
     }
 
@@ -65,6 +68,12 @@ enum BenchmarkMode {
             """
         case .fullDefault:
             return nil
+        case .compactDefault:
+            return """
+            {
+              "persist_bm25": false
+            }
+            """
         }
     }
 }

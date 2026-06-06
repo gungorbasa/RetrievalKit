@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use simsimd::capabilities;
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, Metadata, MetadataValue,
-    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
+    Metadata, MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -181,7 +181,12 @@ fn benchmark_persistence(
     let directory = TemporaryBenchmarkDirectory::create(dimension, encoding, filter_every)?;
 
     let save_start = Instant::now();
-    let file_sizes = index.save_to_dir(directory.path())?;
+    let file_sizes = index.save_to_dir_with_options(
+        directory.path(),
+        IndexPersistenceOptions {
+            include_bm25: config.persist_bm25,
+        },
+    )?;
     let save_duration = save_start.elapsed();
 
     let load_start = Instant::now();
@@ -199,6 +204,7 @@ fn benchmark_persistence(
     .stats;
 
     Ok(BenchmarkPersistence {
+        persist_bm25: config.persist_bm25,
         save_ms: millis(save_duration),
         load_ms: millis(load_duration),
         file_sizes: PersistedFileSizes::from(file_sizes),
@@ -500,6 +506,7 @@ struct BenchmarkConfig {
     include_unfiltered: bool,
     include_filtered: bool,
     include_persistence: bool,
+    persist_bm25: bool,
     filter_every: Option<usize>,
 }
 
@@ -606,6 +613,7 @@ impl Default for BenchmarkConfig {
             include_unfiltered: true,
             include_filtered: true,
             include_persistence: true,
+            persist_bm25: true,
             filter_every: Some(10),
         }
     }
@@ -660,6 +668,7 @@ struct BenchmarkRun {
 
 #[derive(Debug, Clone, Serialize)]
 struct BenchmarkPersistence {
+    persist_bm25: bool,
     save_ms: f64,
     load_ms: f64,
     file_sizes: PersistedFileSizes,
@@ -876,6 +885,7 @@ mod tests {
         assert!(config.include_unfiltered);
         assert!(config.include_filtered);
         assert!(config.include_persistence);
+        assert!(config.persist_bm25);
     }
 
     #[test]
@@ -924,6 +934,25 @@ mod tests {
     }
 
     #[test]
+    fn benchmark_json_can_skip_bm25_persistence() {
+        let report = run_benchmark(BenchmarkConfig {
+            chunks: 16,
+            dimensions: vec![8],
+            queries: 2,
+            top_k: 2,
+            include_filtered: false,
+            persist_bm25: false,
+            ..BenchmarkConfig::default()
+        })
+        .unwrap();
+
+        assert!(report.runs.iter().all(|run| {
+            let persistence = run.persistence.as_ref().unwrap();
+            !persistence.persist_bm25 && persistence.file_sizes.bm25_bytes == 0
+        }));
+    }
+
+    #[test]
     fn invalid_config_returns_error_json() {
         let response = response_json(run_benchmark(BenchmarkConfig {
             chunks: 0,
@@ -952,6 +981,7 @@ mod tests {
         assert!(json.contains("\"encoding\":\"f16\""));
         assert!(json.contains("\"encoding\":\"i8-scalar-quantized\""));
         assert!(json.contains("\"persistence\""));
+        assert!(json.contains("\"persist_bm25\":true"));
         assert!(json.contains("\"post_load_search\""));
     }
 }

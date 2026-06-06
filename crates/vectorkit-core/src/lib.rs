@@ -15,7 +15,7 @@ pub use metadata::{Metadata, MetadataValue};
 #[doc(hidden)]
 pub use scoring::dot_product_i8 as diagnostic_dot_product_i8;
 pub use types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport, IndexSizeEstimate,
-    KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding,
-    VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport,
+    IndexPersistenceOptions, IndexSizeEstimate, KeywordHit, KeywordQuery, SearchHit, SearchQuery,
+    SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };

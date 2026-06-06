@@ -22,6 +22,14 @@ struct BenchmarkView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(model.isRunning)
+
+                    Button {
+                        model.run(.compactDefault)
+                    } label: {
+                        Label("Compact", systemImage: "archivebox")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isRunning)
                 }
 
                 HStack(spacing: 10) {

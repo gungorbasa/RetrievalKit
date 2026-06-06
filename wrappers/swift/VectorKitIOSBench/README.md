@@ -19,8 +19,10 @@ Open or build the project:
 open wrappers/swift/VectorKitIOSBench/VectorKitIOSBench.xcodeproj
 ```
 
-The app has two benchmark modes:
+The app has three benchmark modes:
 
 - `Smoke`: small link and UI smoke test.
 - `Default`: the full FFI default benchmark, currently `24K` chunks,
   `384d`/`768d`, `f32`/`f16`/`i8`, filtered and unfiltered.
+- `Compact`: the default benchmark with BM25 persistence disabled so vector-only
+  persisted size can be measured.

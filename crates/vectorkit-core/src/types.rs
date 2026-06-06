@@ -249,3 +249,26 @@ impl IndexFileSizeReport {
             + self.tombstones_bytes
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IndexPersistenceOptions {
+    pub include_bm25: bool,
+}
+
+impl IndexPersistenceOptions {
+    pub fn hybrid() -> Self {
+        Self { include_bm25: true }
+    }
+
+    pub fn vector_only() -> Self {
+        Self {
+            include_bm25: false,
+        }
+    }
+}
+
+impl Default for IndexPersistenceOptions {
+    fn default() -> Self {
+        Self::hybrid()
+    }
+}

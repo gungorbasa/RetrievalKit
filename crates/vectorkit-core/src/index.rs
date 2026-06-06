@@ -12,9 +12,9 @@ use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
 use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport, IndexSizeEstimate,
-    KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding,
-    VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport,
+    IndexPersistenceOptions, IndexSizeEstimate, KeywordHit, KeywordQuery, SearchHit, SearchQuery,
+    SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };
 
 const FORMAT_VERSION: u32 = 1;
@@ -157,6 +157,15 @@ impl ExactVectorIndex {
 
     /// Saves the loaded index to a local directory and returns actual file sizes.
     pub fn save_to_dir(&self, directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
+        self.save_to_dir_with_options(directory, IndexPersistenceOptions::default())
+    }
+
+    /// Saves the loaded index with explicit persistence options.
+    pub fn save_to_dir_with_options(
+        &self,
+        directory: impl AsRef<Path>,
+        options: IndexPersistenceOptions,
+    ) -> Result<IndexFileSizeReport> {
         let directory = directory.as_ref();
         fs::create_dir_all(directory)
             .map_err(|_| persistence_error("create directory", directory))?;
@@ -170,7 +179,11 @@ impl ExactVectorIndex {
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
         write_file(&chunks_path, &encode_chunks(&self.chunks)?)?;
-        write_file(&bm25_path, &self.bm25.to_persisted().to_payload_bytes()?)?;
+        if options.include_bm25 {
+            write_file(&bm25_path, &self.bm25.to_persisted().to_payload_bytes()?)?;
+        } else if bm25_path.exists() {
+            fs::remove_file(&bm25_path).map_err(|_| persistence_error("remove", &bm25_path))?;
+        }
         write_file(
             &tombstones_path,
             &self
@@ -187,11 +200,15 @@ impl ExactVectorIndex {
             metric: self.metric,
             vector_count: self.chunks.len(),
             active_chunk_count: self.active_chunk_count(),
-            has_bm25: true,
+            has_bm25: options.include_bm25,
             vector_encoding: self.vector_encoding,
             vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
             chunk_bytes: file_size(&chunks_path)?,
-            bm25_bytes: file_size(&bm25_path)?,
+            bm25_bytes: if options.include_bm25 {
+                file_size(&bm25_path)?
+            } else {
+                0
+            },
             tombstone_bytes: file_size(&tombstones_path)?,
             normalization: match self.metric {
                 VectorMetric::Cosine => "unit_l2",
@@ -220,7 +237,9 @@ impl ExactVectorIndex {
         let tombstones_path = directory.join(TOMBSTONES_FILE);
 
         validate_file_size(&chunks_path, manifest.chunk_bytes)?;
-        validate_file_size(&bm25_path, manifest.bm25_bytes)?;
+        if manifest.has_bm25 {
+            validate_file_size(&bm25_path, manifest.bm25_bytes)?;
+        }
         validate_file_size(&tombstones_path, manifest.tombstone_bytes)?;
         let vector_bytes = read_file(&vectors_path)?;
         if vector_bytes.len() != manifest.vector_bytes {
@@ -267,8 +286,13 @@ impl ExactVectorIndex {
                 });
             }
         }
-        let persisted_bm25 = PersistedBm25Index::from_payload_bytes(&read_file(&bm25_path)?)?;
-        validate_bm25_state_matches_chunks(&persisted_bm25, &chunks)?;
+        let persisted_bm25 = if manifest.has_bm25 {
+            let persisted_bm25 = PersistedBm25Index::from_payload_bytes(&read_file(&bm25_path)?)?;
+            validate_bm25_state_matches_chunks(&persisted_bm25, &chunks)?;
+            Some(persisted_bm25)
+        } else {
+            None
+        };
 
         let mut index = Self::from_parts(
             manifest.dimension,
@@ -278,8 +302,10 @@ impl ExactVectorIndex {
         )?;
         index.encoded_vectors = encoded_vectors;
         index.chunks = chunks;
-        index.bm25 = Bm25Index::from_persisted(Bm25Config::default(), persisted_bm25)?;
-        index.rebuild_derived_state_from_loaded_bm25();
+        if let Some(persisted_bm25) = persisted_bm25 {
+            index.bm25 = Bm25Index::from_persisted(Bm25Config::default(), persisted_bm25)?;
+        }
+        index.rebuild_derived_state_from_loaded_chunks();
 
         if index.active_chunk_count() != manifest.active_chunk_count {
             return Err(VectorKitError::InvalidFormat {
@@ -301,7 +327,7 @@ impl ExactVectorIndex {
             manifest_bytes: file_size(&directory.join(MANIFEST_FILE))?,
             vectors_bytes: file_size(&directory.join(VECTORS_FILE))?,
             chunks_bytes: file_size(&directory.join(CHUNKS_FILE))?,
-            bm25_bytes: file_size(&directory.join(BM25_FILE))?,
+            bm25_bytes: file_size_if_exists(&directory.join(BM25_FILE))?,
             tombstones_bytes: file_size(&directory.join(TOMBSTONES_FILE))?,
         })
     }
@@ -672,7 +698,7 @@ impl ExactVectorIndex {
         }
     }
 
-    fn rebuild_derived_state_from_loaded_bm25(&mut self) {
+    fn rebuild_derived_state_from_loaded_chunks(&mut self) {
         self.chunk_offsets.clear();
         self.active_offsets.clear();
         self.metadata_filter_index = MetadataFilterIndex::default();
@@ -786,6 +812,12 @@ impl PersistedManifest {
             });
         }
 
+        if !self.has_bm25 && self.bm25_bytes != 0 {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot report bm25 bytes when has_bm25 is false".to_owned(),
+            });
+        }
+
         Ok(())
     }
 }
@@ -817,6 +849,14 @@ fn file_size(path: &Path) -> Result<u64> {
     fs::metadata(path)
         .map(|metadata| metadata.len())
         .map_err(|_| persistence_error("stat", path))
+}
+
+fn file_size_if_exists(path: &Path) -> Result<u64> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.len()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(_) => Err(persistence_error("stat", path)),
+    }
 }
 
 fn validate_file_size(path: &Path, expected: u64) -> Result<()> {
@@ -1469,6 +1509,75 @@ mod tests {
             .unwrap();
         assert_eq!(filtered_hits.len(), 1);
         assert_eq!(filtered_hits[0].chunk_id, 0);
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn saved_index_without_bm25_round_trips_vector_filter_and_tombstones() {
+        let directory = temp_index_dir("vector-only-round-trip");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+
+        let mut notes_document = document("doc-1");
+        notes_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                notes_document,
+                vec![chunk_input("Swift exact local search", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let mut transcript_document = document("doc-2");
+        transcript_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index
+            .upsert_document(
+                transcript_document,
+                vec![chunk_input("Rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        index.delete_document("doc-2");
+
+        let file_sizes = index
+            .save_to_dir_with_options(&directory, IndexPersistenceOptions::vector_only())
+            .unwrap();
+        assert_eq!(file_sizes.bm25_bytes, 0);
+        assert!(!directory.join(BM25_FILE).exists());
+        assert_eq!(
+            ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),
+            file_sizes
+        );
+
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(loaded.active_chunk_count(), 1);
+        assert!(loaded.chunk(1).unwrap().deleted);
+
+        let vector_hits = loaded
+            .search(&SearchQuery::new(vec![1.0, 0.0], 10))
+            .unwrap();
+        assert_eq!(vector_hits.len(), 1);
+        assert_eq!(vector_hits[0].chunk_id, 0);
+
+        let filtered_hits = loaded
+            .search(
+                &SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+                    field: "source".to_owned(),
+                    value: MetadataValue::String("notes".to_owned()),
+                }),
+            )
+            .unwrap();
+        assert_eq!(filtered_hits.len(), 1);
+        assert_eq!(filtered_hits[0].chunk_id, 0);
+
+        let keyword_hits = loaded
+            .keyword_search(&KeywordQuery::new("swift local", 10))
+            .unwrap();
+        assert!(keyword_hits.is_empty());
 
         let _ = std::fs::remove_dir_all(directory);
     }

@@ -25,6 +25,13 @@ const VECTORS_FILE: &str = "vectors.vec";
 const CHUNKS_FILE: &str = "chunks.bin";
 const BM25_FILE: &str = "bm25.bin";
 const TOMBSTONES_FILE: &str = "tombstones.bin";
+const CHUNKS_MAGIC: &[u8; 4] = b"VKCH";
+const CHUNKS_FORMAT_VERSION: u32 = 1;
+const METADATA_STRING: u8 = 0;
+const METADATA_INTEGER: u8 = 1;
+const METADATA_FLOAT: u8 = 2;
+const METADATA_BOOLEAN: u8 = 3;
+const METADATA_TIMESTAMP_MILLIS: u8 = 4;
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
@@ -159,7 +166,7 @@ impl ExactVectorIndex {
         let manifest_tmp_path = directory.join(MANIFEST_TMP_FILE);
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
-        write_json_file(&chunks_path, &self.chunks)?;
+        write_file(&chunks_path, &encode_chunks(&self.chunks)?)?;
         write_json_file(&bm25_path, &self.bm25.to_persisted())?;
         write_file(
             &tombstones_path,
@@ -229,7 +236,7 @@ impl ExactVectorIndex {
             manifest.dimension,
             &vector_bytes,
         )?;
-        let chunks: Vec<StoredChunk> = read_json_file(&chunks_path)?;
+        let chunks = decode_chunks(&read_file(&chunks_path)?)?;
         if chunks.len() != manifest.vector_count {
             return Err(VectorKitError::InvalidFormat {
                 message: format!(
@@ -713,6 +720,264 @@ fn validate_bm25_state_matches_chunks(
     Ok(())
 }
 
+fn encode_chunks(chunks: &[StoredChunk]) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(CHUNKS_MAGIC);
+    write_u32(&mut bytes, CHUNKS_FORMAT_VERSION);
+    write_u64(
+        &mut bytes,
+        checked_usize_to_u64(chunks.len(), "chunk count")?,
+    );
+
+    for chunk in chunks {
+        write_u64(&mut bytes, chunk.chunk_id);
+        write_u64(&mut bytes, chunk.version);
+        write_bool(&mut bytes, chunk.deleted);
+        write_string(&mut bytes, &chunk.document_id)?;
+        write_string(&mut bytes, &chunk.text)?;
+        write_metadata(&mut bytes, &chunk.metadata)?;
+    }
+
+    Ok(bytes)
+}
+
+fn decode_chunks(bytes: &[u8]) -> Result<Vec<StoredChunk>> {
+    let mut reader = ByteReader::new(bytes);
+    if reader.read_exact(CHUNKS_MAGIC.len())? != CHUNKS_MAGIC {
+        return Err(VectorKitError::InvalidFormat {
+            message: "chunk file has invalid magic".to_owned(),
+        });
+    }
+
+    let format_version = reader.read_u32()?;
+    if format_version != CHUNKS_FORMAT_VERSION {
+        return Err(VectorKitError::InvalidFormat {
+            message: format!("unsupported chunk file version {format_version}"),
+        });
+    }
+
+    let chunk_count = checked_u64_to_usize(reader.read_u64()?, "chunk count")?;
+    let mut chunks = Vec::with_capacity(chunk_count);
+    for _ in 0..chunk_count {
+        chunks.push(StoredChunk {
+            chunk_id: reader.read_u64()?,
+            version: reader.read_u64()?,
+            deleted: reader.read_bool()?,
+            document_id: reader.read_string()?,
+            text: reader.read_string()?,
+            metadata: reader.read_metadata()?,
+        });
+    }
+
+    reader.finish()?;
+    Ok(chunks)
+}
+
+fn write_metadata(bytes: &mut Vec<u8>, metadata: &Metadata) -> Result<()> {
+    write_u32(
+        bytes,
+        checked_usize_to_u32(metadata.len(), "metadata field count")?,
+    );
+    for (field, value) in metadata {
+        write_string(bytes, field)?;
+        match value {
+            crate::metadata::MetadataValue::String(value) => {
+                write_u8(bytes, METADATA_STRING);
+                write_string(bytes, value)?;
+            }
+            crate::metadata::MetadataValue::Integer(value) => {
+                write_u8(bytes, METADATA_INTEGER);
+                write_i64(bytes, *value);
+            }
+            crate::metadata::MetadataValue::Float(value) => {
+                write_u8(bytes, METADATA_FLOAT);
+                write_f64(bytes, *value);
+            }
+            crate::metadata::MetadataValue::Boolean(value) => {
+                write_u8(bytes, METADATA_BOOLEAN);
+                write_bool(bytes, *value);
+            }
+            crate::metadata::MetadataValue::TimestampMillis(value) => {
+                write_u8(bytes, METADATA_TIMESTAMP_MILLIS);
+                write_i64(bytes, *value);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_string(bytes: &mut Vec<u8>, value: &str) -> Result<()> {
+    write_u32(bytes, checked_usize_to_u32(value.len(), "string length")?);
+    bytes.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn write_bool(bytes: &mut Vec<u8>, value: bool) {
+    write_u8(bytes, u8::from(value));
+}
+
+fn write_u8(bytes: &mut Vec<u8>, value: u8) {
+    bytes.push(value);
+}
+
+fn write_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_u64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_i64(bytes: &mut Vec<u8>, value: i64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_f64(bytes: &mut Vec<u8>, value: f64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+struct ByteReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> ByteReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn read_metadata(&mut self) -> Result<Metadata> {
+        let field_count = checked_u32_to_usize(self.read_u32()?, "metadata field count")?;
+        let mut metadata = Metadata::new();
+        for _ in 0..field_count {
+            let field = self.read_string()?;
+            let value = match self.read_u8()? {
+                METADATA_STRING => crate::metadata::MetadataValue::String(self.read_string()?),
+                METADATA_INTEGER => crate::metadata::MetadataValue::Integer(self.read_i64()?),
+                METADATA_FLOAT => crate::metadata::MetadataValue::Float(self.read_f64()?),
+                METADATA_BOOLEAN => crate::metadata::MetadataValue::Boolean(self.read_bool()?),
+                METADATA_TIMESTAMP_MILLIS => {
+                    crate::metadata::MetadataValue::TimestampMillis(self.read_i64()?)
+                }
+                value_type => {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!("unknown metadata value type {value_type}"),
+                    })
+                }
+            };
+            metadata.insert(field, value);
+        }
+        Ok(metadata)
+    }
+
+    fn read_string(&mut self) -> Result<String> {
+        let len = checked_u32_to_usize(self.read_u32()?, "string length")?;
+        let bytes = self.read_exact(len)?;
+        String::from_utf8(bytes.to_vec()).map_err(|error| VectorKitError::InvalidFormat {
+            message: format!("invalid UTF-8 string in chunk file: {error}"),
+        })
+    }
+
+    fn read_bool(&mut self) -> Result<bool> {
+        match self.read_u8()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            value => Err(VectorKitError::InvalidFormat {
+                message: format!("invalid boolean byte {value}"),
+            }),
+        }
+    }
+
+    fn read_u8(&mut self) -> Result<u8> {
+        Ok(self.read_exact(1)?[0])
+    }
+
+    fn read_u32(&mut self) -> Result<u32> {
+        Ok(u32::from_le_bytes(
+            self.read_exact(std::mem::size_of::<u32>())?
+                .try_into()
+                .expect("u32 chunk size"),
+        ))
+    }
+
+    fn read_u64(&mut self) -> Result<u64> {
+        Ok(u64::from_le_bytes(
+            self.read_exact(std::mem::size_of::<u64>())?
+                .try_into()
+                .expect("u64 chunk size"),
+        ))
+    }
+
+    fn read_i64(&mut self) -> Result<i64> {
+        Ok(i64::from_le_bytes(
+            self.read_exact(std::mem::size_of::<i64>())?
+                .try_into()
+                .expect("i64 chunk size"),
+        ))
+    }
+
+    fn read_f64(&mut self) -> Result<f64> {
+        Ok(f64::from_le_bytes(
+            self.read_exact(std::mem::size_of::<f64>())?
+                .try_into()
+                .expect("f64 chunk size"),
+        ))
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<&'a [u8]> {
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| VectorKitError::InvalidFormat {
+                message: "chunk reader offset overflow".to_owned(),
+            })?;
+        let Some(bytes) = self.bytes.get(self.offset..end) else {
+            return Err(VectorKitError::InvalidFormat {
+                message: "chunk file ended unexpectedly".to_owned(),
+            });
+        };
+        self.offset = end;
+        Ok(bytes)
+    }
+
+    fn finish(&self) -> Result<()> {
+        if self.offset == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(VectorKitError::InvalidFormat {
+                message: format!(
+                    "chunk file has {} trailing bytes",
+                    self.bytes.len() - self.offset
+                ),
+            })
+        }
+    }
+}
+
+fn checked_usize_to_u32(value: usize, label: &str) -> Result<u32> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in u32"),
+    })
+}
+
+fn checked_usize_to_u64(value: usize, label: &str) -> Result<u64> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in u64"),
+    })
+}
+
+fn checked_u32_to_usize(value: u32, label: &str) -> Result<usize> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in usize"),
+    })
+}
+
+fn checked_u64_to_usize(value: u64, label: &str) -> Result<usize> {
+    value.try_into().map_err(|_| VectorKitError::InvalidFormat {
+        message: format!("{label} does not fit in usize"),
+    })
+}
+
 fn persistence_error(operation: &str, path: &Path) -> VectorKitError {
     VectorKitError::Persistence {
         operation: operation.to_owned(),
@@ -920,6 +1185,47 @@ mod tests {
     }
 
     #[test]
+    fn binary_chunk_records_round_trip_metadata_values() {
+        let mut stored_chunk = StoredChunk {
+            chunk_id: 42,
+            document_id: "doc-42".to_owned(),
+            text: "compact chunk text".to_owned(),
+            metadata: Metadata::new(),
+            deleted: true,
+            version: 7,
+        };
+        stored_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        stored_chunk
+            .metadata
+            .insert("rank".to_owned(), MetadataValue::Integer(5));
+        stored_chunk
+            .metadata
+            .insert("score".to_owned(), MetadataValue::Float(0.25));
+        stored_chunk
+            .metadata
+            .insert("archived".to_owned(), MetadataValue::Boolean(false));
+        stored_chunk.metadata.insert(
+            "created".to_owned(),
+            MetadataValue::TimestampMillis(1_700_000_000),
+        );
+
+        let encoded = encode_chunks(&[stored_chunk.clone()]).unwrap();
+        let decoded = decode_chunks(&encoded).unwrap();
+
+        assert_eq!(decoded, vec![stored_chunk]);
+    }
+
+    #[test]
+    fn binary_chunk_records_reject_bad_magic() {
+        let error = decode_chunks(b"NOPE").unwrap_err();
+
+        assert!(matches!(error, VectorKitError::InvalidFormat { .. }));
+    }
+
+    #[test]
     fn saved_index_round_trips_vector_keyword_filter_and_tombstones() {
         let directory = temp_index_dir("round-trip");
         let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
@@ -956,6 +1262,7 @@ mod tests {
         assert!(file_sizes.chunks_bytes > 0);
         assert!(file_sizes.bm25_bytes > 100);
         assert_eq!(file_sizes.tombstones_bytes, 2);
+        assert!(file_sizes.chunks_bytes < 512);
         assert_eq!(
             ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),
             file_sizes

@@ -7,6 +7,8 @@ This directory separates active product decisions from deferred research notes.
 Current implementation source of truth:
 
 - [`product/vectorkit-product-spec.md`](product/vectorkit-product-spec.md)
+- [`product/working-memory.md`](product/working-memory.md) for active handoff
+  context and recent decisions that should survive chat changes
 
 ## Research
 

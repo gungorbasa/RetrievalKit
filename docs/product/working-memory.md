@@ -93,6 +93,10 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Deferred Exploration
 
+- `docs/research/turbovec-notes.md` captures ideas from `RyanCodrai/turbovec`.
+  Useful ideas include filter-aware scoring loops, explicit cache warmup,
+  strict binary format validation, and benchmark/debug counters. Do not adopt
+  its approximate TurboQuant index as the V1 primary retrieval engine.
 - Optional rerank vector store for compressed encodings is deferred.
 - Revisit reranking only after real-data benchmarks show I8 needs higher final
   quality.

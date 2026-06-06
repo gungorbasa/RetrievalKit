@@ -17,6 +17,7 @@ Current implementation source of truth:
 Technical explorations that are not part of the current V1 scope:
 
 - [`research/rust-hnsw-vector-search-plan.md`](research/rust-hnsw-vector-search-plan.md)
+- [`research/turbovec-notes.md`](research/turbovec-notes.md)
 
 ## Current Direction
 

@@ -202,7 +202,8 @@ A larger `50K` pass showed the same pattern:
 | 50K | 768 | F16 | 73.242 | 9.831 | 11.557 |
 | 50K | 768 | I8 | 36.812 | 1.249 | 1.258 |
 
-The end-to-end exact search benchmark also improved:
+The end-to-end exact search benchmark also improved after the AArch64 dotprod
+backend and late result materialization:
 
 | chunks | dim | top_k | encoding | avg ms | p95 ms | recall@k vs F32 |
 |---:|---:|---:|:---|---:|---:|---:|
@@ -213,12 +214,36 @@ The end-to-end exact search benchmark also improved:
 | 24K | 768 | 10 | F16 | 6.331 | 8.664 | 1.0000 |
 | 24K | 768 | 10 | I8 | 1.355 | 1.435 | 0.9920 |
 
+A later specialized unfiltered I8 scan removes the generic candidate scoring
+path for the no-filter case while keeping active-offset scanning, deterministic
+top-k ordering, and late `SearchHit` materialization:
+
+```bash
+cargo run --release -p vectorkit-cli -- bench matrix \
+  --chunks 24000 \
+  --dimensions 384,768 \
+  --queries 200 \
+  --top-k 10 \
+  --encodings f32,f16,i8 \
+  --budget-mb 20
+```
+
+| chunks | dim | top_k | encoding | avg ms | p95 ms | recall@k vs F32 |
+|---:|---:|---:|:---|---:|---:|---:|
+| 24K | 384 | 10 | F32 | 2.451 | 2.528 | 1.0000 |
+| 24K | 384 | 10 | F16 | 2.627 | 2.698 | 0.9995 |
+| 24K | 384 | 10 | I8 | 0.787 | 0.841 | 0.9895 |
+| 24K | 768 | 10 | F32 | 5.444 | 5.586 | 1.0000 |
+| 24K | 768 | 10 | F16 | 5.584 | 5.701 | 1.0000 |
+| 24K | 768 | 10 | I8 | 1.029 | 1.091 | 0.9920 |
+
 Conclusion: on Apple hardware with `FEAT_DotProd`, `I8ScalarQuantized` is now
 both the best compact storage option and the fastest exact full-scan scoring
 option in the current benchmark. Late result materialization also improves F32
 and F16 by avoiding `SearchHit` construction for candidates that do not survive
-top-k. Keep the runtime fallback because not every AArch64 target has
-dot-product support.
+top-k, while the unfiltered I8 path further reduces per-candidate overhead for
+the compact target. Keep the runtime fallback because not every AArch64 target
+has dot-product support.
 
 ## Recommendation
 

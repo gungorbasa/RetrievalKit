@@ -76,12 +76,13 @@ Approximate vector-only sizes for `24K` vectors:
 ## Recent Benchmark Takeaways
 
 For `24K` vectors, `top_k=10`, `200` synthetic queries after the AArch64 I8
-dotprod backend and late result materialization:
+dotprod backend, late result materialization, active-offset scans, and the
+unfiltered I8 fast path:
 
 | dim | F32 avg | F16 avg | I8 avg | I8 recall@10 vs F32 |
 |---:|---:|---:|---:|---:|
-| 384 | ~2.5 ms | ~2.7 ms | ~0.9 ms | 0.9895 |
-| 768 | ~5.5 ms | ~6.3 ms | ~1.4 ms | 0.9920 |
+| 384 | ~2.5 ms | ~2.6 ms | ~0.8 ms | 0.9895 |
+| 768 | ~5.4 ms | ~5.6 ms | ~1.0 ms | 0.9920 |
 
 For isolated scoring kernels, `50K x 768d I8` measured about `1.25 ms` average
 versus about `9.1 ms` for F32 on the same machine.
@@ -104,6 +105,9 @@ versus about `9.1 ms` for F32 on the same machine.
 - Active-offset scanning is implemented for unfiltered exact vector search. The
   index keeps a derived `active_offsets` list so tombstoned rows are not scanned
   after upserts, deletes, or persistence reload.
+- A specialized unfiltered `I8ScalarQuantized` search path is implemented. It
+  borrows the contiguous I8 values and scale arrays directly, skips generic
+  filter checks, and keeps final result materialization after top-k selection.
 
 ## Likely Next Tasks
 
@@ -111,8 +115,10 @@ versus about `9.1 ms` for F32 on the same machine.
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
   older devices that may not report `dotprod`.
-- Explore batched I8 scoring and parallel exact scan only after target-device
-  benchmarks show remaining CPU pressure.
+- Extend the I8 fast path to filtered searches only after the unfiltered path is
+  stable and benchmarked on target devices.
+- Explore parallel exact scan only after target-device benchmarks show remaining
+  CPU pressure.
 - Add persistence load timing and payload/RSS memory reporting to the benchmark
   output.
 - Validate the compact target on a target Apple device through the Swift

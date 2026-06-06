@@ -441,6 +441,12 @@ impl ExactVectorIndex {
         }
         let encoded_query = self.encode_query_embedding(&query.embedding)?;
 
+        if query.filter.is_none() {
+            if let Some(hits) = self.search_i8_unfiltered(query.top_k, &encoded_query) {
+                return Ok(hits);
+            }
+        }
+
         let mut candidates = Vec::with_capacity(query.top_k);
         let candidate_offsets = query
             .filter
@@ -465,6 +471,42 @@ impl ExactVectorIndex {
         sort_scored_candidates(&mut candidates);
 
         Ok(self.materialize_search_hits(&candidates))
+    }
+
+    fn search_i8_unfiltered(
+        &self,
+        top_k: usize,
+        encoded_query: &scoring::EncodedQuery,
+    ) -> Option<Vec<SearchHit>> {
+        let (values, scales) = self.encoded_vectors.i8_scalar_quantized_parts()?;
+        let (query_values, query_scale) = encoded_query.i8_scalar_quantized_parts()?;
+        let mut candidates = Vec::with_capacity(top_k);
+
+        for offset in self.active_offsets.iter().copied() {
+            let chunk = &self.chunks[offset];
+            debug_assert!(!chunk.deleted);
+
+            let start = offset.checked_mul(self.dimension)?;
+            let end = start.checked_add(self.dimension)?;
+            let chunk_values = values.get(start..end)?;
+            let chunk_scale = *scales.get(offset)?;
+            let score =
+                scoring::dot_product_i8(query_values, chunk_values) * query_scale * chunk_scale;
+
+            push_bounded_candidate(
+                &mut candidates,
+                top_k,
+                ScoredCandidate {
+                    chunk_id: chunk.chunk_id,
+                    offset,
+                    score,
+                },
+            );
+        }
+
+        sort_scored_candidates(&mut candidates);
+
+        Some(self.materialize_search_hits(&candidates))
     }
 
     /// Performs BM25 keyword search over active chunks.
@@ -1671,6 +1713,65 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
         assert_close(hits[0].score, 1.0);
+    }
+
+    #[test]
+    fn i8_unfiltered_fast_path_keeps_stable_top_k_ordering() {
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::DotProduct)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        index
+            .add_chunk(chunk(40, "doc-40", vec![4.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(10, "doc-10", vec![1.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(20, "doc-20", vec![4.0, 0.0]))
+            .unwrap();
+        index
+            .add_chunk(chunk(30, "doc-30", vec![3.0, 0.0]))
+            .unwrap();
+
+        let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 2)).unwrap();
+
+        assert_eq!(
+            hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
+            vec![20, 40]
+        );
+    }
+
+    #[test]
+    fn i8_filtered_search_stays_on_generic_filter_path() {
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::DotProduct)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        let mut notes_chunk = chunk(1, "doc-1", vec![10.0, 0.0]);
+        notes_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index.add_chunk(notes_chunk).unwrap();
+
+        let mut transcript_chunk = chunk(2, "doc-2", vec![1.0, 0.0]);
+        transcript_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index.add_chunk(transcript_chunk).unwrap();
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("transcript".to_owned()),
+        });
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 2);
     }
 
     #[test]

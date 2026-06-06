@@ -89,6 +89,13 @@ impl EncodedVectorStore {
         }
     }
 
+    pub(crate) fn i8_scalar_quantized_parts(&self) -> Option<(&[i8], &[f32])> {
+        match self {
+            Self::I8ScalarQuantized { values, scales } => Some((values, scales)),
+            Self::F32(_) | Self::F16(_) | Self::BF16(_) => None,
+        }
+    }
+
     pub fn estimated_payload_bytes(&self) -> usize {
         match self {
             Self::F32(vectors) => vectors.len() * std::mem::size_of::<f32>(),
@@ -214,6 +221,15 @@ pub(crate) enum EncodedQuery {
 pub(crate) struct ScalarQuantizedVector {
     values: Vec<i8>,
     scale: f32,
+}
+
+impl EncodedQuery {
+    pub(crate) fn i8_scalar_quantized_parts(&self) -> Option<(&[i8], f32)> {
+        match self {
+            Self::I8ScalarQuantized(query) => Some((&query.values, query.scale)),
+            Self::F32(_) | Self::F16(_) | Self::BF16(_) => None,
+        }
+    }
 }
 
 pub(crate) fn encode_query(encoding: VectorEncoding, embedding: &[f32]) -> Result<EncodedQuery> {

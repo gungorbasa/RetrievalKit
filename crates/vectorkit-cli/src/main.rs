@@ -4,9 +4,11 @@ use std::fmt::{Display, Formatter};
 use std::time::{Duration, Instant};
 
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, IndexConfig, Metadata, SearchHit, SearchQuery, VectorEncoding,
-    VectorMetric,
+    Chunk, ExactVectorIndex, Filter, IndexConfig, Metadata, MetadataValue, SearchHit, SearchQuery,
+    VectorEncoding, VectorMetric,
 };
+
+const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
 
 fn main() {
     if let Err(error) = run(env::args().skip(1).collect()) {
@@ -36,6 +38,7 @@ struct SyntheticBenchConfig {
     encoding: VectorEncoding,
     metric: VectorMetric,
     seed: u64,
+    filter_every: Option<usize>,
     footprint: FootprintConfig,
 }
 
@@ -57,6 +60,7 @@ impl Default for SyntheticBenchConfig {
             encoding: VectorEncoding::F32,
             metric: VectorMetric::Cosine,
             seed: 42,
+            filter_every: None,
             footprint: FootprintConfig::default(),
         }
     }
@@ -94,6 +98,7 @@ impl SyntheticBenchConfig {
                 "--encoding" => config.encoding = parse_encoding(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
+                "--filter-every" => config.filter_every = Some(parse_positive(value, flag)?),
                 "--budget-mb" => {
                     config.footprint.budget_bytes = parse_mib(value, flag)?;
                 }
@@ -130,6 +135,7 @@ struct MatrixBenchConfig {
     encodings: Vec<VectorEncoding>,
     metric: VectorMetric,
     seed: u64,
+    filter_every: Option<usize>,
     footprint: FootprintConfig,
 }
 
@@ -148,6 +154,7 @@ impl Default for MatrixBenchConfig {
             ],
             metric: VectorMetric::Cosine,
             seed: 42,
+            filter_every: None,
             footprint: FootprintConfig::default(),
         }
     }
@@ -174,6 +181,7 @@ impl MatrixBenchConfig {
                 "--encodings" => config.encodings = parse_encoding_list(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
+                "--filter-every" => config.filter_every = Some(parse_positive(value, flag)?),
                 "--budget-mb" => {
                     config.footprint.budget_bytes = parse_mib(value, flag)?;
                 }
@@ -256,6 +264,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("encoding: {}", encoding_name(report.config.encoding));
     println!("metric: {}", metric_name(report.config.metric));
     println!("seed: {}", report.config.seed);
+    println!(
+        "filter_every: {}",
+        filter_every_name(report.config.filter_every)
+    );
     println!("vector_mb: {:.3}", mib(report.footprint.vector_bytes));
     println!(
         "estimated_auxiliary_mb: {:.3}",
@@ -312,10 +324,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | vector MB | aux MB | est total MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
@@ -329,16 +341,18 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     encoding: *encoding,
                     metric: config.metric,
                     seed: config.seed,
+                    filter_every: config.filter_every,
                     footprint: config.footprint.clone(),
                 })?;
 
                 println!(
-                    "| {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
                     report.config.chunks,
                     report.config.dimension,
                     report.config.top_k,
                     encoding_name(report.config.encoding),
                     metric_name(report.config.metric),
+                    filter_every_name(report.config.filter_every),
                     mib(report.footprint.vector_bytes),
                     mib(report.footprint.auxiliary_bytes()),
                     mib(report.footprint.total_bytes()),
@@ -382,15 +396,22 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         let target_chunk = target_chunk_id(query_id, config.chunks);
         let query =
             generate_query_vector(config.dimension, config.seed, target_chunk as u64, query_id);
+        let search_query = synthetic_search_query(
+            config.top_k,
+            query.clone(),
+            config.filter_every,
+            target_chunk,
+        );
 
         let start = Instant::now();
-        let hits = index.search(&SearchQuery::new(query.clone(), config.top_k))?;
+        let hits = index.search(&search_query)?;
         query_durations.push(start.elapsed());
 
         recall_sum += match &f32_ground_truth {
             Some(ground_truth) => {
-                let ground_truth_hits =
-                    ground_truth.search(&SearchQuery::new(query, config.top_k))?;
+                let ground_truth_query =
+                    synthetic_search_query(config.top_k, query, config.filter_every, target_chunk);
+                let ground_truth_hits = ground_truth.search(&ground_truth_query)?;
                 recall_at_k(&hits, &ground_truth_hits)
             }
             None => 1.0,
@@ -447,21 +468,56 @@ fn build_synthetic_index(
 
     let build_start = Instant::now();
     for chunk_id in 0..config.chunks {
-        index.add_chunk(synthetic_chunk(config.dimension, config.seed, chunk_id))?;
+        index.add_chunk(synthetic_chunk(
+            config.dimension,
+            config.seed,
+            chunk_id,
+            config.filter_every,
+        ))?;
     }
 
     Ok((index, build_start.elapsed()))
 }
 
-fn synthetic_chunk(dimension: usize, seed: u64, chunk_id: usize) -> Chunk {
+fn synthetic_chunk(
+    dimension: usize,
+    seed: u64,
+    chunk_id: usize,
+    filter_every: Option<usize>,
+) -> Chunk {
+    let mut metadata = Metadata::new();
+    if let Some(filter_every) = filter_every {
+        metadata.insert(
+            BENCH_FILTER_FIELD.to_owned(),
+            MetadataValue::Integer((chunk_id % filter_every) as i64),
+        );
+    }
+
     Chunk {
         chunk_id: chunk_id as u64,
         document_id: format!("synthetic-doc-{chunk_id}"),
         text: format!("synthetic chunk {chunk_id} topic {}", chunk_id % 17),
         embedding: generate_normalized_vector(dimension, seed, chunk_id as u64),
-        metadata: Metadata::new(),
+        metadata,
         deleted: false,
         version: 1,
+    }
+}
+
+fn synthetic_search_query(
+    top_k: usize,
+    embedding: Vec<f32>,
+    filter_every: Option<usize>,
+    target_chunk: usize,
+) -> SearchQuery {
+    let query = SearchQuery::new(embedding, top_k);
+
+    match filter_every {
+        Some(filter_every) => query.with_filter(Filter::Equals {
+            field: BENCH_FILTER_FIELD.to_owned(),
+            value: MetadataValue::Integer((target_chunk % filter_every) as i64),
+        }),
+        None => query,
     }
 }
 
@@ -665,6 +721,12 @@ fn metric_name(metric: VectorMetric) -> &'static str {
     }
 }
 
+fn filter_every_name(filter_every: Option<usize>) -> String {
+    filter_every
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_owned())
+}
+
 fn encoded_vector_bytes(chunks: usize, dimension: usize, encoding: VectorEncoding) -> usize {
     chunks * dimension * encoded_bytes_per_value(encoding)
         + chunks * encoded_sidecar_bytes_per_vector(encoding)
@@ -727,6 +789,7 @@ impl CliError {
                 "  --encoding <kind>  f32, f16, bf16, or i8; default f32",
                 "  --metric <kind>    cosine or dot; default cosine",
                 "  --seed <n>         default 42",
+                "  --filter-every <n> indexed equality filter with roughly 1/n selectivity",
                 "  --budget-mb <n>    footprint budget in MiB; default 20",
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
                 "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
@@ -740,6 +803,7 @@ impl CliError {
                 "  --encodings <list>    comma list of f32,f16,bf16,i8; default f32,f16,bf16,i8",
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
+                "  --filter-every <n>    indexed equality filter with roughly 1/n selectivity",
                 "  --budget-mb <n>       footprint budget in MiB; default 20",
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
                 "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
@@ -821,6 +885,8 @@ mod tests {
             "dot",
             "--seed",
             "7",
+            "--filter-every",
+            "10",
             "--budget-mb",
             "12.5",
             "--avg-chunk-data-bytes",
@@ -841,6 +907,7 @@ mod tests {
         assert_eq!(config.encoding, VectorEncoding::I8ScalarQuantized);
         assert_eq!(config.metric, VectorMetric::DotProduct);
         assert_eq!(config.seed, 7);
+        assert_eq!(config.filter_every, Some(10));
         assert_eq!(config.footprint.budget_bytes, 13_107_200);
         assert_eq!(config.footprint.avg_chunk_data_bytes, 128);
         assert_eq!(config.footprint.avg_metadata_bytes, 16);
@@ -868,6 +935,8 @@ mod tests {
             "5,10",
             "--encodings",
             "f32,i8",
+            "--filter-every",
+            "100",
         ]
         .map(str::to_owned);
 
@@ -880,6 +949,7 @@ mod tests {
             config.encodings,
             vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
         );
+        assert_eq!(config.filter_every, Some(100));
     }
 
     #[test]

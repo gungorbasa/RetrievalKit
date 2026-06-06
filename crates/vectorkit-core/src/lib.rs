@@ -3,6 +3,7 @@ mod error;
 mod filter;
 mod index;
 mod metadata;
+mod metadata_index;
 mod scoring;
 mod types;
 

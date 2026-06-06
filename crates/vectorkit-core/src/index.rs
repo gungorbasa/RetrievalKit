@@ -5,6 +5,7 @@ use crate::bm25::{Bm25Config, Bm25Index};
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
 use crate::metadata::Metadata;
+use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
     Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
@@ -19,6 +20,7 @@ pub struct ExactVectorIndex {
     chunks: Vec<StoredChunk>,
     encoded_vectors: EncodedVectorStore,
     chunk_offsets: Vec<Option<usize>>,
+    metadata_filter_index: MetadataFilterIndex,
     next_chunk_id: ChunkId,
     document_versions: BTreeMap<String, u64>,
     bm25: Bm25Index,
@@ -68,6 +70,7 @@ impl ExactVectorIndex {
             chunks: Vec::new(),
             encoded_vectors: EncodedVectorStore::new(vector_encoding)?,
             chunk_offsets: Vec::new(),
+            metadata_filter_index: MetadataFilterIndex::default(),
             next_chunk_id: 0,
             document_versions: BTreeMap::new(),
             bm25: Bm25Index::new(bm25_config),
@@ -111,6 +114,7 @@ impl ExactVectorIndex {
     /// remains useful for tests and future persistence-loading paths.
     pub fn add_chunk(&mut self, chunk: Chunk) -> Result<()> {
         self.validate_dimension(chunk.embedding.len())?;
+        let offset = self.chunks.len();
         self.next_chunk_id = self.next_chunk_id.max(chunk.chunk_id.saturating_add(1));
         self.document_versions
             .entry(chunk.document_id.clone())
@@ -118,16 +122,21 @@ impl ExactVectorIndex {
             .or_insert(chunk.version);
         self.bm25
             .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
-        self.register_chunk_offset(chunk.chunk_id, self.chunks.len());
+        self.register_chunk_offset(chunk.chunk_id, offset);
         self.push_embedding(&chunk.embedding);
-        self.chunks.push(StoredChunk {
+        let stored_chunk = StoredChunk {
             chunk_id: chunk.chunk_id,
             document_id: chunk.document_id,
             text: chunk.text,
             metadata: chunk.metadata,
             deleted: chunk.deleted,
             version: chunk.version,
-        });
+        };
+        if !stored_chunk.deleted {
+            self.metadata_filter_index
+                .insert(offset, &stored_chunk.metadata);
+        }
+        self.chunks.push(stored_chunk);
         Ok(())
     }
 
@@ -154,8 +163,11 @@ impl ExactVectorIndex {
             .unwrap_or(0)
             + 1;
 
-        for chunk in &mut self.chunks {
+        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
             if chunk.document_id == document.id {
+                if !chunk.deleted {
+                    self.metadata_filter_index.remove(offset, &chunk.metadata);
+                }
                 chunk.deleted = true;
                 self.bm25.deactivate_chunk(chunk.chunk_id);
             }
@@ -163,19 +175,23 @@ impl ExactVectorIndex {
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
         for chunk_input in chunk_inputs {
+            let offset = self.chunks.len();
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
-            self.register_chunk_offset(chunk_id, self.chunks.len());
+            self.register_chunk_offset(chunk_id, offset);
             self.push_embedding(&chunk_input.embedding);
-            self.chunks.push(StoredChunk {
+            let stored_chunk = StoredChunk {
                 chunk_id,
                 document_id: document.id.clone(),
                 text: chunk_input.text,
                 metadata: merge_metadata(&document.metadata, chunk_input.metadata),
                 deleted: false,
                 version,
-            });
+            };
+            self.metadata_filter_index
+                .insert(offset, &stored_chunk.metadata);
+            self.chunks.push(stored_chunk);
         }
 
         self.document_versions.insert(document.id, version);
@@ -189,8 +205,9 @@ impl ExactVectorIndex {
     /// idempotent and return zero once no active chunks remain.
     pub fn delete_document(&mut self, document_id: &str) -> usize {
         let mut deleted_count = 0;
-        for chunk in &mut self.chunks {
+        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id && !chunk.deleted {
+                self.metadata_filter_index.remove(offset, &chunk.metadata);
                 chunk.deleted = true;
                 self.bm25.deactivate_chunk(chunk.chunk_id);
                 deleted_count += 1;
@@ -218,35 +235,24 @@ impl ExactVectorIndex {
         let encoded_query = self.encode_query_embedding(&query.embedding)?;
 
         let mut hits = Vec::with_capacity(query.top_k);
-        for (offset, chunk) in self.chunks.iter().enumerate() {
-            if chunk.deleted {
-                continue;
-            }
+        let candidate_offsets = query
+            .filter
+            .as_ref()
+            .map(|filter| self.metadata_filter_index.candidate_offsets(filter))
+            .transpose()?
+            .flatten();
 
-            if !matches_filter(query.filter.as_ref(), chunk)? {
-                continue;
+        match candidate_offsets {
+            Some(offsets) => {
+                for offset in offsets {
+                    self.score_search_candidate(offset, query, &encoded_query, &mut hits)?;
+                }
             }
-
-            let Some(score) =
-                self.encoded_vectors
-                    .score_at(self.metric, &encoded_query, offset, self.dimension)
-            else {
-                continue;
-            };
-            push_bounded_hit(
-                &mut hits,
-                query.top_k,
-                SearchHit {
-                    chunk_id: chunk.chunk_id,
-                    document_id: chunk.document_id.clone(),
-                    score,
-                    trace: SearchTrace {
-                        vector_score: score,
-                        keyword_score: None,
-                        filter_matched: true,
-                    },
-                },
-            );
+            None => {
+                for offset in 0..self.chunks.len() {
+                    self.score_search_candidate(offset, query, &encoded_query, &mut hits)?;
+                }
+            }
         }
 
         sort_hits(&mut hits);
@@ -337,6 +343,50 @@ impl ExactVectorIndex {
                 scoring::encode_query_owned(self.vector_encoding, normalized)
             }
         }
+    }
+
+    fn score_search_candidate(
+        &self,
+        offset: usize,
+        query: &SearchQuery,
+        encoded_query: &scoring::EncodedQuery,
+        hits: &mut Vec<SearchHit>,
+    ) -> Result<()> {
+        let Some(chunk) = self.chunks.get(offset) else {
+            return Ok(());
+        };
+
+        if chunk.deleted {
+            return Ok(());
+        }
+
+        if !matches_filter(query.filter.as_ref(), chunk)? {
+            return Ok(());
+        }
+
+        let Some(score) =
+            self.encoded_vectors
+                .score_at(self.metric, encoded_query, offset, self.dimension)
+        else {
+            return Ok(());
+        };
+
+        push_bounded_hit(
+            hits,
+            query.top_k,
+            SearchHit {
+                chunk_id: chunk.chunk_id,
+                document_id: chunk.document_id.clone(),
+                score,
+                trace: SearchTrace {
+                    vector_score: score,
+                    keyword_score: None,
+                    filter_matched: true,
+                },
+            },
+        );
+
+        Ok(())
     }
 }
 
@@ -593,6 +643,127 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 2);
+    }
+
+    #[test]
+    fn exact_search_uses_indexed_in_and_range_filters() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        for chunk_id in 0..5 {
+            let mut indexed_chunk = chunk(chunk_id, &format!("doc-{chunk_id}"), vec![1.0, 0.0]);
+            indexed_chunk.metadata.insert(
+                "source".to_owned(),
+                MetadataValue::String(if chunk_id % 2 == 0 {
+                    "notes".to_owned()
+                } else {
+                    "transcript".to_owned()
+                }),
+            );
+            indexed_chunk
+                .metadata
+                .insert("stars".to_owned(), MetadataValue::Integer(chunk_id as i64));
+            index.add_chunk(indexed_chunk).unwrap();
+        }
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::All(vec![
+            Filter::In {
+                field: "source".to_owned(),
+                values: vec![MetadataValue::String("notes".to_owned())],
+            },
+            Filter::Range {
+                field: "stars".to_owned(),
+                lower: Some(MetadataValue::Integer(2)),
+                upper: Some(MetadataValue::Integer(4)),
+            },
+        ]));
+
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(
+            hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
+            vec![2, 4]
+        );
+    }
+
+    #[test]
+    fn exact_search_uses_indexed_not_equals_filter() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut hidden = chunk(1, "doc-1", vec![2.0, 0.0]);
+        hidden
+            .metadata
+            .insert("archived".to_owned(), MetadataValue::Boolean(true));
+        index.add_chunk(hidden).unwrap();
+
+        let mut visible = chunk(2, "doc-2", vec![1.0, 0.0]);
+        visible
+            .metadata
+            .insert("archived".to_owned(), MetadataValue::Boolean(false));
+        index.add_chunk(visible).unwrap();
+
+        let mut missing_field = chunk(3, "doc-3", vec![3.0, 0.0]);
+        missing_field.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index.add_chunk(missing_field).unwrap();
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::NotEquals {
+            field: "archived".to_owned(),
+            value: MetadataValue::Boolean(true),
+        });
+
+        let hits = index.search(&query).unwrap();
+
+        assert_eq!(
+            hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
+            vec![3, 2]
+        );
+    }
+
+    #[test]
+    fn filtered_search_excludes_upserted_old_metadata() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut old = chunk_input("old", vec![1.0, 0.0]);
+        old.metadata
+            .insert("source".to_owned(), MetadataValue::String("old".to_owned()));
+        index.upsert_document(document("doc-1"), vec![old]).unwrap();
+
+        let mut new = chunk_input("new", vec![0.0, 1.0]);
+        new.metadata
+            .insert("source".to_owned(), MetadataValue::String("new".to_owned()));
+        index.upsert_document(document("doc-1"), vec![new]).unwrap();
+
+        let old_query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("old".to_owned()),
+        });
+        let new_query = SearchQuery::new(vec![0.0, 1.0], 10).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("new".to_owned()),
+        });
+
+        assert!(index.search(&old_query).unwrap().is_empty());
+        assert_eq!(index.search(&new_query).unwrap()[0].chunk_id, 1);
+    }
+
+    #[test]
+    fn filtered_search_excludes_deleted_metadata() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut indexed_chunk = chunk_input("private", vec![1.0, 0.0]);
+        indexed_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("private".to_owned()),
+        );
+        index
+            .upsert_document(document("doc-1"), vec![indexed_chunk])
+            .unwrap();
+        index.delete_document("doc-1");
+
+        let query = SearchQuery::new(vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+            field: "source".to_owned(),
+            value: MetadataValue::String("private".to_owned()),
+        });
+
+        assert!(index.search(&query).unwrap().is_empty());
     }
 
     #[test]

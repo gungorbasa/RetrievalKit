@@ -11,7 +11,7 @@ MACOSX_DEPLOYMENT_TARGET=14.0 cargo build -p vectorkit-ffi --release
 To build the Apple XCFramework used by future app targets:
 
 ```bash
-rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim
 scripts/build-xcframework.sh
 ```
 

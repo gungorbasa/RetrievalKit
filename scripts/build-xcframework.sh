@@ -11,7 +11,7 @@ MIN_MACOS_VERSION="${MIN_MACOS_VERSION:-14.0}"
 
 MACOS_TARGET="aarch64-apple-darwin"
 IOS_DEVICE_TARGET="aarch64-apple-ios"
-IOS_SIMULATOR_TARGETS=("aarch64-apple-ios-sim" "x86_64-apple-ios")
+IOS_SIMULATOR_TARGET="aarch64-apple-ios-sim"
 
 usage() {
   cat <<'EOF'
@@ -25,7 +25,7 @@ Options:
   --help, -h     show this help
 
 Install all Apple Rust targets before the full build:
-  rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+  rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim
 EOF
 }
 
@@ -161,35 +161,17 @@ build_framework_slice() {
     "$slice_name"
 }
 
-build_simulator_framework() {
-  local static_libs=()
-  local rust_target
-
-  for rust_target in "${IOS_SIMULATOR_TARGETS[@]}"; do
-    build_rust_target "$rust_target" "ios-simulator" "$MIN_IOS_VERSION"
-    static_libs+=("$ROOT_DIR/target/$rust_target/release/libvectorkit_ffi.a")
-  done
-
-  local universal_lib="$BUILD_DIR/slices/ios-simulator-universal/libvectorkit_ffi.a"
-  mkdir -p "$(dirname "$universal_lib")"
-  echo "Combining iOS simulator static libraries" >&2
-  lipo -create "${static_libs[@]}" -output "$universal_lib"
-
-  create_framework_from_static_lib "$universal_lib" "ios-simulator-universal"
-}
-
 main() {
   require_tool cargo
   require_tool rustup
   require_tool xcodebuild
-  require_tool lipo
 
   if [[ ! -f "$HEADER_PATH" ]]; then
     echo "missing header: $HEADER_PATH" >&2
     exit 1
   fi
 
-  local required_targets=("$MACOS_TARGET" "$IOS_DEVICE_TARGET" "${IOS_SIMULATOR_TARGETS[@]}")
+  local required_targets=("$MACOS_TARGET" "$IOS_DEVICE_TARGET" "$IOS_SIMULATOR_TARGET")
   if [[ "$MACOS_ONLY" == "1" ]]; then
     required_targets=("$MACOS_TARGET")
   fi
@@ -221,7 +203,7 @@ main() {
     framework_dir="$(build_framework_slice "$IOS_DEVICE_TARGET" "ios" "ios-arm64" "$MIN_IOS_VERSION")"
     framework_args+=("-framework" "$framework_dir")
 
-    framework_dir="$(build_simulator_framework)"
+    framework_dir="$(build_framework_slice "$IOS_SIMULATOR_TARGET" "ios-simulator" "ios-simulator-arm64" "$MIN_IOS_VERSION")"
     framework_args+=("-framework" "$framework_dir")
   fi
 

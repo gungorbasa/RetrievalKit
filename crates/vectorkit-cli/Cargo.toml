@@ -10,4 +10,5 @@ name = "vectorkit"
 path = "src/main.rs"
 
 [dependencies]
+simsimd = "6.5.16"
 vectorkit-core = { path = "../vectorkit-core" }

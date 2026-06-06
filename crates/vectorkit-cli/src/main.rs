@@ -1,9 +1,11 @@
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::hint::black_box;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use simsimd::{bf16, capabilities, f16, SpatialSimilarity};
 use vectorkit_core::{
     Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexSizeEstimate, Metadata,
     MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
@@ -25,6 +27,9 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         }
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "matrix" => {
             run_matrix_bench(MatrixBenchConfig::parse(rest)?)
+        }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "kernels" => {
+            run_kernel_bench(KernelBenchConfig::parse(rest)?)
         }
         _ => Err(CliError::usage()),
     }
@@ -216,6 +221,65 @@ impl MatrixBenchConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct KernelBenchConfig {
+    vectors: usize,
+    dimensions: Vec<usize>,
+    queries: usize,
+    encodings: Vec<VectorEncoding>,
+    seed: u64,
+}
+
+impl Default for KernelBenchConfig {
+    fn default() -> Self {
+        Self {
+            vectors: 24_000,
+            dimensions: vec![384, 768],
+            queries: 200,
+            encodings: vec![
+                VectorEncoding::F32,
+                VectorEncoding::F16,
+                VectorEncoding::I8ScalarQuantized,
+            ],
+            seed: 42,
+        }
+    }
+}
+
+impl KernelBenchConfig {
+    fn parse(args: &[String]) -> Result<Self, CliError> {
+        let mut config = Self::default();
+        let mut index = 0;
+
+        while index < args.len() {
+            let flag = args[index].as_str();
+            let Some(value) = args.get(index + 1) else {
+                return Err(CliError::InvalidArgument(format!(
+                    "missing value for argument '{flag}'"
+                )));
+            };
+
+            match flag {
+                "--vectors" => config.vectors = parse_positive(value, flag)?,
+                "--dimensions" => config.dimensions = parse_positive_list(value, flag)?,
+                "--queries" => config.queries = parse_positive(value, flag)?,
+                "--encodings" => config.encodings = parse_encoding_list(value)?,
+                "--seed" => config.seed = parse_u64(value, flag)?,
+                "--help" | "-h" => return Err(CliError::usage()),
+                _ => {
+                    return Err(CliError::InvalidArgument(format!(
+                        "unknown argument '{flag}'"
+                    )));
+                }
+            }
+
+            index += 2;
+        }
+
+        Ok(config)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SyntheticBenchReport {
     config: SyntheticBenchConfig,
@@ -232,6 +296,20 @@ struct SyntheticBenchReport {
     recall_at_k_vs_f32: f64,
     total_hits: usize,
     top_hit_checksum: u64,
+}
+
+#[derive(Debug, Clone)]
+struct KernelBenchReport {
+    vectors: usize,
+    dimension: usize,
+    encoding: VectorEncoding,
+    payload_bytes: usize,
+    query_min: Duration,
+    query_avg: Duration,
+    query_p50: Duration,
+    query_p95: Duration,
+    query_max: Duration,
+    score_checksum: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -443,6 +521,39 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     Ok(())
 }
 
+fn run_kernel_bench(config: KernelBenchConfig) -> Result<(), CliError> {
+    println!("VectorKit scoring kernel benchmark");
+    println!("vectors: {}", config.vectors);
+    println!("queries: {}", config.queries);
+    println!("seed: {}", config.seed);
+    println!("simsimd_capabilities: {}", simsimd_capability_summary());
+    println!(
+        "| vectors | dim | enc | payload MB | min ms | avg ms | p50 ms | p95 ms | max ms | score checksum |"
+    );
+    println!("|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|");
+
+    for dimension in &config.dimensions {
+        for encoding in &config.encodings {
+            let report = benchmark_kernel(&config, *dimension, *encoding);
+            println!(
+                "| {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} |",
+                report.vectors,
+                report.dimension,
+                encoding_name(report.encoding),
+                mib(report.payload_bytes),
+                millis(report.query_min),
+                millis(report.query_avg),
+                millis(report.query_p50),
+                millis(report.query_p95),
+                millis(report.query_max),
+                report.score_checksum,
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchReport, CliError> {
     let (index, build_duration) = build_synthetic_index(&config, config.encoding)?;
     let index_size = index.size_estimate();
@@ -515,6 +626,169 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         top_hit_checksum,
         config,
     })
+}
+
+fn benchmark_kernel(
+    config: &KernelBenchConfig,
+    dimension: usize,
+    encoding: VectorEncoding,
+) -> KernelBenchReport {
+    match encoding {
+        VectorEncoding::F32 => benchmark_f32_kernel(config, dimension),
+        VectorEncoding::F16 => benchmark_f16_kernel(config, dimension),
+        VectorEncoding::BF16 => benchmark_bf16_kernel(config, dimension),
+        VectorEncoding::I8ScalarQuantized => benchmark_i8_kernel(config, dimension),
+        VectorEncoding::BinaryQuantized => {
+            panic!("BinaryQuantized is not supported by kernel benchmark")
+        }
+    }
+}
+
+fn benchmark_f32_kernel(config: &KernelBenchConfig, dimension: usize) -> KernelBenchReport {
+    let values = flatten_generated_vectors(config.vectors, dimension, config.seed);
+    let mut query_durations = Vec::with_capacity(config.queries);
+    let mut score_checksum = 0.0;
+
+    for query_id in 0..config.queries {
+        let query = kernel_query(config, dimension, query_id);
+
+        let start = Instant::now();
+        for chunk in values.chunks_exact(dimension) {
+            score_checksum += black_box(simd_dot_f32(&query, chunk));
+        }
+        query_durations.push(start.elapsed());
+    }
+
+    kernel_report(
+        config.vectors,
+        dimension,
+        VectorEncoding::F32,
+        values.len() * std::mem::size_of::<f32>(),
+        query_durations,
+        score_checksum,
+    )
+}
+
+fn benchmark_f16_kernel(config: &KernelBenchConfig, dimension: usize) -> KernelBenchReport {
+    let values = flatten_generated_vectors(config.vectors, dimension, config.seed)
+        .into_iter()
+        .map(f16::from_f32)
+        .collect::<Vec<_>>();
+    let mut query_durations = Vec::with_capacity(config.queries);
+    let mut score_checksum = 0.0;
+
+    for query_id in 0..config.queries {
+        let query = kernel_query(config, dimension, query_id)
+            .into_iter()
+            .map(f16::from_f32)
+            .collect::<Vec<_>>();
+
+        let start = Instant::now();
+        for chunk in values.chunks_exact(dimension) {
+            score_checksum += black_box(simd_dot_f16(&query, chunk));
+        }
+        query_durations.push(start.elapsed());
+    }
+
+    kernel_report(
+        config.vectors,
+        dimension,
+        VectorEncoding::F16,
+        values.len() * std::mem::size_of::<f16>(),
+        query_durations,
+        score_checksum,
+    )
+}
+
+fn benchmark_bf16_kernel(config: &KernelBenchConfig, dimension: usize) -> KernelBenchReport {
+    let values = flatten_generated_vectors(config.vectors, dimension, config.seed)
+        .into_iter()
+        .map(bf16::from_f32)
+        .collect::<Vec<_>>();
+    let mut query_durations = Vec::with_capacity(config.queries);
+    let mut score_checksum = 0.0;
+
+    for query_id in 0..config.queries {
+        let query = kernel_query(config, dimension, query_id)
+            .into_iter()
+            .map(bf16::from_f32)
+            .collect::<Vec<_>>();
+
+        let start = Instant::now();
+        for chunk in values.chunks_exact(dimension) {
+            score_checksum += black_box(simd_dot_bf16(&query, chunk));
+        }
+        query_durations.push(start.elapsed());
+    }
+
+    kernel_report(
+        config.vectors,
+        dimension,
+        VectorEncoding::BF16,
+        values.len() * std::mem::size_of::<bf16>(),
+        query_durations,
+        score_checksum,
+    )
+}
+
+fn benchmark_i8_kernel(config: &KernelBenchConfig, dimension: usize) -> KernelBenchReport {
+    let mut values = Vec::with_capacity(config.vectors * dimension);
+    let mut scales = Vec::with_capacity(config.vectors);
+    for vector_id in 0..config.vectors {
+        let encoded = encode_i8_scalar_quantized(&generate_normalized_vector(
+            dimension,
+            config.seed,
+            vector_id as u64,
+        ));
+        values.extend_from_slice(&encoded.values);
+        scales.push(encoded.scale);
+    }
+
+    let mut query_durations = Vec::with_capacity(config.queries);
+    let mut score_checksum = 0.0;
+
+    for query_id in 0..config.queries {
+        let query = encode_i8_scalar_quantized(&kernel_query(config, dimension, query_id));
+
+        let start = Instant::now();
+        for (row, chunk) in values.chunks_exact(dimension).enumerate() {
+            score_checksum += black_box(
+                simd_dot_i8(&query.values, chunk) * query.scale as f64 * scales[row] as f64,
+            );
+        }
+        query_durations.push(start.elapsed());
+    }
+
+    kernel_report(
+        config.vectors,
+        dimension,
+        VectorEncoding::I8ScalarQuantized,
+        values.len() * std::mem::size_of::<i8>() + scales.len() * std::mem::size_of::<f32>(),
+        query_durations,
+        score_checksum,
+    )
+}
+
+fn kernel_report(
+    vectors: usize,
+    dimension: usize,
+    encoding: VectorEncoding,
+    payload_bytes: usize,
+    query_durations: Vec<Duration>,
+    score_checksum: f64,
+) -> KernelBenchReport {
+    KernelBenchReport {
+        vectors,
+        dimension,
+        encoding,
+        payload_bytes,
+        query_min: *query_durations.iter().min().unwrap_or(&Duration::ZERO),
+        query_avg: average_duration(&query_durations),
+        query_p50: percentile(query_durations.clone(), 50),
+        query_p95: percentile(query_durations.clone(), 95),
+        query_max: *query_durations.iter().max().unwrap_or(&Duration::ZERO),
+        score_checksum,
+    }
 }
 
 fn estimate_footprint(config: &SyntheticBenchConfig) -> FootprintEstimate {
@@ -635,6 +909,96 @@ fn generate_normalized_vector(dimension: usize, seed: u64, vector_id: u64) -> Ve
     }
     normalize(&mut vector);
     vector
+}
+
+fn flatten_generated_vectors(vectors: usize, dimension: usize, seed: u64) -> Vec<f32> {
+    let mut values = Vec::with_capacity(vectors * dimension);
+    for vector_id in 0..vectors {
+        values.extend_from_slice(&generate_normalized_vector(
+            dimension,
+            seed,
+            vector_id as u64,
+        ));
+    }
+    values
+}
+
+fn kernel_query(config: &KernelBenchConfig, dimension: usize, query_id: usize) -> Vec<f32> {
+    generate_query_vector(
+        dimension,
+        config.seed,
+        target_chunk_id(query_id, config.vectors) as u64,
+        query_id,
+    )
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct I8EncodedVector {
+    values: Vec<i8>,
+    scale: f32,
+}
+
+fn encode_i8_scalar_quantized(embedding: &[f32]) -> I8EncodedVector {
+    let max_abs = embedding
+        .iter()
+        .map(|value| value.abs())
+        .fold(0.0, f32::max);
+
+    if max_abs == 0.0 {
+        return I8EncodedVector {
+            values: vec![0; embedding.len()],
+            scale: 0.0,
+        };
+    }
+
+    let scale = max_abs / i8::MAX as f32;
+    let inverse_scale = scale.recip();
+    let values = embedding
+        .iter()
+        .map(|value| {
+            (value * inverse_scale)
+                .round()
+                .clamp(i8::MIN as f32, i8::MAX as f32) as i8
+        })
+        .collect();
+
+    I8EncodedVector { values, scale }
+}
+
+fn simd_dot_f32(left: &[f32], right: &[f32]) -> f64 {
+    <f32 as SpatialSimilarity>::dot(left, right).unwrap_or(0.0)
+}
+
+fn simd_dot_f16(left: &[f16], right: &[f16]) -> f64 {
+    <f16 as SpatialSimilarity>::dot(left, right).unwrap_or(0.0)
+}
+
+fn simd_dot_bf16(left: &[bf16], right: &[bf16]) -> f64 {
+    <bf16 as SpatialSimilarity>::dot(left, right).unwrap_or(0.0)
+}
+
+fn simd_dot_i8(left: &[i8], right: &[i8]) -> f64 {
+    <i8 as SpatialSimilarity>::dot(left, right).unwrap_or(0.0)
+}
+
+fn simsimd_capability_summary() -> String {
+    [
+        ("neon", capabilities::uses_neon()),
+        ("neon_f16", capabilities::uses_neon_f16()),
+        ("neon_i8", capabilities::uses_neon_i8()),
+        ("sve", capabilities::uses_sve()),
+        ("sve_f16", capabilities::uses_sve_f16()),
+        ("sve_i8", capabilities::uses_sve_i8()),
+        ("haswell", capabilities::uses_haswell()),
+        ("skylake", capabilities::uses_skylake()),
+        ("ice", capabilities::uses_ice()),
+        ("sierra", capabilities::uses_sierra()),
+        ("dynamic", capabilities::uses_dynamic_dispatch()),
+    ]
+    .into_iter()
+    .filter_map(|(name, active)| active.then_some(name))
+    .collect::<Vec<_>>()
+    .join(",")
 }
 
 fn normalize(vector: &mut [f32]) {
@@ -862,6 +1226,7 @@ impl CliError {
                 "usage:",
                 "  vectorkit bench synthetic [options]",
                 "  vectorkit bench matrix [options]",
+                "  vectorkit bench kernels [options]",
                 "",
                 "synthetic options:",
                 "  --chunks <n>       default 1000",
@@ -892,6 +1257,13 @@ impl CliError {
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
                 "  --avg-metadata-bytes <n>    estimated metadata bytes per chunk; default 32",
                 "  --avg-bm25-terms <n>        estimated BM25 postings per chunk; default 24",
+                "",
+                "kernel options:",
+                "  --vectors <n>        vectors scanned per query; default 24000",
+                "  --dimensions <list>  comma list; default 384,768",
+                "  --queries <n>        default 200",
+                "  --encodings <list>   comma list of f32,f16,bf16,i8; default f32,f16,i8",
+                "  --seed <n>           default 42",
             ]
             .join("\n"),
         )
@@ -1049,6 +1421,34 @@ mod tests {
     }
 
     #[test]
+    fn parses_kernel_benchmark_config() {
+        let args = [
+            "--vectors",
+            "50000",
+            "--dimensions",
+            "384,768",
+            "--queries",
+            "25",
+            "--encodings",
+            "f32,i8",
+            "--seed",
+            "9",
+        ]
+        .map(str::to_owned);
+
+        let config = KernelBenchConfig::parse(&args).unwrap();
+
+        assert_eq!(config.vectors, 50_000);
+        assert_eq!(config.dimensions, vec![384, 768]);
+        assert_eq!(config.queries, 25);
+        assert_eq!(
+            config.encodings,
+            vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
+        );
+        assert_eq!(config.seed, 9);
+    }
+
+    #[test]
     fn estimates_vector_memory_by_encoding() {
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F32), 320);
         assert_eq!(encoded_vector_bytes(10, 8, VectorEncoding::F16), 160);
@@ -1087,6 +1487,14 @@ mod tests {
             estimate.budget_headroom_bytes(config.footprint.budget_bytes),
             -5_092
         );
+    }
+
+    #[test]
+    fn i8_scalar_quantization_uses_per_vector_scale() {
+        let encoded = encode_i8_scalar_quantized(&[0.0, 0.5, -1.0]);
+
+        assert_eq!(encoded.scale, 1.0 / 127.0);
+        assert_eq!(encoded.values, vec![0, 64, -127]);
     }
 
     #[test]

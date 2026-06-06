@@ -158,6 +158,50 @@ Swift wrapper numbers, so target-device validation is still required.
 - Recall is measured against synthetic vectors. Real corpus quality and user
   query distributions still need a fixture-backed benchmark.
 
+## Scoring Kernel Follow-Up
+
+`I8ScalarQuantized` is smaller on disk and in RAM, but exact full-scan search is
+not automatically faster. A focused scoring-kernel benchmark now isolates raw
+dot-product scanning from chunk lookup, filtering, top-k maintenance, and trace
+construction:
+
+```bash
+cargo run --release -p vectorkit-cli -- bench kernels \
+  --vectors 24000 \
+  --dimensions 384,768 \
+  --queries 200 \
+  --encodings f32,f16,i8
+```
+
+On the current Apple/NEON development machine, `simsimd_capabilities` reported
+`neon,neon_f16,dynamic`. It did not report `neon_i8`, which explains why I8
+scoring is slower even though it reads fewer bytes.
+
+| vectors | dim | encoding | payload MiB | avg ms | p95 ms |
+|---:|---:|:---|---:|---:|---:|
+| 24K | 384 | F32 | 35.156 | 1.929 | 2.287 |
+| 24K | 384 | F16 | 17.578 | 1.973 | 2.095 |
+| 24K | 384 | I8 | 8.881 | 3.012 | 3.127 |
+| 24K | 768 | F32 | 70.312 | 4.631 | 5.465 |
+| 24K | 768 | F16 | 35.156 | 4.658 | 4.852 |
+| 24K | 768 | I8 | 17.670 | 6.086 | 6.253 |
+
+A larger `50K` pass showed the same pattern:
+
+| vectors | dim | encoding | payload MiB | avg ms | p95 ms |
+|---:|---:|:---|---:|---:|---:|
+| 50K | 384 | F32 | 73.242 | 4.004 | 4.294 |
+| 50K | 384 | F16 | 36.621 | 4.081 | 4.271 |
+| 50K | 384 | I8 | 18.501 | 6.309 | 6.653 |
+| 50K | 768 | F32 | 146.484 | 9.574 | 12.846 |
+| 50K | 768 | F16 | 73.242 | 9.931 | 9.931 |
+| 50K | 768 | I8 | 36.812 | 12.709 | 13.019 |
+
+Conclusion: `I8ScalarQuantized` is currently a size and memory win, not a CPU
+latency win on this machine. To make it faster than F32/F16, VectorKit likely
+needs target-device validation with active I8 dot-product support, a batched I8
+scoring path, parallel exact scan, or fewer candidates before vector scoring.
+
 ## Recommendation
 
 Use `24K x 384d I8ScalarQuantized` as the first sub-`20 MiB` persisted package

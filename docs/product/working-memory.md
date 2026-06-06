@@ -63,9 +63,11 @@ Approximate vector-only sizes for `24K` vectors:
   Do not choose it for speed without device-specific benchmarks.
 - `I8ScalarQuantized` is implemented as symmetric per-vector quantization:
   `i8` values plus one `f32` scale per vector.
-- I8 synthetic recall passed the current gate, but exact full-scan latency was
-  slightly slower than F32/F16. Treat it as a memory feature, not a speed
-  feature, unless later benchmarks prove otherwise.
+- I8 synthetic recall passed the current gate, but exact full-scan latency and
+  isolated scoring-kernel latency are slower than F32/F16 on the current
+  Apple/NEON development machine. `simsimd_capabilities` reports
+  `neon,neon_f16,dynamic`, not `neon_i8`, so treat I8 as a memory feature until
+  target-device benchmarks prove an I8 dot-product path is active and faster.
 - `BinaryQuantized` is a future size-constrained candidate retrieval option.
   It may be necessary for `768d + data <20 MB`, but needs recall benchmarking
   before use.
@@ -102,6 +104,9 @@ For `24K`, expected exact I8 retrieval is roughly:
 
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
+- Explore batched I8 scoring and parallel exact scan only after the scoring
+  kernel benchmark shows whether the target device has an active I8 dot-product
+  backend.
 - Add persistence load timing and payload/RSS memory reporting to the benchmark
   output.
 - Validate the compact target on a target Apple device through the Swift

@@ -63,32 +63,28 @@ Approximate vector-only sizes for `24K` vectors:
   Do not choose it for speed without device-specific benchmarks.
 - `I8ScalarQuantized` is implemented as symmetric per-vector quantization:
   `i8` values plus one `f32` scale per vector.
-- I8 synthetic recall passed the current gate, but exact full-scan latency and
-  isolated scoring-kernel latency are slower than F32/F16 on the current
-  Apple/NEON development machine. `simsimd_capabilities` reports
-  `neon,neon_f16,dynamic`, not `neon_i8`, so treat I8 as a memory feature until
-  target-device benchmarks prove an I8 dot-product path is active and faster.
+- I8 synthetic recall passed the current gate. Exact full-scan latency is now
+  faster than F32/F16 on the current Apple M1 Max development machine because
+  VectorKit uses an AArch64 `dotprod` C shim for I8 dot products when runtime
+  feature detection reports support. SimSIMD still reports
+  `neon,neon_f16,dynamic`, not `neon_i8`, because this machine has
+  `FEAT_DotProd=1` but `FEAT_I8MM=0`; keep VectorKit's guarded fallback path.
 - `BinaryQuantized` is a future size-constrained candidate retrieval option.
   It may be necessary for `768d + data <20 MB`, but needs recall benchmarking
   before use.
 
 ## Recent Benchmark Takeaways
 
-For `50K` vectors, `top_k=5`, `100` synthetic queries:
+For `24K` vectors, `top_k=10`, `200` synthetic queries after the AArch64 I8
+dotprod backend:
 
-| dim | F32 avg | F16 avg | I8 avg | I8 recall@5 vs F32 |
+| dim | F32 avg | F16 avg | I8 avg | I8 recall@10 vs F32 |
 |---:|---:|---:|---:|---:|
-| 384 | ~7.4 ms | ~7.5 ms | ~8.0 ms | 0.9900 |
-| 768 | ~13.6 ms | ~13.7 ms | ~14.3 ms | 0.9920 |
-| 1536 | ~25.9 ms | ~26.0 ms | ~27.1 ms | 0.9860 |
+| 384 | ~4.0 ms | ~3.8 ms | ~1.7 ms | 0.9895 |
+| 768 | ~6.9 ms | ~6.9 ms | ~2.0 ms | 0.9920 |
 
-For `24K`, expected exact I8 retrieval is roughly:
-
-| dim | expected I8 latency |
-|---:|---:|
-| 384 | ~3.8-4.2 ms |
-| 768 | ~7.0-7.5 ms |
-| 1536 | ~13 ms+, but too large for the current size target |
+For isolated scoring kernels, `50K x 768d I8` measured about `1.25 ms` average
+versus about `9.1 ms` for F32 on the same machine.
 
 ## Deferred Exploration
 
@@ -104,9 +100,10 @@ For `24K`, expected exact I8 retrieval is roughly:
 
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
-- Explore batched I8 scoring and parallel exact scan only after the scoring
-  kernel benchmark shows whether the target device has an active I8 dot-product
-  backend.
+- Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
+  older devices that may not report `dotprod`.
+- Explore batched I8 scoring and parallel exact scan only after target-device
+  benchmarks show remaining CPU pressure.
 - Add persistence load timing and payload/RSS memory reporting to the benchmark
   output.
 - Validate the compact target on a target Apple device through the Swift

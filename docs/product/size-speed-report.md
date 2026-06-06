@@ -161,9 +161,12 @@ Swift wrapper numbers, so target-device validation is still required.
 ## Scoring Kernel Follow-Up
 
 `I8ScalarQuantized` is smaller on disk and in RAM, but exact full-scan search is
-not automatically faster. A focused scoring-kernel benchmark now isolates raw
-dot-product scanning from chunk lookup, filtering, top-k maintenance, and trace
-construction:
+only faster when the scoring path uses a real integer dot-product backend. The
+current core now has an AArch64 `dotprod` shim for I8 dot products. It is guarded
+by runtime feature detection and falls back to SimSIMD otherwise.
+
+A focused scoring-kernel benchmark isolates raw dot-product scanning from chunk
+lookup, filtering, top-k maintenance, and trace construction:
 
 ```bash
 cargo run --release -p vectorkit-cli -- bench kernels \
@@ -173,34 +176,46 @@ cargo run --release -p vectorkit-cli -- bench kernels \
   --encodings f32,f16,i8
 ```
 
-On the current Apple/NEON development machine, `simsimd_capabilities` reported
-`neon,neon_f16,dynamic`. It did not report `neon_i8`, which explains why I8
-scoring is slower even though it reads fewer bytes.
+On the current Apple M1 Max development machine, `simsimd_capabilities` reports
+`neon,neon_f16,dynamic`, and macOS reports `FEAT_DotProd=1` but `FEAT_I8MM=0`.
+SimSIMD therefore does not advertise `neon_i8`, but VectorKit can still use the
+dot-product instruction for the dot-product-only I8 scoring path.
 
 | vectors | dim | encoding | payload MiB | avg ms | p95 ms |
 |---:|---:|:---|---:|---:|---:|
-| 24K | 384 | F32 | 35.156 | 1.929 | 2.287 |
-| 24K | 384 | F16 | 17.578 | 1.973 | 2.095 |
-| 24K | 384 | I8 | 8.881 | 3.012 | 3.127 |
-| 24K | 768 | F32 | 70.312 | 4.631 | 5.465 |
-| 24K | 768 | F16 | 35.156 | 4.658 | 4.852 |
-| 24K | 768 | I8 | 17.670 | 6.086 | 6.253 |
+| 24K | 384 | F32 | 35.156 | 2.003 | 2.182 |
+| 24K | 384 | F16 | 17.578 | 1.979 | 2.092 |
+| 24K | 384 | I8 | 8.881 | 0.295 | 0.340 |
+| 24K | 768 | F32 | 70.312 | 4.483 | 4.682 |
+| 24K | 768 | F16 | 35.156 | 4.793 | 5.580 |
+| 24K | 768 | I8 | 17.670 | 0.620 | 0.684 |
 
 A larger `50K` pass showed the same pattern:
 
 | vectors | dim | encoding | payload MiB | avg ms | p95 ms |
 |---:|---:|:---|---:|---:|---:|
-| 50K | 384 | F32 | 73.242 | 4.004 | 4.294 |
-| 50K | 384 | F16 | 36.621 | 4.081 | 4.271 |
-| 50K | 384 | I8 | 18.501 | 6.309 | 6.653 |
-| 50K | 768 | F32 | 146.484 | 9.574 | 12.846 |
-| 50K | 768 | F16 | 73.242 | 9.931 | 9.931 |
-| 50K | 768 | I8 | 36.812 | 12.709 | 13.019 |
+| 50K | 384 | F32 | 73.242 | 4.017 | 4.468 |
+| 50K | 384 | F16 | 36.621 | 4.076 | 4.159 |
+| 50K | 384 | I8 | 18.501 | 0.639 | 0.645 |
+| 50K | 768 | F32 | 146.484 | 9.082 | 9.431 |
+| 50K | 768 | F16 | 73.242 | 9.831 | 11.557 |
+| 50K | 768 | I8 | 36.812 | 1.249 | 1.258 |
 
-Conclusion: `I8ScalarQuantized` is currently a size and memory win, not a CPU
-latency win on this machine. To make it faster than F32/F16, VectorKit likely
-needs target-device validation with active I8 dot-product support, a batched I8
-scoring path, parallel exact scan, or fewer candidates before vector scoring.
+The end-to-end exact search benchmark also improved:
+
+| chunks | dim | top_k | encoding | avg ms | p95 ms | recall@k vs F32 |
+|---:|---:|---:|:---|---:|---:|---:|
+| 24K | 384 | 10 | F32 | 3.964 | 4.234 | 1.0000 |
+| 24K | 384 | 10 | F16 | 3.848 | 3.954 | 0.9995 |
+| 24K | 384 | 10 | I8 | 1.721 | 1.790 | 0.9895 |
+| 24K | 768 | 10 | F32 | 6.891 | 7.031 | 1.0000 |
+| 24K | 768 | 10 | F16 | 6.861 | 7.066 | 1.0000 |
+| 24K | 768 | 10 | I8 | 1.973 | 2.026 | 0.9920 |
+
+Conclusion: on Apple hardware with `FEAT_DotProd`, `I8ScalarQuantized` is now
+both the best compact storage option and the fastest exact full-scan scoring
+option in the current benchmark. Keep the runtime fallback because not every
+AArch64 target has dot-product support.
 
 ## Recommendation
 

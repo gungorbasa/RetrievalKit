@@ -7,8 +7,9 @@ use std::time::{Duration, Instant};
 
 use simsimd::{bf16, capabilities, f16, SpatialSimilarity};
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexSizeEstimate, Metadata,
-    MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    diagnostic_dot_product_i8, Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport,
+    IndexSizeEstimate, Metadata, MetadataValue, SearchHit, SearchQuery, VectorEncoding,
+    VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -978,7 +979,7 @@ fn simd_dot_bf16(left: &[bf16], right: &[bf16]) -> f64 {
 }
 
 fn simd_dot_i8(left: &[i8], right: &[i8]) -> f64 {
-    <i8 as SpatialSimilarity>::dot(left, right).unwrap_or(0.0)
+    diagnostic_dot_product_i8(left, right) as f64
 }
 
 fn simsimd_capability_summary() -> String {

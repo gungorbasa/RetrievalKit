@@ -300,10 +300,36 @@ fn simd_dot_product(query: &[f32], chunk: &[f32]) -> f32 {
 }
 
 fn simd_dot_product_i8(query: &[i8], chunk: &[i8]) -> f32 {
-    <i8 as SpatialSimilarity>::dot(query, chunk)
+    dot_product_i8(query, chunk)
+}
+
+#[doc(hidden)]
+pub fn dot_product_i8(left: &[i8], right: &[i8]) -> f32 {
+    if left.len() != right.len() {
+        return scalar_dot_product_i8(left, right);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("dotprod") {
+            return unsafe { aarch64_dot_product_i8_neon(left, right) };
+        }
+    }
+
+    <i8 as SpatialSimilarity>::dot(left, right)
         .map(|distance| distance as f32)
         .filter(|score| score.is_finite())
-        .unwrap_or_else(|| scalar_dot_product_i8(query, chunk))
+        .unwrap_or_else(|| scalar_dot_product_i8(left, right))
+}
+
+#[cfg(target_arch = "aarch64")]
+unsafe fn aarch64_dot_product_i8_neon(left: &[i8], right: &[i8]) -> f32 {
+    vectorkit_dot_i8_aarch64_dotprod(left.as_ptr(), right.as_ptr(), left.len()) as f32
+}
+
+#[cfg(target_arch = "aarch64")]
+extern "C" {
+    fn vectorkit_dot_i8_aarch64_dotprod(left: *const i8, right: *const i8, length: usize) -> i32;
 }
 
 pub(crate) fn normalize(vector: &mut [f32]) {
@@ -529,6 +555,17 @@ mod tests {
                 .score_at(VectorMetric::Cosine, &query, 1, 2)
                 .unwrap(),
             1.0,
+        );
+    }
+
+    #[test]
+    fn i8_dot_product_matches_scalar_for_tail_lengths() {
+        let left = [-4, -3, -2, -1, 0, 1, 2, 3, 4, 5, -6, 7, -8, 9, -10, 11, 12];
+        let right = [12, -11, 10, -9, 8, -7, 6, -5, 4, -3, 2, -1, 0, 1, -2, 3, -4];
+
+        assert_close(
+            simd_dot_product_i8(&left, &right),
+            scalar_dot_product_i8(&left, &right),
         );
     }
 

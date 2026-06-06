@@ -124,11 +124,15 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `vectorkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
   benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
   unfiltered and `filter_every=10` filtered searches.
+- A SwiftPM macOS command-line harness exists at
+  `wrappers/swift/VectorKitBench`. It links `vectorkit-ffi`, supports
+  `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
+  full default FFI benchmark locally.
 
 ## Likely Next Tasks
 
-- Add a Swift macOS command-line harness that links `vectorkit-ffi` and prints
-  the JSON benchmark report.
+- Package the Rust FFI library for iOS/macOS as an XCFramework so the same
+  benchmark harness can run from an iOS app target.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

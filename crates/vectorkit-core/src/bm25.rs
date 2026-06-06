@@ -153,6 +153,22 @@ impl Bm25Index {
         hits
     }
 
+    pub fn estimated_payload_bytes(&self) -> usize {
+        let term_bytes = self.postings.keys().map(String::len).sum::<usize>();
+        let posting_bytes = self
+            .postings
+            .values()
+            .map(|postings| {
+                postings.len() * (std::mem::size_of::<ChunkId>() + std::mem::size_of::<usize>())
+            })
+            .sum::<usize>();
+        let chunk_length_bytes = self.chunk_lengths.len()
+            * (std::mem::size_of::<ChunkId>() + std::mem::size_of::<usize>());
+        let active_chunk_bytes = self.active_chunks.len() * std::mem::size_of::<ChunkId>();
+
+        term_bytes + posting_bytes + chunk_length_bytes + active_chunk_bytes
+    }
+
     fn average_active_chunk_length(&self) -> f32 {
         let total_length = self
             .active_chunks

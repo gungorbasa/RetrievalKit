@@ -4,8 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::time::{Duration, Instant};
 
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, Metadata, MetadataValue, SearchHit, SearchQuery,
-    VectorEncoding, VectorMetric,
+    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexSizeEstimate, Metadata, MetadataValue,
+    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -213,6 +213,7 @@ impl MatrixBenchConfig {
 struct SyntheticBenchReport {
     config: SyntheticBenchConfig,
     footprint: FootprintEstimate,
+    index_size: IndexSizeEstimate,
     source_embedding_bytes: usize,
     build_duration: Duration,
     query_min: Duration,
@@ -309,6 +310,26 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
         "total_vector_mb_current: {:.3}",
         mib(report.footprint.vector_bytes + report.source_embedding_bytes)
     );
+    println!(
+        "current_index_payload_mb: {:.3}",
+        mib(report.index_size.total_bytes())
+    );
+    println!(
+        "current_vector_payload_mb: {:.3}",
+        mib(report.index_size.vector_bytes)
+    );
+    println!(
+        "current_chunk_payload_mb: {:.3}",
+        mib(report.index_size.chunk_bytes())
+    );
+    println!(
+        "current_bm25_payload_mb: {:.3}",
+        mib(report.index_size.bm25_bytes)
+    );
+    println!(
+        "current_metadata_filter_payload_mb: {:.3}",
+        mib(report.index_size.metadata_filter_bytes)
+    );
     println!("build_ms: {:.3}", millis(report.build_duration));
     println!("query_min_ms: {:.3}", millis(report.query_min));
     println!("query_avg_ms: {:.3}", millis(report.query_avg));
@@ -324,10 +345,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
@@ -346,7 +367,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                 })?;
 
                 println!(
-                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
                     report.config.chunks,
                     report.config.dimension,
                     report.config.top_k,
@@ -356,6 +377,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
                     mib(report.footprint.vector_bytes),
                     mib(report.footprint.auxiliary_bytes()),
                     mib(report.footprint.total_bytes()),
+                    mib(report.index_size.total_bytes()),
                     signed_mib(
                         report
                             .footprint
@@ -381,6 +403,7 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
 
 fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchReport, CliError> {
     let (index, build_duration) = build_synthetic_index(&config, config.encoding)?;
+    let index_size = index.size_estimate();
     let f32_ground_truth = if config.encoding == VectorEncoding::F32 {
         None
     } else {
@@ -431,6 +454,7 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
 
     Ok(SyntheticBenchReport {
         footprint: estimate_footprint(&config),
+        index_size,
         source_embedding_bytes: source_embedding_bytes(config.chunks, config.dimension),
         build_duration,
         query_min,

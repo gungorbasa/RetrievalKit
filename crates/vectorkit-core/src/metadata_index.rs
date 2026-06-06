@@ -63,6 +63,17 @@ impl MetadataFilterIndex {
             .map(|candidate_set| candidate_set.map(|set| set.into_iter().collect()))
     }
 
+    pub fn estimated_payload_bytes(&self) -> usize {
+        let active_offset_bytes = self.active_offsets.len() * std::mem::size_of::<usize>();
+        let field_bytes = self
+            .fields
+            .iter()
+            .map(|(field, field_index)| field.len() + field_index.estimated_payload_bytes())
+            .sum::<usize>();
+
+        active_offset_bytes + field_bytes
+    }
+
     fn candidate_set(&self, filter: &Filter) -> Result<Option<BTreeSet<usize>>> {
         match filter {
             Filter::Equals { field, value } => Ok(Some(self.equals_set(field, value))),
@@ -185,6 +196,28 @@ struct FieldIndex {
     numbers: BTreeMap<IndexedNumber, BTreeSet<usize>>,
 }
 
+impl FieldIndex {
+    fn estimated_payload_bytes(&self) -> usize {
+        let exists_bytes = self.exists.len() * std::mem::size_of::<usize>();
+        let value_bytes = self
+            .values
+            .iter()
+            .map(|(value, offsets)| {
+                value.estimated_payload_bytes() + offsets.len() * std::mem::size_of::<usize>()
+            })
+            .sum::<usize>();
+        let number_bytes = self
+            .numbers
+            .values()
+            .map(|offsets| {
+                std::mem::size_of::<f64>() + offsets.len() * std::mem::size_of::<usize>()
+            })
+            .sum::<usize>();
+
+        exists_bytes + value_bytes + number_bytes
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum IndexedValue {
     String(String),
@@ -202,6 +235,15 @@ impl IndexedValue {
             MetadataValue::Float(value) => IndexedNumber::new(*value).map(Self::Float),
             MetadataValue::Boolean(value) => Some(Self::Boolean(*value)),
             MetadataValue::TimestampMillis(value) => Some(Self::TimestampMillis(*value)),
+        }
+    }
+
+    fn estimated_payload_bytes(&self) -> usize {
+        match self {
+            Self::String(value) => value.len(),
+            Self::Integer(_) | Self::TimestampMillis(_) => std::mem::size_of::<i64>(),
+            Self::Float(_) => std::mem::size_of::<f64>(),
+            Self::Boolean(_) => std::mem::size_of::<bool>(),
         }
     }
 }

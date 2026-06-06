@@ -13,6 +13,6 @@ pub use filter::Filter;
 pub use index::ExactVectorIndex;
 pub use metadata::{Metadata, MetadataValue};
 pub use types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
-    SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexSizeEstimate, KeywordHit, KeywordQuery,
+    SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };

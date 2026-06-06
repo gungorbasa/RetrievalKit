@@ -189,3 +189,43 @@ impl VectorEncoding {
         }
     }
 }
+
+/// Approximate byte breakdown for the currently loaded index payload.
+///
+/// This intentionally reports payload bytes, not allocator or `BTreeMap`
+/// overhead. It is useful for tracking the storage model while persistence is
+/// being designed, and should be replaced or supplemented with real file sizes
+/// once saved index files exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndexSizeEstimate {
+    pub vector_bytes: usize,
+    pub chunk_record_bytes: usize,
+    pub document_id_bytes: usize,
+    pub text_bytes: usize,
+    pub metadata_bytes: usize,
+    pub tombstone_bytes: usize,
+    pub version_bytes: usize,
+    pub chunk_offset_bytes: usize,
+    pub bm25_bytes: usize,
+    pub metadata_filter_bytes: usize,
+}
+
+impl IndexSizeEstimate {
+    pub fn chunk_bytes(&self) -> usize {
+        self.chunk_record_bytes
+            + self.document_id_bytes
+            + self.text_bytes
+            + self.metadata_bytes
+            + self.tombstone_bytes
+            + self.version_bytes
+            + self.chunk_offset_bytes
+    }
+
+    pub fn auxiliary_bytes(&self) -> usize {
+        self.chunk_bytes() + self.bm25_bytes + self.metadata_filter_bytes
+    }
+
+    pub fn total_bytes(&self) -> usize {
+        self.vector_bytes + self.auxiliary_bytes()
+    }
+}

@@ -19,4 +19,20 @@ impl MetadataValue {
             Self::String(_) | Self::Boolean(_) => None,
         }
     }
+
+    pub(crate) fn estimated_payload_bytes(&self) -> usize {
+        match self {
+            Self::String(value) => value.len(),
+            Self::Integer(_) | Self::TimestampMillis(_) => std::mem::size_of::<i64>(),
+            Self::Float(_) => std::mem::size_of::<f64>(),
+            Self::Boolean(_) => std::mem::size_of::<bool>(),
+        }
+    }
+}
+
+pub(crate) fn estimated_metadata_payload_bytes(metadata: &Metadata) -> usize {
+    metadata
+        .iter()
+        .map(|(field, value)| field.len() + value.estimated_payload_bytes())
+        .sum()
 }

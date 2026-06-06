@@ -4,12 +4,12 @@ use std::collections::BTreeMap;
 use crate::bm25::{Bm25Config, Bm25Index};
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
-use crate::metadata::Metadata;
+use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
 use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, KeywordHit, KeywordQuery, SearchHit,
-    SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexSizeEstimate, KeywordHit, KeywordQuery,
+    SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };
 
 #[derive(Debug, Clone)]
@@ -105,6 +105,30 @@ impl ExactVectorIndex {
     /// Returns the number of chunks currently eligible for search results.
     pub fn active_chunk_count(&self) -> usize {
         self.chunks.iter().filter(|chunk| !chunk.deleted).count()
+    }
+
+    /// Returns an approximate payload byte breakdown for the currently loaded index.
+    pub fn size_estimate(&self) -> IndexSizeEstimate {
+        IndexSizeEstimate {
+            vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
+            chunk_record_bytes: self.chunks.len() * std::mem::size_of::<ChunkId>(),
+            document_id_bytes: self
+                .chunks
+                .iter()
+                .map(|chunk| chunk.document_id.len())
+                .sum(),
+            text_bytes: self.chunks.iter().map(|chunk| chunk.text.len()).sum(),
+            metadata_bytes: self
+                .chunks
+                .iter()
+                .map(|chunk| estimated_metadata_payload_bytes(&chunk.metadata))
+                .sum(),
+            tombstone_bytes: self.chunks.len() * std::mem::size_of::<bool>(),
+            version_bytes: self.chunks.len() * std::mem::size_of::<u64>(),
+            chunk_offset_bytes: self.chunk_offsets.len() * std::mem::size_of::<Option<usize>>(),
+            bm25_bytes: self.bm25.estimated_payload_bytes(),
+            metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
+        }
     }
 
     /// Adds a prebuilt chunk directly.
@@ -545,6 +569,37 @@ mod tests {
 
         assert_eq!(index.len(), 2);
         assert_eq!(index.active_chunk_count(), 1);
+    }
+
+    #[test]
+    fn size_estimate_reports_current_payload_components() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut indexed_chunk = chunk(1, "doc-1", vec![1.0, 0.0]);
+        indexed_chunk.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index.add_chunk(indexed_chunk).unwrap();
+
+        let estimate = index.size_estimate();
+
+        assert_eq!(estimate.vector_bytes, 2 * std::mem::size_of::<f32>());
+        assert_eq!(estimate.chunk_record_bytes, std::mem::size_of::<ChunkId>());
+        assert_eq!(estimate.document_id_bytes, "doc-1".len());
+        assert_eq!(estimate.text_bytes, "chunk 1".len());
+        assert_eq!(estimate.metadata_bytes, "source".len() + "notes".len());
+        assert_eq!(estimate.tombstone_bytes, std::mem::size_of::<bool>());
+        assert_eq!(estimate.version_bytes, std::mem::size_of::<u64>());
+        assert_eq!(
+            estimate.chunk_offset_bytes,
+            2 * std::mem::size_of::<Option<usize>>()
+        );
+        assert!(estimate.bm25_bytes > 0);
+        assert!(estimate.metadata_filter_bytes > 0);
+        assert_eq!(
+            estimate.total_bytes(),
+            estimate.vector_bytes + estimate.auxiliary_bytes()
+        );
     }
 
     #[test]

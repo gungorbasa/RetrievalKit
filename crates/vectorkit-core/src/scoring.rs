@@ -88,6 +88,17 @@ impl EncodedVectorStore {
             _ => None,
         }
     }
+
+    pub fn estimated_payload_bytes(&self) -> usize {
+        match self {
+            Self::F32(vectors) => vectors.len() * std::mem::size_of::<f32>(),
+            Self::F16(vectors) => vectors.len() * std::mem::size_of::<f16>(),
+            Self::BF16(vectors) => vectors.len() * std::mem::size_of::<bf16>(),
+            Self::I8ScalarQuantized { values, scales } => {
+                values.len() * std::mem::size_of::<i8>() + scales.len() * std::mem::size_of::<f32>()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,8 @@ const VECTORS_FILE: &str = "vectors.vec";
 const CHUNKS_FILE: &str = "chunks.bin";
 const BM25_FILE: &str = "bm25.bin";
 const TOMBSTONES_FILE: &str = "tombstones.bin";
+const PERSISTENCE_COMPRESSION: FileCompression = FileCompression::Zstd;
+const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 const CHUNKS_MAGIC: &[u8; 4] = b"VKCH";
 const CHUNKS_FORMAT_VERSION: u32 = 2;
 const LEGACY_CHUNKS_FORMAT_VERSION: u32 = 1;
@@ -179,9 +182,22 @@ impl ExactVectorIndex {
         let manifest_tmp_path = directory.join(MANIFEST_TMP_FILE);
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
-        write_file(&chunks_path, &encode_chunks(&self.chunks)?)?;
+        let chunk_payload = encode_chunks(&self.chunks)?;
+        let chunk_uncompressed_bytes =
+            checked_usize_to_u64(chunk_payload.len(), "chunk payload byte count")?;
+        write_file(
+            &chunks_path,
+            &compress_payload(&chunks_path, &chunk_payload, PERSISTENCE_COMPRESSION)?,
+        )?;
+        let mut bm25_uncompressed_bytes = 0;
         if options.include_bm25 {
-            write_file(&bm25_path, &self.bm25.to_persisted().to_payload_bytes()?)?;
+            let bm25_payload = self.bm25.to_persisted().to_payload_bytes()?;
+            bm25_uncompressed_bytes =
+                checked_usize_to_u64(bm25_payload.len(), "bm25 payload byte count")?;
+            write_file(
+                &bm25_path,
+                &compress_payload(&bm25_path, &bm25_payload, PERSISTENCE_COMPRESSION)?,
+            )?;
         } else if bm25_path.exists() {
             fs::remove_file(&bm25_path).map_err(|_| persistence_error("remove", &bm25_path))?;
         }
@@ -205,10 +221,18 @@ impl ExactVectorIndex {
             vector_encoding: self.vector_encoding,
             vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
             chunk_bytes: file_size(&chunks_path)?,
+            chunk_uncompressed_bytes,
+            chunk_compression: PERSISTENCE_COMPRESSION,
             bm25_bytes: if options.include_bm25 {
                 file_size(&bm25_path)?
             } else {
                 0
+            },
+            bm25_uncompressed_bytes,
+            bm25_compression: if options.include_bm25 {
+                PERSISTENCE_COMPRESSION
+            } else {
+                FileCompression::None
             },
             tombstone_bytes: file_size(&tombstones_path)?,
             normalization: match self.metric {
@@ -259,7 +283,12 @@ impl ExactVectorIndex {
             manifest.dimension,
             &vector_bytes,
         )?;
-        let chunks = decode_chunks(&read_file(&chunks_path)?)?;
+        let chunk_payload = read_payload_file(
+            &chunks_path,
+            manifest.chunk_compression,
+            manifest.chunk_uncompressed_bytes,
+        )?;
+        let chunks = decode_chunks(&chunk_payload)?;
         if chunks.len() != manifest.vector_count {
             return Err(VectorKitError::InvalidFormat {
                 message: format!(
@@ -288,7 +317,12 @@ impl ExactVectorIndex {
             }
         }
         let persisted_bm25 = if manifest.has_bm25 {
-            let persisted_bm25 = PersistedBm25Index::from_payload_bytes(&read_file(&bm25_path)?)?;
+            let bm25_payload = read_payload_file(
+                &bm25_path,
+                manifest.bm25_compression,
+                manifest.bm25_uncompressed_bytes,
+            )?;
+            let persisted_bm25 = PersistedBm25Index::from_payload_bytes(&bm25_payload)?;
             validate_bm25_state_matches_chunks(&persisted_bm25, &chunks)?;
             Some(persisted_bm25)
         } else {
@@ -794,9 +828,25 @@ struct PersistedManifest {
     vector_encoding: VectorEncoding,
     vector_bytes: usize,
     chunk_bytes: u64,
+    #[serde(default)]
+    chunk_uncompressed_bytes: u64,
+    #[serde(default)]
+    chunk_compression: FileCompression,
     bm25_bytes: u64,
+    #[serde(default)]
+    bm25_uncompressed_bytes: u64,
+    #[serde(default)]
+    bm25_compression: FileCompression,
     tombstone_bytes: u64,
     normalization: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum FileCompression {
+    #[default]
+    None,
+    Zstd,
 }
 
 impl PersistedManifest {
@@ -816,6 +866,20 @@ impl PersistedManifest {
         if !self.has_bm25 && self.bm25_bytes != 0 {
             return Err(VectorKitError::InvalidFormat {
                 message: "manifest cannot report bm25 bytes when has_bm25 is false".to_owned(),
+            });
+        }
+
+        if !self.has_bm25 && self.bm25_uncompressed_bytes != 0 {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot report bm25 uncompressed bytes when has_bm25 is false"
+                    .to_owned(),
+            });
+        }
+
+        if !self.has_bm25 && self.bm25_compression != FileCompression::None {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot report bm25 compression when has_bm25 is false"
+                    .to_owned(),
             });
         }
 
@@ -846,6 +910,38 @@ fn read_file(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|_| persistence_error("read", path))
 }
 
+fn compress_payload(path: &Path, bytes: &[u8], compression: FileCompression) -> Result<Vec<u8>> {
+    match compression {
+        FileCompression::None => Ok(bytes.to_vec()),
+        FileCompression::Zstd => {
+            zstd::stream::encode_all(Cursor::new(bytes), ZSTD_COMPRESSION_LEVEL).map_err(|error| {
+                VectorKitError::InvalidFormat {
+                    message: format!("could not zstd-compress '{}': {error}", path.display()),
+                }
+            })
+        }
+    }
+}
+
+fn read_payload_file(
+    path: &Path,
+    compression: FileCompression,
+    expected_uncompressed_bytes: u64,
+) -> Result<Vec<u8>> {
+    let bytes = read_file(path)?;
+    let payload = match compression {
+        FileCompression::None => bytes,
+        FileCompression::Zstd => zstd::stream::decode_all(Cursor::new(bytes)).map_err(|error| {
+            VectorKitError::InvalidFormat {
+                message: format!("could not zstd-decompress '{}': {error}", path.display()),
+            }
+        })?,
+    };
+
+    validate_uncompressed_size(path, expected_uncompressed_bytes, payload.len())?;
+    Ok(payload)
+}
+
 fn file_size(path: &Path) -> Result<u64> {
     fs::metadata(path)
         .map(|metadata| metadata.len())
@@ -868,6 +964,24 @@ fn validate_file_size(path: &Path, expected: u64) -> Result<()> {
         Err(VectorKitError::InvalidFormat {
             message: format!(
                 "manifest file size {expected} does not match '{}' size {actual}",
+                path.display()
+            ),
+        })
+    }
+}
+
+fn validate_uncompressed_size(path: &Path, expected: u64, actual: usize) -> Result<()> {
+    if expected == 0 {
+        return Ok(());
+    }
+
+    let actual = checked_usize_to_u64(actual, "uncompressed file size")?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(VectorKitError::InvalidFormat {
+            message: format!(
+                "manifest uncompressed file size {expected} does not match '{}' size {actual}",
                 path.display()
             ),
         })
@@ -1652,6 +1766,11 @@ mod tests {
             ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),
             file_sizes
         );
+        let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+        assert_eq!(manifest.chunk_compression, FileCompression::Zstd);
+        assert!(manifest.chunk_uncompressed_bytes > 0);
+        assert_eq!(manifest.bm25_compression, FileCompression::Zstd);
+        assert!(manifest.bm25_uncompressed_bytes > 0);
 
         let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
         assert_eq!(loaded.dimension(), 2);
@@ -1731,6 +1850,10 @@ mod tests {
             ExactVectorIndex::persisted_file_sizes(&directory).unwrap(),
             file_sizes
         );
+        let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+        assert_eq!(manifest.chunk_compression, FileCompression::Zstd);
+        assert_eq!(manifest.bm25_compression, FileCompression::None);
+        assert_eq!(manifest.bm25_uncompressed_bytes, 0);
 
         let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
         assert_eq!(loaded.active_chunk_count(), 1);

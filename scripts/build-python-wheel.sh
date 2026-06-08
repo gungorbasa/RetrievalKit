@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WRAPPER_DIR="$ROOT_DIR/wrappers/python"
-VENV_DIR="$ROOT_DIR/target/python-wheel-venv"
 WHEEL_DIR="$ROOT_DIR/target/wheels"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 BUILD_MODE="--release"
@@ -61,18 +60,26 @@ main() {
   require_tool cargo
   require_tool "$PYTHON_BIN"
 
+  local python_tag
+  python_tag="$("$PYTHON_BIN" - <<'PY'
+import sys
+print(f"py{sys.version_info.major}{sys.version_info.minor}")
+PY
+)"
+  local venv_dir="$ROOT_DIR/target/python-wheel-venv-$python_tag"
+
   if [[ ! -f "$WRAPPER_DIR/pyproject.toml" ]]; then
     echo "missing Python wrapper pyproject: $WRAPPER_DIR/pyproject.toml" >&2
     exit 1
   fi
 
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-  "$VENV_DIR/bin/python" -m pip install --upgrade pip maturin
+  "$PYTHON_BIN" -m venv "$venv_dir"
+  "$venv_dir/bin/python" -m pip install --upgrade pip maturin
 
   mkdir -p "$WHEEL_DIR"
   (
     cd "$WRAPPER_DIR"
-    "$VENV_DIR/bin/maturin" build $BUILD_MODE --out "$WHEEL_DIR"
+    "$venv_dir/bin/maturin" build $BUILD_MODE --interpreter "$venv_dir/bin/python" --out "$WHEEL_DIR"
   )
 
   echo "Built Python wheel(s):"

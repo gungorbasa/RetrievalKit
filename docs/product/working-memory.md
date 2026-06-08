@@ -178,6 +178,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - `chunks.bin` now writes a v2 payload with a metadata field dictionary and
   compact varint integer/timestamp metadata values. The loader still accepts the
   older v1 chunk payload.
+- `chunks.bin` and `bm25.bin` are now zstd-compressed at rest by default.
+  Manifest fields record compression type and uncompressed byte counts, and load
+  transparently decompresses before rebuilding in-memory structures.
 - The FFI benchmark report is now schema version `2`. On Apple platforms it
   includes Mach task RSS snapshots for the whole report, per-run build/search
   phases, and persistence save/load/post-load-search phases.

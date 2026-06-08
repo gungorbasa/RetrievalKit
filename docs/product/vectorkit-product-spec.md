@@ -231,6 +231,10 @@ Required fields:
   "has_bm25": true,
   "vector_encoding": "f32",
   "vector_bytes_per_value": 4,
+  "chunk_compression": "zstd",
+  "chunk_uncompressed_bytes": 123456,
+  "bm25_compression": "zstd",
+  "bm25_uncompressed_bytes": 123456,
   "embedding_model": "caller-provided",
   "normalization": "unit_l2"
 }
@@ -242,7 +246,13 @@ Load must fail clearly if:
 - format version is unsupported.
 - required files are missing.
 - file sizes do not match manifest counts.
+- compressed payloads fail to decompress.
+- decompressed file sizes do not match manifest counts when recorded.
 - checksum validation fails when checksums are enabled.
+
+`chunks.bin` and `bm25.bin` may be compressed at rest. Loading must
+transparently decompress them before rebuilding in-memory search structures so
+compression does not affect the hot query path.
 
 ### Vector Store
 

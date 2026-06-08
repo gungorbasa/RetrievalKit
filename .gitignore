@@ -3,3 +3,11 @@
 **/.build/
 **/*.xcodeproj/project.xcworkspace/
 **/*.xcodeproj/xcuserdata/
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
+*.so
+**/*.so

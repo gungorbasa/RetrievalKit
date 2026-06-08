@@ -78,6 +78,21 @@ Approximate vector-only sizes for `24K` vectors:
 
 ## Recent Benchmark Takeaways
 
+Physical-device validation using the iOS `Device` mode has now run on an
+iPhone with iOS 26.5. Source report:
+`docs/product/reports/iphone-device-validation-i8-report.md`.
+
+| dim | filter | avg | p95 | load | persisted | observed RSS after load |
+|---:|:---|---:|---:|---:|---:|---:|
+| 384 | none | 0.471 ms | 0.506 ms | 22.54 ms | 12.772 MiB | 180.33 MiB |
+| 384 | 1/10 | 0.111 ms | 0.173 ms | 28.68 ms | 12.910 MiB | 214.89 MiB |
+| 768 | none | 0.640 ms | 0.658 ms | 25.62 ms | 21.561 MiB | 255.34 MiB |
+| 768 | 1/10 | 0.167 ms | 0.256 ms | 27.83 ms | 21.699 MiB | 249.27 MiB |
+
+Treat the RSS values as process-level sequential-run observations, not isolated
+per-index memory footprints. Add one-scenario-per-launch device presets before
+making memory-budget decisions from RSS.
+
 For `24K` vectors, `top_k=10`, `200` synthetic queries after the AArch64 I8
 dotprod backend, late result materialization, active-offset scans, and the
 unfiltered I8 fast path:
@@ -107,6 +122,20 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `I8`, `I8 + F16 rerank`, and `I8 + F32 rerank`.
 - Reranking adds small CPU cost for `top_k * overfetch` candidates but
   significant memory/disk cost from the second vector store.
+
+## Python Wrapper Context
+
+- `docs/agents/python.md` defines Python wrapper guidance. Python is currently
+  an internal developer wrapper before the public Swift wrapper is finalized.
+- `crates/vectorkit-python` exposes a thin PyO3 module that calls
+  `vectorkit-core` directly.
+- `wrappers/python` contains the maturin package. The public API is Pythonic:
+  `Index.add(documents=[...])`, `Index.search(embedding, limit=10, where=...)`,
+  `Index.keyword_search(...)`, `Index.save(...)`, `Index.load(...)`, and
+  `delete_document(...)`.
+- Embeddings are caller-provided. `search_text(index, text, embed=...)` is only
+  a convenience helper that calls the supplied provider, validates one returned
+  query vector, then calls vector search.
 
 ## Completed Optimizations
 
@@ -141,16 +170,25 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   not used.
 - A minimal SwiftUI iOS benchmark app exists at
   `wrappers/swift/VectorKitIOSBench`. It links the local XCFramework, exposes
-  smoke, full default, and compact vector-only benchmark buttons, and the
-  generic iOS Simulator build succeeds locally.
+  smoke, device-validation, full default, and compact vector-only benchmark
+  buttons, and the generic iOS Simulator build succeeds locally. The
+  device-validation mode runs `24K` chunks, `384d`/`768d`, `i8`, filtered and
+  unfiltered, persistence enabled, and `include_recall=false` so F32
+  ground-truth indexes do not inflate RSS.
 - `chunks.bin` now writes a v2 payload with a metadata field dictionary and
   compact varint integer/timestamp metadata values. The loader still accepts the
   older v1 chunk payload.
+- The FFI benchmark report is now schema version `2`. On Apple platforms it
+  includes Mach task RSS snapshots for the whole report, per-run build/search
+  phases, and persistence save/load/post-load-search phases.
 
 ## Likely Next Tasks
 
-- Run the iOS benchmark app on physical iPhone/iPad hardware and compare device
-  latency against the macOS SwiftPM and Rust benchmark reports.
+- Add isolated iOS device benchmark presets for one scenario per app launch so
+  RSS can be interpreted per scenario instead of as a sequential process-level
+  value.
+- Add compact `768d` experiments: `persist_bm25=false`, lower-bit candidate
+  encodings, and optional F16 rerank store.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

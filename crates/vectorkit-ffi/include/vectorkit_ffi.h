@@ -19,6 +19,9 @@ extern "C" {
 //   "metric": "cosine",
 //   "include_unfiltered": true,
 //   "include_filtered": true,
+//   "include_persistence": true,
+//   "include_recall": true,
+//   "persist_bm25": true,
 //   "filter_every": 10
 // }
 //

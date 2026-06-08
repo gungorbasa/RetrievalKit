@@ -80,46 +80,52 @@ unsafe fn read_config(config_json: *const c_char) -> Result<BenchmarkConfig, Ben
 fn run_benchmark(config: BenchmarkConfig) -> Result<BenchmarkReport, BenchError> {
     validate_config(&config)?;
     let started_at = Instant::now();
+    let memory_at_start = ProcessMemorySnapshot::current();
     let mut runs = Vec::new();
 
     for &dimension in &config.dimensions {
-        let f32_unfiltered =
-            build_synthetic_index(&config, dimension, VectorEncoding::F32, None)?.0;
-        let f32_filtered = match config.filter_every {
-            Some(filter_every) if config.include_filtered => Some(build_synthetic_index(
+        let f32_unfiltered = config
+            .include_recall
+            .then(|| build_synthetic_index(&config, dimension, VectorEncoding::F32, None))
+            .transpose()?
+            .map(|(index, _)| index);
+        let f32_filtered = match (config.include_recall, config.filter_every) {
+            (true, Some(filter_every)) if config.include_filtered => Some(build_synthetic_index(
                 &config,
                 dimension,
                 VectorEncoding::F32,
                 Some(filter_every),
             )?),
-            Some(_) | None => None,
+            _ => None,
         };
 
         for &encoding in &config.encodings {
             if config.include_unfiltered {
-                let run = benchmark_one(&config, dimension, encoding, None, Some(&f32_unfiltered))?;
+                let run =
+                    benchmark_one(&config, dimension, encoding, None, f32_unfiltered.as_ref())?;
                 runs.push(run);
             }
 
             if config.include_filtered {
-                if let Some((ground_truth, _)) = &f32_filtered {
-                    let run = benchmark_one(
-                        &config,
-                        dimension,
-                        encoding,
-                        config.filter_every,
-                        Some(ground_truth),
-                    )?;
-                    runs.push(run);
-                }
+                let ground_truth = f32_filtered.as_ref().map(|(ground_truth, _)| ground_truth);
+                let run = benchmark_one(
+                    &config,
+                    dimension,
+                    encoding,
+                    config.filter_every,
+                    ground_truth,
+                )?;
+                runs.push(run);
             }
         }
     }
 
     Ok(BenchmarkReport {
-        schema_version: 1,
+        schema_version: 2,
         config,
         capabilities: RuntimeCapabilities::detect(),
+        memory_at_start,
+        memory_at_end: ProcessMemorySnapshot::current(),
         elapsed_ms: millis(started_at.elapsed()),
         runs,
     })
@@ -132,7 +138,9 @@ fn benchmark_one(
     filter_every: Option<usize>,
     ground_truth: Option<&ExactVectorIndex>,
 ) -> Result<BenchmarkRun, BenchError> {
+    let memory_before_build = ProcessMemorySnapshot::current();
     let (index, build_duration) = build_synthetic_index(config, dimension, encoding, filter_every)?;
+    let memory_after_build = ProcessMemorySnapshot::current();
     let index_size = index.size_estimate();
     let search_measurement = benchmark_searches(
         config,
@@ -141,7 +149,9 @@ fn benchmark_one(
         filter_every,
         &index,
         ground_truth,
+        config.include_recall,
     )?;
+    let memory_after_search = ProcessMemorySnapshot::current();
     let persistence = config
         .include_persistence
         .then(|| benchmark_persistence(config, dimension, encoding, filter_every, &index))
@@ -165,6 +175,9 @@ fn benchmark_one(
         p95_ms: stats.p95_ms,
         max_ms: stats.max_ms,
         recall_at_k_vs_f32: search_measurement.recall_at_k_vs_f32,
+        memory_before_build,
+        memory_after_build,
+        memory_after_search,
         total_hits: stats.total_hits,
         top_hit_checksum: stats.top_hit_checksum,
         persistence,
@@ -180,6 +193,7 @@ fn benchmark_persistence(
 ) -> Result<BenchmarkPersistence, BenchError> {
     let directory = TemporaryBenchmarkDirectory::create(dimension, encoding, filter_every)?;
 
+    let memory_before_save = ProcessMemorySnapshot::current();
     let save_start = Instant::now();
     let file_sizes = index.save_to_dir_with_options(
         directory.path(),
@@ -188,10 +202,12 @@ fn benchmark_persistence(
         },
     )?;
     let save_duration = save_start.elapsed();
+    let memory_after_save = ProcessMemorySnapshot::current();
 
     let load_start = Instant::now();
     let loaded_index = ExactVectorIndex::load_from_dir(directory.path())?;
     let load_duration = load_start.elapsed();
+    let memory_after_load = ProcessMemorySnapshot::current();
 
     let post_load_search = benchmark_searches(
         config,
@@ -200,8 +216,10 @@ fn benchmark_persistence(
         filter_every,
         &loaded_index,
         None,
+        false,
     )?
     .stats;
+    let memory_after_post_load_search = ProcessMemorySnapshot::current();
 
     Ok(BenchmarkPersistence {
         persist_bm25: config.persist_bm25,
@@ -209,6 +227,10 @@ fn benchmark_persistence(
         load_ms: millis(load_duration),
         file_sizes: PersistedFileSizes::from(file_sizes),
         post_load_search,
+        memory_before_save,
+        memory_after_save,
+        memory_after_load,
+        memory_after_post_load_search,
     })
 }
 
@@ -219,6 +241,7 @@ fn benchmark_searches(
     filter_every: Option<usize>,
     index: &ExactVectorIndex,
     ground_truth: Option<&ExactVectorIndex>,
+    measure_recall: bool,
 ) -> Result<SearchMeasurement, BenchError> {
     let mut query_durations = Vec::with_capacity(config.queries);
     let mut recall_sum = 0.0;
@@ -235,15 +258,22 @@ fn benchmark_searches(
         let hits = index.search(&search_query)?;
         query_durations.push(start.elapsed());
 
-        recall_sum += match ground_truth {
-            Some(ground_truth) if encoding != VectorEncoding::F32 => {
-                let ground_truth_query =
-                    synthetic_search_query(config.top_k, query, filter_every, target_chunk);
-                let ground_truth_hits = ground_truth.search(&ground_truth_query)?;
-                recall_at_k(&hits, &ground_truth_hits)
-            }
-            Some(_) | None => 1.0,
-        };
+        if measure_recall {
+            recall_sum += match ground_truth {
+                Some(ground_truth) if encoding != VectorEncoding::F32 => {
+                    let ground_truth_query =
+                        synthetic_search_query(config.top_k, query, filter_every, target_chunk);
+                    let ground_truth_hits = ground_truth.search(&ground_truth_query)?;
+                    recall_at_k(&hits, &ground_truth_hits)
+                }
+                Some(_) | None if encoding == VectorEncoding::F32 => 1.0,
+                Some(_) | None => {
+                    return Err(BenchError::InvalidConfig(
+                        "include_recall requires F32 ground-truth runs".to_owned(),
+                    ));
+                }
+            };
+        }
 
         total_hits += hits.len();
         if let Some(hit) = hits.first() {
@@ -261,7 +291,7 @@ fn benchmark_searches(
             total_hits,
             top_hit_checksum,
         },
-        recall_at_k_vs_f32: recall_sum / config.queries as f64,
+        recall_at_k_vs_f32: measure_recall.then_some(recall_sum / config.queries as f64),
     })
 }
 
@@ -506,6 +536,7 @@ struct BenchmarkConfig {
     include_unfiltered: bool,
     include_filtered: bool,
     include_persistence: bool,
+    include_recall: bool,
     persist_bm25: bool,
     filter_every: Option<usize>,
 }
@@ -613,6 +644,7 @@ impl Default for BenchmarkConfig {
             include_unfiltered: true,
             include_filtered: true,
             include_persistence: true,
+            include_recall: true,
             persist_bm25: true,
             filter_every: Some(10),
         }
@@ -624,6 +656,10 @@ struct BenchmarkReport {
     schema_version: u32,
     config: BenchmarkConfig,
     capabilities: RuntimeCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_at_start: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_at_end: Option<ProcessMemorySnapshot>,
     elapsed_ms: f64,
     runs: Vec<BenchmarkRun>,
 }
@@ -659,7 +695,14 @@ struct BenchmarkRun {
     p50_ms: f64,
     p95_ms: f64,
     max_ms: f64,
-    recall_at_k_vs_f32: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recall_at_k_vs_f32: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_before_build: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_after_build: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_after_search: Option<ProcessMemorySnapshot>,
     total_hits: usize,
     top_hit_checksum: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -673,6 +716,14 @@ struct BenchmarkPersistence {
     load_ms: f64,
     file_sizes: PersistedFileSizes,
     post_load_search: SearchLatencyStats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_before_save: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_after_save: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_after_load: Option<ProcessMemorySnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_after_post_load_search: Option<ProcessMemorySnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -712,7 +763,50 @@ struct SearchLatencyStats {
 #[derive(Debug, Clone)]
 struct SearchMeasurement {
     stats: SearchLatencyStats,
-    recall_at_k_vs_f32: f64,
+    recall_at_k_vs_f32: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+struct ProcessMemorySnapshot {
+    resident_bytes: u64,
+    resident_max_bytes: u64,
+}
+
+impl ProcessMemorySnapshot {
+    fn current() -> Option<Self> {
+        process_memory_snapshot()
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn process_memory_snapshot() -> Option<ProcessMemorySnapshot> {
+    let mut info = std::mem::MaybeUninit::<libc::mach_task_basic_info_data_t>::uninit();
+    let mut count = libc::MACH_TASK_BASIC_INFO_COUNT;
+
+    #[allow(deprecated)]
+    let result = unsafe {
+        libc::task_info(
+            libc::mach_task_self_,
+            libc::MACH_TASK_BASIC_INFO,
+            info.as_mut_ptr().cast(),
+            &mut count,
+        )
+    };
+
+    if result != libc::KERN_SUCCESS {
+        return None;
+    }
+
+    let info = unsafe { info.assume_init() };
+    Some(ProcessMemorySnapshot {
+        resident_bytes: info.resident_size,
+        resident_max_bytes: info.resident_size_max,
+    })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+fn process_memory_snapshot() -> Option<ProcessMemorySnapshot> {
+    None
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -950,6 +1044,26 @@ mod tests {
             let persistence = run.persistence.as_ref().unwrap();
             !persistence.persist_bm25 && persistence.file_sizes.bm25_bytes == 0
         }));
+    }
+
+    #[test]
+    fn benchmark_json_can_skip_recall_ground_truth() {
+        let report = run_benchmark(BenchmarkConfig {
+            chunks: 16,
+            dimensions: vec![8],
+            queries: 2,
+            top_k: 2,
+            encodings: vec![VectorEncoding::I8ScalarQuantized],
+            include_recall: false,
+            ..BenchmarkConfig::default()
+        })
+        .unwrap();
+
+        assert_eq!(report.runs.len(), 2);
+        assert!(report
+            .runs
+            .iter()
+            .all(|run| run.recall_at_k_vs_f32.is_none()));
     }
 
     #[test]

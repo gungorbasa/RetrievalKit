@@ -22,7 +22,16 @@ open wrappers/swift/VectorKitIOSBench/VectorKitIOSBench.xcodeproj
 The app has three benchmark modes:
 
 - `Smoke`: small link and UI smoke test.
+- `Device`: physical-device validation profile. It runs `24K` chunks,
+  `384d`/`768d`, `i8`, filtered and unfiltered, persistence enabled, and F32
+  recall disabled so RSS is not inflated by ground-truth indexes.
 - `Default`: the full FFI default benchmark, currently `24K` chunks,
   `384d`/`768d`, `f32`/`f16`/`i8`, filtered and unfiltered.
 - `Compact`: the default benchmark with BM25 persistence disabled so vector-only
   persisted size can be measured.
+
+For the validation report, run `Device` on physical iPhone/iPad hardware and
+capture the summary plus JSON output. The summary includes latency, persisted
+size, load time, and resident memory after load. The raw JSON includes the same
+metrics plus additional memory snapshots around build, search, save, load, and
+post-load search.

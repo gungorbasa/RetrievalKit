@@ -3,6 +3,7 @@ members = [
     "crates/vectorkit-core",
     "crates/vectorkit-cli",
     "crates/vectorkit-ffi",
+    "crates/vectorkit-python",
 ]
 resolver = "2"
 

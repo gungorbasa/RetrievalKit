@@ -22,6 +22,7 @@ Passing `NULL` or an empty string uses the default benchmark config:
   "include_unfiltered": true,
   "include_filtered": true,
   "include_persistence": true,
+  "include_recall": true,
   "persist_bm25": true,
   "filter_every": 10
 }
@@ -31,14 +32,19 @@ The returned string is UTF-8 JSON and must be released with
 `vectorkit_string_free`.
 
 The report includes runtime SIMD capability flags and one result row for each
-dimension, encoding, and filter mode. When `include_persistence` is true, each
-row also includes:
+dimension, encoding, and filter mode. On Apple platforms, the report also
+includes current and peak resident memory snapshots in bytes. When
+`include_persistence` is true, each row also includes:
 
 - `save_ms`
 - `load_ms`
 - persisted file sizes by component
 - post-load search latency for the same query set
+- memory snapshots before save, after save, after load, and after post-load
+  search
 
+Set `include_recall` to `false` for physical-device memory validation runs
+where keeping F32 ground-truth indexes alive would inflate RSS.
 Set `persist_bm25` to `false` to measure a compact vector-only persisted
 profile. Vector search and metadata filters still reload, but keyword and
 hybrid search need BM25 to be persisted or rebuilt separately.

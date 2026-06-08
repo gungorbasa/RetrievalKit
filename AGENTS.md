@@ -10,6 +10,7 @@ Keep this file focused on repo-wide rules. Put language-specific instructions in
 - Claude: read `CLAUDE.md`, which points back to this file.
 - Cursor: read `.cursor/rules/vectorkit.mdc`, which points back to this file.
 - Rust changes: also read `docs/agents/rust.md`.
+- Python changes: also read `docs/agents/python.md`.
 
 When changing repository guidance, update this file first. Keep tool-specific files as small compatibility entrypoints unless a tool genuinely needs different syntax.
 
@@ -76,6 +77,7 @@ This structure is a guideline, not a requirement for early scaffolding. If the a
 Language-specific guidance lives in `docs/agents/`.
 
 - Rust: `docs/agents/rust.md`
+- Python: `docs/agents/python.md`
 
 Add a new language file before adding a substantial wrapper or implementation language.
 

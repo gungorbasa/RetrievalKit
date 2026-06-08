@@ -16,6 +16,14 @@ struct BenchmarkView: View {
                     .disabled(model.isRunning)
 
                     Button {
+                        model.run(.deviceValidation)
+                    } label: {
+                        Label("Device", systemImage: "iphone")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isRunning)
+
+                    Button {
                         model.run(.fullDefault)
                     } label: {
                         Label("Default", systemImage: "speedometer")
@@ -41,6 +49,14 @@ struct BenchmarkView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+
+                Text(model.summary)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.quaternary.opacity(0.25))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 ScrollView {
                     Text(model.output)

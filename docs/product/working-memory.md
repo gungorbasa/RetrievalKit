@@ -78,6 +78,31 @@ Approximate vector-only sizes for `24K` vectors:
 
 ## Recent Benchmark Takeaways
 
+Local Rust CLI hybrid work after BM25/runtime optimizations:
+
+- BM25 keyword search is no longer the main hybrid bottleneck for the current
+  synthetic V1 benchmark. Runtime BM25 uses hash-backed postings, bounded
+  top-k selection, metadata allowlists for filtered search, and cached active
+  document frequency per term.
+- Filtered hybrid search is fast when metadata filters narrow candidate sets.
+  On `10K x 384d I8ScalarQuantized`, `top_k=10`, `100` queries:
+  `filter_every=100` measured around `0.03-0.05 ms`, `filter_every=10`
+  around `0.10-0.34 ms`, and `filter_every=2` around `0.49-1.58 ms`
+  depending on candidate limits and fusion mode.
+- Unfiltered hybrid latency is dominated by vector candidate count, not BM25.
+  In the same benchmark, `10` vector candidates produced roughly
+  `0.44-0.57 ms`; `25` vector candidates roughly `1.17-1.30 ms`; `50`
+  vector candidates roughly `2.5 ms+`.
+- Keyword candidate count is comparatively cheap after the BM25 changes.
+- Hybrid candidate limits are intentionally public and per-query:
+  `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
+  Do not over-optimize the default yet; callers can tune it, and real-data
+  candidate-quality benchmarks should guide any default change.
+- Current benchmark `recall@k vs f32` compares encodings at the same candidate
+  limits. It does not answer whether `10/10` returns the same final results as
+  `50/50` for the same encoding. Add a same-encoding high-candidate-reference
+  comparison before changing candidate defaults for quality reasons.
+
 Physical-device validation using the iOS `Device` mode has now run on an
 iPhone with iOS 26.5. Source report:
 `docs/product/reports/iphone-device-validation-i8-report.md`.
@@ -152,6 +177,19 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   uses metadata candidate offsets when available, still verifies the actual
   filter predicate for correctness, and falls back to active-offset scans for
   filter shapes that cannot be fully narrowed by the metadata index.
+- BM25 runtime search is optimized for V1 hybrid retrieval. The in-memory index
+  uses hash-backed term lookups and postings, bounded top-k selection, filtered
+  metadata allowlists, O(1) active average document length, and cached active
+  document frequency. Persistence remains deterministic through the existing
+  sorted binary format.
+- Hybrid search supports weighted normalized score fusion as the default and
+  RRF as an explicit option. Result traces expose vector/keyword ranks, raw
+  scores, normalized scores when applicable, matched terms, and fusion config.
+- Hybrid candidate limits are exposed through the Rust public API with
+  `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
+- The CLI matrix benchmark can now vary filter selectivity and hybrid candidate
+  limits with `--filter-every-values`, `--vector-candidates`, and
+  `--keyword-candidates`.
 - A `vectorkit-ffi` crate now exposes `vectorkit_bench_synthetic_json` and
   `vectorkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
   benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
@@ -190,6 +228,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - Add isolated iOS device benchmark presets for one scenario per app launch so
   RSS can be interpreted per scenario instead of as a sequential process-level
   value.
+- Add a same-encoding hybrid candidate-quality benchmark that compares smaller
+  candidate limits such as `10/25` or `25/25` against a high-candidate reference
+  such as `50/50` or `100/100`.
 - Add compact `768d` experiments: `persist_bm25=false`, lower-bit candidate
   encodings, and optional F16 rerank store.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25

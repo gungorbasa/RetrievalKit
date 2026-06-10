@@ -65,15 +65,15 @@ Tokenizer behavior should be explicit:
 
 ## Hybrid Retrieval
 
-Hybrid search should combine vector and BM25 candidate sets, then fuse ranks or
+Hybrid search combines vector and BM25 candidate sets, then fuses ranks or
 scores.
 
-Recommended V1 pipeline:
+Current V1 pipeline:
 
 ```text
 query
--> vector top N
--> BM25 top N
+-> metadata-prefiltered vector top N
+-> metadata-prefiltered BM25 top N
 -> union candidates
 -> fuse scores or ranks
 -> deterministic tie-break
@@ -88,9 +88,31 @@ bm25_top_k = 50
 final_top_k = 10
 ```
 
+These are defaults, not fixed behavior. The Rust public API exposes
+`HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)` so callers can
+tune latency and candidate breadth per query.
+
 ## Fusion Strategy
 
-Use Reciprocal Rank Fusion first.
+Weighted normalized score fusion is the current default. It min-max normalizes
+vector and BM25 scores across the fused candidate set, then applies explicit
+weights:
+
+```text
+hybrid_score =
+  vector_weight * normalized_vector_score
+  +
+  keyword_weight * normalized_bm25_score
+```
+
+Default:
+
+```text
+vector_weight = 0.6
+keyword_weight = 0.4
+```
+
+Reciprocal Rank Fusion remains available:
 
 ```text
 hybrid_score =
@@ -105,29 +127,20 @@ Default:
 rrf_k = 60
 ```
 
-Why RRF first:
+Both strategies must remain deterministic and explainable in traces.
 
-- It is deterministic.
-- It does not require fragile score normalization.
-- It works when vector scores and BM25 scores have different scales.
-- It is easy to explain in traces.
+## Current Performance Takeaways
 
-Weighted normalized score fusion can come later:
+The local synthetic benchmark after BM25 optimizations shows:
 
-```text
-hybrid =
-  alpha * normalized_vector_score
-  +
-  (1 - alpha) * normalized_bm25_score
-```
+- BM25 candidate generation is no longer the primary hybrid bottleneck.
+- Filtered hybrid is fast when metadata prefiltering narrows the candidate set.
+- Unfiltered hybrid latency is dominated by vector candidate count.
+- Keyword candidate count is comparatively cheap.
 
-Potential default:
-
-```text
-alpha = 0.6
-```
-
-Only add weighted score fusion after benchmarks show it improves ranking.
+Do not change default candidate limits only from latency numbers. First add a
+same-encoding comparison against a high-candidate reference so smaller candidate
+limits can be evaluated for final-result quality.
 
 ## Result Trace
 
@@ -139,15 +152,20 @@ Example trace shape:
 {
   "vector_score": 0.82,
   "vector_rank": 3,
+  "normalized_vector_score": 0.61,
   "bm25_score": 7.4,
   "bm25_rank": 1,
-  "hybrid_score": 0.0315,
+  "normalized_bm25_score": 1.0,
+  "hybrid_score": 0.766,
   "matched_terms": ["erica", "bar"],
-  "fusion": "rrf",
-  "rrf_k": 60,
+  "fusion": "weighted_normalized_score",
+  "vector_weight": 0.6,
+  "keyword_weight": 0.4,
   "filter_matched": true
 }
 ```
+
+RRF traces should include `fusion = "rrf"` and `rrf_k`.
 
 Missing ranks should be represented explicitly. For example, a candidate found
 only by BM25 should have no vector rank rather than a fake vector score.
@@ -222,8 +240,10 @@ Benchmark rules:
 
 ## Recommended Next Steps
 
-1. Make BM25 storage and scoring robust with trace output.
-2. Add a `hybrid_search` API using RRF.
-3. Return vector, BM25, and hybrid trace data.
-4. Add benchmarks comparing vector, BM25, and hybrid ranking.
-5. Add weighted score fusion only after RRF is measured.
+1. Add same-encoding hybrid candidate-quality benchmarks comparing small
+   candidate limits against a high-candidate reference.
+2. Add fixture-backed benchmarks with realistic chunk text, metadata, and BM25
+   term distributions.
+3. Carry the public candidate-limit override into language wrappers.
+4. Revisit default candidate limits only after real-data quality and latency
+   benchmarks support a change.

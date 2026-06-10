@@ -534,36 +534,45 @@ BM25 must return:
 
 Hybrid search combines vector and BM25 results.
 
-V1 fusion method:
+V1 default fusion method:
 
 ```text
-RRF, reciprocal rank fusion
+weighted normalized score fusion
 ```
 
 Default:
 
 ```text
-rrf_k: 60
-vector_weight: 1.0
-keyword_weight: 1.0
+vector_weight: 0.6
+keyword_weight: 0.4
+vector_candidates: 50
+keyword_candidates: 50
 ```
+
+Reciprocal rank fusion remains available as an explicit option with
+`rrf_k = 60`.
 
 V1 hybrid query flow:
 
 ```text
 query embedding
-  -> exact vector retrieval
+  -> metadata-prefiltered exact vector candidate retrieval
 query text
-  -> BM25 candidate retrieval
+  -> metadata-prefiltered BM25 candidate retrieval
 vector candidates + BM25 candidates
-  -> metadata filter
-  -> exact vector scoring
-  -> RRF/weighted fusion
+  -> weighted normalized or RRF fusion
   -> final top_k
   -> result trace
 ```
 
-Metadata filters must be applied before final top-k is returned.
+Metadata filters must be applied before final top-k is returned. When a filter
+can be represented by the metadata filter index, candidate generation should use
+that narrowed set before vector scoring or BM25 scoring. Final results must
+still verify filter correctness.
+
+Hybrid candidate limits are part of the public API and are per-query tunables.
+`top_k` is the final fused hit count; `vector_top_k` and `keyword_top_k` control
+how many candidates each retrieval mode contributes before fusion.
 
 ## Query Planner
 
@@ -890,7 +899,7 @@ Tests must verify:
 - keyword-only matches can appear.
 - vector-only matches can appear.
 - exact name queries are not lost to semantic-only retrieval.
-- RRF ranking is deterministic.
+- weighted normalized and RRF ranking are deterministic.
 - score traces match the ranking calculation.
 
 ### Persistence Correctness
@@ -1152,7 +1161,8 @@ Deliverables:
 
 - Tokenizer.
 - BM25 index.
-- Hybrid RRF fusion.
+- Hybrid weighted normalized fusion.
+- Hybrid RRF fusion as an explicit option.
 - Trace output.
 - Filter support.
 
@@ -1184,7 +1194,14 @@ and recall:
   real-data benchmarks show `I8ScalarQuantized` needs better final quality.
   Measure disk size, memory, recall, and latency for `I8`, `I8 + F16 rerank`,
   and `I8 + F32 rerank` before implementation.
-- Faster BM25 maps/sets: evaluate `rustc-hash`, `hashbrown`, or another hasher against the current deterministic `BTreeMap`/`BTreeSet` implementation.
+- Hybrid candidate defaults: keep the public per-query override. Before
+  changing the default candidate limits, compare smaller limits such as
+  `10/25` or `25/25` against a high-candidate same-encoding reference such as
+  `50/50` or `100/100`.
+- Faster BM25 maps/sets: the runtime BM25 index now uses hash-backed term
+  lookups/postings while preserving deterministic persisted format and final
+  ordering. Revisit custom hashers only if realistic benchmarks show the local
+  BM25 implementation is again a bottleneck.
 - External BM25 engine: evaluate the `bm25` crate or Tantivy BM25/tokenizer stack only if benchmarks show the local BM25 implementation is a bottleneck or search quality needs language-aware stemming/normalization.
 
 Do not replace simple deterministic structures just because a faster crate exists. Use benchmark results to justify the dependency and keep final ranking deterministic.
@@ -1247,7 +1264,8 @@ dimension: caller-defined, fixed per index
 vector encoding: F32 by default, F16/I8 opt-in
 exact search: enabled
 BM25: enabled
-hybrid fusion: RRF
+hybrid fusion: weighted normalized score
+hybrid RRF: available as an explicit option
 HNSW: deferred until after small-index MVP
 metadata filters: simple typed filters
 storage: local files with mmap-friendly layouts
@@ -1262,6 +1280,8 @@ vector_candidates: 50
 keyword_candidates: 50
 rerank: exact_vector
 trace: false
+vector_weight: 0.6
+keyword_weight: 0.4
 ```
 
 Debug search config:

@@ -137,8 +137,11 @@ pub struct KeywordHit {
 pub struct HybridQuery {
     pub text: String,
     pub embedding: Vec<f32>,
+    /// Final number of fused hybrid hits returned to the caller.
     pub top_k: usize,
+    /// Number of vector-search candidates generated before hybrid fusion.
     pub vector_top_k: usize,
+    /// Number of BM25 keyword candidates generated before hybrid fusion.
     pub keyword_top_k: usize,
     pub filter: Option<Filter>,
     pub fusion: HybridFusion,
@@ -146,6 +149,11 @@ pub struct HybridQuery {
 
 impl HybridQuery {
     /// Creates a hybrid search request with stable V1 candidate defaults.
+    ///
+    /// `top_k` controls the final fused result count. The default pre-fusion
+    /// candidate limits are `vector_top_k = 50` and `keyword_top_k = 50`.
+    /// Override them with [`HybridQuery::with_candidate_limits`] when lower
+    /// latency or broader candidate recall is more important for a query.
     pub fn new(text: impl Into<String>, embedding: Vec<f32>, top_k: usize) -> Self {
         Self {
             text: text.into(),
@@ -167,7 +175,11 @@ impl HybridQuery {
         self
     }
 
-    /// Sets the number of vector and keyword candidates fused before final top-k.
+    /// Sets the number of vector and keyword candidates fused before final `top_k`.
+    ///
+    /// These limits do not change the final result count. They control how many
+    /// candidates each retrieval mode contributes before hybrid fusion ranks and
+    /// truncates the final hits.
     pub fn with_candidate_limits(mut self, vector_top_k: usize, keyword_top_k: usize) -> Self {
         self.vector_top_k = vector_top_k;
         self.keyword_top_k = keyword_top_k;

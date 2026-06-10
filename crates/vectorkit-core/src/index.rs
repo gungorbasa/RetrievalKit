@@ -2951,6 +2951,57 @@ mod tests {
     }
 
     #[test]
+    fn hybrid_search_respects_candidate_limits_before_fusion() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector-1"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-vector-2"),
+                vec![chunk_input("semantic only", vec![2.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword-1"),
+                vec![chunk_input("alpha alpha alpha", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword-2"),
+                vec![chunk_input("alpha", vec![0.0, 0.5])],
+            )
+            .unwrap();
+
+        let vector_limited = index
+            .hybrid_search(
+                &HybridQuery::new("missing", vec![1.0, 0.0], 10).with_candidate_limits(1, 0),
+            )
+            .unwrap();
+
+        assert_eq!(vector_limited.len(), 1);
+        assert_eq!(vector_limited[0].document_id, "doc-vector-1");
+        assert_eq!(vector_limited[0].trace.vector_rank, Some(1));
+        assert_eq!(vector_limited[0].trace.keyword_rank, None);
+
+        let keyword_limited = index
+            .hybrid_search(
+                &HybridQuery::new("alpha", vec![1.0, 0.0], 10).with_candidate_limits(0, 1),
+            )
+            .unwrap();
+
+        assert_eq!(keyword_limited.len(), 1);
+        assert_eq!(keyword_limited[0].document_id, "doc-keyword-1");
+        assert_eq!(keyword_limited[0].trace.vector_rank, None);
+        assert_eq!(keyword_limited[0].trace.keyword_rank, Some(1));
+    }
+
+    #[test]
     fn hybrid_search_rrf_score_matches_ranks() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         index

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .types import AddDocumentResult, FileSizeReport, HybridHit, KeywordHit, SearchHit
+
 
 class VectorKitError(Exception): ...
 
@@ -39,7 +41,7 @@ class Index:
     @property
     def total_chunk_count(self) -> int: ...
 
-    def add(self, documents: list[dict[str, Any]]) -> list[dict[str, Any]]: ...
+    def add(self, documents: list[dict[str, Any]]) -> list[AddDocumentResult]: ...
 
     def delete_document(self, document_id: str) -> int: ...
 
@@ -49,7 +51,7 @@ class Index:
         *,
         limit: int = 10,
         where: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[SearchHit]: ...
 
     def keyword_search(
         self,
@@ -57,7 +59,7 @@ class Index:
         *,
         limit: int = 10,
         where: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[KeywordHit]: ...
 
     def hybrid_search(
         self,
@@ -72,11 +74,11 @@ class Index:
         vector_weight: float = 0.6,
         keyword_weight: float = 0.4,
         rrf_k: float = 60.0,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[HybridHit]: ...
 
     def save(
         self,
         path: str | Path,
         *,
         include_bm25: bool = True,
-    ) -> dict[str, int]: ...
+    ) -> FileSizeReport: ...

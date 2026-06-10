@@ -10,6 +10,20 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from .types import (
+    AddDocumentResult,
+    FileSizeReport,
+    HybridFusionTrace,
+    HybridHit,
+    HybridTrace,
+    KeywordHit,
+    Metadata,
+    MetadataValue,
+    RrfFusionTrace,
+    SearchHit,
+    SearchTrace,
+    WeightedNormalizedFusionTrace,
+)
 from ._native import (
     DimensionMismatchError,
     FilterError,
@@ -31,7 +45,7 @@ def search_text(
     embed: EmbeddingProvider,
     limit: int = 10,
     where: Any | None = None,
-) -> list[dict[str, Any]]:
+) -> list[SearchHit]:
     """Embed one query string and search an index.
 
     This helper is intentionally provider-based so VectorKit does not require a
@@ -57,7 +71,7 @@ def hybrid_search_text(
     vector_weight: float = 0.6,
     keyword_weight: float = 0.4,
     rrf_k: float = 60.0,
-) -> list[dict[str, Any]]:
+) -> list[HybridHit]:
     """Embed one query string and run hybrid vector + keyword search."""
 
     embeddings = embed([text])
@@ -78,13 +92,25 @@ def hybrid_search_text(
 
 
 __all__ = [
+    "AddDocumentResult",
     "DimensionMismatchError",
     "EmbeddingProvider",
+    "FileSizeReport",
     "FilterError",
+    "HybridFusionTrace",
+    "HybridHit",
+    "HybridTrace",
     "Index",
+    "KeywordHit",
+    "Metadata",
+    "MetadataValue",
     "PersistenceError",
+    "RrfFusionTrace",
+    "SearchHit",
+    "SearchTrace",
     "UnsupportedFormatError",
     "VectorKitError",
+    "WeightedNormalizedFusionTrace",
     "hybrid_search_text",
     "search_text",
     "where",

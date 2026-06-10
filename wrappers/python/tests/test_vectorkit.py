@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from vectorkit import DimensionMismatchError, Index, hybrid_search_text, search_text, where
+from vectorkit import (
+    DimensionMismatchError,
+    HybridHit,
+    Index,
+    KeywordHit,
+    SearchHit,
+    hybrid_search_text,
+    search_text,
+    where,
+)
 
 
 def embed(texts: list[str]) -> list[list[float]]:
@@ -256,3 +265,9 @@ def test_hybrid_search_text_uses_provider() -> None:
 
     hits = hybrid_search_text(index, "query alpha", embed=embed)
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
+
+
+def test_public_result_types_are_exported() -> None:
+    assert SearchHit.__name__ == "SearchHit"
+    assert KeywordHit.__name__ == "KeywordHit"
+    assert HybridHit.__name__ == "HybridHit"

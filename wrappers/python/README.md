@@ -7,6 +7,8 @@ persistence, and result tracing.
 The wrapper does not include an embedding model. Callers provide embeddings from
 the same local or remote provider for indexing and querying.
 
+Requires Python 3.10 or newer.
+
 ## Local Development
 
 From this directory:
@@ -21,6 +23,13 @@ From the repository root:
 
 ```bash
 scripts/build-python-wheel.sh
+```
+
+The script builds the wheel, installs that exact wheel into a clean smoke-test
+virtual environment, and runs:
+
+```bash
+python wrappers/python/tests/smoke_installed.py
 ```
 
 The wheel is written to:
@@ -39,15 +48,18 @@ The wheel contains a compiled Rust extension, so it is specific to the platform
 and Python version used to build it. For example, a macOS arm64 CPython 3.14
 wheel is only for compatible macOS arm64 CPython 3.14 environments.
 
+Use `--skip-smoke-test` only when you need to produce a wheel without validating
+the installed package.
+
 ## Platform Wheels
 
 The local `scripts/build-python-wheel.sh` helper builds for the platform and
 Python interpreter running the command. To produce macOS, Linux, and Windows
 wheels, run the wheel build on each target operating system and smoke-test the
-installed package with:
+installed package. The smoke test runs by default.
 
 ```bash
-python wrappers/python/tests/smoke_installed.py
+scripts/build-python-wheel.sh
 ```
 
 This keeps the repository ready for platform-specific wheels without requiring a
@@ -145,6 +157,16 @@ hits = index.hybrid_search(
 `keyword_candidates` control how many candidates each retrieval mode contributes
 before fusion. Use `fusion="rrf"` with `rrf_k=60.0` to use reciprocal rank
 fusion instead of weighted normalized score fusion.
+
+Search methods return dictionaries, with public `TypedDict` shapes available
+for annotations:
+
+```python
+from vectorkit import HybridHit, SearchHit
+
+vector_hits: list[SearchHit] = index.search(query_embedding)
+hybrid_hits: list[HybridHit] = index.hybrid_search("python wrapper", query_embedding)
+```
 
 Complex filters can use helper constructors:
 

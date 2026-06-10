@@ -39,10 +39,16 @@ pub(crate) struct Bm25Hit {
 #[derive(Debug, Clone)]
 pub(crate) struct Bm25Index {
     config: Bm25Config,
-    postings: HashMap<String, Vec<Posting>>,
+    postings: HashMap<String, TermPostings>,
     chunk_lengths: HashMap<ChunkId, usize>,
     active_chunks: HashSet<ChunkId>,
     active_total_length: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct TermPostings {
+    postings: Vec<Posting>,
+    active_document_frequency: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,10 +86,14 @@ impl Bm25Index {
         }
 
         for (term, count) in term_counts {
-            self.postings.entry(term).or_default().push(Posting {
+            let term_postings = self.postings.entry(term).or_default();
+            term_postings.postings.push(Posting {
                 chunk_id,
                 term_frequency: count,
             });
+            if active {
+                term_postings.active_document_frequency += 1;
+            }
         }
 
         self.chunk_lengths.insert(chunk_id, length);
@@ -97,24 +107,36 @@ impl Bm25Index {
             if let Some(length) = self.chunk_lengths.get(&chunk_id) {
                 self.active_total_length = self.active_total_length.saturating_sub(*length);
             }
+            self.decrement_active_document_frequencies(chunk_id);
         }
     }
 
     pub fn from_persisted(config: Bm25Config, persisted: PersistedBm25Index) -> Result<Self> {
         persisted.validate()?;
+        let persisted_active_chunks = persisted.active_chunks;
         let postings = persisted
             .postings
             .into_iter()
             .map(|(term, postings)| {
-                (
-                    term,
-                    postings
-                        .into_iter()
-                        .map(|(chunk_id, term_frequency)| Posting {
+                let mut active_document_frequency = 0;
+                let postings = postings
+                    .into_iter()
+                    .map(|(chunk_id, term_frequency)| {
+                        if persisted_active_chunks.contains(&chunk_id) {
+                            active_document_frequency += 1;
+                        }
+                        Posting {
                             chunk_id,
                             term_frequency,
-                        })
-                        .collect(),
+                        }
+                    })
+                    .collect();
+                (
+                    term,
+                    TermPostings {
+                        postings,
+                        active_document_frequency,
+                    },
                 )
             })
             .collect();
@@ -122,7 +144,7 @@ impl Bm25Index {
             .chunk_lengths
             .into_iter()
             .collect::<HashMap<_, _>>();
-        let active_chunks = persisted.active_chunks.into_iter().collect::<HashSet<_>>();
+        let active_chunks = persisted_active_chunks.into_iter().collect::<HashSet<_>>();
         let active_total_length = active_chunks
             .iter()
             .filter_map(|chunk_id| chunk_lengths.get(chunk_id))
@@ -141,8 +163,9 @@ impl Bm25Index {
         let postings = self
             .postings
             .iter()
-            .map(|(term, postings)| {
-                let term_postings = postings
+            .map(|(term, term_postings)| {
+                let term_postings = term_postings
+                    .postings
                     .iter()
                     .map(|posting| (posting.chunk_id, posting.term_frequency))
                     .collect::<BTreeMap<_, _>>();
@@ -215,20 +238,17 @@ impl Bm25Index {
         let mut matched_terms: HashMap<ChunkId, Vec<String>> = HashMap::new();
 
         for term in query_terms {
-            let Some(postings) = self.postings.get(&term) else {
+            let Some(term_postings) = self.postings.get(&term) else {
                 continue;
             };
 
-            let document_frequency = postings
-                .iter()
-                .filter(|posting| self.active_chunks.contains(&posting.chunk_id))
-                .count();
+            let document_frequency = term_postings.active_document_frequency;
             if document_frequency == 0 {
                 continue;
             }
 
             let idf = inverse_document_frequency(active_count, document_frequency);
-            for posting in postings {
+            for posting in &term_postings.postings {
                 if !self.active_chunks.contains(&posting.chunk_id) {
                     continue;
                 }
@@ -289,8 +309,10 @@ impl Bm25Index {
         let posting_bytes = self
             .postings
             .values()
-            .map(|postings| {
-                postings.len() * (std::mem::size_of::<ChunkId>() + std::mem::size_of::<usize>())
+            .map(|term_postings| {
+                term_postings.postings.len()
+                    * (std::mem::size_of::<ChunkId>() + std::mem::size_of::<usize>())
+                    + std::mem::size_of::<usize>()
             })
             .sum::<usize>();
         let chunk_length_bytes = self.chunk_lengths.len()
@@ -305,24 +327,41 @@ impl Bm25Index {
     }
 
     fn remove_chunk_terms(&mut self, chunk_id: ChunkId) {
-        if self.active_chunks.remove(&chunk_id) {
+        let was_active = self.active_chunks.remove(&chunk_id);
+        if was_active {
             if let Some(length) = self.chunk_lengths.get(&chunk_id) {
                 self.active_total_length = self.active_total_length.saturating_sub(*length);
             }
+            self.decrement_active_document_frequencies(chunk_id);
         }
         self.chunk_lengths.remove(&chunk_id);
 
         let empty_terms = self
             .postings
             .iter_mut()
-            .filter_map(|(term, postings)| {
-                postings.retain(|posting| posting.chunk_id != chunk_id);
-                postings.is_empty().then(|| term.clone())
+            .filter_map(|(term, term_postings)| {
+                term_postings
+                    .postings
+                    .retain(|posting| posting.chunk_id != chunk_id);
+                term_postings.postings.is_empty().then(|| term.clone())
             })
             .collect::<Vec<_>>();
 
         for term in empty_terms {
             self.postings.remove(&term);
+        }
+    }
+
+    fn decrement_active_document_frequencies(&mut self, chunk_id: ChunkId) {
+        for term_postings in self.postings.values_mut() {
+            if term_postings
+                .postings
+                .iter()
+                .any(|posting| posting.chunk_id == chunk_id)
+            {
+                term_postings.active_document_frequency =
+                    term_postings.active_document_frequency.saturating_sub(1);
+            }
         }
     }
 }
@@ -670,6 +709,55 @@ mod tests {
     }
 
     #[test]
+    fn bm25_active_document_frequency_updates_when_chunks_deactivate() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(1, "target shared", true);
+        index.add_chunk(2, "target", true);
+
+        assert_eq!(
+            index
+                .postings
+                .get("target")
+                .map(|postings| postings.active_document_frequency),
+            Some(2)
+        );
+
+        index.deactivate_chunk(1);
+
+        assert_eq!(
+            index
+                .postings
+                .get("target")
+                .map(|postings| postings.active_document_frequency),
+            Some(1)
+        );
+        assert_eq!(index.search_all("shared"), Vec::new());
+    }
+
+    #[test]
+    fn bm25_active_document_frequency_updates_when_chunks_are_replaced() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(1, "old target", true);
+        index.add_chunk(1, "new target", true);
+
+        assert!(!index.postings.contains_key("old"));
+        assert_eq!(
+            index
+                .postings
+                .get("new")
+                .map(|postings| postings.active_document_frequency),
+            Some(1)
+        );
+        assert_eq!(
+            index
+                .postings
+                .get("target")
+                .map(|postings| postings.active_document_frequency),
+            Some(1)
+        );
+    }
+
+    #[test]
     fn bm25_search_is_deterministic_for_tied_scores() {
         let mut index = Bm25Index::new(Bm25Config::default());
         index.add_chunk(20, "same", true);
@@ -764,6 +852,20 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+        assert_eq!(
+            restored
+                .postings
+                .get("swift")
+                .map(|postings| postings.active_document_frequency),
+            Some(1)
+        );
+        assert_eq!(
+            restored
+                .postings
+                .get("rust")
+                .map(|postings| postings.active_document_frequency),
+            Some(0)
+        );
         assert!(restored.search_all("rust").is_empty());
     }
 

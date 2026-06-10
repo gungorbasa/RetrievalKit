@@ -2145,6 +2145,85 @@ mod tests {
     }
 
     #[test]
+    fn saved_index_round_trips_hybrid_search() {
+        let directory = temp_index_dir("hybrid-round-trip");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("swift local search", vec![2.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        index.save_to_dir(&directory).unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+
+        let hits = loaded
+            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        let shared_hit = hits.iter().find(|hit| hit.document_id == "doc-1").unwrap();
+        assert_eq!(shared_hit.trace.vector_rank, Some(1));
+        assert_eq!(shared_hit.trace.keyword_rank, Some(1));
+        assert!(shared_hit.vector_score.is_some());
+        assert!(shared_hit.keyword_score.is_some());
+        assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
+        assert_eq!(
+            shared_hit.trace.fusion,
+            HybridFusionTrace::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4
+            }
+        );
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn saved_index_without_bm25_still_runs_vector_side_hybrid() {
+        let directory = temp_index_dir("hybrid-vector-only-round-trip");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("swift local search", vec![2.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        index
+            .save_to_dir_with_options(&directory, IndexPersistenceOptions::vector_only())
+            .unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+
+        let hits = loaded
+            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        let vector_hit = hits.iter().find(|hit| hit.document_id == "doc-1").unwrap();
+        assert_eq!(vector_hit.trace.vector_rank, Some(1));
+        assert_eq!(vector_hit.trace.keyword_rank, None);
+        assert!(vector_hit.vector_score.is_some());
+        assert_eq!(vector_hit.keyword_score, None);
+        assert_eq!(vector_hit.trace.normalized_vector_score, Some(1.0));
+        assert_eq!(vector_hit.trace.normalized_keyword_score, None);
+        assert!(vector_hit.trace.matched_terms.is_empty());
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
     fn saved_i8_index_round_trips_encoded_vector_search() {
         let directory = temp_index_dir("i8-round-trip");
         let mut index = ExactVectorIndex::try_with_config(
@@ -2163,6 +2242,44 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].chunk_id, 1);
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn saved_i8_index_round_trips_hybrid_search() {
+        let directory = temp_index_dir("i8-hybrid-round-trip");
+        let mut index = ExactVectorIndex::try_with_config(
+            IndexConfig::new(2, VectorMetric::DotProduct)
+                .with_vector_encoding(VectorEncoding::I8ScalarQuantized),
+        )
+        .unwrap();
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("swift local search", vec![2.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        index.save_to_dir(&directory).unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+
+        assert_eq!(loaded.vector_encoding(), VectorEncoding::I8ScalarQuantized);
+        let hits = loaded
+            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        let shared_hit = hits.iter().find(|hit| hit.document_id == "doc-1").unwrap();
+        assert_eq!(shared_hit.trace.vector_rank, Some(1));
+        assert_eq!(shared_hit.trace.keyword_rank, Some(1));
+        assert!(shared_hit.vector_score.is_some());
+        assert!(shared_hit.keyword_score.is_some());
 
         let _ = std::fs::remove_dir_all(directory);
     }

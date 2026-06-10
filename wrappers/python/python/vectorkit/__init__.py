@@ -9,15 +9,24 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from . import where
+from ._native import (
+    DimensionMismatchError,
+    FilterError,
+    Index,
+    PersistenceError,
+    UnsupportedFormatError,
+    VectorKitError,
+)
 from .types import (
     AddDocumentResult,
     ChunkInput,
     DocumentInput,
     Embedding,
+    FileSizeReport,
     Filter,
     FilterCondition,
     FilterOperatorSpec,
-    FileSizeReport,
     HybridFusionTrace,
     HybridHit,
     HybridTrace,
@@ -29,16 +38,6 @@ from .types import (
     SearchTrace,
     WeightedNormalizedFusionTrace,
 )
-from ._native import (
-    DimensionMismatchError,
-    FilterError,
-    Index,
-    PersistenceError,
-    UnsupportedFormatError,
-    VectorKitError,
-)
-from . import where
-
 
 EmbeddingProvider = Callable[[Sequence[str]], Sequence[Sequence[float]]]
 

@@ -30,3 +30,16 @@ files = [
   "python/vectorkit",
   "tests/typing_smoke.py",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["python", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+]

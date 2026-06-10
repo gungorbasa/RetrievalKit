@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, TypeAlias, TypedDict
 
-
 MetadataValue: TypeAlias = str | int | float | bool
 Metadata: TypeAlias = dict[str, MetadataValue]
 Embedding: TypeAlias = Sequence[float]

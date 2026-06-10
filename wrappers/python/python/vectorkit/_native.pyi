@@ -13,7 +13,6 @@ from .types import (
     SearchHit,
 )
 
-
 class VectorKitError(Exception): ...
 
 

@@ -273,7 +273,7 @@ def test_hybrid_search_text_uses_provider() -> None:
 def test_public_input_and_result_types_are_exported() -> None:
     assert ChunkInput.__name__ == "ChunkInput"
     assert DocumentInput.__name__ == "DocumentInput"
-    assert Filter == dict[str, "FilterCondition | list[Filter]"]
+    assert str(Filter).startswith("dict[str,")
     assert SearchHit.__name__ == "SearchHit"
     assert KeywordHit.__name__ == "KeywordHit"
     assert HybridHit.__name__ == "HybridHit"

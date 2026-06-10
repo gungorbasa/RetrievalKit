@@ -30,8 +30,14 @@ environment:
 python -m mypy
 ```
 
-`mypy` is a developer tool only. It is not a runtime dependency of the
-`vectorkit` package.
+Run optional lint checks when `ruff` is installed:
+
+```bash
+python -m ruff check .
+```
+
+`mypy` and `ruff` are developer tools only. They are not runtime dependencies of
+the `vectorkit` package.
 
 ## Build A Local Wheel
 

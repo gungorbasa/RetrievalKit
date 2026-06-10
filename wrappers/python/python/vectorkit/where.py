@@ -2,32 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from .types import Filter, MetadataValue
 
 
-def eq(field: str, value: Any) -> dict[str, Any]:
+def eq(field: str, value: MetadataValue) -> Filter:
     return {field: {"$eq": value}}
 
 
-def ne(field: str, value: Any) -> dict[str, Any]:
+def ne(field: str, value: MetadataValue) -> Filter:
     return {field: {"$ne": value}}
 
 
-def in_(field: str, values: list[Any]) -> dict[str, Any]:
+def in_(field: str, values: list[MetadataValue]) -> Filter:
     return {field: {"$in": values}}
 
 
-def exists(field: str) -> dict[str, Any]:
+def exists(field: str) -> Filter:
     return {field: {"$exists": True}}
 
 
 def range(
     field: str,
     *,
-    gte: Any | None = None,
-    lte: Any | None = None,
-) -> dict[str, Any]:
-    spec: dict[str, Any] = {}
+    gte: MetadataValue | None = None,
+    lte: MetadataValue | None = None,
+) -> Filter:
+    spec: dict[str, MetadataValue] = {}
     if gte is not None:
         spec["$gte"] = gte
     if lte is not None:
@@ -35,9 +35,9 @@ def range(
     return {field: spec}
 
 
-def all(*filters: dict[str, Any]) -> dict[str, Any]:
+def all(*filters: Filter) -> Filter:
     return {"$and": list(filters)}
 
 
-def any(*filters: dict[str, Any]) -> dict[str, Any]:
+def any(*filters: Filter) -> Filter:
     return {"$or": list(filters)}

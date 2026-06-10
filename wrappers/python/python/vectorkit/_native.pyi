@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-from .types import AddDocumentResult, FileSizeReport, HybridHit, KeywordHit, SearchHit
+from .types import (
+    AddDocumentResult,
+    DocumentInput,
+    Embedding,
+    FileSizeReport,
+    Filter,
+    HybridHit,
+    KeywordHit,
+    SearchHit,
+)
 
 
 class VectorKitError(Exception): ...
@@ -41,16 +49,16 @@ class Index:
     @property
     def total_chunk_count(self) -> int: ...
 
-    def add(self, documents: list[dict[str, Any]]) -> list[AddDocumentResult]: ...
+    def add(self, documents: list[DocumentInput]) -> list[AddDocumentResult]: ...
 
     def delete_document(self, document_id: str) -> int: ...
 
     def search(
         self,
-        embedding: list[float],
+        embedding: Embedding,
         *,
         limit: int = 10,
-        where: dict[str, Any] | None = None,
+        where: Filter | None = None,
     ) -> list[SearchHit]: ...
 
     def keyword_search(
@@ -58,16 +66,16 @@ class Index:
         text: str,
         *,
         limit: int = 10,
-        where: dict[str, Any] | None = None,
+        where: Filter | None = None,
     ) -> list[KeywordHit]: ...
 
     def hybrid_search(
         self,
         text: str,
-        embedding: list[float],
+        embedding: Embedding,
         *,
         limit: int = 10,
-        where: dict[str, Any] | None = None,
+        where: Filter | None = None,
         vector_candidates: int | None = None,
         keyword_candidates: int | None = None,
         fusion: str = "weighted",

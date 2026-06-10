@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from vectorkit import (
+    ChunkInput,
     DimensionMismatchError,
+    DocumentInput,
+    Filter,
     HybridHit,
     Index,
     KeywordHit,
@@ -267,7 +270,10 @@ def test_hybrid_search_text_uses_provider() -> None:
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
 
 
-def test_public_result_types_are_exported() -> None:
+def test_public_input_and_result_types_are_exported() -> None:
+    assert ChunkInput.__name__ == "ChunkInput"
+    assert DocumentInput.__name__ == "DocumentInput"
+    assert Filter == dict[str, "FilterCondition | list[Filter]"]
     assert SearchHit.__name__ == "SearchHit"
     assert KeywordHit.__name__ == "KeywordHit"
     assert HybridHit.__name__ == "HybridHit"

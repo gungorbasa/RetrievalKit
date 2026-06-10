@@ -123,15 +123,19 @@ hybrid_hits = hybrid_search_text(
 Common filters use `where={...}`:
 
 ```python
+from vectorkit import Filter
+
+filters: Filter = {
+    "project": "vectorkit",
+    "archived": False,
+    "created_at": {"$gte": 1710000000000},
+    "source": {"$in": ["notes", "docs"]},
+}
+
 index.search(
     query_embedding,
     limit=10,
-    where={
-        "project": "vectorkit",
-        "archived": False,
-        "created_at": {"$gte": 1710000000000},
-        "source": {"$in": ["notes", "docs"]},
-    },
+    where=filters,
 )
 ```
 
@@ -158,12 +162,20 @@ hits = index.hybrid_search(
 before fusion. Use `fusion="rrf"` with `rrf_k=60.0` to use reciprocal rank
 fusion instead of weighted normalized score fusion.
 
-Search methods return dictionaries, with public `TypedDict` shapes available
-for annotations:
+Inputs and search results are plain dictionaries, with public `TypedDict` shapes
+available for annotations:
 
 ```python
-from vectorkit import HybridHit, SearchHit
+from vectorkit import DocumentInput, HybridHit, SearchHit
 
+documents: list[DocumentInput] = [
+    {
+        "id": "doc-1",
+        "chunks": [{"text": "python wrapper", "embedding": query_embedding}],
+    }
+]
+
+index.add(documents)
 vector_hits: list[SearchHit] = index.search(query_embedding)
 hybrid_hits: list[HybridHit] = index.hybrid_search("python wrapper", query_embedding)
 ```

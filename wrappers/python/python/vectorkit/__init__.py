@@ -8,10 +8,15 @@ Rust-produced results.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any
 
 from .types import (
     AddDocumentResult,
+    ChunkInput,
+    DocumentInput,
+    Embedding,
+    Filter,
+    FilterCondition,
+    FilterOperatorSpec,
     FileSizeReport,
     HybridFusionTrace,
     HybridHit,
@@ -44,7 +49,7 @@ def search_text(
     *,
     embed: EmbeddingProvider,
     limit: int = 10,
-    where: Any | None = None,
+    where: Filter | None = None,
 ) -> list[SearchHit]:
     """Embed one query string and search an index.
 
@@ -64,7 +69,7 @@ def hybrid_search_text(
     *,
     embed: EmbeddingProvider,
     limit: int = 10,
-    where: Any | None = None,
+    where: Filter | None = None,
     vector_candidates: int | None = None,
     keyword_candidates: int | None = None,
     fusion: str = "weighted",
@@ -93,8 +98,14 @@ def hybrid_search_text(
 
 __all__ = [
     "AddDocumentResult",
+    "ChunkInput",
     "DimensionMismatchError",
+    "DocumentInput",
+    "Embedding",
     "EmbeddingProvider",
+    "Filter",
+    "FilterCondition",
+    "FilterOperatorSpec",
     "FileSizeReport",
     "FilterError",
     "HybridFusionTrace",

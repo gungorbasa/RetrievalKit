@@ -1,4 +1,4 @@
-"""Public type shapes returned by the VectorKit Python API."""
+"""Public type shapes accepted and returned by the VectorKit Python API."""
 
 from __future__ import annotations
 
@@ -7,6 +7,41 @@ from typing import Literal, TypeAlias, TypedDict
 
 MetadataValue: TypeAlias = str | int | float | bool
 Metadata: TypeAlias = dict[str, MetadataValue]
+Embedding: TypeAlias = list[float]
+
+
+class ChunkInputRequired(TypedDict):
+    text: str
+    embedding: Embedding
+
+
+class ChunkInput(ChunkInputRequired, total=False):
+    metadata: Metadata
+
+
+class DocumentInputRequired(TypedDict):
+    id: str
+    chunks: list[ChunkInput]
+
+
+class DocumentInput(DocumentInputRequired, total=False):
+    metadata: Metadata
+
+
+FilterOperatorSpec = TypedDict(
+    "FilterOperatorSpec",
+    {
+        "$eq": MetadataValue,
+        "$ne": MetadataValue,
+        "$in": list[MetadataValue],
+        "$gte": MetadataValue,
+        "$lte": MetadataValue,
+        "$exists": bool,
+    },
+    total=False,
+)
+FilterCondition: TypeAlias = MetadataValue | FilterOperatorSpec
+Filter: TypeAlias = dict[str, "FilterCondition | list[Filter]"]
 
 
 class AddDocumentResult(TypedDict):
@@ -85,6 +120,12 @@ class FileSizeReport(TypedDict):
 
 __all__ = [
     "AddDocumentResult",
+    "ChunkInput",
+    "DocumentInput",
+    "Embedding",
+    "Filter",
+    "FilterCondition",
+    "FilterOperatorSpec",
     "FileSizeReport",
     "HybridFusionTrace",
     "HybridHit",

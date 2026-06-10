@@ -2697,8 +2697,13 @@ mod tests {
         assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
         assert_eq!(
             shared_hit.trace.fusion,
-            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
+            HybridFusionTrace::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4
+            }
         );
+        assert!(shared_hit.trace.normalized_vector_score.is_some());
+        assert!(shared_hit.trace.normalized_keyword_score.is_some());
     }
 
     #[test]
@@ -2772,9 +2777,8 @@ mod tests {
             )
             .unwrap();
 
-        let hits = index
-            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
-            .unwrap();
+        let query = HybridQuery::new("swift search", vec![1.0, 0.0], 10).with_rrf_k(60.0);
+        let hits = index.hybrid_search(&query).unwrap();
         let hit = &hits[0];
 
         let expected = 1.0 / (60.0 + hit.trace.vector_rank.unwrap() as f32)
@@ -2858,6 +2862,161 @@ mod tests {
             error,
             VectorKitError::InvalidFormat {
                 message: "at least one hybrid fusion weight must be greater than zero".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn hybrid_search_applies_metadata_filters_to_both_modes() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut vector_document = document("doc-vector-excluded");
+        vector_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                vector_document,
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+
+        let mut keyword_document = document("doc-keyword-excluded");
+        keyword_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                keyword_document,
+                vec![chunk_input("rare keyword", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let mut allowed_document = document("doc-allowed");
+        allowed_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index
+            .upsert_document(
+                allowed_document,
+                vec![chunk_input("rare keyword", vec![0.0, 0.5])],
+            )
+            .unwrap();
+
+        let query =
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+                field: "source".to_owned(),
+                value: MetadataValue::String("transcript".to_owned()),
+            });
+        let hits = index.hybrid_search(&query).unwrap();
+
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.document_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["doc-allowed"]
+        );
+        assert!(hits[0].trace.filter_matched);
+    }
+
+    #[test]
+    fn hybrid_search_excludes_deleted_documents() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-deleted"),
+                vec![chunk_input("rare keyword", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-active"),
+                vec![chunk_input("active fallback", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        assert_eq!(index.delete_document("doc-deleted"), 1);
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("rare keyword", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        assert!(!hits.iter().any(|hit| hit.document_id == "doc-deleted"));
+    }
+
+    #[test]
+    fn hybrid_search_excludes_superseded_chunks() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let old_chunk_ids = index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("old codename alpha", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        let new_chunk_ids = index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("new codename beta", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("old alpha", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        assert!(!hits.iter().any(|hit| old_chunk_ids.contains(&hit.chunk_id)));
+        assert!(hits.iter().any(|hit| new_chunk_ids.contains(&hit.chunk_id)));
+        for hit in hits {
+            let chunk = index.chunk(hit.chunk_id).unwrap();
+            assert_ne!(chunk.text, "old codename alpha");
+        }
+    }
+
+    #[test]
+    fn hybrid_search_top_k_zero_returns_empty() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("rare keyword", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("rare keyword", vec![1.0, 0.0], 0))
+            .unwrap();
+
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn hybrid_search_dimension_mismatch_returns_error() {
+        let index = ExactVectorIndex::new(3, VectorMetric::DotProduct);
+        let query = HybridQuery::new("anything", vec![1.0, 0.0], 10);
+
+        let error = index.hybrid_search(&query).unwrap_err();
+
+        assert_eq!(
+            error,
+            VectorKitError::InvalidDimension {
+                expected: 3,
+                actual: 2
+            }
+        );
+    }
+
+    #[test]
+    fn hybrid_search_rejects_invalid_rrf_k() {
+        let index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let query = HybridQuery::new("anything", vec![1.0, 0.0], 10).with_rrf_k(0.0);
+
+        let error = index.hybrid_search(&query).unwrap_err();
+
+        assert_eq!(
+            error,
+            VectorKitError::InvalidFormat {
+                message: "rrf_k must be finite and greater than zero".to_owned()
             }
         );
     }

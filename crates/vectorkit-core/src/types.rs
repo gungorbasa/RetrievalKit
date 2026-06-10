@@ -154,7 +154,10 @@ impl HybridQuery {
             vector_top_k: 50,
             keyword_top_k: 50,
             filter: None,
-            fusion: HybridFusion::ReciprocalRank { rrf_k: 60.0 },
+            fusion: HybridFusion::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4,
+            },
         }
     }
 

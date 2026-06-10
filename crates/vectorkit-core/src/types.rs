@@ -132,6 +132,127 @@ pub struct KeywordHit {
     pub matched_terms: Vec<String>,
 }
 
+/// Hybrid vector + BM25 search request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HybridQuery {
+    pub text: String,
+    pub embedding: Vec<f32>,
+    pub top_k: usize,
+    pub vector_top_k: usize,
+    pub keyword_top_k: usize,
+    pub filter: Option<Filter>,
+    pub fusion: HybridFusion,
+}
+
+impl HybridQuery {
+    /// Creates a hybrid search request with stable V1 candidate defaults.
+    pub fn new(text: impl Into<String>, embedding: Vec<f32>, top_k: usize) -> Self {
+        Self {
+            text: text.into(),
+            embedding,
+            top_k,
+            vector_top_k: 50,
+            keyword_top_k: 50,
+            filter: None,
+            fusion: HybridFusion::ReciprocalRank { rrf_k: 60.0 },
+        }
+    }
+
+    /// Adds a metadata filter to both vector and BM25 candidate generation.
+    pub fn with_filter(mut self, filter: Filter) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Sets the number of vector and keyword candidates fused before final top-k.
+    pub fn with_candidate_limits(mut self, vector_top_k: usize, keyword_top_k: usize) -> Self {
+        self.vector_top_k = vector_top_k;
+        self.keyword_top_k = keyword_top_k;
+        self
+    }
+
+    /// Sets the RRF smoothing constant used by reciprocal rank fusion.
+    pub fn with_rrf_k(mut self, rrf_k: f32) -> Self {
+        self.fusion = HybridFusion::ReciprocalRank { rrf_k };
+        self
+    }
+
+    /// Uses min-max normalized vector and BM25 scores with explicit weights.
+    pub fn with_weighted_normalized_score(
+        mut self,
+        vector_weight: f32,
+        keyword_weight: f32,
+    ) -> Self {
+        self.fusion = HybridFusion::WeightedNormalizedScore {
+            vector_weight,
+            keyword_weight,
+        };
+        self
+    }
+}
+
+/// Hybrid rank fusion strategy.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HybridFusion {
+    ReciprocalRank {
+        rrf_k: f32,
+    },
+    WeightedNormalizedScore {
+        vector_weight: f32,
+        keyword_weight: f32,
+    },
+}
+
+/// Single ranked hybrid search result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HybridHit {
+    pub chunk_id: ChunkId,
+    pub document_id: String,
+    pub score: f32,
+    pub vector_score: Option<f32>,
+    pub keyword_score: Option<f32>,
+    pub trace: HybridTrace,
+}
+
+/// Debug data explaining vector, keyword, and fusion contributions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HybridTrace {
+    pub vector_rank: Option<usize>,
+    pub keyword_rank: Option<usize>,
+    pub normalized_vector_score: Option<f32>,
+    pub normalized_keyword_score: Option<f32>,
+    pub matched_terms: Vec<String>,
+    pub fusion: HybridFusionTrace,
+    pub filter_matched: bool,
+}
+
+/// Fusion data copied into traces so callers can reproduce the score.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HybridFusionTrace {
+    ReciprocalRank {
+        rrf_k: f32,
+    },
+    WeightedNormalizedScore {
+        vector_weight: f32,
+        keyword_weight: f32,
+    },
+}
+
+impl From<HybridFusion> for HybridFusionTrace {
+    fn from(fusion: HybridFusion) -> Self {
+        match fusion {
+            HybridFusion::ReciprocalRank { rrf_k } => Self::ReciprocalRank { rrf_k },
+            HybridFusion::WeightedNormalizedScore {
+                vector_weight,
+                keyword_weight,
+            } => Self::WeightedNormalizedScore {
+                vector_weight,
+                keyword_weight,
+            },
+        }
+    }
+}
+
 /// Configuration for an exact vector index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexConfig {

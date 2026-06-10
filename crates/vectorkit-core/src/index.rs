@@ -13,9 +13,10 @@ use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
 use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, IndexConfig, IndexFileSizeReport,
-    IndexPersistenceOptions, IndexSizeEstimate, KeywordHit, KeywordQuery, SearchHit, SearchQuery,
-    SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
+    Chunk, ChunkId, ChunkInput, Document, HybridFusion, HybridFusionTrace, HybridHit, HybridQuery,
+    HybridTrace, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions, IndexSizeEstimate,
+    KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding,
+    VectorMetric,
 };
 
 const FORMAT_VERSION: u32 = 1;
@@ -672,6 +673,81 @@ impl ExactVectorIndex {
         }
 
         Ok(hits)
+    }
+
+    /// Performs hybrid exact vector + BM25 search using the configured fusion strategy.
+    pub fn hybrid_search(&self, query: &HybridQuery) -> Result<Vec<HybridHit>> {
+        self.validate_dimension(query.embedding.len())?;
+
+        if query.top_k == 0 {
+            return Ok(Vec::new());
+        }
+
+        validate_hybrid_fusion(query.fusion)?;
+
+        let vector_hits = self.search(&SearchQuery {
+            embedding: query.embedding.clone(),
+            top_k: query.vector_top_k,
+            filter: query.filter.clone(),
+        })?;
+        let keyword_hits = self.keyword_search(&KeywordQuery {
+            text: query.text.clone(),
+            top_k: query.keyword_top_k,
+            filter: query.filter.clone(),
+        })?;
+
+        let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
+        for (rank_index, hit) in vector_hits.iter().enumerate() {
+            let rank = rank_index + 1;
+            let candidate = candidates
+                .entry(hit.chunk_id)
+                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+            candidate.document_id.clone_from(&hit.document_id);
+            candidate.vector_score = Some(hit.score);
+            candidate.vector_rank = Some(rank);
+        }
+
+        for (rank_index, hit) in keyword_hits.iter().enumerate() {
+            let rank = rank_index + 1;
+            let candidate = candidates
+                .entry(hit.chunk_id)
+                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+            candidate.document_id.clone_from(&hit.document_id);
+            candidate.keyword_score = Some(hit.score);
+            candidate.keyword_rank = Some(rank);
+            candidate.matched_terms.clone_from(&hit.matched_terms);
+        }
+
+        let mut candidates = candidates.into_values().collect::<Vec<_>>();
+        score_hybrid_candidates(&mut candidates, query.fusion)?;
+        sort_hybrid_candidates(&mut candidates);
+
+        Ok(candidates
+            .into_iter()
+            .take(query.top_k)
+            .filter_map(|candidate| {
+                let chunk = self.chunk(candidate.chunk_id)?;
+                if chunk.deleted {
+                    return None;
+                }
+                Some(HybridHit {
+                    chunk_id: candidate.chunk_id,
+                    document_id: candidate.document_id,
+                    score: candidate.hybrid_score,
+                    vector_score: candidate.vector_score,
+                    keyword_score: candidate.keyword_score,
+                    trace: HybridTrace {
+                        vector_rank: candidate.vector_rank,
+                        keyword_rank: candidate.keyword_rank,
+                        normalized_vector_score: candidate.normalized_vector_score,
+                        normalized_keyword_score: candidate.normalized_keyword_score,
+                        matched_terms: candidate.matched_terms,
+                        fusion: HybridFusionTrace::from(query.fusion),
+                        filter_matched: true,
+                    },
+                })
+            })
+            .collect())
     }
 
     fn validate_dimension(&self, actual: usize) -> Result<()> {
@@ -1432,6 +1508,37 @@ struct ScoredCandidate {
     score: f32,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct HybridCandidate {
+    chunk_id: ChunkId,
+    document_id: String,
+    vector_score: Option<f32>,
+    vector_rank: Option<usize>,
+    keyword_score: Option<f32>,
+    keyword_rank: Option<usize>,
+    normalized_vector_score: Option<f32>,
+    normalized_keyword_score: Option<f32>,
+    matched_terms: Vec<String>,
+    hybrid_score: f32,
+}
+
+impl HybridCandidate {
+    fn new(chunk_id: ChunkId, document_id: String) -> Self {
+        Self {
+            chunk_id,
+            document_id,
+            vector_score: None,
+            vector_rank: None,
+            keyword_score: None,
+            keyword_rank: None,
+            normalized_vector_score: None,
+            normalized_keyword_score: None,
+            matched_terms: Vec::new(),
+            hybrid_score: 0.0,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct I8ScoringParts<'a> {
     query_values: &'a [i8],
@@ -1482,6 +1589,133 @@ fn compare_hits(left: &ScoredCandidate, right: &ScoredCandidate) -> Ordering {
 
 fn hit_ranks_before(left: &ScoredCandidate, right: &ScoredCandidate) -> bool {
     compare_hits(left, right).is_lt()
+}
+
+fn validate_hybrid_fusion(fusion: HybridFusion) -> Result<()> {
+    match fusion {
+        HybridFusion::ReciprocalRank { rrf_k } => validate_positive_finite(rrf_k, "rrf_k"),
+        HybridFusion::WeightedNormalizedScore {
+            vector_weight,
+            keyword_weight,
+        } => {
+            if !vector_weight.is_finite() || vector_weight < 0.0 {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "vector_weight must be finite and non-negative".to_owned(),
+                });
+            }
+            if !keyword_weight.is_finite() || keyword_weight < 0.0 {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "keyword_weight must be finite and non-negative".to_owned(),
+                });
+            }
+            if vector_weight == 0.0 && keyword_weight == 0.0 {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "at least one hybrid fusion weight must be greater than zero"
+                        .to_owned(),
+                });
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_positive_finite(value: f32, label: &str) -> Result<()> {
+    if value.is_finite() && value > 0.0 {
+        Ok(())
+    } else {
+        Err(VectorKitError::InvalidFormat {
+            message: format!("{label} must be finite and greater than zero"),
+        })
+    }
+}
+
+fn rrf_component(rank: Option<usize>, rrf_k: f32) -> f32 {
+    rank.map_or(0.0, |rank| 1.0 / (rrf_k + rank as f32))
+}
+
+fn score_hybrid_candidates(candidates: &mut [HybridCandidate], fusion: HybridFusion) -> Result<()> {
+    validate_hybrid_fusion(fusion)?;
+    match fusion {
+        HybridFusion::ReciprocalRank { rrf_k } => {
+            for candidate in candidates {
+                candidate.normalized_vector_score = None;
+                candidate.normalized_keyword_score = None;
+                candidate.hybrid_score = rrf_component(candidate.vector_rank, rrf_k)
+                    + rrf_component(candidate.keyword_rank, rrf_k);
+            }
+        }
+        HybridFusion::WeightedNormalizedScore {
+            vector_weight,
+            keyword_weight,
+        } => {
+            let vector_range = score_range(candidates.iter().filter_map(|c| c.vector_score));
+            let keyword_range = score_range(candidates.iter().filter_map(|c| c.keyword_score));
+
+            for candidate in candidates {
+                let normalized_vector_score = normalize_score(candidate.vector_score, vector_range);
+                let normalized_keyword_score =
+                    normalize_score(candidate.keyword_score, keyword_range);
+                candidate.normalized_vector_score = normalized_vector_score;
+                candidate.normalized_keyword_score = normalized_keyword_score;
+                candidate.hybrid_score = vector_weight * normalized_vector_score.unwrap_or(0.0)
+                    + keyword_weight * normalized_keyword_score.unwrap_or(0.0);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn score_range(scores: impl Iterator<Item = f32>) -> Option<(f32, f32)> {
+    let mut min_score = f32::INFINITY;
+    let mut max_score = f32::NEG_INFINITY;
+    let mut found = false;
+
+    for score in scores {
+        if !score.is_finite() {
+            continue;
+        }
+        min_score = min_score.min(score);
+        max_score = max_score.max(score);
+        found = true;
+    }
+
+    found.then_some((min_score, max_score))
+}
+
+fn normalize_score(score: Option<f32>, range: Option<(f32, f32)>) -> Option<f32> {
+    let score = score?;
+    if !score.is_finite() {
+        return None;
+    }
+    let (min_score, max_score) = range?;
+    let width = max_score - min_score;
+    if width <= f32::EPSILON {
+        Some(1.0)
+    } else {
+        Some((score - min_score) / width)
+    }
+}
+
+fn sort_hybrid_candidates(candidates: &mut [HybridCandidate]) {
+    candidates.sort_by(compare_hybrid_candidates);
+}
+
+fn compare_hybrid_candidates(left: &HybridCandidate, right: &HybridCandidate) -> Ordering {
+    right
+        .hybrid_score
+        .total_cmp(&left.hybrid_score)
+        .then_with(|| optional_rank_cmp(left.vector_rank, right.vector_rank))
+        .then_with(|| optional_rank_cmp(left.keyword_rank, right.keyword_rank))
+        .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+}
+
+fn optional_rank_cmp(left: Option<usize>, right: Option<usize>) -> Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
 }
 
 #[cfg(test)]
@@ -2433,6 +2667,199 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].document_id, "doc-2");
+    }
+
+    #[test]
+    fn hybrid_search_merges_shared_candidates_with_trace() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("swift local search", vec![2.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("rust vector core", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        let shared_hit = hits.iter().find(|hit| hit.document_id == "doc-1").unwrap();
+        assert_eq!(shared_hit.vector_score, Some(2.0));
+        assert!(shared_hit.keyword_score.is_some());
+        assert_eq!(shared_hit.trace.vector_rank, Some(1));
+        assert_eq!(shared_hit.trace.keyword_rank, Some(1));
+        assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
+        assert_eq!(
+            shared_hit.trace.fusion,
+            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
+        );
+    }
+
+    #[test]
+    fn hybrid_search_returns_vector_only_candidates() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword"),
+                vec![chunk_input("rare keyword", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("rare keyword", vec![1.0, 0.0], 10))
+            .unwrap();
+
+        let vector_hit = hits
+            .iter()
+            .find(|hit| hit.document_id == "doc-vector")
+            .unwrap();
+        assert_eq!(vector_hit.trace.vector_rank, Some(1));
+        assert_eq!(vector_hit.trace.keyword_rank, None);
+        assert_eq!(vector_hit.keyword_score, None);
+        assert!(vector_hit.trace.matched_terms.is_empty());
+    }
+
+    #[test]
+    fn hybrid_search_returns_keyword_only_candidates() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword"),
+                vec![chunk_input("rare keyword", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let query =
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10).with_candidate_limits(1, 10);
+        let hits = index.hybrid_search(&query).unwrap();
+
+        let keyword_hit = hits
+            .iter()
+            .find(|hit| hit.document_id == "doc-keyword")
+            .unwrap();
+        assert_eq!(keyword_hit.trace.vector_rank, None);
+        assert_eq!(keyword_hit.trace.keyword_rank, Some(1));
+        assert_eq!(keyword_hit.vector_score, None);
+        assert!(keyword_hit.keyword_score.is_some());
+        assert_eq!(keyword_hit.trace.matched_terms, vec!["keyword", "rare"]);
+    }
+
+    #[test]
+    fn hybrid_search_rrf_score_matches_ranks() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("swift local search", vec![2.0, 0.0])],
+            )
+            .unwrap();
+
+        let hits = index
+            .hybrid_search(&HybridQuery::new("swift search", vec![1.0, 0.0], 10))
+            .unwrap();
+        let hit = &hits[0];
+
+        let expected = 1.0 / (60.0 + hit.trace.vector_rank.unwrap() as f32)
+            + 1.0 / (60.0 + hit.trace.keyword_rank.unwrap() as f32);
+        assert_close(hit.score, expected);
+    }
+
+    #[test]
+    fn hybrid_search_weighted_normalized_score_can_prioritize_keyword_hits() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword"),
+                vec![chunk_input("rare keyword", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let query = HybridQuery::new("rare keyword", vec![1.0, 0.0], 10)
+            .with_weighted_normalized_score(0.25, 0.75);
+        let hits = index.hybrid_search(&query).unwrap();
+
+        assert_eq!(hits[0].document_id, "doc-keyword");
+        assert_eq!(
+            hits[0].trace.fusion,
+            HybridFusionTrace::WeightedNormalizedScore {
+                vector_weight: 0.25,
+                keyword_weight: 0.75
+            }
+        );
+        assert_eq!(hits[0].trace.normalized_vector_score, Some(0.0));
+        assert_eq!(hits[0].trace.normalized_keyword_score, Some(1.0));
+        assert_close(hits[0].score, 0.75);
+
+        assert_eq!(hits[1].document_id, "doc-vector");
+        assert_eq!(hits[1].trace.normalized_vector_score, Some(1.0));
+        assert_eq!(hits[1].trace.normalized_keyword_score, None);
+        assert_close(hits[1].score, 0.25);
+    }
+
+    #[test]
+    fn hybrid_search_weighted_normalized_score_can_prioritize_vector_hits() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword"),
+                vec![chunk_input("rare keyword", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        let query = HybridQuery::new("rare keyword", vec![1.0, 0.0], 10)
+            .with_weighted_normalized_score(0.75, 0.25);
+        let hits = index.hybrid_search(&query).unwrap();
+
+        assert_eq!(hits[0].document_id, "doc-vector");
+        assert_close(hits[0].score, 0.75);
+        assert_eq!(hits[1].document_id, "doc-keyword");
+        assert_close(hits[1].score, 0.25);
+    }
+
+    #[test]
+    fn hybrid_search_rejects_invalid_weighted_normalized_scores() {
+        let index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let query = HybridQuery::new("anything", vec![1.0, 0.0], 10)
+            .with_weighted_normalized_score(0.0, 0.0);
+
+        let error = index.hybrid_search(&query).unwrap_err();
+
+        assert_eq!(
+            error,
+            VectorKitError::InvalidFormat {
+                message: "at least one hybrid fusion weight must be greater than zero".to_owned()
+            }
+        );
     }
 
     #[test]

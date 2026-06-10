@@ -42,7 +42,7 @@ wheel is only for compatible macOS arm64 CPython 3.14 environments.
 ## Example
 
 ```python
-from vectorkit import Index, search_text
+from vectorkit import Index, hybrid_search_text, search_text
 
 
 def embed(texts):
@@ -80,6 +80,16 @@ hits = search_text(
     limit=5,
     where={"project": "vectorkit", "archived": False},
 )
+
+hybrid_hits = hybrid_search_text(
+    index,
+    "How does the wrapper work?",
+    embed=embed,
+    limit=5,
+    where={"project": "vectorkit", "archived": False},
+    vector_candidates=10,
+    keyword_candidates=25,
+)
 ```
 
 ## Filter Syntax
@@ -98,6 +108,29 @@ index.search(
     },
 )
 ```
+
+## Hybrid Search
+
+Hybrid search combines vector and BM25 keyword candidates in the Rust core:
+
+```python
+hits = index.hybrid_search(
+    "python wrapper",
+    query_embedding,
+    limit=10,
+    where={"project": "vectorkit"},
+    vector_candidates=10,
+    keyword_candidates=25,
+    fusion="weighted",
+    vector_weight=0.6,
+    keyword_weight=0.4,
+)
+```
+
+`limit` is the final number of fused hits. `vector_candidates` and
+`keyword_candidates` control how many candidates each retrieval mode contributes
+before fusion. Use `fusion="rrf"` with `rrf_k=60.0` to use reciprocal rank
+fusion instead of weighted normalized score fusion.
 
 Complex filters can use helper constructors:
 

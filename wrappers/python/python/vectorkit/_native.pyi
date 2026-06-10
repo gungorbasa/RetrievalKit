@@ -59,6 +59,21 @@ class Index:
         where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]: ...
 
+    def hybrid_search(
+        self,
+        text: str,
+        embedding: list[float],
+        *,
+        limit: int = 10,
+        where: dict[str, Any] | None = None,
+        vector_candidates: int | None = None,
+        keyword_candidates: int | None = None,
+        fusion: str = "weighted",
+        vector_weight: float = 0.6,
+        keyword_weight: float = 0.4,
+        rrf_k: float = 60.0,
+    ) -> list[dict[str, Any]]: ...
+
     def save(
         self,
         path: str | Path,

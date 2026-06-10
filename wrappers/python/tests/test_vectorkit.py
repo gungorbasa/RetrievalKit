@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vectorkit import DimensionMismatchError, Index, search_text, where
+from vectorkit import DimensionMismatchError, Index, hybrid_search_text, search_text, where
 
 
 def embed(texts: list[str]) -> list[list[float]]:
@@ -95,6 +95,104 @@ def test_where_helpers_and_keyword_search() -> None:
     assert "python" in keyword_hits[0]["matched_terms"]
 
 
+def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
+    index = Index(dimension=4)
+    index.add(
+        documents=[
+            {
+                "id": "doc-vector",
+                "chunks": [
+                    {
+                        "text": "semantic only",
+                        "embedding": [3.0, 0.0, 0.0, 0.0],
+                    }
+                ],
+            },
+            {
+                "id": "doc-keyword",
+                "chunks": [
+                    {
+                        "text": "rare keyword keyword",
+                        "embedding": [0.0, 1.0, 0.0, 0.0],
+                    }
+                ],
+            },
+        ]
+    )
+
+    hits = index.hybrid_search(
+        "rare keyword",
+        [1.0, 0.0, 0.0, 0.0],
+        limit=10,
+        vector_candidates=1,
+        keyword_candidates=1,
+        vector_weight=0.25,
+        keyword_weight=0.75,
+    )
+
+    assert {hit["document_id"] for hit in hits} == {"doc-vector", "doc-keyword"}
+    keyword_hit = next(hit for hit in hits if hit["document_id"] == "doc-keyword")
+    assert keyword_hit["keyword_score"] is not None
+    assert keyword_hit["vector_score"] is None
+    assert keyword_hit["matched_terms"] == ["keyword", "rare"]
+    assert keyword_hit["trace"]["keyword_rank"] == 1
+    assert keyword_hit["trace"]["vector_rank"] is None
+    assert keyword_hit["trace"]["fusion"] == {
+        "kind": "weighted_normalized",
+        "vector_weight": 0.25,
+        "keyword_weight": 0.75,
+    }
+
+    vector_only = index.hybrid_search(
+        "missing",
+        [1.0, 0.0, 0.0, 0.0],
+        limit=10,
+        vector_candidates=1,
+        keyword_candidates=0,
+    )
+    assert [hit["document_id"] for hit in vector_only] == ["doc-vector"]
+
+
+def test_hybrid_search_supports_rrf_and_filters() -> None:
+    index = Index(dimension=4)
+    index.add(
+        documents=[
+            {
+                "id": "doc-1",
+                "metadata": {"project": "vectorkit"},
+                "chunks": [
+                    {
+                        "text": "python wrapper",
+                        "embedding": [1.0, 0.0, 0.0, 0.0],
+                    }
+                ],
+            },
+            {
+                "id": "doc-2",
+                "metadata": {"project": "other"},
+                "chunks": [
+                    {
+                        "text": "python wrapper",
+                        "embedding": [1.0, 0.0, 0.0, 0.0],
+                    }
+                ],
+            },
+        ]
+    )
+
+    hits = index.hybrid_search(
+        "python",
+        [1.0, 0.0, 0.0, 0.0],
+        where={"project": "vectorkit"},
+        fusion="rrf",
+        rrf_k=42.0,
+    )
+
+    assert [hit["document_id"] for hit in hits] == ["doc-1"]
+    assert hits[0]["trace"]["filter_matched"] is True
+    assert hits[0]["trace"]["fusion"] == {"kind": "rrf", "rrf_k": 42.0}
+
+
 def test_save_load_round_trip(tmp_path) -> None:
     index = Index(dimension=4)
     index.add(
@@ -140,4 +238,21 @@ def test_search_text_uses_provider() -> None:
     )
 
     hits = search_text(index, "query alpha", embed=embed)
+    assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
+
+
+def test_hybrid_search_text_uses_provider() -> None:
+    index = Index(dimension=4)
+    index.add(
+        documents=[
+            {
+                "id": "doc-alpha",
+                "chunks": [
+                    {"text": "alpha", "embedding": [1.0, 0.0, 0.0, 0.0]},
+                ],
+            }
+        ]
+    )
+
+    hits = hybrid_search_text(index, "query alpha", embed=embed)
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]

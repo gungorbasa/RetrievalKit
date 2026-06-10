@@ -5,9 +5,9 @@ use pyo3::exceptions::{PyException, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 use vectorkit_core::{
-    ChunkInput, Document, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, KeywordHit,
-    KeywordQuery, Metadata, MetadataValue, SearchHit, SearchQuery, StoredChunk, VectorEncoding,
-    VectorKitError as CoreError, VectorMetric,
+    ChunkInput, Document, ExactVectorIndex, Filter, HybridFusionTrace, HybridHit, HybridQuery,
+    IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata, MetadataValue, SearchHit,
+    SearchQuery, StoredChunk, VectorEncoding, VectorKitError as CoreError, VectorMetric,
 };
 
 pyo3::create_exception!(_native, VectorKitError, PyException);
@@ -143,6 +143,59 @@ impl PyIndex {
         };
         let hits = self.inner.keyword_search(&query).map_err(py_error)?;
         keyword_hits_to_py(py, &self.inner, &hits)
+    }
+
+    #[pyo3(signature = (
+        text,
+        embedding,
+        *,
+        limit = 10,
+        r#where = None,
+        vector_candidates = None,
+        keyword_candidates = None,
+        fusion = "weighted",
+        vector_weight = 0.6,
+        keyword_weight = 0.4,
+        rrf_k = 60.0
+    ))]
+    // PyO3 maps the Pythonic keyword-only API directly to Rust parameters here.
+    #[allow(clippy::too_many_arguments)]
+    fn hybrid_search(
+        &self,
+        py: Python<'_>,
+        text: &str,
+        embedding: Vec<f32>,
+        limit: usize,
+        r#where: Option<&Bound<'_, PyAny>>,
+        vector_candidates: Option<usize>,
+        keyword_candidates: Option<usize>,
+        fusion: &str,
+        vector_weight: f32,
+        keyword_weight: f32,
+        rrf_k: f32,
+    ) -> PyResult<Py<PyAny>> {
+        let filter = parse_optional_filter(r#where)?;
+        let mut query = HybridQuery::new(text, embedding, limit);
+        let vector_top_k = vector_candidates.unwrap_or(query.vector_top_k);
+        let keyword_top_k = keyword_candidates.unwrap_or(query.keyword_top_k);
+        query = query.with_candidate_limits(vector_top_k, keyword_top_k);
+        if let Some(filter) = filter {
+            query = query.with_filter(filter);
+        }
+        query = match fusion.to_ascii_lowercase().as_str() {
+            "weighted" | "weighted_normalized" | "weighted-normalized" => {
+                query.with_weighted_normalized_score(vector_weight, keyword_weight)
+            }
+            "rrf" | "reciprocal_rank" | "reciprocal-rank" => query.with_rrf_k(rrf_k),
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "unsupported fusion '{fusion}'; expected 'weighted' or 'rrf'"
+                )));
+            }
+        };
+
+        let hits = self.inner.hybrid_search(&query).map_err(py_error)?;
+        hybrid_hits_to_py(py, &self.inner, &hits)
     }
 
     #[pyo3(signature = (path, *, include_bm25 = true))]
@@ -456,6 +509,65 @@ fn keyword_hits_to_py(
         result.append(item)?;
     }
     Ok(result.into_any().unbind())
+}
+
+fn hybrid_hits_to_py(
+    py: Python<'_>,
+    index: &ExactVectorIndex,
+    hits: &[HybridHit],
+) -> PyResult<Py<PyAny>> {
+    let result = PyList::empty(py);
+    for hit in hits {
+        let chunk = index
+            .chunk(hit.chunk_id)
+            .ok_or_else(|| VectorKitError::new_err("hybrid hit referenced a missing chunk"))?;
+        let item = PyDict::new(py);
+        item.set_item("chunk_id", hit.chunk_id)?;
+        item.set_item("document_id", &hit.document_id)?;
+        item.set_item("text", &chunk.text)?;
+        item.set_item("metadata", metadata_to_py(py, &chunk.metadata)?)?;
+        item.set_item("score", hit.score)?;
+        item.set_item("vector_score", hit.vector_score)?;
+        item.set_item("keyword_score", hit.keyword_score)?;
+        item.set_item("matched_terms", &hit.trace.matched_terms)?;
+        item.set_item("trace", hybrid_trace_to_py(py, hit)?)?;
+        result.append(item)?;
+    }
+    Ok(result.into_any().unbind())
+}
+
+fn hybrid_trace_to_py(py: Python<'_>, hit: &HybridHit) -> PyResult<Py<PyAny>> {
+    let trace = PyDict::new(py);
+    trace.set_item("vector_rank", hit.trace.vector_rank)?;
+    trace.set_item("keyword_rank", hit.trace.keyword_rank)?;
+    trace.set_item("normalized_vector_score", hit.trace.normalized_vector_score)?;
+    trace.set_item(
+        "normalized_keyword_score",
+        hit.trace.normalized_keyword_score,
+    )?;
+    trace.set_item("matched_terms", &hit.trace.matched_terms)?;
+    trace.set_item("filter_matched", hit.trace.filter_matched)?;
+    trace.set_item("fusion", fusion_trace_to_py(py, hit.trace.fusion)?)?;
+    Ok(trace.into_any().unbind())
+}
+
+fn fusion_trace_to_py(py: Python<'_>, fusion: HybridFusionTrace) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    match fusion {
+        HybridFusionTrace::ReciprocalRank { rrf_k } => {
+            dict.set_item("kind", "rrf")?;
+            dict.set_item("rrf_k", rrf_k)?;
+        }
+        HybridFusionTrace::WeightedNormalizedScore {
+            vector_weight,
+            keyword_weight,
+        } => {
+            dict.set_item("kind", "weighted_normalized")?;
+            dict.set_item("vector_weight", vector_weight)?;
+            dict.set_item("keyword_weight", keyword_weight)?;
+        }
+    }
+    Ok(dict.into_any().unbind())
 }
 
 fn metadata_to_py(py: Python<'_>, metadata: &Metadata) -> PyResult<Py<PyAny>> {

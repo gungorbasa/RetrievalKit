@@ -6,11 +6,21 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, TypeAlias
 
 import yaml
 from fastembed import TextEmbedding
 from vectorkit import Index
+from vectorkit import where as vk_where
+
+if TYPE_CHECKING:
+    from vectorkit import DocumentInput, Filter, HybridHit, KeywordHit, SearchHit
+else:
+    DocumentInput: TypeAlias = dict[str, Any]
+    Filter: TypeAlias = dict[str, Any]
+    SearchHit: TypeAlias = dict[str, Any]
+    KeywordHit: TypeAlias = dict[str, Any]
+    HybridHit: TypeAlias = dict[str, Any]
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -50,6 +60,13 @@ class SearchRecord:
     metadata: dict[str, str | int | float | bool]
 
 
+@dataclass(frozen=True)
+class SearchRun:
+    mode: str
+    hits: list[SearchHit] | list[KeywordHit] | list[HybridHit]
+    search_ms: float
+
+
 def main() -> None:
     args = parse_args()
     source_path = Path(args.json)
@@ -78,12 +95,29 @@ def main() -> None:
     query_embedding = embed_one(model, args.query)
     query_embed_ms = elapsed_ms(embed_start)
 
-    where = {"kind": args.where_kind} if args.where_kind else None
-    search_start = time.perf_counter()
-    hits = index.search(query_embedding, limit=args.limit, where=where)
-    search_ms = elapsed_ms(search_start)
-    print_hits(args.query, hits)
-    print_one_shot_timings(model_init_ms, load_ms, query_embed_ms, search_ms)
+    filters = build_filter(
+        kind=args.where_kind,
+        start_time=args.start_time,
+        end_time=args.end_time,
+        time_filter_mode=args.time_filter_mode,
+    )
+    search_runs = run_searches(
+        index=index,
+        mode=args.search_mode,
+        query=args.query,
+        query_embedding=query_embedding,
+        limit=args.limit,
+        filters=filters,
+        fusion=args.fusion,
+        vector_candidates=args.vector_candidates,
+        keyword_candidates=args.keyword_candidates,
+        vector_weight=args.vector_weight,
+        keyword_weight=args.keyword_weight,
+        rrf_k=args.rrf_k,
+    )
+    for run in search_runs:
+        print_hits(args.query, run.mode, run.hits)
+    print_one_shot_timings(model_init_ms, load_ms, query_embed_ms, search_runs)
 
     if args.timing_runs > 0:
         print_timing_report(
@@ -92,8 +126,14 @@ def main() -> None:
             query=args.query,
             query_embedding=query_embedding,
             limit=args.limit,
-            where=where,
+            filters=filters,
             timing_runs=args.timing_runs,
+            fusion=args.fusion,
+            vector_candidates=args.vector_candidates,
+            keyword_candidates=args.keyword_candidates,
+            vector_weight=args.vector_weight,
+            keyword_weight=args.keyword_weight,
+            rrf_k=args.rrf_k,
         )
 
 
@@ -114,9 +154,65 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int, default=5, help="number of hits to return")
     parser.add_argument(
+        "--search-mode",
+        choices=["vector", "keyword", "hybrid", "all"],
+        default="hybrid",
+        help="retrieval mode to run",
+    )
+    parser.add_argument(
         "--where-kind",
         choices=["scene", "shot"],
         help="optional metadata filter for scene or shot chunks",
+    )
+    parser.add_argument(
+        "--start-time",
+        type=float,
+        help="optional lower bound for time filtering",
+    )
+    parser.add_argument(
+        "--end-time",
+        type=float,
+        help="optional upper bound for time filtering",
+    )
+    parser.add_argument(
+        "--time-filter-mode",
+        choices=["overlap", "contained"],
+        default="overlap",
+        help="how to match start_time/end_time intervals when a time filter is present",
+    )
+    parser.add_argument(
+        "--fusion",
+        choices=["weighted", "rrf"],
+        default="weighted",
+        help="hybrid fusion mode",
+    )
+    parser.add_argument(
+        "--vector-candidates",
+        type=int,
+        help="optional hybrid vector candidate count before fusion",
+    )
+    parser.add_argument(
+        "--keyword-candidates",
+        type=int,
+        help="optional hybrid keyword candidate count before fusion",
+    )
+    parser.add_argument(
+        "--vector-weight",
+        type=float,
+        default=0.6,
+        help="weighted hybrid vector score weight",
+    )
+    parser.add_argument(
+        "--keyword-weight",
+        type=float,
+        default=0.4,
+        help="weighted hybrid keyword score weight",
+    )
+    parser.add_argument(
+        "--rrf-k",
+        type=float,
+        default=60.0,
+        help="RRF k value when --fusion rrf is selected",
     )
     parser.add_argument(
         "--model",
@@ -158,7 +254,14 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help="number of repeated runs for average load/embed/search timing; 0 disables",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if (
+        args.start_time is not None
+        and args.end_time is not None
+        and args.start_time > args.end_time
+    ):
+        parser.error("--start-time must be less than or equal to --end-time")
+    return args
 
 
 def build_records(
@@ -213,7 +316,7 @@ def build_index(
         embed_start = time.perf_counter()
         embeddings = list(model.embed(texts, batch_size=batch_size))
         total_embed_ms += elapsed_ms(embed_start)
-        documents = []
+        documents: list[DocumentInput] = []
 
         for record, embedding in zip(batch, embeddings):
             vector = embedding.tolist()
@@ -249,6 +352,111 @@ def build_index(
     print(f"  index_add_total_ms: {total_add_ms:.3f}")
     print(f"  save_ms: {save_ms:.3f}")
     print(f"  build_total_ms: {build_ms:.3f}")
+
+
+def build_filter(
+    *,
+    kind: str | None,
+    start_time: float | None,
+    end_time: float | None,
+    time_filter_mode: str,
+) -> Filter | None:
+    filters: list[Filter] = []
+    if kind:
+        filters.append(vk_where.eq("kind", kind))
+
+    time_filter = build_time_filter(
+        start_time=start_time,
+        end_time=end_time,
+        time_filter_mode=time_filter_mode,
+    )
+    if time_filter is not None:
+        filters.append(time_filter)
+
+    if not filters:
+        return None
+    if len(filters) == 1:
+        return filters[0]
+    return vk_where.all(*filters)
+
+
+def build_time_filter(
+    *,
+    start_time: float | None,
+    end_time: float | None,
+    time_filter_mode: str,
+) -> Filter | None:
+    if start_time is None and end_time is None:
+        return None
+
+    filters: list[Filter] = []
+    if time_filter_mode == "overlap":
+        if end_time is not None:
+            filters.append(vk_where.range("start_time", lte=end_time))
+        if start_time is not None:
+            filters.append(vk_where.range("end_time", gte=start_time))
+    elif time_filter_mode == "contained":
+        if start_time is not None:
+            filters.append(vk_where.range("start_time", gte=start_time))
+        if end_time is not None:
+            filters.append(vk_where.range("end_time", lte=end_time))
+    else:
+        raise ValueError(f"unsupported time filter mode: {time_filter_mode}")
+
+    if len(filters) == 1:
+        return filters[0]
+    return vk_where.all(*filters)
+
+
+def run_searches(
+    *,
+    index: Index,
+    mode: str,
+    query: str,
+    query_embedding: list[float],
+    limit: int,
+    filters: Filter | None,
+    fusion: str,
+    vector_candidates: int | None,
+    keyword_candidates: int | None,
+    vector_weight: float,
+    keyword_weight: float,
+    rrf_k: float,
+) -> list[SearchRun]:
+    modes = ["vector", "keyword", "hybrid"] if mode == "all" else [mode]
+    runs: list[SearchRun] = []
+
+    for search_mode in modes:
+        start = time.perf_counter()
+        if search_mode == "vector":
+            hits = index.search(query_embedding, limit=limit, where=filters)
+        elif search_mode == "keyword":
+            hits = index.keyword_search(query, limit=limit, where=filters)
+        elif search_mode == "hybrid":
+            if not hasattr(index, "hybrid_search"):
+                raise RuntimeError(
+                    "installed vectorkit package does not expose Index.hybrid_search; "
+                    "rerun scripts/setup-social-network-example.sh or reinstall the "
+                    "current Python wrapper wheel"
+                )
+            hits = index.hybrid_search(
+                query,
+                query_embedding,
+                limit=limit,
+                where=filters,
+                vector_candidates=vector_candidates,
+                keyword_candidates=keyword_candidates,
+                fusion=fusion,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                rrf_k=rrf_k,
+            )
+        else:
+            raise ValueError(f"unsupported search mode: {search_mode}")
+
+        runs.append(SearchRun(search_mode, hits, elapsed_ms(start)))
+
+    return runs
 
 
 def embed_one(model: TextEmbedding, text: str) -> list[float]:
@@ -543,8 +751,13 @@ def batches(records: list[SearchRecord], size: int) -> Iterable[list[SearchRecor
         yield records[index : index + size]
 
 
-def print_hits(query: str, hits: list[dict[str, Any]]) -> None:
+def print_hits(
+    query: str,
+    mode: str,
+    hits: list[SearchHit] | list[KeywordHit] | list[HybridHit],
+) -> None:
     print(f"\nQuery: {query}")
+    print(f"Mode: {mode}")
     if not hits:
         print("No hits.")
         return
@@ -556,21 +769,57 @@ def print_hits(query: str, hits: list[dict[str, Any]]) -> None:
         label = hit["document_id"]
         print(f"\n{rank}. {label} [{metadata.get('kind')}] score={hit['score']:.4f}")
         print(f"   time={start}-{end} location={metadata.get('location_name', 'unknown')}")
+        print_hit_trace(mode, hit)
         print(f"   {hit['text'][:500]}...")
+
+
+def print_hit_trace(
+    mode: str,
+    hit: SearchHit | KeywordHit | HybridHit,
+) -> None:
+    if mode == "keyword":
+        terms = hit.get("matched_terms", [])
+        print(f"   matched_terms={terms}")
+        return
+
+    if mode == "hybrid":
+        trace = hit["trace"]
+        vector_score = hit.get("vector_score")
+        keyword_score = hit.get("keyword_score")
+        terms = hit.get("matched_terms", [])
+        fusion = trace.get("fusion", {})
+        print(
+            "   "
+            f"vector_score={format_optional_score(vector_score)} "
+            f"keyword_score={format_optional_score(keyword_score)} "
+            f"matched_terms={terms}"
+        )
+        print(
+            "   "
+            f"vector_rank={trace.get('vector_rank')} "
+            f"keyword_rank={trace.get('keyword_rank')} "
+            f"fusion={fusion}"
+        )
+
+
+def format_optional_score(value: float | None) -> str:
+    return "none" if value is None else f"{value:.4f}"
 
 
 def print_one_shot_timings(
     model_init_ms: float,
     load_ms: float,
     query_embed_ms: float,
-    search_ms: float,
+    search_runs: list[SearchRun],
 ) -> None:
     print("\nOne-shot timing:")
     print(f"  model_init_ms: {model_init_ms:.3f}")
     print(f"  load_ms: {load_ms:.3f}")
     print(f"  query_embed_ms: {query_embed_ms:.3f}")
-    print(f"  vector_search_ms: {search_ms:.3f}")
-    print(f"  semantic_query_total_ms: {query_embed_ms + search_ms:.3f}")
+    for run in search_runs:
+        print(f"  {run.mode}_search_ms: {run.search_ms:.3f}")
+        if run.mode in {"vector", "hybrid"}:
+            print(f"  {run.mode}_query_total_ms: {query_embed_ms + run.search_ms:.3f}")
 
 
 def print_timing_report(
@@ -580,14 +829,22 @@ def print_timing_report(
     query: str,
     query_embedding: list[float],
     limit: int,
-    where: dict[str, Any] | None,
+    filters: Filter | None,
     timing_runs: int,
+    fusion: str,
+    vector_candidates: int | None,
+    keyword_candidates: int | None,
+    vector_weight: float,
+    keyword_weight: float,
+    rrf_k: float,
 ) -> None:
     load_times = []
     query_embed_times = []
     vector_search_times = []
     keyword_search_times = []
+    hybrid_search_times = []
     semantic_total_times = []
+    hybrid_total_times = []
 
     for _ in range(timing_runs):
         start = time.perf_counter()
@@ -595,6 +852,7 @@ def print_timing_report(
         load_times.append(elapsed_ms(start))
 
     index = Index.load(index_dir)
+    has_hybrid_search = hasattr(index, "hybrid_search")
 
     for _ in range(timing_runs):
         start = time.perf_counter()
@@ -602,19 +860,53 @@ def print_timing_report(
         query_embed_times.append(elapsed_ms(start))
 
         start = time.perf_counter()
-        index.search(vector, limit=limit, where=where)
+        index.search(vector, limit=limit, where=filters)
         search_ms = elapsed_ms(start)
         semantic_total_times.append(query_embed_times[-1] + search_ms)
 
+        if has_hybrid_search:
+            start = time.perf_counter()
+            index.hybrid_search(
+                query,
+                vector,
+                limit=limit,
+                where=filters,
+                vector_candidates=vector_candidates,
+                keyword_candidates=keyword_candidates,
+                fusion=fusion,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                rrf_k=rrf_k,
+            )
+            hybrid_ms = elapsed_ms(start)
+            hybrid_total_times.append(query_embed_times[-1] + hybrid_ms)
+
     for _ in range(timing_runs):
         start = time.perf_counter()
-        index.search(query_embedding, limit=limit, where=where)
+        index.search(query_embedding, limit=limit, where=filters)
         vector_search_times.append(elapsed_ms(start))
 
     for _ in range(timing_runs):
         start = time.perf_counter()
-        index.keyword_search(query, limit=limit, where=where)
+        index.keyword_search(query, limit=limit, where=filters)
         keyword_search_times.append(elapsed_ms(start))
+
+    if has_hybrid_search:
+        for _ in range(timing_runs):
+            start = time.perf_counter()
+            index.hybrid_search(
+                query,
+                query_embedding,
+                limit=limit,
+                where=filters,
+                vector_candidates=vector_candidates,
+                keyword_candidates=keyword_candidates,
+                fusion=fusion,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                rrf_k=rrf_k,
+            )
+            hybrid_search_times.append(elapsed_ms(start))
 
     print(f"\nAverage timing over {timing_runs} runs:")
     print_stats("load_ms", load_times)
@@ -622,6 +914,11 @@ def print_timing_report(
     print_stats("vector_search_ms", vector_search_times)
     print_stats("keyword_search_ms", keyword_search_times)
     print_stats("semantic_query_total_ms", semantic_total_times)
+    if has_hybrid_search:
+        print_stats("hybrid_search_ms", hybrid_search_times)
+        print_stats("hybrid_query_total_ms", hybrid_total_times)
+    else:
+        print("  hybrid_search_ms: skipped; installed vectorkit has no hybrid_search")
 
 
 def print_stats(label: str, values: list[float]) -> None:

@@ -22,7 +22,8 @@ It uses FastEmbed for local text embeddings and VectorKit for local retrieval.
 - Dimension: `384`.
 - VectorKit storage/search encoding: `i8`.
 - Query path: embed query text with the same FastEmbed model, then call
-  `Index.search(query_embedding, limit=..., where=...)`.
+  `Index.search(...)`, `Index.keyword_search(...)`, or
+  `Index.hybrid_search(...)` with optional metadata filters.
 
 For `/Users/gungorbasa/Desktop/the_social_network_v.1.32.json`, the current
 chunking pass prepares:
@@ -73,12 +74,26 @@ target/social-network-example-venv/bin/python \
   --rebuild
 ```
 
+Rebuild the index after changing VectorKit persistence, BM25, hybrid search, or
+metadata generation. Older saved indexes may still load, but keyword and hybrid
+evaluation need the BM25 side of the index to be present for full behavior.
+
 Run a query against the saved index:
 
 ```bash
 target/social-network-example-venv/bin/python \
   examples/python/social_network_search/social_network_search.py \
   --query "Mark and Erica arguing in a dim bar" \
+  --limit 5
+```
+
+Run vector, keyword, and hybrid retrieval side by side:
+
+```bash
+target/social-network-example-venv/bin/python \
+  examples/python/social_network_search/social_network_search.py \
+  --query "Mark and Erica arguing in a dim bar" \
+  --search-mode all \
   --limit 5
 ```
 
@@ -90,6 +105,23 @@ target/social-network-example-venv/bin/python \
   --query "shots on the Harvard campus at night" \
   --where-kind shot
 ```
+
+Filter to a time interval using `start_time` and `end_time` metadata. The
+default `overlap` mode returns chunks whose interval intersects the requested
+interval:
+
+```bash
+target/social-network-example-venv/bin/python \
+  examples/python/social_network_search/social_network_search.py \
+  --query "Mark and Erica arguing" \
+  --search-mode all \
+  --where-kind shot \
+  --start-time 0 \
+  --end-time 600
+```
+
+Use `--time-filter-mode contained` to require chunks to be fully inside the
+requested interval.
 
 The saved index is written to:
 

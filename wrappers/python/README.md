@@ -17,6 +17,12 @@ From this directory:
 maturin develop
 ```
 
+From the repository root, run the full local wrapper check:
+
+```bash
+scripts/check-python-wrapper.sh
+```
+
 Run tests:
 
 ```bash

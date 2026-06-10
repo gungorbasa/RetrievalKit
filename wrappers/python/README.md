@@ -17,6 +17,22 @@ From this directory:
 maturin develop
 ```
 
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Run optional type checks when `mypy` is installed in your development
+environment:
+
+```bash
+python -m mypy
+```
+
+`mypy` is a developer tool only. It is not a runtime dependency of the
+`vectorkit` package.
+
 ## Build A Local Wheel
 
 From the repository root:

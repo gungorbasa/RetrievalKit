@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .types import Filter, MetadataValue
+from .types import Filter, FilterOperatorSpec, MetadataValue
 
 
 def eq(field: str, value: MetadataValue) -> Filter:
@@ -27,7 +27,7 @@ def range(
     gte: MetadataValue | None = None,
     lte: MetadataValue | None = None,
 ) -> Filter:
-    spec: dict[str, MetadataValue] = {}
+    spec: FilterOperatorSpec = {}
     if gte is not None:
         spec["$gte"] = gte
     if lte is not None:

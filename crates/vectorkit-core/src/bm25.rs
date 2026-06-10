@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
@@ -39,9 +39,16 @@ pub(crate) struct Bm25Hit {
 #[derive(Debug, Clone)]
 pub(crate) struct Bm25Index {
     config: Bm25Config,
-    postings: BTreeMap<String, BTreeMap<ChunkId, usize>>,
-    chunk_lengths: BTreeMap<ChunkId, usize>,
-    active_chunks: BTreeSet<ChunkId>,
+    postings: HashMap<String, Vec<Posting>>,
+    chunk_lengths: HashMap<ChunkId, usize>,
+    active_chunks: HashSet<ChunkId>,
+    active_total_length: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Posting {
+    chunk_id: ChunkId,
+    term_frequency: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,9 +62,10 @@ impl Bm25Index {
     pub fn new(config: Bm25Config) -> Self {
         Self {
             config,
-            postings: BTreeMap::new(),
-            chunk_lengths: BTreeMap::new(),
-            active_chunks: BTreeSet::new(),
+            postings: HashMap::new(),
+            chunk_lengths: HashMap::new(),
+            active_chunks: HashSet::new(),
+            active_total_length: 0,
         }
     }
 
@@ -72,39 +80,86 @@ impl Bm25Index {
         }
 
         for (term, count) in term_counts {
-            self.postings
-                .entry(term)
-                .or_default()
-                .insert(chunk_id, count);
+            self.postings.entry(term).or_default().push(Posting {
+                chunk_id,
+                term_frequency: count,
+            });
         }
 
         self.chunk_lengths.insert(chunk_id, length);
-        if active {
-            self.active_chunks.insert(chunk_id);
-        } else {
-            self.active_chunks.remove(&chunk_id);
+        if active && self.active_chunks.insert(chunk_id) {
+            self.active_total_length += length;
         }
     }
 
     pub fn deactivate_chunk(&mut self, chunk_id: ChunkId) {
-        self.active_chunks.remove(&chunk_id);
+        if self.active_chunks.remove(&chunk_id) {
+            if let Some(length) = self.chunk_lengths.get(&chunk_id) {
+                self.active_total_length = self.active_total_length.saturating_sub(*length);
+            }
+        }
     }
 
     pub fn from_persisted(config: Bm25Config, persisted: PersistedBm25Index) -> Result<Self> {
         persisted.validate()?;
+        let postings = persisted
+            .postings
+            .into_iter()
+            .map(|(term, postings)| {
+                (
+                    term,
+                    postings
+                        .into_iter()
+                        .map(|(chunk_id, term_frequency)| Posting {
+                            chunk_id,
+                            term_frequency,
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let chunk_lengths = persisted
+            .chunk_lengths
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        let active_chunks = persisted.active_chunks.into_iter().collect::<HashSet<_>>();
+        let active_total_length = active_chunks
+            .iter()
+            .filter_map(|chunk_id| chunk_lengths.get(chunk_id))
+            .sum();
+
         Ok(Self {
             config,
-            postings: persisted.postings,
-            chunk_lengths: persisted.chunk_lengths,
-            active_chunks: persisted.active_chunks,
+            postings,
+            chunk_lengths,
+            active_chunks,
+            active_total_length,
         })
     }
 
     pub fn to_persisted(&self) -> PersistedBm25Index {
+        let postings = self
+            .postings
+            .iter()
+            .map(|(term, postings)| {
+                let term_postings = postings
+                    .iter()
+                    .map(|posting| (posting.chunk_id, posting.term_frequency))
+                    .collect::<BTreeMap<_, _>>();
+                (term.clone(), term_postings)
+            })
+            .collect::<BTreeMap<_, _>>();
+        let chunk_lengths = self
+            .chunk_lengths
+            .iter()
+            .map(|(chunk_id, length)| (*chunk_id, *length))
+            .collect::<BTreeMap<_, _>>();
+        let active_chunks = self.active_chunks.iter().copied().collect::<BTreeSet<_>>();
+
         PersistedBm25Index {
-            postings: self.postings.clone(),
-            chunk_lengths: self.chunk_lengths.clone(),
-            active_chunks: self.active_chunks.clone(),
+            postings,
+            chunk_lengths,
+            active_chunks,
         }
     }
 
@@ -123,8 +178,8 @@ impl Bm25Index {
             return Vec::new();
         }
 
-        let mut scores: BTreeMap<ChunkId, f32> = BTreeMap::new();
-        let mut matched_terms: BTreeMap<ChunkId, Vec<String>> = BTreeMap::new();
+        let mut scores: HashMap<ChunkId, f32> = HashMap::new();
+        let mut matched_terms: HashMap<ChunkId, Vec<String>> = HashMap::new();
 
         for term in query_terms {
             let Some(postings) = self.postings.get(&term) else {
@@ -132,34 +187,34 @@ impl Bm25Index {
             };
 
             let document_frequency = postings
-                .keys()
-                .filter(|chunk_id| self.active_chunks.contains(chunk_id))
+                .iter()
+                .filter(|posting| self.active_chunks.contains(&posting.chunk_id))
                 .count();
             if document_frequency == 0 {
                 continue;
             }
 
             let idf = inverse_document_frequency(active_count, document_frequency);
-            for (&chunk_id, &term_frequency) in postings {
-                if !self.active_chunks.contains(&chunk_id) {
+            for posting in postings {
+                if !self.active_chunks.contains(&posting.chunk_id) {
                     continue;
                 }
 
-                let Some(&chunk_length) = self.chunk_lengths.get(&chunk_id) else {
+                let Some(&chunk_length) = self.chunk_lengths.get(&posting.chunk_id) else {
                     continue;
                 };
 
                 let score = bm25_term_score(
-                    term_frequency,
+                    posting.term_frequency,
                     chunk_length,
                     average_length,
                     idf,
                     self.config.k1,
                     self.config.b,
                 );
-                *scores.entry(chunk_id).or_insert(0.0) += score;
+                *scores.entry(posting.chunk_id).or_insert(0.0) += score;
                 matched_terms
-                    .entry(chunk_id)
+                    .entry(posting.chunk_id)
                     .or_default()
                     .push(term.clone());
             }
@@ -200,24 +255,22 @@ impl Bm25Index {
     }
 
     fn average_active_chunk_length(&self) -> f32 {
-        let total_length = self
-            .active_chunks
-            .iter()
-            .filter_map(|chunk_id| self.chunk_lengths.get(chunk_id))
-            .sum::<usize>();
-
-        total_length as f32 / self.active_chunks.len() as f32
+        self.active_total_length as f32 / self.active_chunks.len() as f32
     }
 
     fn remove_chunk_terms(&mut self, chunk_id: ChunkId) {
-        self.active_chunks.remove(&chunk_id);
+        if self.active_chunks.remove(&chunk_id) {
+            if let Some(length) = self.chunk_lengths.get(&chunk_id) {
+                self.active_total_length = self.active_total_length.saturating_sub(*length);
+            }
+        }
         self.chunk_lengths.remove(&chunk_id);
 
         let empty_terms = self
             .postings
             .iter_mut()
             .filter_map(|(term, postings)| {
-                postings.remove(&chunk_id);
+                postings.retain(|posting| posting.chunk_id != chunk_id);
                 postings.is_empty().then(|| term.clone())
             })
             .collect::<Vec<_>>();

@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use simsimd::{bf16, capabilities, f16, SpatialSimilarity};
 use vectorkit_core::{
-    diagnostic_dot_product_i8, Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport,
-    IndexSizeEstimate, Metadata, MetadataValue, SearchHit, SearchQuery, VectorEncoding,
-    VectorMetric,
+    diagnostic_dot_product_i8, Chunk, ExactVectorIndex, Filter, HybridQuery, IndexConfig,
+    IndexFileSizeReport, IndexSizeEstimate, KeywordQuery, Metadata, MetadataValue, SearchQuery,
+    VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -42,12 +42,21 @@ struct SyntheticBenchConfig {
     dimension: usize,
     queries: usize,
     top_k: usize,
+    search_mode: SearchMode,
     encoding: VectorEncoding,
     metric: VectorMetric,
     seed: u64,
     filter_every: Option<usize>,
     persist_dir: Option<PathBuf>,
     footprint: FootprintConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchMode {
+    Vector,
+    Keyword,
+    HybridWeighted,
+    HybridRrf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +74,7 @@ impl Default for SyntheticBenchConfig {
             dimension: 384,
             queries: 100,
             top_k: 10,
+            search_mode: SearchMode::Vector,
             encoding: VectorEncoding::F32,
             metric: VectorMetric::Cosine,
             seed: 42,
@@ -104,6 +114,7 @@ impl SyntheticBenchConfig {
                 "--dimension" => config.dimension = parse_positive(value, flag)?,
                 "--queries" => config.queries = parse_positive(value, flag)?,
                 "--top-k" => config.top_k = parse_positive(value, flag)?,
+                "--search-mode" => config.search_mode = parse_search_mode(value)?,
                 "--encoding" => config.encoding = parse_encoding(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
@@ -142,6 +153,7 @@ struct MatrixBenchConfig {
     dimensions: Vec<usize>,
     queries: usize,
     top_ks: Vec<usize>,
+    search_modes: Vec<SearchMode>,
     encodings: Vec<VectorEncoding>,
     metric: VectorMetric,
     seed: u64,
@@ -157,6 +169,7 @@ impl Default for MatrixBenchConfig {
             dimensions: vec![384, 768, 1536],
             queries: 100,
             top_ks: vec![5, 10],
+            search_modes: vec![SearchMode::Vector],
             encodings: vec![
                 VectorEncoding::F32,
                 VectorEncoding::F16,
@@ -190,6 +203,7 @@ impl MatrixBenchConfig {
                 "--dimensions" => config.dimensions = parse_positive_list(value, flag)?,
                 "--queries" => config.queries = parse_positive(value, flag)?,
                 "--top-k" => config.top_ks = parse_positive_list(value, flag)?,
+                "--search-modes" => config.search_modes = parse_search_mode_list(value)?,
                 "--encodings" => config.encodings = parse_encoding_list(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
@@ -289,6 +303,8 @@ struct SyntheticBenchReport {
     persisted_file_sizes: Option<IndexFileSizeReport>,
     source_embedding_bytes: usize,
     build_duration: Duration,
+    vector_candidate_avg: Option<Duration>,
+    keyword_candidate_avg: Option<Duration>,
     query_min: Duration,
     query_avg: Duration,
     query_p50: Duration,
@@ -349,6 +365,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("dimension: {}", report.config.dimension);
     println!("queries: {}", report.config.queries);
     println!("top_k: {}", report.config.top_k);
+    println!(
+        "search_mode: {}",
+        search_mode_name(report.config.search_mode)
+    );
     println!("encoding: {}", encoding_name(report.config.encoding));
     println!("metric: {}", metric_name(report.config.metric));
     println!("seed: {}", report.config.seed);
@@ -441,6 +461,12 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
         );
     }
     println!("build_ms: {:.3}", millis(report.build_duration));
+    if let Some(duration) = report.vector_candidate_avg {
+        println!("vector_candidate_avg_ms: {:.3}", millis(duration));
+    }
+    if let Some(duration) = report.keyword_candidate_avg {
+        println!("keyword_candidate_avg_ms: {:.3}", millis(duration));
+    }
     println!("query_min_ms: {:.3}", millis(report.query_min));
     println!("query_avg_ms: {:.3}", millis(report.query_avg));
     println!("query_p50_ms: {:.3}", millis(report.query_p50));
@@ -455,66 +481,73 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | persisted MB | headroom MB | retained f32 MB | build ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | mode | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | persisted MB | headroom MB | retained f32 MB | build ms | vector cand avg ms | keyword cand avg ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|:---|---:|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|:---|:---|---:|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
         for top_k in &config.top_ks {
-            for encoding in &config.encodings {
-                let persist_dir = config.persist_dir.as_ref().map(|base| {
-                    base.join(format!(
-                        "chunks-{}-dim-{}-topk-{}-{}",
-                        config.chunks,
-                        dimension,
-                        top_k,
-                        encoding_name(*encoding)
-                    ))
-                });
-                let report = benchmark_synthetic(SyntheticBenchConfig {
-                    chunks: config.chunks,
-                    dimension: *dimension,
-                    queries: config.queries,
-                    top_k: *top_k,
-                    encoding: *encoding,
-                    metric: config.metric,
-                    seed: config.seed,
-                    filter_every: config.filter_every,
-                    persist_dir,
-                    footprint: config.footprint.clone(),
-                })?;
+            for search_mode in &config.search_modes {
+                for encoding in &config.encodings {
+                    let persist_dir = config.persist_dir.as_ref().map(|base| {
+                        base.join(format!(
+                            "chunks-{}-dim-{}-topk-{}-{}-{}",
+                            config.chunks,
+                            dimension,
+                            top_k,
+                            search_mode_name(*search_mode),
+                            encoding_name(*encoding)
+                        ))
+                    });
+                    let report = benchmark_synthetic(SyntheticBenchConfig {
+                        chunks: config.chunks,
+                        dimension: *dimension,
+                        queries: config.queries,
+                        top_k: *top_k,
+                        search_mode: *search_mode,
+                        encoding: *encoding,
+                        metric: config.metric,
+                        seed: config.seed,
+                        filter_every: config.filter_every,
+                        persist_dir,
+                        footprint: config.footprint.clone(),
+                    })?;
 
-                println!(
-                    "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
-                    report.config.chunks,
-                    report.config.dimension,
-                    report.config.top_k,
-                    encoding_name(report.config.encoding),
-                    metric_name(report.config.metric),
-                    filter_every_name(report.config.filter_every),
-                    mib(report.footprint.vector_bytes),
-                    mib(report.footprint.auxiliary_bytes()),
-                    mib(report.footprint.total_bytes()),
-                    mib(report.index_size.total_bytes()),
-                    persisted_mb_cell(report.persisted_file_sizes),
-                    signed_mib(
-                        report
-                            .footprint
-                            .budget_headroom_bytes(report.config.footprint.budget_bytes)
-                    ),
-                    mib(report.source_embedding_bytes),
-                    millis(report.build_duration),
-                    millis(report.query_min),
-                    millis(report.query_avg),
-                    millis(report.query_p50),
-                    millis(report.query_p95),
-                    millis(report.query_max),
-                    report.recall_at_k_vs_f32,
-                    report.total_hits,
-                    report.top_hit_checksum,
-                );
+                    println!(
+                        "| {} | {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                        report.config.chunks,
+                        report.config.dimension,
+                        report.config.top_k,
+                        search_mode_name(report.config.search_mode),
+                        encoding_name(report.config.encoding),
+                        metric_name(report.config.metric),
+                        filter_every_name(report.config.filter_every),
+                        mib(report.footprint.vector_bytes),
+                        mib(report.footprint.auxiliary_bytes()),
+                        mib(report.footprint.total_bytes()),
+                        mib(report.index_size.total_bytes()),
+                        persisted_mb_cell(report.persisted_file_sizes),
+                        signed_mib(
+                            report
+                                .footprint
+                                .budget_headroom_bytes(report.config.footprint.budget_bytes)
+                        ),
+                        mib(report.source_embedding_bytes),
+                        millis(report.build_duration),
+                        optional_millis_cell(report.vector_candidate_avg),
+                        optional_millis_cell(report.keyword_candidate_avg),
+                        millis(report.query_min),
+                        millis(report.query_avg),
+                        millis(report.query_p50),
+                        millis(report.query_p95),
+                        millis(report.query_max),
+                        report.recall_at_k_vs_f32,
+                        report.total_hits,
+                        report.top_hit_checksum,
+                    );
+                }
             }
         }
     }
@@ -570,6 +603,8 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
     };
 
     let mut query_durations = Vec::with_capacity(config.queries);
+    let mut vector_candidate_durations = Vec::new();
+    let mut keyword_candidate_durations = Vec::new();
     let mut recall_sum = 0.0;
     let mut total_hits = 0usize;
     let mut top_hit_checksum = 0u64;
@@ -578,22 +613,58 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         let target_chunk = target_chunk_id(query_id, config.chunks);
         let query =
             generate_query_vector(config.dimension, config.seed, target_chunk as u64, query_id);
-        let search_query = synthetic_search_query(
-            config.top_k,
-            query.clone(),
-            config.filter_every,
-            target_chunk,
-        );
+        let query_text = synthetic_query_text(target_chunk);
+
+        if matches!(
+            config.search_mode,
+            SearchMode::HybridWeighted | SearchMode::HybridRrf
+        ) {
+            let search_query = synthetic_search_query(
+                config.top_k,
+                query.clone(),
+                config.filter_every,
+                target_chunk,
+            );
+            let vector_start = Instant::now();
+            let vector_hits = index.search(&search_query)?;
+            vector_candidate_durations.push(vector_start.elapsed());
+            black_box(vector_hits.len());
+
+            let keyword_query = synthetic_keyword_query(
+                config.top_k,
+                &query_text,
+                config.filter_every,
+                target_chunk,
+            );
+            let keyword_start = Instant::now();
+            let keyword_hits = index.keyword_search(&keyword_query)?;
+            keyword_candidate_durations.push(keyword_start.elapsed());
+            black_box(keyword_hits.len());
+        }
 
         let start = Instant::now();
-        let hits = index.search(&search_query)?;
+        let hits = run_synthetic_search_mode(
+            &index,
+            config.search_mode,
+            config.top_k,
+            query.clone(),
+            &query_text,
+            config.filter_every,
+            target_chunk,
+        )?;
         query_durations.push(start.elapsed());
 
         recall_sum += match &f32_ground_truth {
             Some(ground_truth) => {
-                let ground_truth_query =
-                    synthetic_search_query(config.top_k, query, config.filter_every, target_chunk);
-                let ground_truth_hits = ground_truth.search(&ground_truth_query)?;
+                let ground_truth_hits = run_synthetic_search_mode(
+                    ground_truth,
+                    config.search_mode,
+                    config.top_k,
+                    query,
+                    &query_text,
+                    config.filter_every,
+                    target_chunk,
+                )?;
                 recall_at_k(&hits, &ground_truth_hits)
             }
             None => 1.0,
@@ -617,6 +688,8 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         persisted_file_sizes,
         source_embedding_bytes: source_embedding_bytes(config.chunks, config.dimension),
         build_duration,
+        vector_candidate_avg: non_empty_average_duration(&vector_candidate_durations),
+        keyword_candidate_avg: non_empty_average_duration(&keyword_candidate_durations),
         query_min,
         query_avg,
         query_p50: p50,
@@ -843,12 +916,25 @@ fn synthetic_chunk(
     Chunk {
         chunk_id: chunk_id as u64,
         document_id: format!("synthetic-doc-{chunk_id}"),
-        text: format!("synthetic chunk {chunk_id} topic {}", chunk_id % 17),
+        text: synthetic_chunk_text(chunk_id),
         embedding: generate_normalized_vector(dimension, seed, chunk_id as u64),
         metadata,
         deleted: false,
         version: 1,
     }
+}
+
+fn synthetic_chunk_text(chunk_id: usize) -> String {
+    format!(
+        "synthetic chunk {chunk_id} topic{} group{} rareterm{}",
+        chunk_id % 17,
+        chunk_id % 101,
+        chunk_id
+    )
+}
+
+fn synthetic_query_text(target_chunk: usize) -> String {
+    format!("rareterm{target_chunk} topic{}", target_chunk % 17)
 }
 
 fn synthetic_search_query(
@@ -859,16 +945,111 @@ fn synthetic_search_query(
 ) -> SearchQuery {
     let query = SearchQuery::new(embedding, top_k);
 
-    match filter_every {
-        Some(filter_every) => query.with_filter(Filter::Equals {
-            field: BENCH_FILTER_FIELD.to_owned(),
-            value: MetadataValue::Integer((target_chunk % filter_every) as i64),
-        }),
+    match synthetic_filter(filter_every, target_chunk) {
+        Some(filter) => query.with_filter(filter),
         None => query,
     }
 }
 
-fn recall_at_k(hits: &[SearchHit], ground_truth_hits: &[SearchHit]) -> f64 {
+fn synthetic_keyword_query(
+    top_k: usize,
+    text: &str,
+    filter_every: Option<usize>,
+    target_chunk: usize,
+) -> KeywordQuery {
+    let query = KeywordQuery::new(text, top_k);
+
+    match synthetic_filter(filter_every, target_chunk) {
+        Some(filter) => query.with_filter(filter),
+        None => query,
+    }
+}
+
+fn synthetic_hybrid_query(
+    top_k: usize,
+    embedding: Vec<f32>,
+    text: &str,
+    filter_every: Option<usize>,
+    target_chunk: usize,
+    search_mode: SearchMode,
+) -> HybridQuery {
+    let query = HybridQuery::new(text, embedding, top_k);
+    let query = match search_mode {
+        SearchMode::HybridWeighted => query,
+        SearchMode::HybridRrf => query.with_rrf_k(60.0),
+        SearchMode::Vector | SearchMode::Keyword => query,
+    };
+
+    match synthetic_filter(filter_every, target_chunk) {
+        Some(filter) => query.with_filter(filter),
+        None => query,
+    }
+}
+
+fn synthetic_filter(filter_every: Option<usize>, target_chunk: usize) -> Option<Filter> {
+    filter_every.map(|filter_every| Filter::Equals {
+        field: BENCH_FILTER_FIELD.to_owned(),
+        value: MetadataValue::Integer((target_chunk % filter_every) as i64),
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BenchHit {
+    chunk_id: u64,
+}
+
+fn run_synthetic_search_mode(
+    index: &ExactVectorIndex,
+    search_mode: SearchMode,
+    top_k: usize,
+    embedding: Vec<f32>,
+    text: &str,
+    filter_every: Option<usize>,
+    target_chunk: usize,
+) -> Result<Vec<BenchHit>, CliError> {
+    match search_mode {
+        SearchMode::Vector => Ok(index
+            .search(&synthetic_search_query(
+                top_k,
+                embedding,
+                filter_every,
+                target_chunk,
+            ))?
+            .into_iter()
+            .map(|hit| BenchHit {
+                chunk_id: hit.chunk_id,
+            })
+            .collect()),
+        SearchMode::Keyword => Ok(index
+            .keyword_search(&synthetic_keyword_query(
+                top_k,
+                text,
+                filter_every,
+                target_chunk,
+            ))?
+            .into_iter()
+            .map(|hit| BenchHit {
+                chunk_id: hit.chunk_id,
+            })
+            .collect()),
+        SearchMode::HybridWeighted | SearchMode::HybridRrf => Ok(index
+            .hybrid_search(&synthetic_hybrid_query(
+                top_k,
+                embedding,
+                text,
+                filter_every,
+                target_chunk,
+                search_mode,
+            ))?
+            .into_iter()
+            .map(|hit| BenchHit {
+                chunk_id: hit.chunk_id,
+            })
+            .collect()),
+    }
+}
+
+fn recall_at_k(hits: &[BenchHit], ground_truth_hits: &[BenchHit]) -> f64 {
     if ground_truth_hits.is_empty() {
         return 1.0;
     }
@@ -1033,6 +1214,10 @@ fn average_duration(durations: &[Duration]) -> Duration {
     Duration::from_nanos((total_nanos / durations.len() as u128) as u64)
 }
 
+fn non_empty_average_duration(durations: &[Duration]) -> Option<Duration> {
+    (!durations.is_empty()).then(|| average_duration(durations))
+}
+
 fn millis(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1_000.0
 }
@@ -1100,6 +1285,23 @@ fn parse_positive_list(value: &str, name: &str) -> Result<Vec<usize>, CliError> 
     Ok(values)
 }
 
+fn parse_search_mode_list(value: &str) -> Result<Vec<SearchMode>, CliError> {
+    let values = value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(parse_search_mode)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if values.is_empty() {
+        return Err(CliError::InvalidArgument(
+            "'--search-modes' must contain at least one value".to_owned(),
+        ));
+    }
+
+    Ok(values)
+}
+
 fn parse_u64(value: &str, name: &str) -> Result<u64, CliError> {
     value
         .parse::<u64>()
@@ -1123,6 +1325,18 @@ fn parse_encoding_list(value: &str) -> Result<Vec<VectorEncoding>, CliError> {
     Ok(values)
 }
 
+fn parse_search_mode(value: &str) -> Result<SearchMode, CliError> {
+    match value.to_ascii_lowercase().as_str() {
+        "vector" => Ok(SearchMode::Vector),
+        "keyword" | "bm25" => Ok(SearchMode::Keyword),
+        "hybrid-weighted" | "weighted" => Ok(SearchMode::HybridWeighted),
+        "hybrid-rrf" | "rrf" => Ok(SearchMode::HybridRrf),
+        _ => Err(CliError::InvalidArgument(format!(
+            "unsupported search mode '{value}', expected vector, keyword, hybrid-weighted, or hybrid-rrf"
+        ))),
+    }
+}
+
 fn parse_encoding(value: &str) -> Result<VectorEncoding, CliError> {
     match value.to_ascii_lowercase().as_str() {
         "f32" => Ok(VectorEncoding::F32),
@@ -1142,6 +1356,15 @@ fn parse_metric(value: &str) -> Result<VectorMetric, CliError> {
         _ => Err(CliError::InvalidArgument(format!(
             "unsupported metric '{value}', expected cosine or dot"
         ))),
+    }
+}
+
+fn search_mode_name(search_mode: SearchMode) -> &'static str {
+    match search_mode {
+        SearchMode::Vector => "vector",
+        SearchMode::Keyword => "keyword",
+        SearchMode::HybridWeighted => "hybrid-weighted",
+        SearchMode::HybridRrf => "hybrid-rrf",
     }
 }
 
@@ -1171,6 +1394,12 @@ fn filter_every_name(filter_every: Option<usize>) -> String {
 fn persisted_mb_cell(file_sizes: Option<IndexFileSizeReport>) -> String {
     file_sizes
         .map(|file_sizes| format!("{:.3}", mib_u64(file_sizes.total_bytes())))
+        .unwrap_or_else(|| "n/a".to_owned())
+}
+
+fn optional_millis_cell(duration: Option<Duration>) -> String {
+    duration
+        .map(|duration| format!("{:.3}", millis(duration)))
         .unwrap_or_else(|| "n/a".to_owned())
 }
 
@@ -1234,6 +1463,7 @@ impl CliError {
                 "  --dimension <n>    default 384",
                 "  --queries <n>      default 100",
                 "  --top-k <n>        default 10",
+                "  --search-mode <kind> vector, keyword, hybrid-weighted, or hybrid-rrf; default vector",
                 "  --encoding <kind>  f32, f16, bf16, or i8; default f32",
                 "  --metric <kind>    cosine or dot; default cosine",
                 "  --seed <n>         default 42",
@@ -1249,6 +1479,7 @@ impl CliError {
                 "  --dimensions <list>   comma list; default 384,768,1536",
                 "  --queries <n>         default 100",
                 "  --top-k <list>        comma list; default 5,10",
+                "  --search-modes <list> comma list of vector,keyword,hybrid-weighted,hybrid-rrf; default vector",
                 "  --encodings <list>    comma list of f32,f16,bf16,i8; default f32,f16,bf16,i8",
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
@@ -1336,6 +1567,8 @@ mod tests {
             "50",
             "--top-k",
             "5",
+            "--search-mode",
+            "hybrid-weighted",
             "--encoding",
             "i8",
             "--metric",
@@ -1363,6 +1596,7 @@ mod tests {
         assert_eq!(config.dimension, 768);
         assert_eq!(config.queries, 50);
         assert_eq!(config.top_k, 5);
+        assert_eq!(config.search_mode, SearchMode::HybridWeighted);
         assert_eq!(config.encoding, VectorEncoding::I8ScalarQuantized);
         assert_eq!(config.metric, VectorMetric::DotProduct);
         assert_eq!(config.seed, 7);
@@ -1396,6 +1630,8 @@ mod tests {
             "384,768",
             "--top-k",
             "5,10",
+            "--search-modes",
+            "vector,keyword,hybrid-rrf",
             "--encodings",
             "f32,i8",
             "--filter-every",
@@ -1410,6 +1646,14 @@ mod tests {
         assert_eq!(config.chunks, 2_000);
         assert_eq!(config.dimensions, vec![384, 768]);
         assert_eq!(config.top_ks, vec![5, 10]);
+        assert_eq!(
+            config.search_modes,
+            vec![
+                SearchMode::Vector,
+                SearchMode::Keyword,
+                SearchMode::HybridRrf
+            ]
+        );
         assert_eq!(
             config.encodings,
             vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
@@ -1500,27 +1744,38 @@ mod tests {
 
     #[test]
     fn recall_at_k_counts_overlap_with_f32_ground_truth() {
-        let hits = vec![search_hit(1), search_hit(2), search_hit(3), search_hit(4)];
-        let ground_truth_hits = vec![search_hit(2), search_hit(4), search_hit(6), search_hit(8)];
+        let hits = vec![bench_hit(1), bench_hit(2), bench_hit(3), bench_hit(4)];
+        let ground_truth_hits = vec![bench_hit(2), bench_hit(4), bench_hit(6), bench_hit(8)];
 
         assert_eq!(recall_at_k(&hits, &ground_truth_hits), 0.5);
     }
 
     #[test]
     fn recall_at_k_is_complete_when_ground_truth_is_empty() {
-        assert_eq!(recall_at_k(&[search_hit(1)], &[]), 1.0);
+        assert_eq!(recall_at_k(&[bench_hit(1)], &[]), 1.0);
     }
 
-    fn search_hit(chunk_id: u64) -> SearchHit {
-        SearchHit {
-            chunk_id,
-            document_id: format!("doc-{chunk_id}"),
-            score: 1.0,
-            trace: vectorkit_core::SearchTrace {
-                vector_score: 1.0,
-                keyword_score: None,
-                filter_matched: true,
-            },
-        }
+    #[test]
+    fn parses_search_modes() {
+        assert_eq!(parse_search_mode("vector").unwrap(), SearchMode::Vector);
+        assert_eq!(parse_search_mode("bm25").unwrap(), SearchMode::Keyword);
+        assert_eq!(
+            parse_search_mode("hybrid-weighted").unwrap(),
+            SearchMode::HybridWeighted
+        );
+        assert_eq!(parse_search_mode("rrf").unwrap(), SearchMode::HybridRrf);
+    }
+
+    #[test]
+    fn synthetic_keyword_query_matches_target_chunk_text() {
+        let text = synthetic_chunk_text(42);
+        let query_text = synthetic_query_text(42);
+
+        assert!(text.contains("rareterm42"));
+        assert!(query_text.contains("rareterm42"));
+    }
+
+    fn bench_hit(chunk_id: u64) -> BenchHit {
+        BenchHit { chunk_id }
     }
 }

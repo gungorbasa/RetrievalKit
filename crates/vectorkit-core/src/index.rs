@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -671,8 +671,32 @@ impl ExactVectorIndex {
             return Ok(Vec::new());
         }
 
+        let candidate_offsets = filter
+            .map(|filter| self.metadata_filter_index.candidate_offsets(filter))
+            .transpose()?
+            .flatten();
+        let allowed_chunk_ids = candidate_offsets
+            .as_deref()
+            .map(|offsets| self.active_chunk_ids_for_offsets(offsets));
+
+        if allowed_chunk_ids
+            .as_ref()
+            .is_some_and(|allowed_chunk_ids| allowed_chunk_ids.is_empty())
+        {
+            return Ok(Vec::new());
+        }
+
+        let bm25_hits = match (filter, allowed_chunk_ids.as_ref()) {
+            (None, _) => self.bm25.search_top_k(text, top_k),
+            (Some(_), Some(allowed_chunk_ids)) => {
+                self.bm25
+                    .search_top_k_in_chunks(text, top_k, allowed_chunk_ids)
+            }
+            (Some(_), None) => self.bm25.search_all(text),
+        };
+
         let mut hits = Vec::new();
-        for keyword_hit in self.bm25.search_all(text) {
+        for keyword_hit in bm25_hits {
             let Some(chunk) = self.chunk(keyword_hit.chunk_id) else {
                 continue;
             };
@@ -698,6 +722,19 @@ impl ExactVectorIndex {
         }
 
         Ok(hits)
+    }
+
+    fn active_chunk_ids_for_offsets(&self, offsets: &[usize]) -> HashSet<ChunkId> {
+        let mut chunk_ids = HashSet::with_capacity(offsets.len());
+        for offset in offsets {
+            let Some(chunk) = self.chunks.get(*offset) else {
+                continue;
+            };
+            if !chunk.deleted {
+                chunk_ids.insert(chunk.chunk_id);
+            }
+        }
+        chunk_ids
     }
 
     /// Performs hybrid exact vector + BM25 search using the configured fusion strategy.
@@ -2785,7 +2822,10 @@ mod tests {
         index
             .upsert_document(
                 notes_document,
-                vec![chunk_input("shared rare token", vec![1.0, 0.0])],
+                vec![chunk_input(
+                    "shared shared shared rare token",
+                    vec![1.0, 0.0],
+                )],
             )
             .unwrap();
 

@@ -164,11 +164,44 @@ impl Bm25Index {
     }
 
     pub fn search_all(&self, query: &str) -> Vec<Bm25Hit> {
+        self.search_with_limit(query, None, None)
+    }
+
+    pub fn search_top_k(&self, query: &str, top_k: usize) -> Vec<Bm25Hit> {
+        if top_k == 0 {
+            return Vec::new();
+        }
+
+        self.search_with_limit(query, Some(top_k), None)
+    }
+
+    pub fn search_top_k_in_chunks(
+        &self,
+        query: &str,
+        top_k: usize,
+        allowed_chunks: &HashSet<ChunkId>,
+    ) -> Vec<Bm25Hit> {
+        if top_k == 0 || allowed_chunks.is_empty() {
+            return Vec::new();
+        }
+
+        self.search_with_limit(query, Some(top_k), Some(allowed_chunks))
+    }
+
+    fn search_with_limit(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+        allowed_chunks: Option<&HashSet<ChunkId>>,
+    ) -> Vec<Bm25Hit> {
         let query_terms = tokenize(query, &self.config.stop_words)
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        if query_terms.is_empty() || self.active_chunks.is_empty() {
+        if query_terms.is_empty()
+            || self.active_chunks.is_empty()
+            || allowed_chunks.is_some_and(|allowed_chunks| allowed_chunks.is_empty())
+        {
             return Vec::new();
         }
 
@@ -199,6 +232,11 @@ impl Bm25Index {
                 if !self.active_chunks.contains(&posting.chunk_id) {
                     continue;
                 }
+                if let Some(allowed_chunks) = allowed_chunks {
+                    if !allowed_chunks.contains(&posting.chunk_id) {
+                        continue;
+                    }
+                }
 
                 let Some(&chunk_length) = self.chunk_lengths.get(&posting.chunk_id) else {
                     continue;
@@ -220,6 +258,20 @@ impl Bm25Index {
             }
         }
 
+        if let Some(limit) = limit {
+            let mut bounded_hits = Vec::with_capacity(limit.min(scores.len()));
+            for (chunk_id, score) in scores {
+                let hit = Bm25Hit {
+                    chunk_id,
+                    score,
+                    matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
+                };
+                push_bounded_bm25_hit(&mut bounded_hits, limit, hit);
+            }
+            sort_bm25_hits(&mut bounded_hits);
+            return bounded_hits;
+        }
+
         let mut hits = scores
             .into_iter()
             .map(|(chunk_id, score)| Bm25Hit {
@@ -228,13 +280,7 @@ impl Bm25Index {
                 matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
             })
             .collect::<Vec<_>>();
-
-        hits.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
-                .then_with(|| left.chunk_id.cmp(&right.chunk_id))
-        });
+        sort_bm25_hits(&mut hits);
         hits
     }
 
@@ -279,6 +325,46 @@ impl Bm25Index {
             self.postings.remove(&term);
         }
     }
+}
+
+fn push_bounded_bm25_hit(hits: &mut Vec<Bm25Hit>, top_k: usize, hit: Bm25Hit) {
+    if hits.len() < top_k {
+        hits.push(hit);
+        return;
+    }
+
+    let Some(worst_index) = worst_bm25_hit_index(hits) else {
+        return;
+    };
+
+    if bm25_hit_ranks_before(&hit, &hits[worst_index]) {
+        hits[worst_index] = hit;
+    }
+}
+
+fn worst_bm25_hit_index(hits: &[Bm25Hit]) -> Option<usize> {
+    let mut worst_index = 0;
+    for index in 1..hits.len() {
+        if bm25_hit_ranks_before(&hits[worst_index], &hits[index]) {
+            worst_index = index;
+        }
+    }
+    Some(worst_index)
+}
+
+fn sort_bm25_hits(hits: &mut [Bm25Hit]) {
+    hits.sort_by(compare_bm25_hits);
+}
+
+fn compare_bm25_hits(left: &Bm25Hit, right: &Bm25Hit) -> std::cmp::Ordering {
+    right
+        .score
+        .total_cmp(&left.score)
+        .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+}
+
+fn bm25_hit_ranks_before(left: &Bm25Hit, right: &Bm25Hit) -> bool {
+    compare_bm25_hits(left, right).is_lt()
 }
 
 impl PersistedBm25Index {
@@ -595,6 +681,45 @@ mod tests {
             hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
             vec![10, 20]
         );
+    }
+
+    #[test]
+    fn bm25_search_top_k_matches_search_all_prefix() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(1, "swift search search", true);
+        index.add_chunk(2, "swift search", true);
+        index.add_chunk(3, "swift", true);
+        index.add_chunk(4, "search", true);
+
+        let all_hits = index.search_all("swift search");
+        let top_hits = index.search_top_k("swift search", 2);
+
+        assert_eq!(top_hits, all_hits.into_iter().take(2).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn bm25_search_top_k_keeps_deterministic_tie_ordering() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(20, "same", true);
+        index.add_chunk(10, "same", true);
+
+        let hits = index.search_top_k("same", 1);
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 10);
+    }
+
+    #[test]
+    fn bm25_search_top_k_in_chunks_scores_only_allowed_chunks() {
+        let mut index = Bm25Index::new(Bm25Config::default());
+        index.add_chunk(10, "target target target", true);
+        index.add_chunk(20, "target", true);
+
+        let allowed_chunks = [20].into_iter().collect::<HashSet<_>>();
+        let hits = index.search_top_k_in_chunks("target", 1, &allowed_chunks);
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].chunk_id, 20);
     }
 
     #[test]

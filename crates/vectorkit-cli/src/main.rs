@@ -42,6 +42,8 @@ struct SyntheticBenchConfig {
     dimension: usize,
     queries: usize,
     top_k: usize,
+    vector_candidates: usize,
+    keyword_candidates: usize,
     search_mode: SearchMode,
     encoding: VectorEncoding,
     metric: VectorMetric,
@@ -74,6 +76,8 @@ impl Default for SyntheticBenchConfig {
             dimension: 384,
             queries: 100,
             top_k: 10,
+            vector_candidates: 50,
+            keyword_candidates: 50,
             search_mode: SearchMode::Vector,
             encoding: VectorEncoding::F32,
             metric: VectorMetric::Cosine,
@@ -114,6 +118,8 @@ impl SyntheticBenchConfig {
                 "--dimension" => config.dimension = parse_positive(value, flag)?,
                 "--queries" => config.queries = parse_positive(value, flag)?,
                 "--top-k" => config.top_k = parse_positive(value, flag)?,
+                "--vector-candidates" => config.vector_candidates = parse_positive(value, flag)?,
+                "--keyword-candidates" => config.keyword_candidates = parse_positive(value, flag)?,
                 "--search-mode" => config.search_mode = parse_search_mode(value)?,
                 "--encoding" => config.encoding = parse_encoding(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
@@ -153,6 +159,8 @@ struct MatrixBenchConfig {
     dimensions: Vec<usize>,
     queries: usize,
     top_ks: Vec<usize>,
+    vector_candidate_limits: Vec<usize>,
+    keyword_candidate_limits: Vec<usize>,
     search_modes: Vec<SearchMode>,
     encodings: Vec<VectorEncoding>,
     metric: VectorMetric,
@@ -169,6 +177,8 @@ impl Default for MatrixBenchConfig {
             dimensions: vec![384, 768, 1536],
             queries: 100,
             top_ks: vec![5, 10],
+            vector_candidate_limits: vec![50],
+            keyword_candidate_limits: vec![50],
             search_modes: vec![SearchMode::Vector],
             encodings: vec![
                 VectorEncoding::F32,
@@ -203,6 +213,12 @@ impl MatrixBenchConfig {
                 "--dimensions" => config.dimensions = parse_positive_list(value, flag)?,
                 "--queries" => config.queries = parse_positive(value, flag)?,
                 "--top-k" => config.top_ks = parse_positive_list(value, flag)?,
+                "--vector-candidates" => {
+                    config.vector_candidate_limits = parse_positive_list(value, flag)?
+                }
+                "--keyword-candidates" => {
+                    config.keyword_candidate_limits = parse_positive_list(value, flag)?
+                }
                 "--search-modes" => config.search_modes = parse_search_mode_list(value)?,
                 "--encodings" => config.encodings = parse_encoding_list(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
@@ -370,6 +386,8 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
     println!("dimension: {}", report.config.dimension);
     println!("queries: {}", report.config.queries);
     println!("top_k: {}", report.config.top_k);
+    println!("vector_candidates: {}", report.config.vector_candidates);
+    println!("keyword_candidates: {}", report.config.keyword_candidates);
     println!(
         "search_mode: {}",
         search_mode_name(report.config.search_mode)
@@ -486,74 +504,92 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
 
 fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     println!(
-        "| chunks | dim | top_k | mode | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | persisted MB | headroom MB | retained f32 MB | build ms | vector cand avg ms | keyword cand avg ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
+        "| chunks | dim | top_k | vector candidates | keyword candidates | mode | enc | metric | filter every | vector MB | aux MB | est total MB | current payload MB | persisted MB | headroom MB | retained f32 MB | build ms | vector cand avg ms | keyword cand avg ms | min ms | avg ms | p50 ms | p95 ms | max ms | recall@k vs f32 | hits | checksum |"
     );
     println!(
-        "|---:|---:|---:|:---|:---|:---|:---|---:|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "|---:|---:|---:|:---|:---|:---|:---|:---|:---|---:|---:|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     );
 
     for dimension in &config.dimensions {
         for top_k in &config.top_ks {
             for search_mode in &config.search_modes {
                 for encoding in &config.encodings {
-                    for filter_every in &config.filter_every_values {
-                        let persist_dir = config.persist_dir.as_ref().map(|base| {
-                            base.join(format!(
-                                "chunks-{}-dim-{}-topk-{}-{}-{}-filter-{}",
-                                config.chunks,
-                                dimension,
-                                top_k,
-                                search_mode_name(*search_mode),
-                                encoding_name(*encoding),
-                                filter_every_name(*filter_every)
-                            ))
-                        });
-                        let report = benchmark_synthetic(SyntheticBenchConfig {
-                            chunks: config.chunks,
-                            dimension: *dimension,
-                            queries: config.queries,
-                            top_k: *top_k,
-                            search_mode: *search_mode,
-                            encoding: *encoding,
-                            metric: config.metric,
-                            seed: config.seed,
-                            filter_every: *filter_every,
-                            persist_dir,
-                            footprint: config.footprint.clone(),
-                        })?;
+                    for (vector_candidates, keyword_candidates) in candidate_limit_pairs(
+                        *search_mode,
+                        &config.vector_candidate_limits,
+                        &config.keyword_candidate_limits,
+                    ) {
+                        for filter_every in &config.filter_every_values {
+                            let persist_dir = config.persist_dir.as_ref().map(|base| {
+                                base.join(format!(
+                                    "chunks-{}-dim-{}-topk-{}-{}-{}-vcand-{}-kcand-{}-filter-{}",
+                                    config.chunks,
+                                    dimension,
+                                    top_k,
+                                    search_mode_name(*search_mode),
+                                    encoding_name(*encoding),
+                                    vector_candidates,
+                                    keyword_candidates,
+                                    filter_every_name(*filter_every)
+                                ))
+                            });
+                            let report = benchmark_synthetic(SyntheticBenchConfig {
+                                chunks: config.chunks,
+                                dimension: *dimension,
+                                queries: config.queries,
+                                top_k: *top_k,
+                                vector_candidates,
+                                keyword_candidates,
+                                search_mode: *search_mode,
+                                encoding: *encoding,
+                                metric: config.metric,
+                                seed: config.seed,
+                                filter_every: *filter_every,
+                                persist_dir,
+                                footprint: config.footprint.clone(),
+                            })?;
 
-                        println!(
-                            "| {} | {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
-                            report.config.chunks,
-                            report.config.dimension,
-                            report.config.top_k,
-                            search_mode_name(report.config.search_mode),
-                            encoding_name(report.config.encoding),
-                            metric_name(report.config.metric),
-                            filter_every_name(report.config.filter_every),
-                            mib(report.footprint.vector_bytes),
-                            mib(report.footprint.auxiliary_bytes()),
-                            mib(report.footprint.total_bytes()),
-                            mib(report.index_size.total_bytes()),
-                            persisted_mb_cell(report.persisted_file_sizes),
-                            signed_mib(
-                                report
-                                    .footprint
-                                    .budget_headroom_bytes(report.config.footprint.budget_bytes)
-                            ),
-                            mib(report.source_embedding_bytes),
-                            millis(report.build_duration),
-                            optional_millis_cell(report.vector_candidate_avg),
-                            optional_millis_cell(report.keyword_candidate_avg),
-                            millis(report.query_min),
-                            millis(report.query_avg),
-                            millis(report.query_p50),
-                            millis(report.query_p95),
-                            millis(report.query_max),
-                            report.recall_at_k_vs_f32,
-                            report.total_hits,
-                            report.top_hit_checksum,
-                        );
+                            println!(
+                                "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                                report.config.chunks,
+                                report.config.dimension,
+                                report.config.top_k,
+                                hybrid_candidate_limit_cell(
+                                    report.config.search_mode,
+                                    report.config.vector_candidates
+                                ),
+                                hybrid_candidate_limit_cell(
+                                    report.config.search_mode,
+                                    report.config.keyword_candidates
+                                ),
+                                search_mode_name(report.config.search_mode),
+                                encoding_name(report.config.encoding),
+                                metric_name(report.config.metric),
+                                filter_every_name(report.config.filter_every),
+                                mib(report.footprint.vector_bytes),
+                                mib(report.footprint.auxiliary_bytes()),
+                                mib(report.footprint.total_bytes()),
+                                mib(report.index_size.total_bytes()),
+                                persisted_mb_cell(report.persisted_file_sizes),
+                                signed_mib(
+                                    report
+                                        .footprint
+                                        .budget_headroom_bytes(report.config.footprint.budget_bytes)
+                                ),
+                                mib(report.source_embedding_bytes),
+                                millis(report.build_duration),
+                                optional_millis_cell(report.vector_candidate_avg),
+                                optional_millis_cell(report.keyword_candidate_avg),
+                                millis(report.query_min),
+                                millis(report.query_avg),
+                                millis(report.query_p50),
+                                millis(report.query_p95),
+                                millis(report.query_max),
+                                report.recall_at_k_vs_f32,
+                                report.total_hits,
+                                report.top_hit_checksum,
+                            );
+                        }
                     }
                 }
             }
@@ -561,6 +597,39 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn candidate_limit_pairs(
+    search_mode: SearchMode,
+    vector_candidate_limits: &[usize],
+    keyword_candidate_limits: &[usize],
+) -> Vec<(usize, usize)> {
+    if !is_hybrid_mode(search_mode) {
+        return vec![(
+            first_candidate_limit(vector_candidate_limits),
+            first_candidate_limit(keyword_candidate_limits),
+        )];
+    }
+
+    let mut pairs =
+        Vec::with_capacity(vector_candidate_limits.len() * keyword_candidate_limits.len());
+    for vector_candidates in vector_candidate_limits {
+        for keyword_candidates in keyword_candidate_limits {
+            pairs.push((*vector_candidates, *keyword_candidates));
+        }
+    }
+    pairs
+}
+
+fn first_candidate_limit(candidate_limits: &[usize]) -> usize {
+    candidate_limits.first().copied().unwrap_or(50)
+}
+
+fn is_hybrid_mode(search_mode: SearchMode) -> bool {
+    matches!(
+        search_mode,
+        SearchMode::HybridWeighted | SearchMode::HybridRrf
+    )
 }
 
 fn run_kernel_bench(config: KernelBenchConfig) -> Result<(), CliError> {
@@ -622,16 +691,23 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         let query =
             generate_query_vector(config.dimension, config.seed, target_chunk as u64, query_id);
         let query_text = synthetic_query_text(target_chunk);
+        let search_spec = SyntheticSearchSpec {
+            top_k: config.top_k,
+            vector_candidates: config.vector_candidates,
+            keyword_candidates: config.keyword_candidates,
+            filter_every: config.filter_every,
+            target_chunk,
+        };
 
         if matches!(
             config.search_mode,
             SearchMode::HybridWeighted | SearchMode::HybridRrf
         ) {
             let search_query = synthetic_search_query(
-                config.top_k,
+                search_spec.vector_candidates,
                 query.clone(),
-                config.filter_every,
-                target_chunk,
+                search_spec.filter_every,
+                search_spec.target_chunk,
             );
             let vector_start = Instant::now();
             let vector_hits = index.search(&search_query)?;
@@ -639,10 +715,10 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
             black_box(vector_hits.len());
 
             let keyword_query = synthetic_keyword_query(
-                config.top_k,
+                search_spec.keyword_candidates,
                 &query_text,
-                config.filter_every,
-                target_chunk,
+                search_spec.filter_every,
+                search_spec.target_chunk,
             );
             let keyword_start = Instant::now();
             let keyword_hits = index.keyword_search(&keyword_query)?;
@@ -654,11 +730,9 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
         let hits = run_synthetic_search_mode(
             &index,
             config.search_mode,
-            config.top_k,
+            search_spec,
             query.clone(),
             &query_text,
-            config.filter_every,
-            target_chunk,
         )?;
         query_durations.push(start.elapsed());
 
@@ -667,11 +741,9 @@ fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchRep
                 let ground_truth_hits = run_synthetic_search_mode(
                     ground_truth,
                     config.search_mode,
-                    config.top_k,
+                    search_spec,
                     query,
                     &query_text,
-                    config.filter_every,
-                    target_chunk,
                 )?;
                 recall_at_k(&hits, &ground_truth_hits)
             }
@@ -974,21 +1046,20 @@ fn synthetic_keyword_query(
 }
 
 fn synthetic_hybrid_query(
-    top_k: usize,
+    spec: SyntheticSearchSpec,
     embedding: Vec<f32>,
     text: &str,
-    filter_every: Option<usize>,
-    target_chunk: usize,
     search_mode: SearchMode,
 ) -> HybridQuery {
-    let query = HybridQuery::new(text, embedding, top_k);
+    let query = HybridQuery::new(text, embedding, spec.top_k)
+        .with_candidate_limits(spec.vector_candidates, spec.keyword_candidates);
     let query = match search_mode {
         SearchMode::HybridWeighted => query,
         SearchMode::HybridRrf => query.with_rrf_k(60.0),
         SearchMode::Vector | SearchMode::Keyword => query,
     };
 
-    match synthetic_filter(filter_every, target_chunk) {
+    match synthetic_filter(spec.filter_every, spec.target_chunk) {
         Some(filter) => query.with_filter(filter),
         None => query,
     }
@@ -1006,22 +1077,29 @@ struct BenchHit {
     chunk_id: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SyntheticSearchSpec {
+    top_k: usize,
+    vector_candidates: usize,
+    keyword_candidates: usize,
+    filter_every: Option<usize>,
+    target_chunk: usize,
+}
+
 fn run_synthetic_search_mode(
     index: &ExactVectorIndex,
     search_mode: SearchMode,
-    top_k: usize,
+    spec: SyntheticSearchSpec,
     embedding: Vec<f32>,
     text: &str,
-    filter_every: Option<usize>,
-    target_chunk: usize,
 ) -> Result<Vec<BenchHit>, CliError> {
     match search_mode {
         SearchMode::Vector => Ok(index
             .search(&synthetic_search_query(
-                top_k,
+                spec.top_k,
                 embedding,
-                filter_every,
-                target_chunk,
+                spec.filter_every,
+                spec.target_chunk,
             ))?
             .into_iter()
             .map(|hit| BenchHit {
@@ -1030,10 +1108,10 @@ fn run_synthetic_search_mode(
             .collect()),
         SearchMode::Keyword => Ok(index
             .keyword_search(&synthetic_keyword_query(
-                top_k,
+                spec.top_k,
                 text,
-                filter_every,
-                target_chunk,
+                spec.filter_every,
+                spec.target_chunk,
             ))?
             .into_iter()
             .map(|hit| BenchHit {
@@ -1041,14 +1119,7 @@ fn run_synthetic_search_mode(
             })
             .collect()),
         SearchMode::HybridWeighted | SearchMode::HybridRrf => Ok(index
-            .hybrid_search(&synthetic_hybrid_query(
-                top_k,
-                embedding,
-                text,
-                filter_every,
-                target_chunk,
-                search_mode,
-            ))?
+            .hybrid_search(&synthetic_hybrid_query(spec, embedding, text, search_mode))?
             .into_iter()
             .map(|hit| BenchHit {
                 chunk_id: hit.chunk_id,
@@ -1419,6 +1490,14 @@ fn filter_every_name(filter_every: Option<usize>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn hybrid_candidate_limit_cell(search_mode: SearchMode, candidate_limit: usize) -> String {
+    if is_hybrid_mode(search_mode) {
+        candidate_limit.to_string()
+    } else {
+        "n/a".to_owned()
+    }
+}
+
 fn persisted_mb_cell(file_sizes: Option<IndexFileSizeReport>) -> String {
     file_sizes
         .map(|file_sizes| format!("{:.3}", mib_u64(file_sizes.total_bytes())))
@@ -1491,6 +1570,8 @@ impl CliError {
                 "  --dimension <n>    default 384",
                 "  --queries <n>      default 100",
                 "  --top-k <n>        default 10",
+                "  --vector-candidates <n> hybrid vector candidate limit; default 50",
+                "  --keyword-candidates <n> hybrid keyword candidate limit; default 50",
                 "  --search-mode <kind> vector, keyword, hybrid-weighted, or hybrid-rrf; default vector",
                 "  --encoding <kind>  f32, f16, bf16, or i8; default f32",
                 "  --metric <kind>    cosine or dot; default cosine",
@@ -1507,6 +1588,8 @@ impl CliError {
                 "  --dimensions <list>   comma list; default 384,768,1536",
                 "  --queries <n>         default 100",
                 "  --top-k <list>        comma list; default 5,10",
+                "  --vector-candidates <list> comma list of hybrid vector candidate limits; default 50",
+                "  --keyword-candidates <list> comma list of hybrid keyword candidate limits; default 50",
                 "  --search-modes <list> comma list of vector,keyword,hybrid-weighted,hybrid-rrf; default vector",
                 "  --encodings <list>    comma list of f32,f16,bf16,i8; default f32,f16,bf16,i8",
                 "  --metric <kind>       cosine or dot; default cosine",
@@ -1596,6 +1679,10 @@ mod tests {
             "50",
             "--top-k",
             "5",
+            "--vector-candidates",
+            "25",
+            "--keyword-candidates",
+            "30",
             "--search-mode",
             "hybrid-weighted",
             "--encoding",
@@ -1625,6 +1712,8 @@ mod tests {
         assert_eq!(config.dimension, 768);
         assert_eq!(config.queries, 50);
         assert_eq!(config.top_k, 5);
+        assert_eq!(config.vector_candidates, 25);
+        assert_eq!(config.keyword_candidates, 30);
         assert_eq!(config.search_mode, SearchMode::HybridWeighted);
         assert_eq!(config.encoding, VectorEncoding::I8ScalarQuantized);
         assert_eq!(config.metric, VectorMetric::DotProduct);
@@ -1659,6 +1748,10 @@ mod tests {
             "384,768",
             "--top-k",
             "5,10",
+            "--vector-candidates",
+            "10,25",
+            "--keyword-candidates",
+            "10,50",
             "--search-modes",
             "vector,keyword,hybrid-rrf",
             "--encodings",
@@ -1675,6 +1768,8 @@ mod tests {
         assert_eq!(config.chunks, 2_000);
         assert_eq!(config.dimensions, vec![384, 768]);
         assert_eq!(config.top_ks, vec![5, 10]);
+        assert_eq!(config.vector_candidate_limits, vec![10, 25]);
+        assert_eq!(config.keyword_candidate_limits, vec![10, 50]);
         assert_eq!(
             config.search_modes,
             vec![
@@ -1704,6 +1799,18 @@ mod tests {
         let config = MatrixBenchConfig::parse(&args).unwrap();
 
         assert_eq!(config.filter_every_values, vec![Some(100)]);
+    }
+
+    #[test]
+    fn candidate_limit_pairs_only_expand_hybrid_modes() {
+        assert_eq!(
+            candidate_limit_pairs(SearchMode::Keyword, &[10, 25], &[10, 50]),
+            vec![(10, 10)]
+        );
+        assert_eq!(
+            candidate_limit_pairs(SearchMode::HybridWeighted, &[10, 25], &[10, 50]),
+            vec![(10, 10), (10, 50), (25, 10), (25, 50)]
+        );
     }
 
     #[test]

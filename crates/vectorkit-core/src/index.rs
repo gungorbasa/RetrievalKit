@@ -496,39 +496,55 @@ impl ExactVectorIndex {
 
     /// Performs exact vector search over active chunks.
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
-        self.validate_dimension(query.embedding.len())?;
+        self.search_vector_candidates(&query.embedding, query.top_k, query.filter.as_ref())
+    }
 
-        if query.top_k == 0 {
+    fn search_vector_candidates(
+        &self,
+        embedding: &[f32],
+        top_k: usize,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<SearchHit>> {
+        self.validate_dimension(embedding.len())?;
+
+        if top_k == 0 {
             return Ok(Vec::new());
         }
-        let encoded_query = self.encode_query_embedding(&query.embedding)?;
+        let encoded_query = self.encode_query_embedding(embedding)?;
 
-        let candidate_offsets = query
-            .filter
-            .as_ref()
+        let candidate_offsets = filter
             .map(|filter| self.metadata_filter_index.candidate_offsets(filter))
             .transpose()?
             .flatten();
 
-        if let Some(hits) = self.search_i8_offsets(
-            query.top_k,
-            &encoded_query,
-            query.filter.as_ref(),
-            &candidate_offsets,
-        )? {
+        if let Some(hits) =
+            self.search_i8_offsets(top_k, &encoded_query, filter, &candidate_offsets)?
+        {
             return Ok(hits);
         }
 
-        let mut candidates = Vec::with_capacity(query.top_k);
+        let mut candidates = Vec::with_capacity(top_k);
         match candidate_offsets {
             Some(offsets) => {
                 for offset in offsets {
-                    self.score_search_candidate(offset, query, &encoded_query, &mut candidates)?;
+                    self.score_search_candidate(
+                        offset,
+                        top_k,
+                        filter,
+                        &encoded_query,
+                        &mut candidates,
+                    )?;
                 }
             }
             None => {
                 for offset in self.active_offsets.iter().copied() {
-                    self.score_search_candidate(offset, query, &encoded_query, &mut candidates)?;
+                    self.score_search_candidate(
+                        offset,
+                        top_k,
+                        filter,
+                        &encoded_query,
+                        &mut candidates,
+                    )?;
                 }
             }
         }
@@ -642,12 +658,21 @@ impl ExactVectorIndex {
 
     /// Performs BM25 keyword search over active chunks.
     pub fn keyword_search(&self, query: &KeywordQuery) -> Result<Vec<KeywordHit>> {
-        if query.top_k == 0 {
+        self.keyword_search_candidates(&query.text, query.top_k, query.filter.as_ref())
+    }
+
+    fn keyword_search_candidates(
+        &self,
+        text: &str,
+        top_k: usize,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<KeywordHit>> {
+        if top_k == 0 {
             return Ok(Vec::new());
         }
 
         let mut hits = Vec::new();
-        for keyword_hit in self.bm25.search_all(&query.text) {
+        for keyword_hit in self.bm25.search_all(text) {
             let Some(chunk) = self.chunk(keyword_hit.chunk_id) else {
                 continue;
             };
@@ -656,7 +681,7 @@ impl ExactVectorIndex {
                 continue;
             }
 
-            if !matches_filter(query.filter.as_ref(), chunk)? {
+            if !matches_filter(filter, chunk)? {
                 continue;
             }
 
@@ -667,7 +692,7 @@ impl ExactVectorIndex {
                 matched_terms: keyword_hit.matched_terms,
             });
 
-            if hits.len() == query.top_k {
+            if hits.len() == top_k {
                 break;
             }
         }
@@ -685,16 +710,16 @@ impl ExactVectorIndex {
 
         validate_hybrid_fusion(query.fusion)?;
 
-        let vector_hits = self.search(&SearchQuery {
-            embedding: query.embedding.clone(),
-            top_k: query.vector_top_k,
-            filter: query.filter.clone(),
-        })?;
-        let keyword_hits = self.keyword_search(&KeywordQuery {
-            text: query.text.clone(),
-            top_k: query.keyword_top_k,
-            filter: query.filter.clone(),
-        })?;
+        let vector_hits = self.search_vector_candidates(
+            &query.embedding,
+            query.vector_top_k,
+            query.filter.as_ref(),
+        )?;
+        let keyword_hits = self.keyword_search_candidates(
+            &query.text,
+            query.keyword_top_k,
+            query.filter.as_ref(),
+        )?;
 
         let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
         for (rank_index, hit) in vector_hits.iter().enumerate() {
@@ -836,7 +861,8 @@ impl ExactVectorIndex {
     fn score_search_candidate(
         &self,
         offset: usize,
-        query: &SearchQuery,
+        top_k: usize,
+        filter: Option<&Filter>,
         encoded_query: &scoring::EncodedQuery,
         hits: &mut Vec<ScoredCandidate>,
     ) -> Result<()> {
@@ -848,7 +874,7 @@ impl ExactVectorIndex {
             return Ok(());
         }
 
-        if !matches_filter(query.filter.as_ref(), chunk)? {
+        if !matches_filter(filter, chunk)? {
             return Ok(());
         }
 
@@ -861,7 +887,7 @@ impl ExactVectorIndex {
 
         push_bounded_candidate(
             hits,
-            query.top_k,
+            top_k,
             ScoredCandidate {
                 chunk_id: chunk.chunk_id,
                 offset,

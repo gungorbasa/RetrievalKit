@@ -157,7 +157,7 @@ struct MatrixBenchConfig {
     encodings: Vec<VectorEncoding>,
     metric: VectorMetric,
     seed: u64,
-    filter_every: Option<usize>,
+    filter_every_values: Vec<Option<usize>>,
     persist_dir: Option<PathBuf>,
     footprint: FootprintConfig,
 }
@@ -178,7 +178,7 @@ impl Default for MatrixBenchConfig {
             ],
             metric: VectorMetric::Cosine,
             seed: 42,
-            filter_every: None,
+            filter_every_values: vec![None],
             persist_dir: None,
             footprint: FootprintConfig::default(),
         }
@@ -207,7 +207,12 @@ impl MatrixBenchConfig {
                 "--encodings" => config.encodings = parse_encoding_list(value)?,
                 "--metric" => config.metric = parse_metric(value)?,
                 "--seed" => config.seed = parse_u64(value, flag)?,
-                "--filter-every" => config.filter_every = Some(parse_positive(value, flag)?),
+                "--filter-every" => {
+                    config.filter_every_values = vec![Some(parse_positive(value, flag)?)]
+                }
+                "--filter-every-values" => {
+                    config.filter_every_values = parse_filter_every_list(value, flag)?
+                }
                 "--persist-dir" => config.persist_dir = Some(PathBuf::from(value)),
                 "--budget-mb" => {
                     config.footprint.budget_bytes = parse_mib(value, flag)?;
@@ -491,62 +496,65 @@ fn run_matrix_bench(config: MatrixBenchConfig) -> Result<(), CliError> {
         for top_k in &config.top_ks {
             for search_mode in &config.search_modes {
                 for encoding in &config.encodings {
-                    let persist_dir = config.persist_dir.as_ref().map(|base| {
-                        base.join(format!(
-                            "chunks-{}-dim-{}-topk-{}-{}-{}",
-                            config.chunks,
-                            dimension,
-                            top_k,
-                            search_mode_name(*search_mode),
-                            encoding_name(*encoding)
-                        ))
-                    });
-                    let report = benchmark_synthetic(SyntheticBenchConfig {
-                        chunks: config.chunks,
-                        dimension: *dimension,
-                        queries: config.queries,
-                        top_k: *top_k,
-                        search_mode: *search_mode,
-                        encoding: *encoding,
-                        metric: config.metric,
-                        seed: config.seed,
-                        filter_every: config.filter_every,
-                        persist_dir,
-                        footprint: config.footprint.clone(),
-                    })?;
+                    for filter_every in &config.filter_every_values {
+                        let persist_dir = config.persist_dir.as_ref().map(|base| {
+                            base.join(format!(
+                                "chunks-{}-dim-{}-topk-{}-{}-{}-filter-{}",
+                                config.chunks,
+                                dimension,
+                                top_k,
+                                search_mode_name(*search_mode),
+                                encoding_name(*encoding),
+                                filter_every_name(*filter_every)
+                            ))
+                        });
+                        let report = benchmark_synthetic(SyntheticBenchConfig {
+                            chunks: config.chunks,
+                            dimension: *dimension,
+                            queries: config.queries,
+                            top_k: *top_k,
+                            search_mode: *search_mode,
+                            encoding: *encoding,
+                            metric: config.metric,
+                            seed: config.seed,
+                            filter_every: *filter_every,
+                            persist_dir,
+                            footprint: config.footprint.clone(),
+                        })?;
 
-                    println!(
-                        "| {} | {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
-                        report.config.chunks,
-                        report.config.dimension,
-                        report.config.top_k,
-                        search_mode_name(report.config.search_mode),
-                        encoding_name(report.config.encoding),
-                        metric_name(report.config.metric),
-                        filter_every_name(report.config.filter_every),
-                        mib(report.footprint.vector_bytes),
-                        mib(report.footprint.auxiliary_bytes()),
-                        mib(report.footprint.total_bytes()),
-                        mib(report.index_size.total_bytes()),
-                        persisted_mb_cell(report.persisted_file_sizes),
-                        signed_mib(
-                            report
-                                .footprint
-                                .budget_headroom_bytes(report.config.footprint.budget_bytes)
-                        ),
-                        mib(report.source_embedding_bytes),
-                        millis(report.build_duration),
-                        optional_millis_cell(report.vector_candidate_avg),
-                        optional_millis_cell(report.keyword_candidate_avg),
-                        millis(report.query_min),
-                        millis(report.query_avg),
-                        millis(report.query_p50),
-                        millis(report.query_p95),
-                        millis(report.query_max),
-                        report.recall_at_k_vs_f32,
-                        report.total_hits,
-                        report.top_hit_checksum,
-                    );
+                        println!(
+                            "| {} | {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {:.3} | {:.3} | {:.3} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.4} | {} | {} |",
+                            report.config.chunks,
+                            report.config.dimension,
+                            report.config.top_k,
+                            search_mode_name(report.config.search_mode),
+                            encoding_name(report.config.encoding),
+                            metric_name(report.config.metric),
+                            filter_every_name(report.config.filter_every),
+                            mib(report.footprint.vector_bytes),
+                            mib(report.footprint.auxiliary_bytes()),
+                            mib(report.footprint.total_bytes()),
+                            mib(report.index_size.total_bytes()),
+                            persisted_mb_cell(report.persisted_file_sizes),
+                            signed_mib(
+                                report
+                                    .footprint
+                                    .budget_headroom_bytes(report.config.footprint.budget_bytes)
+                            ),
+                            mib(report.source_embedding_bytes),
+                            millis(report.build_duration),
+                            optional_millis_cell(report.vector_candidate_avg),
+                            optional_millis_cell(report.keyword_candidate_avg),
+                            millis(report.query_min),
+                            millis(report.query_avg),
+                            millis(report.query_p50),
+                            millis(report.query_p95),
+                            millis(report.query_max),
+                            report.recall_at_k_vs_f32,
+                            report.total_hits,
+                            report.top_hit_checksum,
+                        );
+                    }
                 }
             }
         }
@@ -1285,6 +1293,26 @@ fn parse_positive_list(value: &str, name: &str) -> Result<Vec<usize>, CliError> 
     Ok(values)
 }
 
+fn parse_filter_every_list(value: &str, name: &str) -> Result<Vec<Option<usize>>, CliError> {
+    let values = value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| match value.to_ascii_lowercase().as_str() {
+            "none" | "unfiltered" => Ok(None),
+            _ => parse_positive(value, name).map(Some),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if values.is_empty() {
+        return Err(CliError::InvalidArgument(format!(
+            "'{name}' must contain at least one value"
+        )));
+    }
+
+    Ok(values)
+}
+
 fn parse_search_mode_list(value: &str) -> Result<Vec<SearchMode>, CliError> {
     let values = value
         .split(',')
@@ -1484,6 +1512,7 @@ impl CliError {
                 "  --metric <kind>       cosine or dot; default cosine",
                 "  --seed <n>            default 42",
                 "  --filter-every <n>    indexed equality filter with roughly 1/n selectivity",
+                "  --filter-every-values <list> comma list of filter-every values or none; matrix only",
                 "  --persist-dir <path>  save built indexes and report actual file sizes",
                 "  --budget-mb <n>       footprint budget in MiB; default 20",
                 "  --avg-chunk-data-bytes <n>  estimated bytes per chunk data; default 256",
@@ -1634,8 +1663,8 @@ mod tests {
             "vector,keyword,hybrid-rrf",
             "--encodings",
             "f32,i8",
-            "--filter-every",
-            "100",
+            "--filter-every-values",
+            "none,100,10,2",
             "--persist-dir",
             "/tmp/vectorkit-matrix",
         ]
@@ -1658,11 +1687,23 @@ mod tests {
             config.encodings,
             vec![VectorEncoding::F32, VectorEncoding::I8ScalarQuantized]
         );
-        assert_eq!(config.filter_every, Some(100));
+        assert_eq!(
+            config.filter_every_values,
+            vec![None, Some(100), Some(10), Some(2)]
+        );
         assert_eq!(
             config.persist_dir,
             Some(PathBuf::from("/tmp/vectorkit-matrix"))
         );
+    }
+
+    #[test]
+    fn parses_matrix_legacy_filter_every_as_single_value() {
+        let args = ["--filter-every", "100"].map(str::to_owned);
+
+        let config = MatrixBenchConfig::parse(&args).unwrap();
+
+        assert_eq!(config.filter_every_values, vec![Some(100)]);
     }
 
     #[test]

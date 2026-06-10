@@ -39,6 +39,20 @@ The wheel contains a compiled Rust extension, so it is specific to the platform
 and Python version used to build it. For example, a macOS arm64 CPython 3.14
 wheel is only for compatible macOS arm64 CPython 3.14 environments.
 
+## Platform Wheels
+
+The local `scripts/build-python-wheel.sh` helper builds for the platform and
+Python interpreter running the command. To produce macOS, Linux, and Windows
+wheels, run the wheel build on each target operating system and smoke-test the
+installed package with:
+
+```bash
+python wrappers/python/tests/smoke_installed.py
+```
+
+This keeps the repository ready for platform-specific wheels without requiring a
+GitHub CI workflow yet.
+
 ## Example
 
 ```python

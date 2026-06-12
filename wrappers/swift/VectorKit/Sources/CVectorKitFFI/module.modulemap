@@ -1,0 +1,4 @@
+module CVectorKitFFI [system] {
+  header "../../../../../crates/vectorkit-ffi/include/vectorkit_ffi.h"
+  export *
+}

@@ -3,22 +3,1115 @@ use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_float};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::ptr;
+use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use simsimd::capabilities;
 use vectorkit_core::{
-    Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
-    Metadata, MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    Chunk, ChunkInput, Document, ExactVectorIndex, Filter, HybridFusion, HybridHit, HybridQuery,
+    IndexConfig, IndexFileSizeReport, IndexPersistenceOptions, KeywordHit, KeywordQuery, Metadata,
+    MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+const VK_STATUS_OK: i32 = 0;
+const VK_STATUS_INVALID_ARGUMENT: i32 = 1;
+const VK_STATUS_CORE_ERROR: i32 = 2;
+const VK_STATUS_PANIC: i32 = 3;
+
+const VK_METRIC_COSINE: u32 = 0;
+const VK_METRIC_DOT_PRODUCT: u32 = 1;
+
+const VK_ENCODING_F32: u32 = 0;
+const VK_ENCODING_F16: u32 = 1;
+const VK_ENCODING_BF16: u32 = 2;
+const VK_ENCODING_I8_SCALAR_QUANTIZED: u32 = 3;
+
+const VK_METADATA_STRING: u32 = 0;
+const VK_METADATA_INTEGER: u32 = 1;
+const VK_METADATA_FLOAT: u32 = 2;
+const VK_METADATA_BOOLEAN: u32 = 3;
+const VK_METADATA_TIMESTAMP_MILLIS: u32 = 4;
+
+const VK_FUSION_WEIGHTED_NORMALIZED_SCORE: u32 = 0;
+const VK_FUSION_RECIPROCAL_RANK: u32 = 1;
+
+#[repr(C)]
+pub struct VkStatus {
+    pub code: i32,
+    pub message: *mut c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkMetadataValue {
+    pub value_type: u32,
+    pub string_value: *const c_char,
+    pub integer_value: i64,
+    pub float_value: f64,
+    pub bool_value: bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkMetadataEntry {
+    pub field: *const c_char,
+    pub value: VkMetadataValue,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkChunkInput {
+    pub text: *const c_char,
+    pub embedding: *const c_float,
+    pub embedding_len: usize,
+    pub metadata: *const VkMetadataEntry,
+    pub metadata_len: usize,
+}
+
+#[repr(C)]
+pub struct VkChunkIdBuffer {
+    pub values: *mut u64,
+    pub count: usize,
+}
+
+#[repr(C)]
+pub struct VkSearchHit {
+    pub chunk_id: u64,
+    pub document_id: *mut c_char,
+    pub text: *mut c_char,
+    pub score: c_float,
+    pub vector_score: c_float,
+    pub filter_matched: bool,
+}
+
+#[repr(C)]
+pub struct VkSearchResultBuffer {
+    pub hits: *mut VkSearchHit,
+    pub count: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkStringArray {
+    pub values: *mut *mut c_char,
+    pub count: usize,
+}
+
+#[repr(C)]
+pub struct VkKeywordHit {
+    pub chunk_id: u64,
+    pub document_id: *mut c_char,
+    pub text: *mut c_char,
+    pub score: c_float,
+    pub matched_terms: VkStringArray,
+}
+
+#[repr(C)]
+pub struct VkKeywordResultBuffer {
+    pub hits: *mut VkKeywordHit,
+    pub count: usize,
+}
+
+#[repr(C)]
+pub struct VkHybridHit {
+    pub chunk_id: u64,
+    pub document_id: *mut c_char,
+    pub text: *mut c_char,
+    pub score: c_float,
+    pub has_vector_score: bool,
+    pub vector_score: c_float,
+    pub has_keyword_score: bool,
+    pub keyword_score: c_float,
+    pub has_vector_rank: bool,
+    pub vector_rank: usize,
+    pub has_keyword_rank: bool,
+    pub keyword_rank: usize,
+    pub has_normalized_vector_score: bool,
+    pub normalized_vector_score: c_float,
+    pub has_normalized_keyword_score: bool,
+    pub normalized_keyword_score: c_float,
+    pub matched_terms: VkStringArray,
+    pub filter_matched: bool,
+}
+
+#[repr(C)]
+pub struct VkHybridResultBuffer {
+    pub hits: *mut VkHybridHit,
+    pub count: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkHybridOptions {
+    pub vector_top_k: usize,
+    pub keyword_top_k: usize,
+    pub fusion_type: u32,
+    pub vector_weight: c_float,
+    pub keyword_weight: c_float,
+    pub rrf_k: c_float,
+}
+
+pub struct VkIndex {
+    index: ExactVectorIndex,
+}
+
+pub struct VkFilter {
+    filter: Filter,
+}
+
+/// Clears a status value populated by any VectorKit FFI function.
+///
+/// # Safety
+///
+/// `status`, when non-null, must point to a valid `VkStatus`. Its `message`
+/// field must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_status_clear(status: *mut VkStatus) {
+    if status.is_null() {
+        return;
+    }
+
+    let status = unsafe { &mut *status };
+    if !status.message.is_null() {
+        unsafe { vectorkit_string_free(status.message) };
+    }
+    status.code = VK_STATUS_OK;
+    status.message = ptr::null_mut();
+}
+
+/// Creates a new local exact/hybrid index.
+///
+/// # Safety
+///
+/// `status`, when non-null, must point to a valid `VkStatus`.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_new(
+    dimension: usize,
+    metric: u32,
+    encoding: u32,
+    status: *mut VkStatus,
+) -> *mut VkIndex {
+    ffi_ptr(status, || {
+        let metric = parse_metric(metric)?;
+        let encoding = parse_encoding_code(encoding)?;
+        let config = IndexConfig::new(dimension, metric).with_vector_encoding(encoding);
+        let index = ExactVectorIndex::try_with_config(config)?;
+        Ok(Box::into_raw(Box::new(VkIndex { index })))
+    })
+}
+
+/// Loads an index previously saved by VectorKit.
+///
+/// # Safety
+///
+/// `directory` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_load(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkIndex {
+    ffi_ptr(status, || {
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        let index = ExactVectorIndex::load_from_dir(directory)?;
+        Ok(Box::into_raw(Box::new(VkIndex { index })))
+    })
+}
+
+/// Frees an index created or loaded by VectorKit.
+///
+/// # Safety
+///
+/// `index` must be null or a pointer returned by `vectorkit_index_new` or
+/// `vectorkit_index_load` that has not already been freed.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_free(index: *mut VkIndex) {
+    if !index.is_null() {
+        unsafe { drop(Box::from_raw(index)) };
+    }
+}
+
+/// Saves an index to a local directory.
+///
+/// # Safety
+///
+/// `index` must be a valid VectorKit index pointer and `directory` must point
+/// to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_save(
+    index: *mut VkIndex,
+    directory: *const c_char,
+    include_bm25: bool,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let index = unsafe { index_mut(index) }?;
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        index
+            .index
+            .save_to_dir_with_options(directory, IndexPersistenceOptions { include_bm25 })?;
+        Ok(())
+    })
+}
+
+/// Returns the index embedding dimension, or 0 for a null index pointer.
+///
+/// # Safety
+///
+/// `index` must be null or a valid VectorKit index pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_dimension(index: *const VkIndex) -> usize {
+    if index.is_null() {
+        return 0;
+    }
+    unsafe { &*index }.index.dimension()
+}
+
+/// Returns the number of active chunks in the index, or 0 for a null pointer.
+///
+/// # Safety
+///
+/// `index` must be null or a valid VectorKit index pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_active_chunk_count(index: *const VkIndex) -> usize {
+    if index.is_null() {
+        return 0;
+    }
+    unsafe { &*index }.index.active_chunk_count()
+}
+
+/// Adds or replaces all chunks for a caller-owned document ID.
+///
+/// # Safety
+///
+/// All string, metadata, and embedding pointers must remain valid for the
+/// duration of this call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_upsert_document(
+    index: *mut VkIndex,
+    document_id: *const c_char,
+    document_text: *const c_char,
+    document_metadata: *const VkMetadataEntry,
+    document_metadata_len: usize,
+    chunks: *const VkChunkInput,
+    chunk_count: usize,
+    out_chunk_ids: *mut VkChunkIdBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_chunk_ids.is_null() {
+            return Err(FfiError::invalid_argument("out_chunk_ids must not be null"));
+        }
+        let index = unsafe { index_mut(index) }?;
+        let document = Document {
+            id: unsafe { read_c_string(document_id, "document_id") }?,
+            text: unsafe { read_c_string(document_text, "document_text") }?,
+            metadata: unsafe { read_metadata(document_metadata, document_metadata_len) }?,
+        };
+        let chunk_inputs = unsafe { read_chunk_inputs(chunks, chunk_count) }?;
+        let chunk_ids = index.index.upsert_document(document, chunk_inputs)?;
+        let buffer = chunk_id_buffer(chunk_ids);
+        unsafe { *out_chunk_ids = buffer };
+        Ok(())
+    })
+}
+
+/// Deletes active chunks for a caller-owned document ID.
+///
+/// # Safety
+///
+/// `index` must be valid and `document_id` must point to a valid
+/// null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_delete_document(
+    index: *mut VkIndex,
+    document_id: *const c_char,
+    deleted_count: *mut usize,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if deleted_count.is_null() {
+            return Err(FfiError::invalid_argument("deleted_count must not be null"));
+        }
+        let index = unsafe { index_mut(index) }?;
+        let document_id = unsafe { read_c_string(document_id, "document_id") }?;
+        let count = index.index.delete_document(&document_id);
+        unsafe { *deleted_count = count };
+        Ok(())
+    })
+}
+
+/// Performs exact vector search over active chunks.
+///
+/// # Safety
+///
+/// `embedding` must point to `embedding_len` contiguous `float` values.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_search(
+    index: *const VkIndex,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkSearchResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { index_ref(index) }?;
+        let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
+        let mut query = SearchQuery::new(embedding.to_vec(), top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = index.index.search(&query)?;
+        let buffer = search_result_buffer(index, hits);
+        unsafe { *out_results = buffer };
+        Ok(())
+    })
+}
+
+/// Performs BM25 keyword search over active chunks.
+///
+/// # Safety
+///
+/// `text` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_keyword_search(
+    index: *const VkIndex,
+    text: *const c_char,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkKeywordResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { index_ref(index) }?;
+        let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = index.index.keyword_search(&query)?;
+        let buffer = keyword_result_buffer(index, hits);
+        unsafe { *out_results = buffer };
+        Ok(())
+    })
+}
+
+/// Performs hybrid exact vector + BM25 search.
+///
+/// # Safety
+///
+/// `text` must be valid UTF-8 and `embedding` must point to `embedding_len`
+/// contiguous `float` values.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_hybrid_search(
+    index: *const VkIndex,
+    text: *const c_char,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { index_ref(index) }?;
+        let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            embedding.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        query.fusion = parse_hybrid_fusion(options)?;
+        let hits = index.index.hybrid_search(&query)?;
+        let buffer = hybrid_result_buffer(index, hits);
+        unsafe { *out_results = buffer };
+        Ok(())
+    })
+}
+
+/// Frees chunk IDs returned by `vectorkit_index_upsert_document`.
+///
+/// # Safety
+///
+/// `buffer.values` must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_chunk_id_buffer_free(buffer: VkChunkIdBuffer) {
+    if !buffer.values.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr::slice_from_raw_parts_mut(
+                buffer.values,
+                buffer.count,
+            )))
+        };
+    }
+}
+
+/// Frees exact search results returned by `vectorkit_index_search`.
+///
+/// # Safety
+///
+/// `buffer.hits` must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_search_results_free(buffer: VkSearchResultBuffer) {
+    if buffer.hits.is_null() {
+        return;
+    }
+    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
+    for hit in hits.iter() {
+        unsafe { vectorkit_string_free(hit.document_id) };
+        unsafe { vectorkit_string_free(hit.text) };
+    }
+}
+
+/// Frees keyword search results returned by `vectorkit_index_keyword_search`.
+///
+/// # Safety
+///
+/// `buffer.hits` must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_keyword_results_free(buffer: VkKeywordResultBuffer) {
+    if buffer.hits.is_null() {
+        return;
+    }
+    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
+    for hit in hits.iter() {
+        unsafe { vectorkit_string_free(hit.document_id) };
+        unsafe { vectorkit_string_free(hit.text) };
+        unsafe { string_array_free(hit.matched_terms) };
+    }
+}
+
+/// Frees hybrid search results returned by `vectorkit_index_hybrid_search`.
+///
+/// # Safety
+///
+/// `buffer.hits` must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_hybrid_results_free(buffer: VkHybridResultBuffer) {
+    if buffer.hits.is_null() {
+        return;
+    }
+    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
+    for hit in hits.iter() {
+        unsafe { vectorkit_string_free(hit.document_id) };
+        unsafe { vectorkit_string_free(hit.text) };
+        unsafe { string_array_free(hit.matched_terms) };
+    }
+}
+
+/// Builds an equality metadata filter.
+///
+/// # Safety
+///
+/// `field` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_equals(
+    field: *const c_char,
+    value: VkMetadataValue,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::Equals {
+                field: unsafe { read_c_string(field, "field") }?,
+                value: unsafe { read_metadata_value(value) }?,
+            },
+        })))
+    })
+}
+
+/// Builds a not-equals metadata filter.
+///
+/// # Safety
+///
+/// `field` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_not_equals(
+    field: *const c_char,
+    value: VkMetadataValue,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::NotEquals {
+                field: unsafe { read_c_string(field, "field") }?,
+                value: unsafe { read_metadata_value(value) }?,
+            },
+        })))
+    })
+}
+
+/// Builds an exists metadata filter.
+///
+/// # Safety
+///
+/// `field` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_exists(
+    field: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::Exists {
+                field: unsafe { read_c_string(field, "field") }?,
+            },
+        })))
+    })
+}
+
+/// Builds an inclusive range metadata filter.
+///
+/// # Safety
+///
+/// `field` must point to a valid null-terminated UTF-8 C string. Lower and
+/// upper pointers may be null to create one-sided ranges.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_range(
+    field: *const c_char,
+    lower: *const VkMetadataValue,
+    upper: *const VkMetadataValue,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::Range {
+                field: unsafe { read_c_string(field, "field") }?,
+                lower: unsafe { optional_metadata_value(lower) }?,
+                upper: unsafe { optional_metadata_value(upper) }?,
+            },
+        })))
+    })
+}
+
+/// Builds an in-values metadata filter.
+///
+/// # Safety
+///
+/// `field` and `values` must remain valid for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_in_values(
+    field: *const c_char,
+    values: *const VkMetadataValue,
+    value_count: usize,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        let values = unsafe { read_metadata_values(values, value_count) }?;
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::In {
+                field: unsafe { read_c_string(field, "field") }?,
+                values,
+            },
+        })))
+    })
+}
+
+/// Builds an all-of filter from child filters.
+///
+/// # Safety
+///
+/// `filters` must point to `filter_count` valid VectorKit filter pointers.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_all(
+    filters: *const *const VkFilter,
+    filter_count: usize,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::All(unsafe { read_filter_list(filters, filter_count) }?),
+        })))
+    })
+}
+
+/// Builds an any-of filter from child filters.
+///
+/// # Safety
+///
+/// `filters` must point to `filter_count` valid VectorKit filter pointers.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_any(
+    filters: *const *const VkFilter,
+    filter_count: usize,
+    status: *mut VkStatus,
+) -> *mut VkFilter {
+    ffi_ptr(status, || {
+        Ok(Box::into_raw(Box::new(VkFilter {
+            filter: Filter::Any(unsafe { read_filter_list(filters, filter_count) }?),
+        })))
+    })
+}
+
+/// Frees a filter created by VectorKit FFI.
+///
+/// # Safety
+///
+/// `filter` must be null or a pointer returned by a `vectorkit_filter_*`
+/// function that has not already been freed.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_filter_free(filter: *mut VkFilter) {
+    if !filter.is_null() {
+        unsafe { drop(Box::from_raw(filter)) };
+    }
+}
+
+fn ffi_bool<F>(status: *mut VkStatus, operation: F) -> bool
+where
+    F: FnOnce() -> std::result::Result<(), FfiError>,
+{
+    match catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(Ok(())) => {
+            unsafe { set_status_ok(status) };
+            true
+        }
+        Ok(Err(error)) => {
+            unsafe { set_status_error(status, error) };
+            false
+        }
+        Err(_) => {
+            unsafe { set_status_error(status, FfiError::panic()) };
+            false
+        }
+    }
+}
+
+fn ffi_ptr<T, F>(status: *mut VkStatus, operation: F) -> *mut T
+where
+    F: FnOnce() -> std::result::Result<*mut T, FfiError>,
+{
+    match catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(Ok(pointer)) => {
+            unsafe { set_status_ok(status) };
+            pointer
+        }
+        Ok(Err(error)) => {
+            unsafe { set_status_error(status, error) };
+            ptr::null_mut()
+        }
+        Err(_) => {
+            unsafe { set_status_error(status, FfiError::panic()) };
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe fn set_status_ok(status: *mut VkStatus) {
+    unsafe { vectorkit_status_clear(status) };
+}
+
+unsafe fn set_status_error(status: *mut VkStatus, error: FfiError) {
+    if status.is_null() {
+        return;
+    }
+
+    unsafe { vectorkit_status_clear(status) };
+    let status = unsafe { &mut *status };
+    status.code = error.code;
+    status.message = json_to_c_string(&error.message);
+}
+
+#[derive(Debug)]
+struct FfiError {
+    code: i32,
+    message: String,
+}
+
+impl FfiError {
+    fn invalid_argument(message: impl Into<String>) -> Self {
+        Self {
+            code: VK_STATUS_INVALID_ARGUMENT,
+            message: message.into(),
+        }
+    }
+
+    fn core(error: vectorkit_core::VectorKitError) -> Self {
+        Self {
+            code: VK_STATUS_CORE_ERROR,
+            message: error.to_string(),
+        }
+    }
+
+    fn panic() -> Self {
+        Self {
+            code: VK_STATUS_PANIC,
+            message: "VectorKit FFI call panicked".to_owned(),
+        }
+    }
+}
+
+impl From<vectorkit_core::VectorKitError> for FfiError {
+    fn from(value: vectorkit_core::VectorKitError) -> Self {
+        Self::core(value)
+    }
+}
+
+unsafe fn index_ref<'a>(index: *const VkIndex) -> std::result::Result<&'a VkIndex, FfiError> {
+    if index.is_null() {
+        return Err(FfiError::invalid_argument("index must not be null"));
+    }
+    Ok(unsafe { &*index })
+}
+
+unsafe fn index_mut<'a>(index: *mut VkIndex) -> std::result::Result<&'a mut VkIndex, FfiError> {
+    if index.is_null() {
+        return Err(FfiError::invalid_argument("index must not be null"));
+    }
+    Ok(unsafe { &mut *index })
+}
+
+unsafe fn read_c_string(value: *const c_char, name: &str) -> std::result::Result<String, FfiError> {
+    if value.is_null() {
+        return Err(FfiError::invalid_argument(format!(
+            "{name} must not be null"
+        )));
+    }
+    unsafe { CStr::from_ptr(value) }
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|_| FfiError::invalid_argument(format!("{name} must be valid UTF-8")))
+}
+
+unsafe fn read_f32_slice<'a>(
+    values: *const c_float,
+    count: usize,
+    name: &str,
+) -> std::result::Result<&'a [f32], FfiError> {
+    if count == 0 {
+        return Ok(&[]);
+    }
+    if values.is_null() {
+        return Err(FfiError::invalid_argument(format!(
+            "{name} must not be null"
+        )));
+    }
+    Ok(unsafe { slice::from_raw_parts(values.cast::<f32>(), count) })
+}
+
+unsafe fn read_metadata(
+    entries: *const VkMetadataEntry,
+    count: usize,
+) -> std::result::Result<Metadata, FfiError> {
+    if count == 0 {
+        return Ok(Metadata::new());
+    }
+    if entries.is_null() {
+        return Err(FfiError::invalid_argument(
+            "metadata entries must not be null when metadata_len is non-zero",
+        ));
+    }
+
+    let entries = unsafe { slice::from_raw_parts(entries, count) };
+    let mut metadata = Metadata::new();
+    for entry in entries {
+        metadata.insert(
+            unsafe { read_c_string(entry.field, "metadata field") }?,
+            unsafe { read_metadata_value(entry.value) }?,
+        );
+    }
+    Ok(metadata)
+}
+
+unsafe fn read_metadata_value(
+    value: VkMetadataValue,
+) -> std::result::Result<MetadataValue, FfiError> {
+    match value.value_type {
+        VK_METADATA_STRING => Ok(MetadataValue::String(unsafe {
+            read_c_string(value.string_value, "metadata string value")
+        }?)),
+        VK_METADATA_INTEGER => Ok(MetadataValue::Integer(value.integer_value)),
+        VK_METADATA_FLOAT => Ok(MetadataValue::Float(value.float_value)),
+        VK_METADATA_BOOLEAN => Ok(MetadataValue::Boolean(value.bool_value)),
+        VK_METADATA_TIMESTAMP_MILLIS => Ok(MetadataValue::TimestampMillis(value.integer_value)),
+        _ => Err(FfiError::invalid_argument(format!(
+            "unsupported metadata value type {}",
+            value.value_type
+        ))),
+    }
+}
+
+unsafe fn optional_metadata_value(
+    value: *const VkMetadataValue,
+) -> std::result::Result<Option<MetadataValue>, FfiError> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    Ok(Some(unsafe { read_metadata_value(*value) }?))
+}
+
+unsafe fn read_metadata_values(
+    values: *const VkMetadataValue,
+    count: usize,
+) -> std::result::Result<Vec<MetadataValue>, FfiError> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if values.is_null() {
+        return Err(FfiError::invalid_argument(
+            "values must not be null when value_count is non-zero",
+        ));
+    }
+    unsafe { slice::from_raw_parts(values, count) }
+        .iter()
+        .map(|value| unsafe { read_metadata_value(*value) })
+        .collect()
+}
+
+unsafe fn read_chunk_inputs(
+    chunks: *const VkChunkInput,
+    count: usize,
+) -> std::result::Result<Vec<ChunkInput>, FfiError> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if chunks.is_null() {
+        return Err(FfiError::invalid_argument(
+            "chunks must not be null when chunk_count is non-zero",
+        ));
+    }
+
+    unsafe { slice::from_raw_parts(chunks, count) }
+        .iter()
+        .map(|chunk| {
+            Ok(ChunkInput {
+                text: unsafe { read_c_string(chunk.text, "chunk text") }?,
+                embedding: unsafe {
+                    read_f32_slice(chunk.embedding, chunk.embedding_len, "chunk embedding")
+                }?
+                .to_vec(),
+                metadata: unsafe { read_metadata(chunk.metadata, chunk.metadata_len) }?,
+            })
+        })
+        .collect()
+}
+
+unsafe fn optional_filter(filter: *const VkFilter) -> Option<Filter> {
+    if filter.is_null() {
+        None
+    } else {
+        Some(unsafe { &*filter }.filter.clone())
+    }
+}
+
+unsafe fn read_filter_list(
+    filters: *const *const VkFilter,
+    count: usize,
+) -> std::result::Result<Vec<Filter>, FfiError> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if filters.is_null() {
+        return Err(FfiError::invalid_argument(
+            "filters must not be null when filter_count is non-zero",
+        ));
+    }
+
+    unsafe { slice::from_raw_parts(filters, count) }
+        .iter()
+        .map(|filter| {
+            if filter.is_null() {
+                Err(FfiError::invalid_argument("child filter must not be null"))
+            } else {
+                Ok(unsafe { &**filter }.filter.clone())
+            }
+        })
+        .collect()
+}
+
+fn parse_metric(metric: u32) -> std::result::Result<VectorMetric, FfiError> {
+    match metric {
+        VK_METRIC_COSINE => Ok(VectorMetric::Cosine),
+        VK_METRIC_DOT_PRODUCT => Ok(VectorMetric::DotProduct),
+        _ => Err(FfiError::invalid_argument(format!(
+            "unsupported vector metric {metric}"
+        ))),
+    }
+}
+
+fn parse_encoding_code(encoding: u32) -> std::result::Result<VectorEncoding, FfiError> {
+    match encoding {
+        VK_ENCODING_F32 => Ok(VectorEncoding::F32),
+        VK_ENCODING_F16 => Ok(VectorEncoding::F16),
+        VK_ENCODING_BF16 => Ok(VectorEncoding::BF16),
+        VK_ENCODING_I8_SCALAR_QUANTIZED => Ok(VectorEncoding::I8ScalarQuantized),
+        _ => Err(FfiError::invalid_argument(format!(
+            "unsupported vector encoding {encoding}"
+        ))),
+    }
+}
+
+fn parse_hybrid_fusion(options: VkHybridOptions) -> std::result::Result<HybridFusion, FfiError> {
+    match options.fusion_type {
+        VK_FUSION_WEIGHTED_NORMALIZED_SCORE => Ok(HybridFusion::WeightedNormalizedScore {
+            vector_weight: options.vector_weight,
+            keyword_weight: options.keyword_weight,
+        }),
+        VK_FUSION_RECIPROCAL_RANK => Ok(HybridFusion::ReciprocalRank {
+            rrf_k: options.rrf_k,
+        }),
+        _ => Err(FfiError::invalid_argument(format!(
+            "unsupported hybrid fusion type {}",
+            options.fusion_type
+        ))),
+    }
+}
+
+fn chunk_id_buffer(values: Vec<u64>) -> VkChunkIdBuffer {
+    let mut values = values.into_boxed_slice();
+    let buffer = VkChunkIdBuffer {
+        values: values.as_mut_ptr(),
+        count: values.len(),
+    };
+    std::mem::forget(values);
+    buffer
+}
+
+fn search_result_buffer(index: &VkIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = index
+                .index
+                .chunk(hit.chunk_id)
+                .map(|chunk| chunk.text.as_str())
+                .unwrap_or("");
+            VkSearchHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                vector_score: hit.trace.vector_score,
+                filter_matched: hit.trace.filter_matched,
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkSearchResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
+fn keyword_result_buffer(index: &VkIndex, hits: Vec<KeywordHit>) -> VkKeywordResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = index
+                .index
+                .chunk(hit.chunk_id)
+                .map(|chunk| chunk.text.as_str())
+                .unwrap_or("");
+            VkKeywordHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                matched_terms: string_array(hit.matched_terms),
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkKeywordResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
+fn hybrid_result_buffer(index: &VkIndex, hits: Vec<HybridHit>) -> VkHybridResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = index
+                .index
+                .chunk(hit.chunk_id)
+                .map(|chunk| chunk.text.as_str())
+                .unwrap_or("");
+            VkHybridHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                has_vector_score: hit.vector_score.is_some(),
+                vector_score: hit.vector_score.unwrap_or_default(),
+                has_keyword_score: hit.keyword_score.is_some(),
+                keyword_score: hit.keyword_score.unwrap_or_default(),
+                has_vector_rank: hit.trace.vector_rank.is_some(),
+                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+                has_keyword_rank: hit.trace.keyword_rank.is_some(),
+                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+                matched_terms: string_array(hit.trace.matched_terms),
+                filter_matched: hit.trace.filter_matched,
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkHybridResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
+fn string_to_owned_ptr(value: &str) -> *mut c_char {
+    json_to_c_string(value)
+}
+
+fn string_array(values: Vec<String>) -> VkStringArray {
+    let mut pointers = values
+        .into_iter()
+        .map(|value| string_to_owned_ptr(&value))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let array = VkStringArray {
+        values: pointers.as_mut_ptr(),
+        count: pointers.len(),
+    };
+    std::mem::forget(pointers);
+    array
+}
+
+unsafe fn string_array_free(array: VkStringArray) {
+    if array.values.is_null() {
+        return;
+    }
+    let pointers =
+        unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(array.values, array.count)) };
+    for pointer in pointers.iter() {
+        unsafe { vectorkit_string_free(*pointer) };
+    }
+}
 
 /// Runs VectorKit's synthetic device benchmark and returns a heap-allocated
 /// UTF-8 JSON string. Call `vectorkit_string_free` when the caller is done.

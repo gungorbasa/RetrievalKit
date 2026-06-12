@@ -1,8 +1,11 @@
 import VectorKitFFI
 import Foundation
 
+/// Vector similarity metric used by a `VectorIndex`.
 public enum VectorMetric: Sendable {
+    /// L2-normalized cosine similarity.
     case cosine
+    /// Raw dot product similarity.
     case dotProduct
 
     fileprivate var ffiValue: UInt32 {
@@ -13,10 +16,15 @@ public enum VectorMetric: Sendable {
     }
 }
 
+/// Stored vector representation used by the Rust retrieval core.
 public enum VectorEncoding: Sendable {
+    /// Store vectors as 32-bit floats.
     case f32
+    /// Store vectors as IEEE 16-bit floats.
     case f16
+    /// Store vectors as bfloat16 values.
     case bf16
+    /// Store vectors using per-vector scalar quantized 8-bit values.
     case i8ScalarQuantized
 
     fileprivate var ffiValue: UInt32 {
@@ -29,11 +37,17 @@ public enum VectorEncoding: Sendable {
     }
 }
 
+/// Typed metadata value supported by VectorKit filters and indexing.
 public enum MetadataValue: Equatable, Sendable {
+    /// UTF-8 string metadata.
     case string(String)
+    /// Signed integer metadata.
     case integer(Int64)
+    /// Floating-point metadata.
     case float(Double)
+    /// Boolean metadata.
     case boolean(Bool)
+    /// Timestamp represented as milliseconds since the caller's chosen epoch.
     case timestampMillis(Int64)
 
     fileprivate func ffiValue(arena: CStringArena) -> VkMetadataValue {
@@ -82,11 +96,16 @@ public enum MetadataValue: Equatable, Sendable {
     }
 }
 
+/// Caller-owned document identity and metadata.
 public struct Document: Equatable, Sendable {
+    /// Stable caller-owned document identifier.
     public var id: String
+    /// Optional document-level text retained for caller context.
     public var text: String
+    /// Metadata merged into each indexed chunk unless overridden by chunk metadata.
     public var metadata: [String: MetadataValue]
 
+    /// Creates a document descriptor for upsert operations.
     public init(id: String, text: String = "", metadata: [String: MetadataValue] = [:]) {
         self.id = id
         self.text = text
@@ -94,11 +113,16 @@ public struct Document: Equatable, Sendable {
     }
 }
 
+/// Caller-provided retrievable chunk data.
 public struct ChunkInput: Equatable, Sendable {
+    /// Text used for display and BM25 keyword indexing.
     public var text: String
+    /// Embedding vector. Its length must match the index dimension.
     public var embedding: [Float]
+    /// Chunk metadata. Values override document metadata with the same key.
     public var metadata: [String: MetadataValue]
 
+    /// Creates a chunk input for indexing.
     public init(text: String, embedding: [Float], metadata: [String: MetadataValue] = [:]) {
         self.text = text
         self.embedding = embedding
@@ -106,58 +130,97 @@ public struct ChunkInput: Equatable, Sendable {
     }
 }
 
+/// Exact vector search result.
 public struct SearchResult: Equatable, Sendable {
+    /// Internal chunk identifier assigned by VectorKit.
     public var chunkID: UInt64
+    /// Caller-owned document identifier.
     public var documentID: String
+    /// Stored chunk text.
     public var text: String
+    /// Ranked vector score.
     public var score: Float
+    /// Debug data for the score and filter decision.
     public var trace: SearchTrace
 }
 
+/// Debug data for exact vector search.
 public struct SearchTrace: Equatable, Sendable {
+    /// Raw vector score used for ranking.
     public var vectorScore: Float
+    /// Whether the metadata filter matched this result.
     public var filterMatched: Bool
 }
 
+/// BM25 keyword search result.
 public struct KeywordResult: Equatable, Sendable {
+    /// Internal chunk identifier assigned by VectorKit.
     public var chunkID: UInt64
+    /// Caller-owned document identifier.
     public var documentID: String
+    /// Stored chunk text.
     public var text: String
+    /// BM25 score.
     public var score: Float
+    /// Query terms matched by the keyword index.
     public var matchedTerms: [String]
 }
 
+/// Hybrid vector plus keyword search result.
 public struct HybridResult: Equatable, Sendable {
+    /// Internal chunk identifier assigned by VectorKit.
     public var chunkID: UInt64
+    /// Caller-owned document identifier.
     public var documentID: String
+    /// Stored chunk text.
     public var text: String
+    /// Final fused hybrid score.
     public var score: Float
+    /// Vector score when the chunk came from vector candidates.
     public var vectorScore: Float?
+    /// Keyword score when the chunk came from keyword candidates.
     public var keywordScore: Float?
+    /// Debug data for ranking and fusion.
     public var trace: HybridTrace
 }
 
+/// Debug data for hybrid search ranking.
 public struct HybridTrace: Equatable, Sendable {
+    /// Rank in vector candidates before fusion.
     public var vectorRank: Int?
+    /// Rank in keyword candidates before fusion.
     public var keywordRank: Int?
+    /// Normalized vector score used by weighted fusion, when available.
     public var normalizedVectorScore: Float?
+    /// Normalized keyword score used by weighted fusion, when available.
     public var normalizedKeywordScore: Float?
+    /// Query terms matched by the keyword side of hybrid search.
     public var matchedTerms: [String]
+    /// Whether the metadata filter matched this result.
     public var filterMatched: Bool
 }
 
+/// Candidate and fusion options for hybrid search.
 public struct HybridOptions: Equatable, Sendable {
+    /// Hybrid rank fusion strategy.
     public enum Fusion: Equatable, Sendable {
+        /// Fuse min-max normalized vector and keyword scores with explicit weights.
         case weightedNormalizedScore(vectorWeight: Float, keywordWeight: Float)
+        /// Fuse candidates using reciprocal rank fusion.
         case reciprocalRank(rrfK: Float)
     }
 
+    /// Number of vector candidates generated before fusion.
     public var vectorTopK: Int
+    /// Number of keyword candidates generated before fusion.
     public var keywordTopK: Int
+    /// Fusion strategy used to rank the final results.
     public var fusion: Fusion
 
+    /// Stable V1 defaults: 50 vector candidates, 50 keyword candidates, 0.6/0.4 weighted fusion.
     public static let `default` = HybridOptions()
 
+    /// Creates hybrid search options.
     public init(
         vectorTopK: Int = 50,
         keywordTopK: Int = 50,
@@ -192,12 +255,18 @@ public struct HybridOptions: Equatable, Sendable {
     }
 }
 
+/// Error surfaced by the Swift wrapper.
 public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable {
+    /// Invalid input before or at the FFI boundary.
     case invalidArgument(String)
+    /// Typed error returned by the Rust core.
     case core(String)
+    /// Panic caught at the FFI boundary.
     case panic(String)
+    /// Unknown FFI status code.
     case unknown(code: Int32, message: String)
 
+    /// Human-readable error message.
     public var description: String {
         switch self {
         case .invalidArgument(let message), .core(let message), .panic(let message):
@@ -218,27 +287,39 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     }
 }
 
+/// Immutable metadata filter used by search APIs.
 public indirect enum Filter: Equatable, Sendable {
+    /// Matches chunks where a metadata field equals a value.
     case equals(field: String, value: MetadataValue)
+    /// Matches chunks where a metadata field does not equal a value.
     case notEquals(field: String, value: MetadataValue)
+    /// Matches chunks containing a metadata field.
     case exists(field: String)
+    /// Matches chunks where a numeric or timestamp field is within an inclusive range.
     case range(field: String, lower: MetadataValue?, upper: MetadataValue?)
+    /// Matches chunks where a metadata field equals any provided value.
     case inValues(field: String, values: [MetadataValue])
+    /// Matches chunks where all child filters match.
     case all([Filter])
+    /// Matches chunks where any child filter matches.
     case any([Filter])
 
+    /// Creates an equality filter.
     public static func equals(_ field: String, _ value: MetadataValue) -> Filter {
         .equals(field: field, value: value)
     }
 
+    /// Creates a not-equals filter.
     public static func notEquals(_ field: String, _ value: MetadataValue) -> Filter {
         .notEquals(field: field, value: value)
     }
 
+    /// Creates an exists filter.
     public static func exists(_ field: String) -> Filter {
         .exists(field: field)
     }
 
+    /// Creates an inclusive range filter. Pass `nil` for one-sided ranges.
     public static func range(
         _ field: String,
         lower: MetadataValue? = nil,
@@ -247,11 +328,17 @@ public indirect enum Filter: Equatable, Sendable {
         .range(field: field, lower: lower, upper: upper)
     }
 
+    /// Creates an in-values filter.
     public static func inValues(_ field: String, _ values: [MetadataValue]) -> Filter {
         .inValues(field: field, values: values)
     }
 }
 
+/// Actor-isolated local retrieval index backed by the Rust core.
+///
+/// `VectorIndex` owns one Rust index handle. All mutation, search, and
+/// persistence calls are actor-isolated, so callers use `await` outside the
+/// actor and no manual locking is exposed in Swift.
 public actor VectorIndex {
     private let handle: UInt
 
@@ -259,14 +346,17 @@ public actor VectorIndex {
         OpaquePointer(bitPattern: handle)!
     }
 
+    /// Required embedding dimension for indexed chunks and queries.
     public var dimension: Int {
         Int(vectorkit_index_dimension(pointer))
     }
 
+    /// Number of chunks currently eligible for search results.
     public var activeChunkCount: Int {
         Int(vectorkit_index_active_chunk_count(pointer))
     }
 
+    /// Creates an empty local index.
     public init(
         dimension: Int,
         metric: VectorMetric = .cosine,
@@ -286,6 +376,7 @@ public actor VectorIndex {
         vectorkit_index_free(OpaquePointer(bitPattern: handle))
     }
 
+    /// Loads an index saved by `save(to:includeBM25:)`.
     public static func load(from directory: URL) throws -> VectorIndex {
         let pointer = try FFI.withStatusPointer { status in
             directory.path.withCString { path in
@@ -295,6 +386,7 @@ public actor VectorIndex {
         return VectorIndex(pointer: pointer)
     }
 
+    /// Saves the loaded index to a local directory.
     public func save(to directory: URL, includeBM25: Bool = true) throws {
         let arena = CStringArena()
         var status = VkStatus(code: 0, message: nil)
@@ -310,6 +402,7 @@ public actor VectorIndex {
         }
     }
 
+    /// Adds or replaces all chunks for a document and returns assigned chunk IDs.
     @discardableResult
     public func upsert(document: Document, chunks: [ChunkInput]) throws -> [UInt64] {
         let arena = CStringArena()
@@ -351,6 +444,7 @@ public actor VectorIndex {
         return Array(UnsafeBufferPointer(start: values, count: output.count))
     }
 
+    /// Tombstones all active chunks for a document ID.
     @discardableResult
     public func deleteDocument(id: String) throws -> Int {
         let arena = CStringArena()
@@ -369,6 +463,7 @@ public actor VectorIndex {
         return deletedCount
     }
 
+    /// Performs exact vector search over active chunks.
     public func search(
         embedding: [Float],
         topK: Int = 10,
@@ -398,6 +493,7 @@ public actor VectorIndex {
         return UnsafeBufferPointer(start: hits, count: output.count).map(SearchResult.init)
     }
 
+    /// Performs BM25 keyword search over active chunks.
     public func keywordSearch(
         text: String,
         topK: Int = 10,
@@ -426,6 +522,7 @@ public actor VectorIndex {
         return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
     }
 
+    /// Performs hybrid vector plus keyword search over active chunks.
     public func hybridSearch(
         text: String,
         embedding: [Float],

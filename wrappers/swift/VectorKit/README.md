@@ -17,19 +17,18 @@ The default package manifest consumes the built XCFramework at:
 target/apple/VectorKitFFI.xcframework
 ```
 
-For a local macOS release-packaging smoke test:
+For release-packaging validation across supported arm64 Apple slices:
 
 ```bash
 cd ../../..
 scripts/verify-swift-wrapper.sh
 ```
 
-For the full Apple artifact, build all supported slices:
+To build only the local macOS arm64 slice during quick development:
 
 ```bash
 cd ../../..
-rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim
-scripts/build-xcframework.sh
+scripts/build-xcframework.sh --macos-only
 ```
 
 The script writes:

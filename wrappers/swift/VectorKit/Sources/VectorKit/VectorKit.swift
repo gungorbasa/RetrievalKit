@@ -1,4 +1,4 @@
-import CVectorKitFFI
+import VectorKitFFI
 import Foundation
 
 public enum VectorMetric: Sendable {
@@ -218,103 +218,46 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     }
 }
 
-public final class Filter {
-    fileprivate let pointer: OpaquePointer
+public indirect enum Filter: Equatable, Sendable {
+    case equals(field: String, value: MetadataValue)
+    case notEquals(field: String, value: MetadataValue)
+    case exists(field: String)
+    case range(field: String, lower: MetadataValue?, upper: MetadataValue?)
+    case inValues(field: String, values: [MetadataValue])
+    case all([Filter])
+    case any([Filter])
 
-    private init(pointer: OpaquePointer) {
-        self.pointer = pointer
+    public static func equals(_ field: String, _ value: MetadataValue) -> Filter {
+        .equals(field: field, value: value)
     }
 
-    deinit {
-        vectorkit_filter_free(pointer)
+    public static func notEquals(_ field: String, _ value: MetadataValue) -> Filter {
+        .notEquals(field: field, value: value)
     }
 
-    public static func equals(_ field: String, _ value: MetadataValue) throws -> Filter {
-        try make { status, arena in
-            vectorkit_filter_equals(arena.copy(field), value.ffiValue(arena: arena), status)
-        }
-    }
-
-    public static func notEquals(_ field: String, _ value: MetadataValue) throws -> Filter {
-        try make { status, arena in
-            vectorkit_filter_not_equals(arena.copy(field), value.ffiValue(arena: arena), status)
-        }
-    }
-
-    public static func exists(_ field: String) throws -> Filter {
-        try make { status, arena in
-            vectorkit_filter_exists(arena.copy(field), status)
-        }
+    public static func exists(_ field: String) -> Filter {
+        .exists(field: field)
     }
 
     public static func range(
         _ field: String,
         lower: MetadataValue? = nil,
         upper: MetadataValue? = nil
-    ) throws -> Filter {
-        try make { status, arena in
-            var lowerValue = lower?.ffiValue(arena: arena)
-            var upperValue = upper?.ffiValue(arena: arena)
-            return withOptionalPointer(to: &lowerValue) { lowerPointer in
-                withOptionalPointer(to: &upperValue) { upperPointer in
-                    vectorkit_filter_range(arena.copy(field), lowerPointer, upperPointer, status)
-                }
-            }
-        }
+    ) -> Filter {
+        .range(field: field, lower: lower, upper: upper)
     }
 
-    public static func inValues(_ field: String, _ values: [MetadataValue]) throws -> Filter {
-        try make { status, arena in
-            let ffiValues = values.map { $0.ffiValue(arena: arena) }
-            return ffiValues.withUnsafeBufferPointer { buffer in
-                vectorkit_filter_in_values(
-                    arena.copy(field),
-                    buffer.baseAddress,
-                    buffer.count,
-                    status
-                )
-            }
-        }
-    }
-
-    public static func all(_ filters: [Filter]) throws -> Filter {
-        try composite(filters, builder: vectorkit_filter_all)
-    }
-
-    public static func any(_ filters: [Filter]) throws -> Filter {
-        try composite(filters, builder: vectorkit_filter_any)
-    }
-
-    private static func make(
-        _ body: (UnsafeMutablePointer<VkStatus>, CStringArena) -> OpaquePointer?
-    ) throws -> Filter {
-        let pointer = try FFI.withStatusPointer { status in
-            let arena = CStringArena()
-            return body(status, arena)
-        }
-        return Filter(pointer: pointer)
-    }
-
-    private static func composite(
-        _ filters: [Filter],
-        builder: (
-            UnsafePointer<OpaquePointer?>?,
-            Int,
-            UnsafeMutablePointer<VkStatus>?
-        ) -> OpaquePointer?
-    ) throws -> Filter {
-        let pointer = try FFI.withStatusPointer { status in
-            let pointers = filters.map { Optional($0.pointer) }
-            return pointers.withUnsafeBufferPointer { buffer in
-                builder(buffer.baseAddress, buffer.count, status)
-            }
-        }
-        return Filter(pointer: pointer)
+    public static func inValues(_ field: String, _ values: [MetadataValue]) -> Filter {
+        .inValues(field: field, values: values)
     }
 }
 
-public final class VectorIndex {
-    private let pointer: OpaquePointer
+public actor VectorIndex {
+    private let handle: UInt
+
+    private var pointer: OpaquePointer {
+        OpaquePointer(bitPattern: handle)!
+    }
 
     public var dimension: Int {
         Int(vectorkit_index_dimension(pointer))
@@ -329,17 +272,18 @@ public final class VectorIndex {
         metric: VectorMetric = .cosine,
         encoding: VectorEncoding = .f32
     ) throws {
-        pointer = try FFI.withStatusPointer { status in
+        let pointer = try FFI.withStatusPointer { status in
             vectorkit_index_new(dimension, metric.ffiValue, encoding.ffiValue, status)
         }
+        handle = UInt(bitPattern: pointer)
     }
 
     private init(pointer: OpaquePointer) {
-        self.pointer = pointer
+        handle = UInt(bitPattern: pointer)
     }
 
     deinit {
-        vectorkit_index_free(pointer)
+        vectorkit_index_free(OpaquePointer(bitPattern: handle))
     }
 
     public static func load(from directory: URL) throws -> VectorIndex {
@@ -352,10 +296,17 @@ public final class VectorIndex {
     }
 
     public func save(to directory: URL, includeBM25: Bool = true) throws {
-        try FFI.withStatusBool { status in
-            directory.path.withCString { path in
-                vectorkit_index_save(pointer, path, includeBM25, status)
-            }
+        let arena = CStringArena()
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_save(
+            pointer,
+            arena.copy(directory.path),
+            includeBM25,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
     }
 
@@ -365,7 +316,7 @@ public final class VectorIndex {
         let documentMetadata = MetadataBuffer(document.metadata, arena: arena)
         let chunkMetadata = chunks.map { MetadataBuffer($0.metadata, arena: arena) }
         let embeddingBuffers = chunks.map { EmbeddingBuffer($0.embedding) }
-        let ffiChunks = chunks.enumerated().map { index, chunk in
+        let ffiChunks = ChunkInputBuffer(chunks.enumerated().map { index, chunk in
             VkChunkInput(
                 text: arena.copy(chunk.text),
                 embedding: embeddingBuffers[index].pointer,
@@ -373,23 +324,24 @@ public final class VectorIndex {
                 metadata: chunkMetadata[index].pointer,
                 metadata_len: chunkMetadata[index].count
             )
-        }
+        })
         var output = VkChunkIdBuffer(values: nil, count: 0)
 
-        try FFI.withStatusBool { status in
-            ffiChunks.withUnsafeBufferPointer { chunkBuffer in
-                vectorkit_index_upsert_document(
-                    pointer,
-                    arena.copy(document.id),
-                    arena.copy(document.text),
-                    documentMetadata.pointer,
-                    documentMetadata.count,
-                    chunkBuffer.baseAddress,
-                    chunkBuffer.count,
-                    &output,
-                    status
-                )
-            }
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_upsert_document(
+            pointer,
+            arena.copy(document.id),
+            arena.copy(document.text),
+            documentMetadata.pointer,
+            documentMetadata.count,
+            ffiChunks.pointer,
+            ffiChunks.count,
+            &output,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
 
         defer { vectorkit_chunk_id_buffer_free(output) }
@@ -403,8 +355,16 @@ public final class VectorIndex {
     public func deleteDocument(id: String) throws -> Int {
         let arena = CStringArena()
         var deletedCount = 0
-        try FFI.withStatusBool { status in
-            vectorkit_index_delete_document(pointer, arena.copy(id), &deletedCount, status)
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_delete_document(
+            pointer,
+            arena.copy(id),
+            &deletedCount,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
         return deletedCount
     }
@@ -415,18 +375,21 @@ public final class VectorIndex {
         filter: Filter? = nil
     ) throws -> [SearchResult] {
         var output = VkSearchResultBuffer(hits: nil, count: 0)
-        try FFI.withStatusBool { status in
-            embedding.withUnsafeBufferPointer { buffer in
-                vectorkit_index_search(
-                    pointer,
-                    buffer.baseAddress,
-                    buffer.count,
-                    topK,
-                    filter?.pointer,
-                    &output,
-                    status
-                )
-            }
+        let embeddingBuffer = EmbeddingBuffer(embedding)
+        let ffiFilter = try filter?.makeFFI()
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_search(
+            pointer,
+            embeddingBuffer.pointer,
+            embeddingBuffer.count,
+            topK,
+            ffiFilter?.pointer,
+            &output,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
         defer { vectorkit_search_results_free(output) }
         guard let hits = output.hits else {
@@ -441,17 +404,20 @@ public final class VectorIndex {
         filter: Filter? = nil
     ) throws -> [KeywordResult] {
         var output = VkKeywordResultBuffer(hits: nil, count: 0)
-        try FFI.withStatusBool { status in
-            text.withCString { textPointer in
-                vectorkit_index_keyword_search(
-                    pointer,
-                    textPointer,
-                    topK,
-                    filter?.pointer,
-                    &output,
-                    status
-                )
-            }
+        let arena = CStringArena()
+        let ffiFilter = try filter?.makeFFI()
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_keyword_search(
+            pointer,
+            arena.copy(text),
+            topK,
+            ffiFilter?.pointer,
+            &output,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
         defer { vectorkit_keyword_results_free(output) }
         guard let hits = output.hits else {
@@ -468,23 +434,25 @@ public final class VectorIndex {
         options: HybridOptions = .default
     ) throws -> [HybridResult] {
         var output = VkHybridResultBuffer(hits: nil, count: 0)
+        let arena = CStringArena()
+        let embeddingBuffer = EmbeddingBuffer(embedding)
         let ffiOptions = options.ffiValue
-        try FFI.withStatusBool { status in
-            text.withCString { textPointer in
-                embedding.withUnsafeBufferPointer { buffer in
-                    vectorkit_index_hybrid_search(
-                        pointer,
-                        textPointer,
-                        buffer.baseAddress,
-                        buffer.count,
-                        topK,
-                        filter?.pointer,
-                        ffiOptions,
-                        &output,
-                        status
-                    )
-                }
-            }
+        let ffiFilter = try filter?.makeFFI()
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_hybrid_search(
+            pointer,
+            arena.copy(text),
+            embeddingBuffer.pointer,
+            embeddingBuffer.count,
+            topK,
+            ffiFilter?.pointer,
+            ffiOptions,
+            &output,
+            &status
+        )
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
         }
         defer { vectorkit_hybrid_results_free(output) }
         guard let hits = output.hits else {
@@ -565,6 +533,99 @@ private enum FFI {
     }
 }
 
+private final class FFIFilter {
+    let pointer: OpaquePointer
+
+    init(pointer: OpaquePointer) {
+        self.pointer = pointer
+    }
+
+    deinit {
+        vectorkit_filter_free(pointer)
+    }
+}
+
+private extension Filter {
+    func makeFFI() throws -> FFIFilter {
+        let pointer = try makeFFIPointer()
+        return FFIFilter(pointer: pointer)
+    }
+
+    func makeFFIPointer() throws -> OpaquePointer {
+        switch self {
+        case .equals(let field, let value):
+            try makeFFILeaf { status, arena in
+                vectorkit_filter_equals(arena.copy(field), value.ffiValue(arena: arena), status)
+            }
+        case .notEquals(let field, let value):
+            try makeFFILeaf { status, arena in
+                vectorkit_filter_not_equals(arena.copy(field), value.ffiValue(arena: arena), status)
+            }
+        case .exists(let field):
+            try makeFFILeaf { status, arena in
+                vectorkit_filter_exists(arena.copy(field), status)
+            }
+        case .range(let field, let lower, let upper):
+            try makeFFILeaf { status, arena in
+                var lowerValue = lower?.ffiValue(arena: arena)
+                var upperValue = upper?.ffiValue(arena: arena)
+                return withOptionalPointer(to: &lowerValue) { lowerPointer in
+                    withOptionalPointer(to: &upperValue) { upperPointer in
+                        vectorkit_filter_range(
+                            arena.copy(field),
+                            lowerPointer,
+                            upperPointer,
+                            status
+                        )
+                    }
+                }
+            }
+        case .inValues(let field, let values):
+            try makeFFILeaf { status, arena in
+                let ffiValues = values.map { $0.ffiValue(arena: arena) }
+                return ffiValues.withUnsafeBufferPointer { buffer in
+                    vectorkit_filter_in_values(
+                        arena.copy(field),
+                        buffer.baseAddress,
+                        buffer.count,
+                        status
+                    )
+                }
+            }
+        case .all(let filters):
+            try makeFFIComposite(filters, builder: vectorkit_filter_all)
+        case .any(let filters):
+            try makeFFIComposite(filters, builder: vectorkit_filter_any)
+        }
+    }
+
+    func makeFFILeaf(
+        _ body: (UnsafeMutablePointer<VkStatus>, CStringArena) -> OpaquePointer?
+    ) throws -> OpaquePointer {
+        try FFI.withStatusPointer { status in
+            let arena = CStringArena()
+            return body(status, arena)
+        }
+    }
+
+    func makeFFIComposite(
+        _ filters: [Filter],
+        builder: (
+            UnsafePointer<OpaquePointer?>?,
+            Int,
+            UnsafeMutablePointer<VkStatus>?
+        ) -> OpaquePointer?
+    ) throws -> OpaquePointer {
+        let children = try filters.map { try $0.makeFFI() }
+        return try FFI.withStatusPointer { status in
+            let pointers = children.map { Optional($0.pointer) }
+            return pointers.withUnsafeBufferPointer { buffer in
+                builder(buffer.baseAddress, buffer.count, status)
+            }
+        }
+    }
+}
+
 private final class CStringArena {
     private var pointers: [UnsafeMutablePointer<CChar>] = []
 
@@ -595,6 +656,30 @@ private final class EmbeddingBuffer {
             pointer = nil
         } else {
             let allocated = UnsafeMutablePointer<Float>.allocate(capacity: values.count)
+            allocated.initialize(from: values, count: values.count)
+            mutablePointer = allocated
+            pointer = UnsafePointer(allocated)
+        }
+    }
+
+    deinit {
+        mutablePointer?.deinitialize(count: count)
+        mutablePointer?.deallocate()
+    }
+}
+
+private final class ChunkInputBuffer {
+    let pointer: UnsafePointer<VkChunkInput>?
+    let count: Int
+    private let mutablePointer: UnsafeMutablePointer<VkChunkInput>?
+
+    init(_ values: [VkChunkInput]) {
+        count = values.count
+        if values.isEmpty {
+            mutablePointer = nil
+            pointer = nil
+        } else {
+            let allocated = UnsafeMutablePointer<VkChunkInput>.allocate(capacity: values.count)
             allocated.initialize(from: values, count: values.count)
             mutablePointer = allocated
             pointer = UnsafePointer(allocated)

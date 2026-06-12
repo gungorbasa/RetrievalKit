@@ -9,18 +9,22 @@ The wrapper is intentionally thin:
 - Retrieval, filtering, ranking, persistence, and traces stay in Rust.
 - Swift provides Apple-platform API shape, ownership, and error mapping.
 
-## Build
+## Build And Test
 
-Build the Rust FFI static library before using the SwiftPM package locally:
+The default package manifest consumes the built XCFramework at:
+
+```text
+target/apple/VectorKitFFI.xcframework
+```
+
+For a local macOS release-packaging smoke test:
 
 ```bash
 cd ../../..
-MACOSX_DEPLOYMENT_TARGET=14.0 cargo build -p vectorkit-ffi
-cd wrappers/swift/VectorKit
-swift test
+scripts/verify-swift-wrapper.sh
 ```
 
-For iOS/macOS app integration, build the XCFramework:
+For the full Apple artifact, build all supported slices:
 
 ```bash
 cd ../../..
@@ -34,6 +38,10 @@ The script writes:
 target/apple/VectorKitFFI.xcframework
 ```
 
+`Package.local.swift` exists for low-level development against
+`target/debug/libvectorkit_ffi.a`, but release validation should use the
+default `Package.swift` and the XCFramework.
+
 ## Usage
 
 ```swift
@@ -41,15 +49,15 @@ import VectorKit
 
 let index = try VectorIndex(dimension: 3)
 
-try index.upsert(
+try await index.upsert(
     document: Document(id: "note-1", metadata: ["source": .string("notes")]),
     chunks: [
         ChunkInput(text: "local private notes", embedding: [1, 0, 0])
     ]
 )
 
-let filter = try Filter.equals("source", .string("notes"))
-let results = try index.hybridSearch(
+let filter = Filter.equals("source", .string("notes"))
+let results = try await index.hybridSearch(
     text: "private notes",
     embedding: [1, 0, 0],
     topK: 5,
@@ -72,6 +80,12 @@ for result in results {
 - Typed filter builders: equals, not-equals, exists, range, in-values, all, any.
 - Structured Swift errors mapped from Rust/FFI failures.
 
-The local SwiftPM package links `../../../target/debug/libvectorkit_ffi.a`
-for development. Release packaging should consume `VectorKitFFI.xcframework`
-instead of the debug archive.
+`VectorIndex` is an actor. Mutating and query operations are isolated to the
+index instance and are called with `await` from outside the actor. `Filter` is
+an immutable `Sendable` value; temporary Rust filter handles are built inside
+the actor call and freed before returning.
+
+The source package currently expects the XCFramework to be built in this
+repository before `swift build` or `swift test`. A public binary release should
+publish `VectorKitFFI.xcframework` and switch the binary target to a URL plus
+checksum for tagged distribution.

@@ -2,10 +2,10 @@ import XCTest
 @testable import VectorKit
 
 final class VectorKitTests: XCTestCase {
-    func testExactSearchReturnsIndexedChunk() throws {
+    func testExactSearchReturnsIndexedChunk() async throws {
         let index = try VectorIndex(dimension: 3)
 
-        try index.upsert(
+        try await index.upsert(
             document: Document(id: "doc-1", metadata: ["source": .string("notes")]),
             chunks: [
                 ChunkInput(text: "alpha topic", embedding: [1, 0, 0]),
@@ -13,17 +13,17 @@ final class VectorKitTests: XCTestCase {
             ]
         )
 
-        let results = try index.search(embedding: [1, 0, 0], topK: 1)
+        let results = try await index.search(embedding: [1, 0, 0], topK: 1)
 
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].documentID, "doc-1")
         XCTAssertEqual(results[0].text, "alpha topic")
     }
 
-    func testMetadataFilterRestrictsSearchResults() throws {
+    func testMetadataFilterRestrictsSearchResults() async throws {
         let index = try VectorIndex(dimension: 2)
 
-        try index.upsert(
+        try await index.upsert(
             document: Document(id: "doc-1"),
             chunks: [
                 ChunkInput(text: "keep", embedding: [1, 0], metadata: ["bucket": .integer(1)]),
@@ -31,16 +31,16 @@ final class VectorKitTests: XCTestCase {
             ]
         )
 
-        let filter = try Filter.equals("bucket", .integer(2))
-        let results = try index.search(embedding: [1, 0], topK: 2, filter: filter)
+        let filter = Filter.equals("bucket", .integer(2))
+        let results = try await index.search(embedding: [1, 0], topK: 2, filter: filter)
 
         XCTAssertEqual(results.map(\.text), ["skip"])
     }
 
-    func testKeywordAndHybridSearchReturnTextAndTrace() throws {
+    func testKeywordAndHybridSearchReturnTextAndTrace() async throws {
         let index = try VectorIndex(dimension: 3)
 
-        try index.upsert(
+        try await index.upsert(
             document: Document(id: "doc-1"),
             chunks: [
                 ChunkInput(text: "local private notes", embedding: [1, 0, 0]),
@@ -48,46 +48,111 @@ final class VectorKitTests: XCTestCase {
             ]
         )
 
-        let keywordResults = try index.keywordSearch(text: "private notes", topK: 1)
+        let keywordResults = try await index.keywordSearch(text: "private notes", topK: 1)
         XCTAssertEqual(keywordResults.first?.text, "local private notes")
         XCTAssertTrue(keywordResults.first?.matchedTerms.contains("private") == true)
 
-        let hybridResults = try index.hybridSearch(text: "private notes", embedding: [1, 0, 0], topK: 1)
+        let hybridResults = try await index.hybridSearch(text: "private notes", embedding: [1, 0, 0], topK: 1)
         XCTAssertEqual(hybridResults.first?.text, "local private notes")
         XCTAssertNotNil(hybridResults.first?.vectorScore)
         XCTAssertNotNil(hybridResults.first?.keywordScore)
         XCTAssertEqual(hybridResults.first?.trace.filterMatched, true)
     }
 
-    func testDeleteRemovesDocumentFromResults() throws {
+    func testDeleteRemovesDocumentFromResults() async throws {
         let index = try VectorIndex(dimension: 2)
 
-        try index.upsert(
+        try await index.upsert(
             document: Document(id: "doc-1"),
             chunks: [ChunkInput(text: "delete me", embedding: [1, 0])]
         )
 
-        XCTAssertEqual(try index.deleteDocument(id: "doc-1"), 1)
-        XCTAssertTrue(try index.search(embedding: [1, 0], topK: 1).isEmpty)
+        let deletedCount = try await index.deleteDocument(id: "doc-1")
+        let results = try await index.search(embedding: [1, 0], topK: 1)
+
+        XCTAssertEqual(deletedCount, 1)
+        XCTAssertTrue(results.isEmpty)
     }
 
-    func testSaveAndLoadRoundTrip() throws {
+    func testSaveAndLoadRoundTrip() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vectorkit-swift-tests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let index = try VectorIndex(dimension: 2)
-        try index.upsert(
+        try await index.upsert(
             document: Document(id: "doc-1"),
             chunks: [ChunkInput(text: "persisted chunk", embedding: [0, 1])]
         )
-        try index.save(to: directory)
+        try await index.save(to: directory)
 
         let loaded = try VectorIndex.load(from: directory)
-        let results = try loaded.search(embedding: [0, 1], topK: 1)
+        let results = try await loaded.search(embedding: [0, 1], topK: 1)
+        let dimension = await loaded.dimension
+        let activeChunkCount = await loaded.activeChunkCount
 
-        XCTAssertEqual(loaded.dimension, 2)
-        XCTAssertEqual(loaded.activeChunkCount, 1)
+        XCTAssertEqual(dimension, 2)
+        XCTAssertEqual(activeChunkCount, 1)
         XCTAssertEqual(results.first?.text, "persisted chunk")
+    }
+
+    func testDimensionMismatchMapsToCoreError() async throws {
+        let index = try VectorIndex(dimension: 2)
+
+        do {
+            _ = try await index.search(embedding: [1], topK: 1)
+            XCTFail("expected dimension mismatch")
+        } catch {
+            guard case VectorKitError.core(let message) = error else {
+                return XCTFail("expected core error, got \(error)")
+            }
+            XCTAssertTrue(message.contains("invalid vector dimension"))
+        }
+    }
+
+    func testCompositeFilters() async throws {
+        let index = try VectorIndex(dimension: 2)
+        try await index.upsert(
+            document: Document(id: "doc-1"),
+            chunks: [
+                ChunkInput(
+                    text: "match",
+                    embedding: [1, 0],
+                    metadata: ["source": .string("notes"), "stars": .integer(5)]
+                ),
+                ChunkInput(
+                    text: "miss",
+                    embedding: [1, 0],
+                    metadata: ["source": .string("web"), "stars": .integer(5)]
+                )
+            ]
+        )
+
+        let filter = Filter.all([
+            .equals("source", .string("notes")),
+            .range("stars", lower: .integer(4), upper: .integer(5))
+        ])
+        let results = try await index.search(embedding: [1, 0], topK: 2, filter: filter)
+
+        XCTAssertEqual(results.map(\.text), ["match"])
+    }
+
+    func testConcurrentReadOnlySearchesAfterIndexing() async throws {
+        let index = try VectorIndex(dimension: 2)
+        try await index.upsert(
+            document: Document(id: "doc-1"),
+            chunks: [ChunkInput(text: "concurrent", embedding: [1, 0])]
+        )
+
+        try await withThrowingTaskGroup(of: String?.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    try await index.search(embedding: [1, 0], topK: 1).first?.text
+                }
+            }
+            for try await text in group {
+                XCTAssertEqual(text, "concurrent")
+            }
+        }
     }
 }

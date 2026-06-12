@@ -2191,4 +2191,269 @@ mod tests {
         assert!(json.contains("\"persist_bm25\":true"));
         assert!(json.contains("\"post_load_search\""));
     }
+
+    #[test]
+    fn sdk_ffi_can_upsert_filter_search_and_delete() {
+        let mut status = empty_status();
+        let index =
+            unsafe { vectorkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        assert!(!index.is_null());
+        assert_status_ok(&status);
+
+        let document_id = CString::new("doc-1").unwrap();
+        let document_text = CString::new("document text").unwrap();
+        let bucket_field = CString::new("bucket").unwrap();
+        let chunk_text_keep = CString::new("keep").unwrap();
+        let chunk_text_skip = CString::new("skip").unwrap();
+        let keep_embedding = [1.0_f32, 0.0];
+        let skip_embedding = [0.0_f32, 1.0];
+        let keep_metadata = [VkMetadataEntry {
+            field: bucket_field.as_ptr(),
+            value: VkMetadataValue {
+                value_type: VK_METADATA_INTEGER,
+                string_value: ptr::null(),
+                integer_value: 1,
+                float_value: 0.0,
+                bool_value: false,
+            },
+        }];
+        let skip_metadata = [VkMetadataEntry {
+            field: bucket_field.as_ptr(),
+            value: VkMetadataValue {
+                value_type: VK_METADATA_INTEGER,
+                string_value: ptr::null(),
+                integer_value: 2,
+                float_value: 0.0,
+                bool_value: false,
+            },
+        }];
+        let chunks = [
+            VkChunkInput {
+                text: chunk_text_keep.as_ptr(),
+                embedding: keep_embedding.as_ptr(),
+                embedding_len: keep_embedding.len(),
+                metadata: keep_metadata.as_ptr(),
+                metadata_len: keep_metadata.len(),
+            },
+            VkChunkInput {
+                text: chunk_text_skip.as_ptr(),
+                embedding: skip_embedding.as_ptr(),
+                embedding_len: skip_embedding.len(),
+                metadata: skip_metadata.as_ptr(),
+                metadata_len: skip_metadata.len(),
+            },
+        ];
+        let mut chunk_ids = VkChunkIdBuffer {
+            values: ptr::null_mut(),
+            count: 0,
+        };
+
+        let upserted = unsafe {
+            vectorkit_index_upsert_document(
+                index,
+                document_id.as_ptr(),
+                document_text.as_ptr(),
+                ptr::null(),
+                0,
+                chunks.as_ptr(),
+                chunks.len(),
+                &mut chunk_ids,
+                &mut status,
+            )
+        };
+        assert!(upserted);
+        assert_status_ok(&status);
+        assert_eq!(chunk_ids.count, 2);
+        unsafe { vectorkit_chunk_id_buffer_free(chunk_ids) };
+
+        let filter_value = VkMetadataValue {
+            value_type: VK_METADATA_INTEGER,
+            string_value: ptr::null(),
+            integer_value: 2,
+            float_value: 0.0,
+            bool_value: false,
+        };
+        let filter =
+            unsafe { vectorkit_filter_equals(bucket_field.as_ptr(), filter_value, &mut status) };
+        assert!(!filter.is_null());
+        assert_status_ok(&status);
+
+        let query = [1.0_f32, 0.0];
+        let mut results = VkSearchResultBuffer {
+            hits: ptr::null_mut(),
+            count: 0,
+        };
+        let searched = unsafe {
+            vectorkit_index_search(
+                index,
+                query.as_ptr(),
+                query.len(),
+                2,
+                filter,
+                &mut results,
+                &mut status,
+            )
+        };
+        assert!(searched);
+        assert_status_ok(&status);
+        assert_eq!(results.count, 1);
+        let hit = unsafe { &*results.hits };
+        assert_eq!(
+            unsafe { CStr::from_ptr(hit.text) }.to_str().unwrap(),
+            "skip"
+        );
+        unsafe { vectorkit_search_results_free(results) };
+
+        let mut deleted_count = 0;
+        let deleted = unsafe {
+            vectorkit_index_delete_document(
+                index,
+                document_id.as_ptr(),
+                &mut deleted_count,
+                &mut status,
+            )
+        };
+        assert!(deleted);
+        assert_status_ok(&status);
+        assert_eq!(deleted_count, 2);
+        assert_eq!(unsafe { vectorkit_index_active_chunk_count(index) }, 0);
+
+        unsafe {
+            vectorkit_filter_free(filter);
+            vectorkit_index_free(index);
+            vectorkit_status_clear(&mut status);
+        }
+    }
+
+    #[test]
+    fn sdk_ffi_reports_dimension_errors_through_status() {
+        let mut status = empty_status();
+        let index =
+            unsafe { vectorkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        assert!(!index.is_null());
+
+        let query = [1.0_f32];
+        let mut results = VkSearchResultBuffer {
+            hits: ptr::null_mut(),
+            count: 0,
+        };
+        let searched = unsafe {
+            vectorkit_index_search(
+                index,
+                query.as_ptr(),
+                query.len(),
+                1,
+                ptr::null(),
+                &mut results,
+                &mut status,
+            )
+        };
+
+        assert!(!searched);
+        assert_eq!(status.code, VK_STATUS_CORE_ERROR);
+        let message = unsafe { CStr::from_ptr(status.message) }
+            .to_str()
+            .unwrap()
+            .to_owned();
+        assert!(message.contains("invalid vector dimension"));
+
+        unsafe {
+            vectorkit_index_free(index);
+            vectorkit_status_clear(&mut status);
+        }
+    }
+
+    #[test]
+    fn sdk_ffi_save_and_load_round_trips_results() {
+        let mut status = empty_status();
+        let index =
+            unsafe { vectorkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        assert!(!index.is_null());
+
+        let document_id = CString::new("doc-1").unwrap();
+        let document_text = CString::new("").unwrap();
+        let chunk_text = CString::new("persisted").unwrap();
+        let embedding = [0.0_f32, 1.0];
+        let chunks = [VkChunkInput {
+            text: chunk_text.as_ptr(),
+            embedding: embedding.as_ptr(),
+            embedding_len: embedding.len(),
+            metadata: ptr::null(),
+            metadata_len: 0,
+        }];
+        let mut chunk_ids = VkChunkIdBuffer {
+            values: ptr::null_mut(),
+            count: 0,
+        };
+        assert!(unsafe {
+            vectorkit_index_upsert_document(
+                index,
+                document_id.as_ptr(),
+                document_text.as_ptr(),
+                ptr::null(),
+                0,
+                chunks.as_ptr(),
+                chunks.len(),
+                &mut chunk_ids,
+                &mut status,
+            )
+        });
+        unsafe { vectorkit_chunk_id_buffer_free(chunk_ids) };
+
+        let directory = std::env::temp_dir().join(format!(
+            "vectorkit-sdk-ffi-test-{}",
+            TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let directory_string = CString::new(directory.to_string_lossy().as_bytes()).unwrap();
+        assert!(unsafe {
+            vectorkit_index_save(index, directory_string.as_ptr(), true, &mut status)
+        });
+
+        let loaded = unsafe { vectorkit_index_load(directory_string.as_ptr(), &mut status) };
+        assert!(!loaded.is_null());
+        assert_eq!(unsafe { vectorkit_index_dimension(loaded) }, 2);
+        assert_eq!(unsafe { vectorkit_index_active_chunk_count(loaded) }, 1);
+
+        let mut results = VkSearchResultBuffer {
+            hits: ptr::null_mut(),
+            count: 0,
+        };
+        assert!(unsafe {
+            vectorkit_index_search(
+                loaded,
+                embedding.as_ptr(),
+                embedding.len(),
+                1,
+                ptr::null(),
+                &mut results,
+                &mut status,
+            )
+        });
+        assert_eq!(results.count, 1);
+        let hit = unsafe { &*results.hits };
+        assert_eq!(
+            unsafe { CStr::from_ptr(hit.text) }.to_str().unwrap(),
+            "persisted"
+        );
+
+        unsafe {
+            vectorkit_search_results_free(results);
+            vectorkit_index_free(loaded);
+            vectorkit_index_free(index);
+            vectorkit_status_clear(&mut status);
+        }
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    fn empty_status() -> VkStatus {
+        VkStatus {
+            code: VK_STATUS_OK,
+            message: ptr::null_mut(),
+        }
+    }
+
+    fn assert_status_ok(status: &VkStatus) {
+        assert_eq!(status.code, VK_STATUS_OK);
+        assert!(status.message.is_null());
+    }
 }

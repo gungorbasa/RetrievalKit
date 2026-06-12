@@ -12,13 +12,18 @@ let package = Package(
         .library(name: "VectorKit", targets: ["VectorKit"])
     ],
     targets: [
-        .binaryTarget(
+        .systemLibrary(
             name: "VectorKitFFI",
-            path: "../../../target/apple/VectorKitFFI.xcframework"
+            path: "Sources/CVectorKitFFI"
         ),
         .target(
             name: "VectorKit",
-            dependencies: ["VectorKitFFI"]
+            dependencies: ["VectorKitFFI"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "../../../target/debug/libvectorkit_ffi.a"
+                ])
+            ]
         ),
         .testTarget(
             name: "VectorKitTests",

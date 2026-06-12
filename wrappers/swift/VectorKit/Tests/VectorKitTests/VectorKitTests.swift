@@ -2,6 +2,12 @@ import XCTest
 @testable import VectorKit
 
 final class VectorKitTests: XCTestCase {
+    private struct RealDataQuery: Decodable {
+        var query: String
+        var dimension: Int
+        var embedding: [Float]
+    }
+
     func testExactSearchReturnsIndexedChunk() async throws {
         let index = try VectorIndex(dimension: 3)
 
@@ -154,5 +160,57 @@ final class VectorKitTests: XCTestCase {
                 XCTAssertEqual(text, "concurrent")
             }
         }
+    }
+
+    func testBundledSocialNetworkIndexSupportsRealSearches() async throws {
+        let resources = socialNetworkResourcesURL()
+        let indexURL = resources.appendingPathComponent("social-network-index")
+        let queryURL = resources.appendingPathComponent("social-network-query.json")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: indexURL.appendingPathComponent("manifest.json").path))
+        let query = try JSONDecoder().decode(RealDataQuery.self, from: Data(contentsOf: queryURL))
+        XCTAssertEqual(query.dimension, 384)
+        XCTAssertEqual(query.embedding.count, query.dimension)
+
+        let index = try VectorIndex.load(from: indexURL)
+        let dimension = await index.dimension
+        let activeChunkCount = await index.activeChunkCount
+
+        XCTAssertEqual(dimension, query.dimension)
+        XCTAssertEqual(activeChunkCount, 28_650)
+
+        let vectorResults = try await index.search(embedding: query.embedding, topK: 3)
+        XCTAssertEqual(vectorResults.count, 3)
+        XCTAssertTrue(vectorResults[0].documentID.hasPrefix("shot:"))
+
+        let keywordResults = try await index.keywordSearch(text: query.query, topK: 3)
+        XCTAssertEqual(keywordResults.count, 3)
+        XCTAssertTrue(keywordResults[0].matchedTerms.contains("mark"))
+
+        let hybridResults = try await index.hybridSearch(text: query.query, embedding: query.embedding, topK: 3)
+        XCTAssertEqual(hybridResults.count, 3)
+        XCTAssertNotNil(hybridResults[0].vectorScore)
+        XCTAssertNotNil(hybridResults[0].keywordScore)
+
+        let filteredResults = try await index.keywordSearch(
+            text: "Harvard campus at night",
+            topK: 3,
+            filter: .equals("kind", .string("shot"))
+        )
+        XCTAssertEqual(filteredResults.count, 3)
+        XCTAssertTrue(filteredResults.allSatisfy { $0.documentID.hasPrefix("shot:") })
+    }
+
+    private func socialNetworkResourcesURL() -> URL {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let swiftRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return swiftRoot
+            .appendingPathComponent("VectorKitIOSBench")
+            .appendingPathComponent("VectorKitIOSBench")
+            .appendingPathComponent("Resources")
     }
 }

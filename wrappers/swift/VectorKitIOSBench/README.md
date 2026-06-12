@@ -19,8 +19,12 @@ Open or build the project:
 open wrappers/swift/VectorKitIOSBench/VectorKitIOSBench.xcodeproj
 ```
 
-The app has three benchmark modes:
+The app has five benchmark modes:
 
+- `Real Data`: loads the bundled Social Network index from
+  `VectorKitIOSBench/Resources/social-network-index/`, runs vector, keyword,
+  hybrid, and filtered keyword searches with a precomputed
+  `BAAI/bge-small-en-v1.5` query embedding, and reports top real hits.
 - `Smoke`: small link and UI smoke test.
 - `Device`: physical-device validation profile. It runs `24K` chunks,
   `384d`/`768d`, `i8`, filtered and unfiltered, persistence enabled, and F32

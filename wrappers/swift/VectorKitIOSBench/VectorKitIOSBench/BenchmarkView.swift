@@ -6,38 +6,48 @@ struct BenchmarkView: View {
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Button {
-                        model.run(.smallSmoke)
-                    } label: {
-                        Label("Smoke", systemImage: "bolt")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isRunning)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        Button {
+                            model.run(.realData)
+                        } label: {
+                            Label("Real Data", systemImage: "film.stack")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.isRunning)
 
-                    Button {
-                        model.run(.deviceValidation)
-                    } label: {
-                        Label("Device", systemImage: "iphone")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(model.isRunning)
+                        Button {
+                            model.run(.smallSmoke)
+                        } label: {
+                            Label("Smoke", systemImage: "bolt")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.isRunning)
 
-                    Button {
-                        model.run(.fullDefault)
-                    } label: {
-                        Label("Default", systemImage: "speedometer")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(model.isRunning)
+                        Button {
+                            model.run(.deviceValidation)
+                        } label: {
+                            Label("Device", systemImage: "iphone")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.isRunning)
 
-                    Button {
-                        model.run(.compactDefault)
-                    } label: {
-                        Label("Compact", systemImage: "archivebox")
+                        Button {
+                            model.run(.fullDefault)
+                        } label: {
+                            Label("Default", systemImage: "speedometer")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.isRunning)
+
+                        Button {
+                            model.run(.compactDefault)
+                        } label: {
+                            Label("Compact", systemImage: "archivebox")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.isRunning)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(model.isRunning)
                 }
 
                 HStack(spacing: 10) {

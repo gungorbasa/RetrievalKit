@@ -11,6 +11,8 @@
 		01A000000000000000000002 /* BenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000002 /* BenchmarkView.swift */; };
 		01A000000000000000000003 /* BenchmarkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000003 /* BenchmarkViewModel.swift */; };
 		01A000000000000000000004 /* VectorKitFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000004 /* VectorKitFFI.xcframework */; };
+		01A000000000000000000006 /* social-network-index in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000006 /* social-network-index */; };
+		01A000000000000000000007 /* social-network-query.json in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000007 /* social-network-query.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -19,6 +21,8 @@
 		01B000000000000000000003 /* BenchmarkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkViewModel.swift; sourceTree = "<group>"; };
 		01B000000000000000000004 /* VectorKitFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = VectorKitFFI.xcframework; path = ../../../target/apple/VectorKitFFI.xcframework; sourceTree = "<group>"; };
 		01B000000000000000000005 /* VectorKitIOSBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VectorKitIOSBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		01B000000000000000000006 /* social-network-index */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "social-network-index"; sourceTree = "<group>"; };
+		01B000000000000000000007 /* social-network-query.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "social-network-query.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +52,7 @@
 				01B000000000000000000001 /* VectorKitIOSBenchApp.swift */,
 				01B000000000000000000002 /* BenchmarkView.swift */,
 				01B000000000000000000003 /* BenchmarkViewModel.swift */,
+				01D000000000000000000004 /* Resources */,
 			);
 			path = VectorKitIOSBench;
 			sourceTree = "<group>";
@@ -60,6 +65,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		01D000000000000000000004 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				01B000000000000000000006 /* social-network-index */,
+				01B000000000000000000007 /* social-network-query.json */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -68,6 +82,7 @@
 			buildConfigurationList = 01F000000000000000000002 /* Build configuration list for PBXNativeTarget "VectorKitIOSBench" */;
 			buildPhases = (
 				01C000000000000000000002 /* Sources */,
+				01C000000000000000000003 /* Resources */,
 				01C000000000000000000001 /* Frameworks */,
 			);
 			buildRules = (
@@ -111,6 +126,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		01C000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A000000000000000000006 /* social-network-index in Resources */,
+				01A000000000000000000007 /* social-network-query.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		01C000000000000000000002 /* Sources */ = {
@@ -264,7 +291,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vectorkit.VectorKitIOSBench;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 6.2;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -291,7 +318,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vectorkit.VectorKitIOSBench;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 6.2;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;

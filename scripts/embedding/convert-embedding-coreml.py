@@ -103,6 +103,35 @@ MODEL_PRESETS: tuple[ModelPreset, ...] = (
         pooling="mean",
         trust_remote_code=True,
     ),
+    ModelPreset(
+        aliases=("bge-base-en-v1.5", "BAAI/bge-base-en-v1.5"),
+        model_id="BAAI/bge-base-en-v1.5",
+        slug="bge-base-en-v1.5",
+        package_name="BGEBaseEnV15.mlpackage",
+        dimension=768,
+        sequence_length=512,
+        pooling="cls",
+    ),
+    ModelPreset(
+        aliases=("arctic-m", "snowflake-arctic-embed-m", "Snowflake/snowflake-arctic-embed-m"),
+        model_id="Snowflake/snowflake-arctic-embed-m",
+        slug="snowflake-arctic-embed-m",
+        package_name="SnowflakeArcticEmbedM.mlpackage",
+        dimension=768,
+        sequence_length=512,
+        pooling="cls",
+        query_prefix="Represent this sentence for searching relevant passages: ",
+    ),
+    ModelPreset(
+        aliases=("jina-base-en", "jinaai/jina-embeddings-v2-base-en"),
+        model_id="jinaai/jina-embeddings-v2-base-en",
+        slug="jina-embeddings-v2-base-en",
+        package_name="JinaEmbeddingsV2BaseEn.mlpackage",
+        dimension=768,
+        sequence_length=512,
+        pooling="mean",
+        trust_remote_code=True,
+    ),
 )
 
 

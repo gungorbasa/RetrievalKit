@@ -31,6 +31,9 @@ The conversion script also supports the first recommended comparison batch:
 | `e5-small-v2` | `intfloat/e5-small-v2` | 384 | 512 | mean | Query/passsage prefixes recorded |
 | `gte-small` | `thenlper/gte-small` | 384 | 512 | mean | Compact quality candidate |
 | `jina-small-en` | `jinaai/jina-embeddings-v2-small-en` | 512 | 512 | mean | Requires Hugging Face remote code |
+| `bge-base-en-v1.5` | `BAAI/bge-base-en-v1.5` | 768 | 512 | CLS | Higher-cost BGE quality comparison |
+| `arctic-m` | `Snowflake/snowflake-arctic-embed-m` | 768 | 512 | CLS | Higher-cost Arctic quality comparison |
+| `jina-base-en` | `jinaai/jina-embeddings-v2-base-en` | 768 | 512 | mean | Higher-cost long-context comparison |
 
 ## Script
 
@@ -82,6 +85,18 @@ for preset in \
   e5-small-v2 \
   gte-small \
   jina-small-en
+do
+  scripts/embedding/convert-embedding-coreml.py --preset "$preset" --compile --verify
+done
+```
+
+Convert the quality-ceiling comparison batch:
+
+```bash
+for preset in \
+  bge-base-en-v1.5 \
+  arctic-m \
+  jina-base-en
 do
   scripts/embedding/convert-embedding-coreml.py --preset "$preset" --compile --verify
 done
@@ -162,6 +177,9 @@ converter wraps the Hugging Face transformer model with:
   `passage_prefix` consistently when generating query and document embeddings.
 - `jina-small-en` uses `trust_remote_code=True` during conversion and should be
   reviewed separately before adopting as a default app model.
+- The 768-dimensional presets are quality-ceiling comparisons. They increase
+  VectorKit storage, memory, and exact-search cost, so benchmark them separately
+  from the small-model default candidates.
 
 ## References
 
@@ -181,3 +199,9 @@ converter wraps the Hugging Face transformer model with:
   https://huggingface.co/Snowflake/snowflake-arctic-embed-xs
 - `jinaai/jina-embeddings-v2-small-en` model card:
   https://huggingface.co/jinaai/jina-embeddings-v2-small-en
+- `BAAI/bge-base-en-v1.5` model card:
+  https://huggingface.co/BAAI/bge-base-en-v1.5
+- `Snowflake/snowflake-arctic-embed-m` model card:
+  https://huggingface.co/Snowflake/snowflake-arctic-embed-m
+- `jinaai/jina-embeddings-v2-base-en` model card:
+  https://huggingface.co/jinaai/jina-embeddings-v2-base-en

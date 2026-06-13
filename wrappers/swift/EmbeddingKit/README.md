@@ -32,7 +32,7 @@ let hits = try await index.search(embedding: embedding, topK: 5)
 - `EmbeddingRuntimeInfo`: runtime and requested/actual compute metadata.
 - `PrecomputedEmbedder`: deterministic provider for fixtures and tests.
 - `TextTokenizer`: tokenizer boundary for model-backed providers.
-- `CoreMLEmbedder`: Core ML provider shell behind `canImport(CoreML)`.
+- `CoreMLEmbedder`: Core ML provider behind `canImport(CoreML)`.
 - `EmbeddingBenchmark`: shared benchmark runner for single-query and batch
   latency measurement.
 
@@ -63,11 +63,12 @@ compare:
 Core ML and model conversion stay out of this initial package pass so the public
 API can settle before adding runtime dependencies.
 
-The current Core ML shell defines the expected model boundary without loading a
-real model yet:
+The Core ML provider expects a compiled model whose input/output boundary is:
 
 - tokenizer produces `inputIDs`, `attentionMask`, and optional `tokenTypeIDs`
-- backend returns one pooled embedding vector per input text
+- token arrays are converted to `MLMultiArray` inputs, defaulting to
+  `[1, sequenceLength]`
+- model output exposes one pooled embedding vector
 - embedding length must equal `EmbeddingModelInfo.dimension`
 - unsupported model input/output shapes surface as `unsupportedModelInterface`
 
@@ -79,6 +80,9 @@ Default Core ML feature names:
 | Attention mask | `attention_mask` |
 | Token type IDs | `token_type_ids` |
 | Pooled embedding | `embedding` |
+
+`CoreMLModelConfiguration.tokenInputShape` can be changed to `.sequence` for
+models that expect one-dimensional token arrays.
 
 ## Benchmark Shape
 

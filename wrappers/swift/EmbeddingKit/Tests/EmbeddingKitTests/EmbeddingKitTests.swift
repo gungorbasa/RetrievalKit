@@ -123,29 +123,19 @@ final class EmbeddingKitTests: XCTestCase {
         }
     }
 
-    func testCoreMLConfigurationInitializerReportsUnsupportedModelInterface() async throws {
+    func testCoreMLConfigurationInitializerLoadsModelImmediately() throws {
         let model = try EmbeddingModelInfo(identifier: "coreml-test", dimension: 2)
-        let embedder = CoreMLEmbedder(
-            modelInfo: model,
-            tokenizer: FakeTokenizer(),
-            configuration: CoreMLModelConfiguration(
-                modelURL: URL(fileURLWithPath: "/tmp/missing.mlmodelc"),
-                compute: .cpuAndNeuralEngine
+
+        XCTAssertThrowsError(
+            try CoreMLEmbedder(
+                modelInfo: model,
+                tokenizer: FakeTokenizer(),
+                configuration: CoreMLModelConfiguration(
+                    modelURL: URL(fileURLWithPath: "/tmp/missing.mlmodelc"),
+                    compute: .cpuAndNeuralEngine
+                )
             )
         )
-
-        XCTAssertEqual(embedder.runtimeInfo.name, "Core ML")
-        XCTAssertEqual(embedder.runtimeInfo.requestedCompute, .cpuAndNeuralEngine)
-
-        do {
-            _ = try await embedder.embed("alpha")
-            XCTFail("expected unsupported model interface")
-        } catch {
-            guard case EmbeddingKitError.unsupportedModelInterface(let message) = error else {
-                return XCTFail("expected unsupported interface error, got \(error)")
-            }
-            XCTAssertTrue(message.contains("Core ML model loading is not implemented yet"))
-        }
     }
 
     func testCoreMLEmbedderRejectsWrongBatchCount() async throws {

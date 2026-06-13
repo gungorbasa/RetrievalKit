@@ -112,14 +112,17 @@ target/social-network-example-venv/bin/python \
   --measured-queries 750
 ```
 
-Latest measured result on `MacBookPro18,4` / Apple M1 Max:
+Latest measured results on `MacBookPro18,4` / Apple M1 Max:
 
-| System | Corpus | P50 | P95 | P99 | Mean |
-|---|---:|---:|---:|---:|---:|
-| VectorKit exact vector search | 28,650 chunks | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
+| System | Corpus | Embedding | Search | P50 | P95 | P99 | Mean |
+|---|---:|---|---|---:|---:|---:|---:|
+| MiniLM Core ML + Swift exact search | 28,650 chunks | `all-MiniLM-L6-v2` seq=256 | Swift VectorKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
+| BGE FastEmbed + Python exact search | 28,650 chunks | `BAAI/bge-small-en-v1.5` | Python VectorKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
 
 See `docs/product/reports/social-network-end-to-end-benchmark-report.md` for
-the environment, command, and embedding/search component breakdown.
+the environment, commands, and embedding/search component breakdown. See
+`docs/product/reports/social-network-minilm-swift-search-report.md` for the
+MiniLM-backed persisted index and Swift exact-search run.
 
 Filter to shots only:
 

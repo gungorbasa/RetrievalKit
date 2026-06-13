@@ -5,6 +5,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -94,16 +95,6 @@ MODEL_PRESETS: tuple[ModelPreset, ...] = (
         pooling="mean",
     ),
     ModelPreset(
-        aliases=("jina-small-en", "jinaai/jina-embeddings-v2-small-en"),
-        model_id="jinaai/jina-embeddings-v2-small-en",
-        slug="jina-embeddings-v2-small-en",
-        package_name="JinaEmbeddingsV2SmallEn.mlpackage",
-        dimension=512,
-        sequence_length=512,
-        pooling="mean",
-        trust_remote_code=True,
-    ),
-    ModelPreset(
         aliases=("bge-base-en-v1.5", "BAAI/bge-base-en-v1.5"),
         model_id="BAAI/bge-base-en-v1.5",
         slug="bge-base-en-v1.5",
@@ -121,16 +112,6 @@ MODEL_PRESETS: tuple[ModelPreset, ...] = (
         sequence_length=512,
         pooling="cls",
         query_prefix="Represent this sentence for searching relevant passages: ",
-    ),
-    ModelPreset(
-        aliases=("jina-base-en", "jinaai/jina-embeddings-v2-base-en"),
-        model_id="jinaai/jina-embeddings-v2-base-en",
-        slug="jina-embeddings-v2-base-en",
-        package_name="JinaEmbeddingsV2BaseEn.mlpackage",
-        dimension=768,
-        sequence_length=512,
-        pooling="mean",
-        trust_remote_code=True,
     ),
 )
 
@@ -159,7 +140,7 @@ def main() -> None:
         return
 
     preset = resolve_preset(args)
-    output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_ROOT / preset.slug
+    output_dir = (Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_ROOT / preset.slug).resolve()
     package_name = args.package_name or preset.package_name
     package_path = output_dir / package_name
     tokenizer_path = output_dir / "tokenizer"
@@ -171,6 +152,7 @@ def main() -> None:
     passage_prefix = preset.passage_prefix if args.passage_prefix is None else args.passage_prefix
     trust_remote_code = preset.trust_remote_code or args.trust_remote_code
 
+    ensure_coremltools_conversion_runtime()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     tokenizer, traced_model = build_traced_model(
@@ -334,12 +316,18 @@ def build_traced_model(
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     base_model = AutoModel.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    base_model.float()
     base_model.eval()
 
     class EmbeddingWrapper(torch.nn.Module):
-        def __init__(self, model: Any) -> None:
+        def __init__(self, model: Any, fixed_sequence_length: int) -> None:
             super().__init__()
             self.model = model
+            self.register_buffer(
+                "position_ids",
+                torch.arange(fixed_sequence_length, dtype=torch.int32).unsqueeze(0),
+                persistent=False,
+            )
 
         def forward(
             self,
@@ -347,13 +335,29 @@ def build_traced_model(
             attention_mask: Any,
             token_type_ids: Any,
         ) -> Any:
-            outputs = self.model(
-                input_ids=input_ids.to(torch.long),
-                attention_mask=attention_mask.to(torch.long),
-                token_type_ids=token_type_ids.to(torch.long),
-                return_dict=False,
-            )
-            last_hidden_state = outputs[0]
+            if hasattr(self.model, "embeddings") and hasattr(self.model, "encoder"):
+                embedding_output = self.model.embeddings(
+                    input_ids=input_ids,
+                    token_type_ids=token_type_ids,
+                    position_ids=self.position_ids,
+                )
+                mask = attention_mask[:, None, None, :].to(dtype=embedding_output.dtype)
+                extended_attention_mask = (1.0 - mask) * -10000.0
+                encoder_outputs = self.model.encoder(
+                    embedding_output,
+                    attention_mask=extended_attention_mask,
+                    return_dict=False,
+                )
+                last_hidden_state = encoder_outputs[0]
+            else:
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    token_type_ids=token_type_ids,
+                    position_ids=self.position_ids,
+                    return_dict=False,
+                )
+                last_hidden_state = outputs[0]
             if pooling == "cls":
                 embedding = last_hidden_state[:, 0]
             else:
@@ -365,7 +369,7 @@ def build_traced_model(
                 embedding = torch.nn.functional.normalize(embedding, p=2, dim=1)
             return embedding
 
-    wrapper = EmbeddingWrapper(base_model).eval()
+    wrapper = EmbeddingWrapper(base_model, sequence_length).eval()
     input_ids = torch.zeros((1, sequence_length), dtype=torch.int32)
     attention_mask = torch.ones((1, sequence_length), dtype=torch.int32)
     token_type_ids = torch.zeros((1, sequence_length), dtype=torch.int32)
@@ -391,6 +395,7 @@ def convert_to_coreml(
     minimum_deployment_target: str,
     precision: str,
 ) -> None:
+    ensure_coremltools_conversion_runtime()
     try:
         import coremltools as ct
         import numpy as np
@@ -427,6 +432,34 @@ def convert_to_coreml(
         outputs=[ct.TensorType(name=OUTPUT_EMBEDDING)],
     )
     coreml_model.save(str(package_path))
+
+
+def ensure_coremltools_conversion_runtime() -> None:
+    if sys.version_info >= (3, 14):
+        raise SystemExit(
+            "Core ML Tools native conversion libraries are not available in this "
+            f"Python {sys.version_info.major}.{sys.version_info.minor} environment. "
+            "Recreate target/embedding-conversion-venv with python3.11 or python3.12, "
+            "then reinstall torch, transformers, coremltools, and numpy."
+        )
+
+    try:
+        import coremltools  # noqa: F401
+    except ModuleNotFoundError as error:
+        raise SystemExit(
+            "Missing conversion dependency: coremltools. Install torch, "
+            "transformers, coremltools, and numpy in the conversion venv."
+        ) from error
+
+    try:
+        import coremltools.libmilstoragepython  # noqa: F401
+    except ModuleNotFoundError as error:
+        raise SystemExit(
+            "Core ML Tools native storage bindings are missing, so .mlpackage "
+            "export cannot run. Recreate the conversion venv with a Core ML Tools "
+            "supported Python version, preferably python3.11 or python3.12, and "
+            "reinstall torch, transformers, coremltools, and numpy."
+        ) from error
 
 
 def compile_model(package_path: Path, output_dir: Path) -> Path:

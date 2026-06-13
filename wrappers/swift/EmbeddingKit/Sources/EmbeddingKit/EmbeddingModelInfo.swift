@@ -113,15 +113,29 @@ public enum KnownEmbeddingModels {
         recommendedMetric: .cosine
     )
 
-    public static let jinaEmbeddingsV2SmallEn = try! EmbeddingModelInfo(
-        identifier: "jinaai/jina-embeddings-v2-small-en",
-        dimension: 512,
-        maxInputTokens: 8192,
+    public static let e5SmallV2 = try! EmbeddingModelInfo(
+        identifier: "intfloat/e5-small-v2",
+        dimension: 384,
+        maxInputTokens: 512,
+        recommendedMetric: .cosine
+    )
+
+    public static let gteSmall = try! EmbeddingModelInfo(
+        identifier: "thenlper/gte-small",
+        dimension: 384,
+        maxInputTokens: 512,
         recommendedMetric: .cosine
     )
 
     public static let bgeBaseEnV15 = try! EmbeddingModelInfo(
         identifier: "BAAI/bge-base-en-v1.5",
+        dimension: 768,
+        maxInputTokens: 512,
+        recommendedMetric: .cosine
+    )
+
+    public static let snowflakeArcticEmbedM = try! EmbeddingModelInfo(
+        identifier: "snowflake/snowflake-arctic-embed-m",
         dimension: 768,
         maxInputTokens: 512,
         recommendedMetric: .cosine

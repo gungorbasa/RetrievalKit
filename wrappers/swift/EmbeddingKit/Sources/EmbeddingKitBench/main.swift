@@ -69,7 +69,8 @@ struct EmbeddingKitBench {
     Options:
       --models <list>         Comma-separated model aliases. Defaults to bge-small-en-v1.5.
                               Aliases: bge-small-en-v1.5, all-MiniLM-L6-v2,
-                              arctic-xs, arctic-s, jina-small-en, bge-base-en-v1.5.
+                              arctic-xs, arctic-s, e5-small-v2, gte-small,
+                              bge-base-en-v1.5, arctic-m.
       --queries <name>        Built-in query fixture. Defaults to social-network.
       --queries-file <path>   JSON query file. Supports ["query"], {"queries":[...]}, or {"query":"..."}.
       --warmup <count>        Warmup iterations excluded from stats. Defaults to 50.
@@ -157,8 +158,10 @@ private enum ModelSelection {
     case allMiniLML6V2
     case arcticXS
     case arcticS
-    case jinaSmallEn
+    case e5SmallV2
+    case gteSmall
     case bgeBaseEnV15
+    case arcticM
 
     var info: EmbeddingModelInfo {
         switch self {
@@ -170,10 +173,14 @@ private enum ModelSelection {
             KnownEmbeddingModels.snowflakeArcticEmbedXS
         case .arcticS:
             KnownEmbeddingModels.snowflakeArcticEmbedS
-        case .jinaSmallEn:
-            KnownEmbeddingModels.jinaEmbeddingsV2SmallEn
+        case .e5SmallV2:
+            KnownEmbeddingModels.e5SmallV2
+        case .gteSmall:
+            KnownEmbeddingModels.gteSmall
         case .bgeBaseEnV15:
             KnownEmbeddingModels.bgeBaseEnV15
+        case .arcticM:
+            KnownEmbeddingModels.snowflakeArcticEmbedM
         }
     }
 
@@ -187,10 +194,14 @@ private enum ModelSelection {
             self = .arcticXS
         case "arctic-s", "snowflake/snowflake-arctic-embed-s":
             self = .arcticS
-        case "jina-small-en", "jinaai/jina-embeddings-v2-small-en":
-            self = .jinaSmallEn
+        case "e5-small-v2", "intfloat/e5-small-v2":
+            self = .e5SmallV2
+        case "gte-small", "thenlper/gte-small":
+            self = .gteSmall
         case "bge-base-en-v1.5", "BAAI/bge-base-en-v1.5":
             self = .bgeBaseEnV15
+        case "arctic-m", "snowflake/snowflake-arctic-embed-m":
+            self = .arcticM
         default:
             throw CLIError.invalidValue("--models", alias)
         }

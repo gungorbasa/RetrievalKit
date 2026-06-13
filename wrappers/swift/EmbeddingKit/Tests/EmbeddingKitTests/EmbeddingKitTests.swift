@@ -45,8 +45,10 @@ final class EmbeddingKitTests: XCTestCase {
     func testKnownModelsUseExpectedDimensions() {
         XCTAssertEqual(KnownEmbeddingModels.bgeSmallEnV15.dimension, 384)
         XCTAssertEqual(KnownEmbeddingModels.allMiniLML6V2.dimension, 384)
-        XCTAssertEqual(KnownEmbeddingModels.jinaEmbeddingsV2SmallEn.dimension, 512)
+        XCTAssertEqual(KnownEmbeddingModels.e5SmallV2.dimension, 384)
+        XCTAssertEqual(KnownEmbeddingModels.gteSmall.dimension, 384)
         XCTAssertEqual(KnownEmbeddingModels.bgeBaseEnV15.dimension, 768)
+        XCTAssertEqual(KnownEmbeddingModels.snowflakeArcticEmbedM.dimension, 768)
     }
 
     func testBenchmarkRunsSingleQueryAndBatchMeasurements() async throws {

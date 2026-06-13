@@ -30,21 +30,23 @@ The conversion script also supports the first recommended comparison batch:
 | `arctic-s` | `Snowflake/snowflake-arctic-embed-s` | 384 | 512 | CLS | Query prefix recorded |
 | `e5-small-v2` | `intfloat/e5-small-v2` | 384 | 512 | mean | Query/passsage prefixes recorded |
 | `gte-small` | `thenlper/gte-small` | 384 | 512 | mean | Compact quality candidate |
-| `jina-small-en` | `jinaai/jina-embeddings-v2-small-en` | 512 | 512 | mean | Requires Hugging Face remote code |
 | `bge-base-en-v1.5` | `BAAI/bge-base-en-v1.5` | 768 | 512 | CLS | Higher-cost BGE quality comparison |
 | `arctic-m` | `Snowflake/snowflake-arctic-embed-m` | 768 | 512 | CLS | Higher-cost Arctic quality comparison |
-| `jina-base-en` | `jinaai/jina-embeddings-v2-base-en` | 768 | 512 | mean | Higher-cost long-context comparison |
 
 ## Script
 
 From the repository root:
 
 ```bash
-python3 -m venv target/embedding-conversion-venv
+python3.11 -m venv target/embedding-conversion-venv
 source target/embedding-conversion-venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install torch transformers coremltools numpy
 ```
+
+Use Python 3.11 or 3.12 for conversion. Python 3.14 currently installs a
+Core ML Tools package without the native storage/model bindings needed to write
+`.mlpackage` artifacts, which fails with errors such as `BlobWriter not loaded`.
 
 Convert the model:
 
@@ -83,8 +85,7 @@ for preset in \
   arctic-xs \
   arctic-s \
   e5-small-v2 \
-  gte-small \
-  jina-small-en
+  gte-small
 do
   scripts/embedding/convert-embedding-coreml.py --preset "$preset" --compile --verify
 done
@@ -95,8 +96,7 @@ Convert the quality-ceiling comparison batch:
 ```bash
 for preset in \
   bge-base-en-v1.5 \
-  arctic-m \
-  jina-base-en
+  arctic-m
 do
   scripts/embedding/convert-embedding-coreml.py --preset "$preset" --compile --verify
 done
@@ -107,6 +107,49 @@ The older BGE-specific command remains available as a compatibility wrapper:
 ```bash
 scripts/embedding/convert-bge-small-coreml.py --compile --verify
 ```
+
+## Performance Evaluation Plan
+
+The first benchmark pass should compare the six generated 384-dimensional
+models:
+
+```text
+bge-small-en-v1.5
+all-MiniLM-L6-v2
+snowflake-arctic-embed-xs
+snowflake-arctic-embed-s
+e5-small-v2
+gte-small
+```
+
+Measure in three layers:
+
+1. Embedding-only latency in `EmbeddingKit`.
+   - Load each generated `.mlmodelc` and matching tokenizer.
+   - Run the same social-network query set for every model.
+   - Measure cold model load, first query, warmed single-query p50/p95/p99,
+     and batch sizes `1,8,16,32,64`.
+   - Repeat for Core ML compute modes `.cpuOnly`, `.cpuAndGPU`,
+     `.cpuAndNeuralEngine`, and `.all`.
+
+2. Retrieval-only latency in `VectorKit`.
+   - Build or reuse one index per model, because model output vectors are not
+     interchangeable even when dimensions match.
+   - Keep `top_k`, chunk count, filters, vector encoding, and query texts
+     identical across models.
+   - Report exact vector search p50/p95/p99 separately from embedding latency.
+
+3. End-to-end latency and result sanity.
+   - Measure query embedding plus exact vector search with the same 750 measured
+     queries used by the existing social-network benchmark.
+   - Save a small result sample per model for qualitative inspection.
+   - Select the default model only after latency and result quality are both
+     acceptable.
+
+Suggested output table:
+
+| Model | Compute | Init ms | First query ms | Embed p95 ms | Search p95 ms | Total p95 ms | Batch 32 texts/s |
+|---|---|---:|---:|---:|---:|---:|---:|
 
 ## Outputs
 
@@ -175,8 +218,6 @@ converter wraps the Hugging Face transformer model with:
   `.cpuAndNeuralEngine` is fastest for every exported model.
 - For `e5-small-v2`, callers should apply the recorded `query_prefix` and
   `passage_prefix` consistently when generating query and document embeddings.
-- `jina-small-en` uses `trust_remote_code=True` during conversion and should be
-  reviewed separately before adopting as a default app model.
 - The 768-dimensional presets are quality-ceiling comparisons. They increase
   VectorKit storage, memory, and exact-search cost, so benchmark them separately
   from the small-model default candidates.
@@ -197,11 +238,7 @@ converter wraps the Hugging Face transformer model with:
   https://huggingface.co/thenlper/gte-small
 - `Snowflake/snowflake-arctic-embed-xs` model card:
   https://huggingface.co/Snowflake/snowflake-arctic-embed-xs
-- `jinaai/jina-embeddings-v2-small-en` model card:
-  https://huggingface.co/jinaai/jina-embeddings-v2-small-en
 - `BAAI/bge-base-en-v1.5` model card:
   https://huggingface.co/BAAI/bge-base-en-v1.5
 - `Snowflake/snowflake-arctic-embed-m` model card:
   https://huggingface.co/Snowflake/snowflake-arctic-embed-m
-- `jinaai/jina-embeddings-v2-base-en` model card:
-  https://huggingface.co/jinaai/jina-embeddings-v2-base-en

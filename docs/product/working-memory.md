@@ -78,6 +78,26 @@ Approximate vector-only sizes for `24K` vectors:
 
 ## Recent Benchmark Takeaways
 
+Social Network real-data MiniLM benchmark:
+
+- Built `target/examples/social-network-index-minilm` from the real Social
+  Network fixture using Core ML `sentence-transformers/all-MiniLM-L6-v2`,
+  `seq=256`, `384d`, cosine, and `I8ScalarQuantized`.
+- Persisted index: `28,650` chunks, `31.346 MiB`.
+- Query fixture: `target/examples/social-network-minilm-queries.json`.
+- Swift exact vector search over the MiniLM index measured `0.470 ms` average,
+  `0.466 ms` p50, `0.497 ms` p95, and `0.535 ms` p99 over `750` measured
+  queries with `top_k=5`.
+- Core ML MiniLM query embedding measured separately at `3.057 ms` average,
+  `2.973 ms` p50, `3.545 ms` p95, and `5.493 ms` p99.
+- Approximate embedding + Swift search: `3.527 ms` average, `3.439 ms` p50,
+  `4.042 ms` p95, and `6.028 ms` p99. This is close to Moss's published
+  `4.3 ms` p95, but should be replaced by a single Swift end-to-end benchmark
+  once Swift-side tokenization/model execution is wired in.
+- Source reports:
+  `docs/product/reports/social-network-end-to-end-benchmark-report.md` and
+  `docs/product/reports/social-network-minilm-swift-search-report.md`.
+
 Local Rust CLI hybrid work after BM25/runtime optimizations:
 
 - BM25 keyword search is no longer the main hybrid bottleneck for the current

@@ -162,6 +162,18 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   a convenience helper that calls the supplied provider, validates one returned
   query vector, then calls vector search.
 
+## EmbeddingKit Context
+
+- EmbeddingKit lives separately from VectorKit under `wrappers/swift/EmbeddingKit`.
+  VectorKit still accepts caller-provided embeddings and does not depend on an
+  embedding runtime.
+- Core ML model conversion is intentionally outside the Swift package. The BGE
+  conversion script is `scripts/embedding/convert-bge-small-coreml.py`, and the
+  process is documented in `docs/product/embedding-model-conversion.md`.
+- Generated model artifacts should stay under
+  `target/embedding-models/bge-small-en-v1.5/` and should not be committed by
+  default.
+
 ## Completed Optimizations
 
 - Late result materialization is implemented for exact vector search. The hot

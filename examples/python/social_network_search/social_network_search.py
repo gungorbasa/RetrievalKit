@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +68,14 @@ class SearchRun:
     search_ms: float
 
 
+@dataclass(frozen=True)
+class QueryTiming:
+    query: str
+    embed_ms: float
+    search_ms: float
+    total_ms: float
+
+
 def main() -> None:
     args = parse_args()
     source_path = Path(args.json)
@@ -90,6 +99,41 @@ def main() -> None:
     load_start = time.perf_counter()
     index = Index.load(index_dir)
     load_ms = elapsed_ms(load_start)
+
+    if args.end_to_end_benchmark:
+        benchmark_queries = build_benchmark_queries(
+            source_path=source_path,
+            fallback_query=args.query,
+            measured_queries=args.measured_queries,
+            warmup_queries=args.warmup_queries,
+            chunk_token_limit=args.chunk_token_limit,
+            chunk_overlap=args.chunk_overlap,
+        )
+        run_end_to_end_benchmark(
+            index=index,
+            index_dir=index_dir,
+            model=model,
+            model_init_ms=model_init_ms,
+            load_ms=load_ms,
+            queries=benchmark_queries,
+            measured_queries=args.measured_queries,
+            warmup_queries=args.warmup_queries,
+            mode=args.search_mode,
+            limit=args.limit,
+            filters=build_filter(
+                kind=args.where_kind,
+                start_time=args.start_time,
+                end_time=args.end_time,
+                time_filter_mode=args.time_filter_mode,
+            ),
+            fusion=args.fusion,
+            vector_candidates=args.vector_candidates,
+            keyword_candidates=args.keyword_candidates,
+            vector_weight=args.vector_weight,
+            keyword_weight=args.keyword_weight,
+            rrf_k=args.rrf_k,
+        )
+        return
 
     embed_start = time.perf_counter()
     query_embedding = embed_one(model, args.query)
@@ -254,6 +298,23 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help="number of repeated runs for average load/embed/search timing; 0 disables",
     )
+    parser.add_argument(
+        "--end-to-end-benchmark",
+        action="store_true",
+        help="run a Mac-style measured query benchmark instead of printing hits",
+    )
+    parser.add_argument(
+        "--measured-queries",
+        type=int,
+        default=750,
+        help="number of timed query executions for --end-to-end-benchmark",
+    )
+    parser.add_argument(
+        "--warmup-queries",
+        type=int,
+        default=50,
+        help="number of untimed warmup query executions before measured queries",
+    )
     args = parser.parse_args()
     if (
         args.start_time is not None
@@ -261,6 +322,10 @@ def parse_args() -> argparse.Namespace:
         and args.start_time > args.end_time
     ):
         parser.error("--start-time must be less than or equal to --end-time")
+    if args.measured_queries <= 0:
+        parser.error("--measured-queries must be greater than zero")
+    if args.warmup_queries < 0:
+        parser.error("--warmup-queries must be greater than or equal to zero")
     return args
 
 
@@ -822,6 +887,211 @@ def print_one_shot_timings(
             print(f"  {run.mode}_query_total_ms: {query_embed_ms + run.search_ms:.3f}")
 
 
+def build_benchmark_queries(
+    *,
+    source_path: Path,
+    fallback_query: str,
+    measured_queries: int,
+    warmup_queries: int,
+    chunk_token_limit: int,
+    chunk_overlap: int,
+) -> list[str]:
+    requested = measured_queries + warmup_queries
+    queries = fixture_query_texts(
+        source_path=source_path,
+        chunk_token_limit=chunk_token_limit,
+        chunk_overlap=chunk_overlap,
+    )
+    if not queries:
+        queries = [fallback_query]
+
+    selected = []
+    for index in range(requested):
+        selected.append(queries[index % len(queries)])
+    return selected
+
+
+def fixture_query_texts(
+    *,
+    source_path: Path,
+    chunk_token_limit: int,
+    chunk_overlap: int,
+) -> list[str]:
+    if not source_path.exists():
+        return []
+
+    records = build_records(
+        source_path,
+        chunk_token_limit=chunk_token_limit,
+        chunk_overlap=chunk_overlap,
+    )
+    queries = []
+    seen = set()
+    for record in records:
+        query = query_text_from_record(record.text)
+        if query in seen:
+            continue
+        seen.add(query)
+        queries.append(query)
+    return queries
+
+
+def query_text_from_record(text: str) -> str:
+    normalized = " ".join(text.replace("\n", " ").split())
+    if len(normalized) <= 160:
+        return normalized
+    return normalized[:160].rsplit(" ", 1)[0]
+
+
+def run_end_to_end_benchmark(
+    *,
+    index: Index,
+    index_dir: Path,
+    model: TextEmbedding,
+    model_init_ms: float,
+    load_ms: float,
+    queries: list[str],
+    measured_queries: int,
+    warmup_queries: int,
+    mode: str,
+    limit: int,
+    filters: Filter | None,
+    fusion: str,
+    vector_candidates: int | None,
+    keyword_candidates: int | None,
+    vector_weight: float,
+    keyword_weight: float,
+    rrf_k: float,
+) -> None:
+    modes = ["vector", "keyword", "hybrid"] if mode == "all" else [mode]
+    warmups = queries[:warmup_queries]
+    measured = queries[warmup_queries : warmup_queries + measured_queries]
+    if len(measured) != measured_queries:
+        raise RuntimeError("internal benchmark query selection failed")
+
+    for query in warmups:
+        for search_mode in modes:
+            run_end_to_end_query(
+                index=index,
+                model=model,
+                mode=search_mode,
+                query=query,
+                limit=limit,
+                filters=filters,
+                fusion=fusion,
+                vector_candidates=vector_candidates,
+                keyword_candidates=keyword_candidates,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                rrf_k=rrf_k,
+            )
+
+    timings_by_mode: dict[str, list[QueryTiming]] = {search_mode: [] for search_mode in modes}
+    benchmark_start = time.perf_counter()
+    for query in measured:
+        for search_mode in modes:
+            timings_by_mode[search_mode].append(
+                run_end_to_end_query(
+                    index=index,
+                    model=model,
+                    mode=search_mode,
+                    query=query,
+                    limit=limit,
+                    filters=filters,
+                    fusion=fusion,
+                    vector_candidates=vector_candidates,
+                    keyword_candidates=keyword_candidates,
+                    vector_weight=vector_weight,
+                    keyword_weight=keyword_weight,
+                    rrf_k=rrf_k,
+                )
+            )
+    benchmark_wall_ms = elapsed_ms(benchmark_start)
+
+    print("\nEnd-to-end benchmark:")
+    print(f"  device: {platform.platform()}")
+    print(f"  python: {platform.python_version()}")
+    print(f"  index_dir: {index_dir}")
+    print(f"  chunks: {index_value(index, 'active_chunk_count')}")
+    print(f"  dimension: {index_value(index, 'dimension')}")
+    print(f"  measured_queries: {measured_queries}")
+    print(f"  warmup_queries: {warmup_queries}")
+    print(f"  top_k: {limit}")
+    print(f"  model_init_ms: {model_init_ms:.3f}")
+    print(f"  index_load_ms: {load_ms:.3f}")
+    print(f"  measured_wall_ms: {benchmark_wall_ms:.3f}")
+
+    for search_mode, timings in timings_by_mode.items():
+        print(f"\n  {search_mode}:")
+        print_stats("embed_ms", [timing.embed_ms for timing in timings])
+        print_stats("search_ms", [timing.search_ms for timing in timings])
+        print_stats("end_to_end_ms", [timing.total_ms for timing in timings])
+
+
+def index_value(index: Index, name: str) -> Any:
+    value = getattr(index, name)
+    if callable(value):
+        return value()
+    return value
+
+
+def run_end_to_end_query(
+    *,
+    index: Index,
+    model: TextEmbedding,
+    mode: str,
+    query: str,
+    limit: int,
+    filters: Filter | None,
+    fusion: str,
+    vector_candidates: int | None,
+    keyword_candidates: int | None,
+    vector_weight: float,
+    keyword_weight: float,
+    rrf_k: float,
+) -> QueryTiming:
+    total_start = time.perf_counter()
+    embed_ms = 0.0
+    vector: list[float] | None = None
+    if mode in {"vector", "hybrid"}:
+        embed_start = time.perf_counter()
+        vector = embed_one(model, query)
+        embed_ms = elapsed_ms(embed_start)
+
+    search_start = time.perf_counter()
+    if mode == "vector":
+        if vector is None:
+            raise RuntimeError("vector search requires an embedding")
+        index.search(vector, limit=limit, where=filters)
+    elif mode == "keyword":
+        index.keyword_search(query, limit=limit, where=filters)
+    elif mode == "hybrid":
+        if vector is None:
+            raise RuntimeError("hybrid search requires an embedding")
+        index.hybrid_search(
+            query,
+            vector,
+            limit=limit,
+            where=filters,
+            vector_candidates=vector_candidates,
+            keyword_candidates=keyword_candidates,
+            fusion=fusion,
+            vector_weight=vector_weight,
+            keyword_weight=keyword_weight,
+            rrf_k=rrf_k,
+        )
+    else:
+        raise ValueError(f"unsupported search mode: {mode}")
+
+    search_ms = elapsed_ms(search_start)
+    return QueryTiming(
+        query=query,
+        embed_ms=embed_ms,
+        search_ms=search_ms,
+        total_ms=elapsed_ms(total_start),
+    )
+
+
 def print_timing_report(
     *,
     index_dir: Path,
@@ -926,8 +1196,9 @@ def print_stats(label: str, values: list[float]) -> None:
     avg = sum(values) / len(values)
     p50 = percentile(sorted_values, 0.50)
     p95 = percentile(sorted_values, 0.95)
+    p99 = percentile(sorted_values, 0.99)
     print(
-        f"  {label}: avg={avg:.3f} p50={p50:.3f} p95={p95:.3f} "
+        f"  {label}: avg={avg:.3f} p50={p50:.3f} p95={p95:.3f} p99={p99:.3f} "
         f"min={min(values):.3f} max={max(values):.3f}"
     )
 

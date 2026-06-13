@@ -97,6 +97,21 @@ target/social-network-example-venv/bin/python \
   --limit 5
 ```
 
+Run a Mac-style measured end-to-end benchmark on the saved real index. This
+keeps the current `28,650` chunk fixture, uses `top_k=5`, warms up first, and
+then reports embedding + exact vector search latency over `750` measured query
+executions:
+
+```bash
+target/social-network-example-venv/bin/python \
+  examples/python/social_network_search/social_network_search.py \
+  --end-to-end-benchmark \
+  --search-mode vector \
+  --limit 5 \
+  --warmup-queries 50 \
+  --measured-queries 750
+```
+
 Filter to shots only:
 
 ```bash

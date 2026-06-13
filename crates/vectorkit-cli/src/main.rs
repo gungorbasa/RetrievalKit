@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -31,6 +33,9 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         }
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "kernels" => {
             run_kernel_bench(KernelBenchConfig::parse(rest)?)
+        }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "topk" => {
+            run_topk_bench(TopKBenchConfig::parse(rest)?)
         }
         _ => Err(CliError::usage()),
     }
@@ -316,6 +321,58 @@ impl KernelBenchConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct TopKBenchConfig {
+    candidates: usize,
+    queries: usize,
+    top_ks: Vec<usize>,
+    seed: u64,
+}
+
+impl Default for TopKBenchConfig {
+    fn default() -> Self {
+        Self {
+            candidates: 50_000,
+            queries: 1_000,
+            top_ks: vec![5, 10, 50, 100],
+            seed: 42,
+        }
+    }
+}
+
+impl TopKBenchConfig {
+    fn parse(args: &[String]) -> Result<Self, CliError> {
+        let mut config = Self::default();
+        let mut index = 0;
+
+        while index < args.len() {
+            let flag = args[index].as_str();
+            let Some(value) = args.get(index + 1) else {
+                return Err(CliError::InvalidArgument(format!(
+                    "missing value for argument '{flag}'"
+                )));
+            };
+
+            match flag {
+                "--candidates" => config.candidates = parse_positive(value, flag)?,
+                "--queries" => config.queries = parse_positive(value, flag)?,
+                "--top-k" => config.top_ks = parse_positive_list(value, flag)?,
+                "--seed" => config.seed = parse_u64(value, flag)?,
+                "--help" | "-h" => return Err(CliError::usage()),
+                _ => {
+                    return Err(CliError::InvalidArgument(format!(
+                        "unknown argument '{flag}'"
+                    )));
+                }
+            }
+
+            index += 2;
+        }
+
+        Ok(config)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SyntheticBenchReport {
     config: SyntheticBenchConfig,
@@ -348,6 +405,24 @@ struct KernelBenchReport {
     query_p95: Duration,
     query_max: Duration,
     score_checksum: f64,
+}
+
+#[derive(Debug, Clone)]
+struct TopKBenchReport {
+    top_k: usize,
+    algorithm: TopKAlgorithm,
+    query_min: Duration,
+    query_avg: Duration,
+    query_p50: Duration,
+    query_p95: Duration,
+    query_max: Duration,
+    checksum: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TopKAlgorithm {
+    BoundedVec,
+    BinaryHeap,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -665,6 +740,47 @@ fn run_kernel_bench(config: KernelBenchConfig) -> Result<(), CliError> {
     Ok(())
 }
 
+fn run_topk_bench(config: TopKBenchConfig) -> Result<(), CliError> {
+    println!("VectorKit top-k maintenance benchmark");
+    println!("candidates/query: {}", config.candidates);
+    println!("queries: {}", config.queries);
+    println!("seed: {}", config.seed);
+    println!("| k | algorithm | min ms | avg ms | p50 ms | p95 ms | max ms | checksum |");
+    println!("|---:|:---|---:|---:|---:|---:|---:|---:|");
+
+    let mut accumulators = config
+        .top_ks
+        .iter()
+        .copied()
+        .map(TopKBenchAccumulator::new)
+        .collect::<Vec<_>>();
+
+    for query_id in 0..config.queries {
+        let candidates = topk_candidates(config.candidates, config.seed, query_id);
+        for accumulator in &mut accumulators {
+            accumulator.record(&candidates);
+        }
+    }
+
+    for accumulator in accumulators {
+        for report in accumulator.reports() {
+            println!(
+                "| {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {} |",
+                report.top_k,
+                topk_algorithm_name(report.algorithm),
+                millis(report.query_min),
+                millis(report.query_avg),
+                millis(report.query_p50),
+                millis(report.query_p95),
+                millis(report.query_max),
+                report.checksum,
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn benchmark_synthetic(config: SyntheticBenchConfig) -> Result<SyntheticBenchReport, CliError> {
     let (index, build_duration) = build_synthetic_index(&config, config.encoding)?;
     let index_size = index.size_estimate();
@@ -795,6 +911,213 @@ fn benchmark_kernel(
         VectorEncoding::BinaryQuantized => {
             panic!("BinaryQuantized is not supported by kernel benchmark")
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TopKBenchAccumulator {
+    top_k: usize,
+    bounded_vec_durations: Vec<Duration>,
+    binary_heap_durations: Vec<Duration>,
+    bounded_vec_checksum: u64,
+    binary_heap_checksum: u64,
+}
+
+impl TopKBenchAccumulator {
+    fn new(top_k: usize) -> Self {
+        Self {
+            top_k,
+            bounded_vec_durations: Vec::new(),
+            binary_heap_durations: Vec::new(),
+            bounded_vec_checksum: 0,
+            binary_heap_checksum: 0,
+        }
+    }
+
+    fn record(&mut self, candidates: &[TopKCandidate]) {
+        let start = Instant::now();
+        let bounded_vec_hits = bounded_vec_top_k(candidates, self.top_k);
+        self.bounded_vec_durations.push(start.elapsed());
+        self.bounded_vec_checksum = self
+            .bounded_vec_checksum
+            .wrapping_add(topk_checksum(&bounded_vec_hits));
+
+        let start = Instant::now();
+        let binary_heap_hits = binary_heap_top_k(candidates, self.top_k);
+        self.binary_heap_durations.push(start.elapsed());
+        self.binary_heap_checksum = self
+            .binary_heap_checksum
+            .wrapping_add(topk_checksum(&binary_heap_hits));
+
+        debug_assert_eq!(bounded_vec_hits, binary_heap_hits);
+    }
+
+    fn reports(self) -> [TopKBenchReport; 2] {
+        [
+            topk_report(
+                self.top_k,
+                TopKAlgorithm::BoundedVec,
+                self.bounded_vec_durations,
+                self.bounded_vec_checksum,
+            ),
+            topk_report(
+                self.top_k,
+                TopKAlgorithm::BinaryHeap,
+                self.binary_heap_durations,
+                self.binary_heap_checksum,
+            ),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TopKCandidate {
+    chunk_id: u64,
+    score: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HeapTopKCandidate(TopKCandidate);
+
+impl Eq for HeapTopKCandidate {}
+
+impl Ord for HeapTopKCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // BinaryHeap is a max-heap. Make the worst ranked candidate compare
+        // greatest so peek() returns the current replacement threshold.
+        other
+            .0
+            .score
+            .total_cmp(&self.0.score)
+            .then_with(|| self.0.chunk_id.cmp(&other.0.chunk_id))
+    }
+}
+
+impl PartialOrd for HeapTopKCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn topk_candidates(count: usize, seed: u64, query_id: usize) -> Vec<TopKCandidate> {
+    let mut rng =
+        DeterministicRng::new(seed ^ (query_id as u64).wrapping_mul(0x517c_c1b7_2722_0a95));
+    (0..count)
+        .map(|chunk_id| TopKCandidate {
+            chunk_id: chunk_id as u64,
+            score: rng.next_f32_signed(),
+        })
+        .collect()
+}
+
+fn bounded_vec_top_k(candidates: &[TopKCandidate], top_k: usize) -> Vec<TopKCandidate> {
+    let mut hits = Vec::with_capacity(top_k);
+    for candidate in candidates {
+        if hits.len() < top_k {
+            hits.push(*candidate);
+            continue;
+        }
+
+        let Some(worst_index) = worst_topk_candidate_index(&hits) else {
+            continue;
+        };
+
+        if topk_candidate_ranks_before(candidate, &hits[worst_index]) {
+            hits[worst_index] = *candidate;
+        }
+    }
+    sort_topk_candidates(&mut hits);
+    hits
+}
+
+fn binary_heap_top_k(candidates: &[TopKCandidate], top_k: usize) -> Vec<TopKCandidate> {
+    let mut heap = BinaryHeap::with_capacity(top_k);
+    for candidate in candidates {
+        if heap.len() < top_k {
+            heap.push(HeapTopKCandidate(*candidate));
+            continue;
+        }
+
+        let Some(worst) = heap.peek() else {
+            continue;
+        };
+
+        if topk_candidate_ranks_before(candidate, &worst.0) {
+            heap.pop();
+            heap.push(HeapTopKCandidate(*candidate));
+        }
+    }
+
+    let mut hits = heap
+        .into_iter()
+        .map(|candidate| candidate.0)
+        .collect::<Vec<_>>();
+    sort_topk_candidates(&mut hits);
+    hits
+}
+
+fn worst_topk_candidate_index(hits: &[TopKCandidate]) -> Option<usize> {
+    let mut worst_index = 0;
+    for index in 1..hits.len() {
+        if topk_candidate_ranks_before(&hits[worst_index], &hits[index]) {
+            worst_index = index;
+        }
+    }
+    Some(worst_index)
+}
+
+fn sort_topk_candidates(hits: &mut [TopKCandidate]) {
+    hits.sort_by(compare_topk_candidates);
+}
+
+fn compare_topk_candidates(left: &TopKCandidate, right: &TopKCandidate) -> Ordering {
+    right
+        .score
+        .total_cmp(&left.score)
+        .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+}
+
+fn topk_candidate_ranks_before(left: &TopKCandidate, right: &TopKCandidate) -> bool {
+    compare_topk_candidates(left, right).is_lt()
+}
+
+fn topk_checksum(hits: &[TopKCandidate]) -> u64 {
+    hits.iter().fold(0u64, |checksum, hit| {
+        checksum
+            .wrapping_mul(16_777_619)
+            .wrapping_add(hit.chunk_id)
+            .wrapping_add(hit.score.to_bits() as u64)
+    })
+}
+
+fn topk_report(
+    top_k: usize,
+    algorithm: TopKAlgorithm,
+    durations: Vec<Duration>,
+    checksum: u64,
+) -> TopKBenchReport {
+    let query_min = *durations.iter().min().unwrap_or(&Duration::ZERO);
+    let query_max = *durations.iter().max().unwrap_or(&Duration::ZERO);
+    let query_avg = average_duration(&durations);
+    let query_p50 = percentile(durations.clone(), 50);
+    let query_p95 = percentile(durations, 95);
+
+    TopKBenchReport {
+        top_k,
+        algorithm,
+        query_min,
+        query_avg,
+        query_p50,
+        query_p95,
+        query_max,
+        checksum,
+    }
+}
+
+fn topk_algorithm_name(algorithm: TopKAlgorithm) -> &'static str {
+    match algorithm {
+        TopKAlgorithm::BoundedVec => "bounded-vec",
+        TopKAlgorithm::BinaryHeap => "binary-heap",
     }
 }
 
@@ -1564,6 +1887,7 @@ impl CliError {
                 "  vectorkit bench synthetic [options]",
                 "  vectorkit bench matrix [options]",
                 "  vectorkit bench kernels [options]",
+                "  vectorkit bench topk [options]",
                 "",
                 "synthetic options:",
                 "  --chunks <n>       default 1000",
@@ -1607,6 +1931,12 @@ impl CliError {
                 "  --dimensions <list>  comma list; default 384,768",
                 "  --queries <n>        default 200",
                 "  --encodings <list>   comma list of f32,f16,bf16,i8; default f32,f16,i8",
+                "  --seed <n>           default 42",
+                "",
+                "topk options:",
+                "  --candidates <n>     candidates per query; default 50000",
+                "  --queries <n>        default 1000",
+                "  --top-k <list>       comma list; default 5,10,50,100",
                 "  --seed <n>           default 42",
             ]
             .join("\n"),

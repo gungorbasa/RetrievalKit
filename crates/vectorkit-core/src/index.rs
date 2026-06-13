@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap, HashSet};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -523,33 +523,21 @@ impl ExactVectorIndex {
             return Ok(hits);
         }
 
-        let mut candidates = Vec::with_capacity(top_k);
+        let mut candidates = ScoredCandidateTopK::new(top_k);
         match candidate_offsets {
             Some(offsets) => {
                 for offset in offsets {
-                    self.score_search_candidate(
-                        offset,
-                        top_k,
-                        filter,
-                        &encoded_query,
-                        &mut candidates,
-                    )?;
+                    self.score_search_candidate(offset, filter, &encoded_query, &mut candidates)?;
                 }
             }
             None => {
                 for offset in self.active_offsets.iter().copied() {
-                    self.score_search_candidate(
-                        offset,
-                        top_k,
-                        filter,
-                        &encoded_query,
-                        &mut candidates,
-                    )?;
+                    self.score_search_candidate(offset, filter, &encoded_query, &mut candidates)?;
                 }
             }
         }
 
-        sort_scored_candidates(&mut candidates);
+        let candidates = candidates.into_sorted_vec();
 
         Ok(self.materialize_search_hits(&candidates))
     }
@@ -574,7 +562,7 @@ impl ExactVectorIndex {
             scales,
         };
 
-        let mut candidates = Vec::with_capacity(top_k);
+        let mut candidates = ScoredCandidateTopK::new(top_k);
         let offsets = candidate_offsets
             .as_deref()
             .unwrap_or(self.active_offsets.as_slice());
@@ -590,13 +578,7 @@ impl ExactVectorIndex {
                         continue;
                     }
 
-                    self.push_i8_candidate(
-                        &mut candidates,
-                        top_k,
-                        offset,
-                        chunk.chunk_id,
-                        i8_parts,
-                    );
+                    self.push_i8_candidate(&mut candidates, offset, chunk.chunk_id, i8_parts);
                 }
             }
             None => {
@@ -605,26 +587,19 @@ impl ExactVectorIndex {
                         continue;
                     };
                     debug_assert!(!chunk.deleted);
-                    self.push_i8_candidate(
-                        &mut candidates,
-                        top_k,
-                        offset,
-                        chunk.chunk_id,
-                        i8_parts,
-                    );
+                    self.push_i8_candidate(&mut candidates, offset, chunk.chunk_id, i8_parts);
                 }
             }
         }
 
-        sort_scored_candidates(&mut candidates);
+        let candidates = candidates.into_sorted_vec();
 
         Ok(Some(self.materialize_search_hits(&candidates)))
     }
 
     fn push_i8_candidate(
         &self,
-        candidates: &mut Vec<ScoredCandidate>,
-        top_k: usize,
+        candidates: &mut ScoredCandidateTopK,
         offset: usize,
         chunk_id: ChunkId,
         i8_parts: I8ScoringParts<'_>,
@@ -645,15 +620,11 @@ impl ExactVectorIndex {
             * i8_parts.query_scale
             * chunk_scale;
 
-        push_bounded_candidate(
-            candidates,
-            top_k,
-            ScoredCandidate {
-                chunk_id,
-                offset,
-                score,
-            },
-        );
+        candidates.push(ScoredCandidate {
+            chunk_id,
+            offset,
+            score,
+        });
     }
 
     /// Performs BM25 keyword search over active chunks.
@@ -898,10 +869,9 @@ impl ExactVectorIndex {
     fn score_search_candidate(
         &self,
         offset: usize,
-        top_k: usize,
         filter: Option<&Filter>,
         encoded_query: &scoring::EncodedQuery,
-        hits: &mut Vec<ScoredCandidate>,
+        hits: &mut ScoredCandidateTopK,
     ) -> Result<()> {
         let Some(chunk) = self.chunks.get(offset) else {
             return Ok(());
@@ -922,15 +892,11 @@ impl ExactVectorIndex {
             return Ok(());
         };
 
-        push_bounded_candidate(
-            hits,
-            top_k,
-            ScoredCandidate {
-                chunk_id: chunk.chunk_id,
-                offset,
-                score,
-            },
-        );
+        hits.push(ScoredCandidate {
+            chunk_id: chunk.chunk_id,
+            offset,
+            score,
+        });
 
         Ok(())
     }
@@ -1610,33 +1576,65 @@ struct I8ScoringParts<'a> {
     scales: &'a [f32],
 }
 
-fn push_bounded_candidate(
-    hits: &mut Vec<ScoredCandidate>,
+struct ScoredCandidateTopK {
     top_k: usize,
-    candidate: ScoredCandidate,
-) {
-    if hits.len() < top_k {
-        hits.push(candidate);
-        return;
+    heap: BinaryHeap<HeapScoredCandidate>,
+}
+
+impl ScoredCandidateTopK {
+    fn new(top_k: usize) -> Self {
+        Self {
+            top_k,
+            heap: BinaryHeap::with_capacity(top_k),
+        }
     }
 
-    let Some(worst_index) = worst_hit_index(hits) else {
-        return;
-    };
+    fn push(&mut self, candidate: ScoredCandidate) {
+        if self.heap.len() < self.top_k {
+            self.heap.push(HeapScoredCandidate(candidate));
+            return;
+        }
 
-    if hit_ranks_before(&candidate, &hits[worst_index]) {
-        hits[worst_index] = candidate;
+        let Some(worst) = self.heap.peek() else {
+            return;
+        };
+
+        if hit_ranks_before(&candidate, &worst.0) {
+            self.heap.pop();
+            self.heap.push(HeapScoredCandidate(candidate));
+        }
+    }
+
+    fn into_sorted_vec(self) -> Vec<ScoredCandidate> {
+        let mut hits = self
+            .heap
+            .into_iter()
+            .map(|candidate| candidate.0)
+            .collect::<Vec<_>>();
+        sort_scored_candidates(&mut hits);
+        hits
     }
 }
 
-fn worst_hit_index(hits: &[ScoredCandidate]) -> Option<usize> {
-    let mut worst_index = 0;
-    for index in 1..hits.len() {
-        if hit_ranks_before(&hits[worst_index], &hits[index]) {
-            worst_index = index;
-        }
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HeapScoredCandidate(ScoredCandidate);
+
+impl Eq for HeapScoredCandidate {}
+
+impl Ord for HeapScoredCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .0
+            .score
+            .total_cmp(&self.0.score)
+            .then_with(|| self.0.chunk_id.cmp(&other.0.chunk_id))
     }
-    Some(worst_index)
+}
+
+impl PartialOrd for HeapScoredCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 fn sort_scored_candidates(hits: &mut [ScoredCandidate]) {

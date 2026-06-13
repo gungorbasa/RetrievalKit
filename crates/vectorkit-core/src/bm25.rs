@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
@@ -279,17 +280,16 @@ impl Bm25Index {
         }
 
         if let Some(limit) = limit {
-            let mut bounded_hits = Vec::with_capacity(limit.min(scores.len()));
+            let mut bounded_hits = Bm25HitTopK::new(limit);
             for (chunk_id, score) in scores {
                 let hit = Bm25Hit {
                     chunk_id,
                     score,
                     matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
                 };
-                push_bounded_bm25_hit(&mut bounded_hits, limit, hit);
+                bounded_hits.push(hit);
             }
-            sort_bm25_hits(&mut bounded_hits);
-            return bounded_hits;
+            return bounded_hits.into_sorted_vec();
         }
 
         let mut hits = scores
@@ -366,36 +366,68 @@ impl Bm25Index {
     }
 }
 
-fn push_bounded_bm25_hit(hits: &mut Vec<Bm25Hit>, top_k: usize, hit: Bm25Hit) {
-    if hits.len() < top_k {
-        hits.push(hit);
-        return;
+struct Bm25HitTopK {
+    top_k: usize,
+    heap: BinaryHeap<HeapBm25Hit>,
+}
+
+impl Bm25HitTopK {
+    fn new(top_k: usize) -> Self {
+        Self {
+            top_k,
+            heap: BinaryHeap::with_capacity(top_k),
+        }
     }
 
-    let Some(worst_index) = worst_bm25_hit_index(hits) else {
-        return;
-    };
+    fn push(&mut self, hit: Bm25Hit) {
+        if self.heap.len() < self.top_k {
+            self.heap.push(HeapBm25Hit(hit));
+            return;
+        }
 
-    if bm25_hit_ranks_before(&hit, &hits[worst_index]) {
-        hits[worst_index] = hit;
+        let Some(worst) = self.heap.peek() else {
+            return;
+        };
+
+        if bm25_hit_ranks_before(&hit, &worst.0) {
+            self.heap.pop();
+            self.heap.push(HeapBm25Hit(hit));
+        }
+    }
+
+    fn into_sorted_vec(self) -> Vec<Bm25Hit> {
+        let mut hits = self.heap.into_iter().map(|hit| hit.0).collect::<Vec<_>>();
+        sort_bm25_hits(&mut hits);
+        hits
     }
 }
 
-fn worst_bm25_hit_index(hits: &[Bm25Hit]) -> Option<usize> {
-    let mut worst_index = 0;
-    for index in 1..hits.len() {
-        if bm25_hit_ranks_before(&hits[worst_index], &hits[index]) {
-            worst_index = index;
-        }
+#[derive(Debug, Clone, PartialEq)]
+struct HeapBm25Hit(Bm25Hit);
+
+impl Eq for HeapBm25Hit {}
+
+impl Ord for HeapBm25Hit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .0
+            .score
+            .total_cmp(&self.0.score)
+            .then_with(|| self.0.chunk_id.cmp(&other.0.chunk_id))
     }
-    Some(worst_index)
+}
+
+impl PartialOrd for HeapBm25Hit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 fn sort_bm25_hits(hits: &mut [Bm25Hit]) {
     hits.sort_by(compare_bm25_hits);
 }
 
-fn compare_bm25_hits(left: &Bm25Hit, right: &Bm25Hit) -> std::cmp::Ordering {
+fn compare_bm25_hits(left: &Bm25Hit, right: &Bm25Hit) -> Ordering {
     right
         .score
         .total_cmp(&left.score)

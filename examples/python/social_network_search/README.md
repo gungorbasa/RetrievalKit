@@ -112,6 +112,15 @@ target/social-network-example-venv/bin/python \
   --measured-queries 750
 ```
 
+Latest measured result on `MacBookPro18,4` / Apple M1 Max:
+
+| System | Corpus | P50 | P95 | P99 | Mean |
+|---|---:|---:|---:|---:|---:|
+| VectorKit exact vector search | 28,650 chunks | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
+
+See `docs/product/reports/social-network-end-to-end-benchmark-report.md` for
+the environment, command, and embedding/search component breakdown.
+
 Filter to shots only:
 
 ```bash

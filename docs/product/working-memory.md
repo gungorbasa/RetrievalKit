@@ -94,6 +94,13 @@ Social Network real-data MiniLM benchmark:
   `4.042 ms` p95, and `6.028 ms` p99. This is close to Moss's published
   `4.3 ms` p95, but should be replaced by a single Swift end-to-end benchmark
   once Swift-side tokenization/model execution is wired in.
+- Rust can call Core ML directly through `coreml-native`. The experimental
+  `crates/embeddingkit-coreml` crate loads the same MiniLM `.mlmodelc`, uses the
+  Hugging Face tokenizer JSON, sends `input_ids`, `attention_mask`, and
+  `token_type_ids` as `Int32`, and returns the `384d` embedding. On the current
+  machine, `cpuAndNeuralEngine` was the best measured mode in one run:
+  `2.940 ms` average, `2.907 ms` p50, `3.185 ms` p95, and `3.310 ms` p99 over
+  `750` measured single-query embeddings after `50` warmup queries.
 - Source reports:
   `docs/product/reports/social-network-end-to-end-benchmark-report.md` and
   `docs/product/reports/social-network-minilm-swift-search-report.md`.
@@ -187,6 +194,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - EmbeddingKit lives separately from VectorKit under `wrappers/swift/EmbeddingKit`.
   VectorKit still accepts caller-provided embeddings and does not depend on an
   embedding runtime.
+- `crates/embeddingkit-coreml` is the Rust/Core ML embedding path. Keep it
+  separate from `vectorkit-core`; it is an Apple-platform embedding helper, not
+  retrieval logic.
 - Core ML model conversion is intentionally outside the Swift package. The
   generic conversion script is `scripts/embedding/convert-embedding-coreml.py`
   with a BGE compatibility wrapper at

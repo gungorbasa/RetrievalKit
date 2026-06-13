@@ -124,6 +124,32 @@ the environment, commands, and embedding/search component breakdown. See
 `docs/product/reports/social-network-minilm-swift-search-report.md` for the
 MiniLM-backed persisted index and Swift exact-search run.
 
+## Build MiniLM Core ML Index
+
+The MiniLM/Core ML index builder uses the Rust `embeddingkit-coreml` embedder by
+default, then writes a VectorKit Python index with the generated vectors.
+
+Build the Rust embedder once:
+
+```bash
+cargo build -p embeddingkit-coreml --release --bin embeddingkit-coreml-embed
+```
+
+Create the database and query embedding fixture:
+
+```bash
+PYTHONPATH=wrappers/python/python \
+target/embedding-conversion-venv/bin/python \
+  scripts/embedding/build-minilm-social-network-index.py \
+  --embedding-runtime rust-coreml \
+  --compute cpuAndNeuralEngine \
+  --index-dir target/examples/social-network-index-minilm \
+  --queries-path target/examples/social-network-minilm-queries.json
+```
+
+Use `--embedding-runtime python-coreml` to compare against the older Python
+CoreMLTools path.
+
 Filter to shots only:
 
 ```bash

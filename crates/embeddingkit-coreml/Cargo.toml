@@ -1,0 +1,17 @@
+[package]
+name = "embeddingkit-coreml"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "embeddingkit-coreml-embed"
+path = "src/bin/embed_coreml.rs"
+
+[dependencies]
+coreml-native = "0.2.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.18"
+tokenizers = { version = "0.22.2", default-features = false, features = ["onig"] }

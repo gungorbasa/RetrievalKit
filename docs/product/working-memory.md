@@ -167,9 +167,11 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - EmbeddingKit lives separately from VectorKit under `wrappers/swift/EmbeddingKit`.
   VectorKit still accepts caller-provided embeddings and does not depend on an
   embedding runtime.
-- Core ML model conversion is intentionally outside the Swift package. The BGE
-  conversion script is `scripts/embedding/convert-bge-small-coreml.py`, and the
-  process is documented in `docs/product/embedding-model-conversion.md`.
+- Core ML model conversion is intentionally outside the Swift package. The
+  generic conversion script is `scripts/embedding/convert-embedding-coreml.py`
+  with a BGE compatibility wrapper at
+  `scripts/embedding/convert-bge-small-coreml.py`. The process is documented in
+  `docs/product/embedding-model-conversion.md`.
 - Generated model artifacts should stay under
   `target/embedding-models/bge-small-en-v1.5/` and should not be committed by
   default.

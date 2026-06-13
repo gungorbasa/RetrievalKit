@@ -44,24 +44,28 @@ public struct CoreMLModelConfiguration: Equatable, Sendable {
     public var featureNames: CoreMLFeatureNames
     /// Shape used when converting tokenizer output to MLMultiArray inputs.
     public var tokenInputShape: CoreMLTokenInputShape
+    /// Number of Core ML model backend actors used for parallel batch inference.
+    public var backendPoolSize: Int
 
     public init(
         modelURL: URL,
         compute: EmbeddingCompute = .all,
         featureNames: CoreMLFeatureNames = CoreMLFeatureNames(),
-        tokenInputShape: CoreMLTokenInputShape = .batchSequence
+        tokenInputShape: CoreMLTokenInputShape = .batchSequence,
+        backendPoolSize: Int = 1
     ) {
         self.modelURL = modelURL
         self.compute = compute
         self.featureNames = featureNames
         self.tokenInputShape = tokenInputShape
+        self.backendPoolSize = max(1, backendPoolSize)
     }
 }
 
 /// Minimal backend contract used by `CoreMLEmbedder`.
-public protocol CoreMLEmbeddingBackend: Sendable {
+public protocol CoreMLEmbeddingBackend: Actor {
     /// Runtime metadata reported in benchmark output.
-    var runtimeInfo: EmbeddingRuntimeInfo { get }
+    nonisolated var runtimeInfo: EmbeddingRuntimeInfo { get }
 
     /// Predicts one pooled embedding from tokenized model input.
     func predictEmbedding(for input: TokenizedText) async throws -> [Float]
@@ -111,7 +115,7 @@ public actor CoreMLEmbedder: TextEmbedder {
         tokenizer: any TextTokenizer,
         configuration: CoreMLModelConfiguration
     ) throws {
-        let backend = try CoreMLModelBackend(configuration: configuration)
+        let backend = try CoreMLModelBackendPool(configuration: configuration)
         self.modelInfo = modelInfo
         self.runtimeInfo = backend.runtimeInfo
         self.tokenizer = tokenizer
@@ -157,14 +161,69 @@ public actor CoreMLEmbedder: TextEmbedder {
     }
 }
 
+/// Pool of Core ML model backend actors for safe parallel inference.
+public actor CoreMLModelBackendPool: CoreMLEmbeddingBackend {
+    public nonisolated let runtimeInfo: EmbeddingRuntimeInfo
+
+    private let backends: [CoreMLModelBackend]
+    private var nextIndex = 0
+
+    public init(configuration: CoreMLModelConfiguration) throws {
+        var backends: [CoreMLModelBackend] = []
+        backends.reserveCapacity(configuration.backendPoolSize)
+        for _ in 0..<configuration.backendPoolSize {
+            backends.append(try CoreMLModelBackend(configuration: configuration))
+        }
+        self.backends = backends
+        self.runtimeInfo = backends[0].runtimeInfo
+    }
+
+    public func predictEmbedding(for input: TokenizedText) async throws -> [Float] {
+        try await nextBackend().predictEmbedding(for: input)
+    }
+
+    public func predictEmbeddings(for inputs: [TokenizedText]) async throws -> [[Float]] {
+        guard !inputs.isEmpty else {
+            throw EmbeddingKitError.emptyInput
+        }
+
+        let assignments = inputs.enumerated().map { offset, input in
+            (offset, backendForBatchItem(offset), input)
+        }
+        nextIndex = (nextIndex + inputs.count) % backends.count
+
+        var results = Array(repeating: [Float](), count: inputs.count)
+        try await withThrowingTaskGroup(of: (Int, [Float]).self) { group in
+            for (offset, backend, input) in assignments {
+                group.addTask {
+                    (offset, try await backend.predictEmbedding(for: input))
+                }
+            }
+
+            for try await (offset, embedding) in group {
+                results[offset] = embedding
+            }
+        }
+        return results
+    }
+
+    private func nextBackend() -> CoreMLModelBackend {
+        let backend = backends[nextIndex]
+        nextIndex = (nextIndex + 1) % backends.count
+        return backend
+    }
+
+    private func backendForBatchItem(_ offset: Int) -> CoreMLModelBackend {
+        backends[(nextIndex + offset) % backends.count]
+    }
+}
+
 /// Core ML model backend used by `CoreMLEmbedder`.
 ///
-/// Safety invariant for `@unchecked Sendable`: this class is immutable after
-/// initialization, never exposes its `MLModel`, and prediction calls go through
-/// Core ML's async API. If future code adds mutable caches or shared buffers,
-/// replace this with explicit synchronization or actor isolation.
-public final class CoreMLModelBackend: CoreMLEmbeddingBackend, @unchecked Sendable {
-    public let runtimeInfo: EmbeddingRuntimeInfo
+/// `MLModel` remains actor-isolated here. Parallelism is provided by
+/// `CoreMLModelBackendPool`, which creates multiple backend actors.
+public actor CoreMLModelBackend: CoreMLEmbeddingBackend {
+    public nonisolated let runtimeInfo: EmbeddingRuntimeInfo
 
     private let model: MLModel
     private let featureNames: CoreMLFeatureNames
@@ -190,8 +249,12 @@ public final class CoreMLModelBackend: CoreMLEmbeddingBackend, @unchecked Sendab
 
     public func predictEmbedding(for input: TokenizedText) async throws -> [Float] {
         let provider = try makeFeatureProvider(for: input)
-        let output = try await model.prediction(from: provider)
+        let output = try predict(provider)
         return try readEmbedding(from: output)
+    }
+
+    private func predict(_ provider: MLFeatureProvider) throws -> MLFeatureProvider {
+        try model.prediction(from: provider, options: MLPredictionOptions())
     }
 
     private func makeFeatureProvider(for input: TokenizedText) throws -> MLFeatureProvider {

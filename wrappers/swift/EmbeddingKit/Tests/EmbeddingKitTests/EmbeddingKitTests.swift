@@ -175,21 +175,25 @@ private struct FakeTokenizer: TextTokenizer {
     }
 }
 
-private struct FakeCoreMLBackend: CoreMLEmbeddingBackend {
+private actor FakeCoreMLBackend: CoreMLEmbeddingBackend {
     var dimension: Int
-    var runtimeInfo = EmbeddingRuntimeInfo(
+    nonisolated let runtimeInfo = EmbeddingRuntimeInfo(
         name: "Fake Core ML",
         requestedCompute: .cpuAndNeuralEngine,
         actualCompute: .cpuAndNeuralEngine
     )
+
+    init(dimension: Int) {
+        self.dimension = dimension
+    }
 
     func predictEmbedding(for input: TokenizedText) async throws -> [Float] {
         Array(repeating: Float(input.inputIDs[0]), count: dimension)
     }
 }
 
-private struct WrongCountCoreMLBackend: CoreMLEmbeddingBackend {
-    var runtimeInfo = EmbeddingRuntimeInfo(name: "Fake Core ML")
+private actor WrongCountCoreMLBackend: CoreMLEmbeddingBackend {
+    nonisolated let runtimeInfo = EmbeddingRuntimeInfo(name: "Fake Core ML")
 
     func predictEmbedding(for input: TokenizedText) async throws -> [Float] {
         [1, 1]

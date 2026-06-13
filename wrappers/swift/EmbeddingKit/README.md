@@ -47,7 +47,8 @@ let embedder = CoreMLEmbedder(
     tokenizer: tokenizer,
     configuration: CoreMLModelConfiguration(
         modelURL: modelURL,
-        compute: .cpuAndNeuralEngine
+        compute: .cpuAndNeuralEngine,
+        backendPoolSize: 1
     )
 )
 ```
@@ -83,6 +84,11 @@ Default Core ML feature names:
 
 `CoreMLModelConfiguration.tokenInputShape` can be changed to `.sequence` for
 models that expect one-dimensional token arrays.
+
+`CoreMLModelConfiguration.backendPoolSize` controls how many Core ML model
+backend actors are loaded. The default is `1`. Larger values can improve batch
+throughput while keeping each `MLModel` isolated to its own actor; benchmark
+`1`, `2`, and `4` before choosing a production default.
 
 ## Benchmark Shape
 

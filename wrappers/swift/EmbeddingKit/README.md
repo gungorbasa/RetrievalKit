@@ -72,6 +72,52 @@ Target report table:
 | Model | Runtime | Compute | Dim | Batch | Init | P50 | P95 | P99 | Mean | Throughput |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
+## Benchmark CLI
+
+The package includes `embeddingkit-bench` to validate report generation before
+real model providers are added. The current executable uses deterministic
+precomputed embeddings, so it measures harness overhead rather than neural
+network inference.
+
+Run the default Social Network query fixture:
+
+```bash
+cd wrappers/swift/EmbeddingKit
+swift run embeddingkit-bench \
+  --models bge-small-en-v1.5,all-MiniLM-L6-v2 \
+  --warmup 50 \
+  --measured 750 \
+  --batch-sizes 1,8,16,32,64
+```
+
+Write JSON for later comparison:
+
+```bash
+swift run embeddingkit-bench \
+  --format json \
+  --output embedding-benchmark.json
+```
+
+Use a custom query file:
+
+```bash
+swift run embeddingkit-bench --queries-file queries.json
+```
+
+Supported query JSON shapes:
+
+```json
+["query one", "query two"]
+```
+
+```json
+{"queries": ["query one", "query two"]}
+```
+
+```json
+{"query": "single query"}
+```
+
 ## Build And Test
 
 ```bash

@@ -31,6 +31,8 @@ let hits = try await index.search(embedding: embedding, topK: 5)
   recommended similarity metric.
 - `EmbeddingRuntimeInfo`: runtime and requested/actual compute metadata.
 - `PrecomputedEmbedder`: deterministic provider for fixtures and tests.
+- `TextTokenizer`: tokenizer boundary for model-backed providers.
+- `CoreMLEmbedder`: Core ML provider shell behind `canImport(CoreML)`.
 - `EmbeddingBenchmark`: shared benchmark runner for single-query and batch
   latency measurement.
 
@@ -40,9 +42,13 @@ The production Apple path should add a Core ML-backed provider behind the same
 protocol:
 
 ```swift
-let embedder = try await CoreMLEmbedder(
-    model: ...,
-    compute: .cpuAndNeuralEngine
+let embedder = CoreMLEmbedder(
+    modelInfo: KnownEmbeddingModels.bgeSmallEnV15,
+    tokenizer: tokenizer,
+    configuration: CoreMLModelConfiguration(
+        modelURL: modelURL,
+        compute: .cpuAndNeuralEngine
+    )
 )
 ```
 
@@ -56,6 +62,23 @@ compare:
 
 Core ML and model conversion stay out of this initial package pass so the public
 API can settle before adding runtime dependencies.
+
+The current Core ML shell defines the expected model boundary without loading a
+real model yet:
+
+- tokenizer produces `inputIDs`, `attentionMask`, and optional `tokenTypeIDs`
+- backend returns one pooled embedding vector per input text
+- embedding length must equal `EmbeddingModelInfo.dimension`
+- unsupported model input/output shapes surface as `unsupportedModelInterface`
+
+Default Core ML feature names:
+
+| Purpose | Feature |
+|---|---|
+| Token IDs | `input_ids` |
+| Attention mask | `attention_mask` |
+| Token type IDs | `token_type_ids` |
+| Pooled embedding | `embedding` |
 
 ## Benchmark Shape
 

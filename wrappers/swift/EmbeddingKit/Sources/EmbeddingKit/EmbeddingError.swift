@@ -10,6 +10,8 @@ public enum EmbeddingKitError: Error, Equatable, CustomStringConvertible, Sendab
     case missingPrecomputedEmbedding(String)
     /// Benchmark settings are internally inconsistent.
     case invalidBenchmarkConfiguration(String)
+    /// A provider cannot run because the model inputs or outputs do not match EmbeddingKit's contract.
+    case unsupportedModelInterface(String)
     /// Provider-specific backend failure.
     case backend(String)
 
@@ -23,6 +25,8 @@ public enum EmbeddingKitError: Error, Equatable, CustomStringConvertible, Sendab
             "missing precomputed embedding for text '\(text)'"
         case .invalidBenchmarkConfiguration(let message):
             "invalid benchmark configuration: \(message)"
+        case .unsupportedModelInterface(let message):
+            "unsupported model interface: \(message)"
         case .backend(let message):
             "embedding backend error: \(message)"
         }

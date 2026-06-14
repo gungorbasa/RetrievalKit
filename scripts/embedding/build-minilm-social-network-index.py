@@ -5,13 +5,15 @@ import argparse
 import importlib.util
 import json
 import shutil
-import subprocess
 import sys
 import time
 import types
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
+import coremltools as ct
+import numpy as np
+from transformers import AutoTokenizer
 from vectorkit import Index
 
 
@@ -20,7 +22,6 @@ DEFAULT_SOURCE_JSON = Path("/Users/gungorbasa/Desktop/the_social_network_v.1.32.
 DEFAULT_MODEL_DIR = ROOT_DIR / "target" / "embedding-models" / "all-MiniLM-L6-v2"
 DEFAULT_INDEX_DIR = ROOT_DIR / "target" / "examples" / "social-network-index-minilm"
 DEFAULT_QUERIES_PATH = ROOT_DIR / "target" / "examples" / "social-network-minilm-queries.json"
-DEFAULT_RUST_EMBEDDER = ROOT_DIR / "target" / "release" / "embeddingkit-coreml-embed"
 SOCIAL_NETWORK_SCRIPT = ROOT_DIR / "examples" / "python" / "social_network_search" / "social_network_search.py"
 DIMENSION = 384
 
@@ -35,6 +36,9 @@ def main() -> None:
     social = load_social_network_module()
     metadata = json.loads((model_dir / "metadata.json").read_text())
     sequence_length = int(metadata["sequence_length"])
+    tokenizer = AutoTokenizer.from_pretrained(model_dir / "tokenizer")
+    model_package = next(model_dir.glob("*.mlpackage"))
+    model = ct.models.MLModel(str(model_package), compute_units=ct.ComputeUnit.ALL)
 
     records_start = time.perf_counter()
     records = social.build_records(
@@ -46,32 +50,34 @@ def main() -> None:
         records = records[: args.max_records]
     record_prep_ms = elapsed_ms(records_start)
 
-    with make_embedder(args, model_dir, sequence_length) as embedder:
-        build_index(
-            records=records,
-            index_dir=index_dir,
-            embedder=embedder,
-            batch_size=args.batch_size,
-            record_prep_ms=record_prep_ms,
-        )
+    build_index(
+        records=records,
+        index_dir=index_dir,
+        model=model,
+        tokenizer=tokenizer,
+        sequence_length=sequence_length,
+        batch_size=args.batch_size,
+        record_prep_ms=record_prep_ms,
+    )
 
-        queries = social.build_benchmark_queries(
-            source_path=source_json,
-            fallback_query=args.query,
-            measured_queries=args.measured_queries,
-            warmup_queries=args.warmup_queries,
-            chunk_token_limit=args.chunk_token_limit,
-            chunk_overlap=args.chunk_overlap,
-        )
-        write_query_embeddings(
-            queries=queries,
-            queries_path=queries_path,
-            embedder=embedder,
-            sequence_length=sequence_length,
-            warmup_queries=args.warmup_queries,
-            measured_queries=args.measured_queries,
-            top_k=args.limit,
-        )
+    queries = social.build_benchmark_queries(
+        source_path=source_json,
+        fallback_query=args.query,
+        measured_queries=args.measured_queries,
+        warmup_queries=args.warmup_queries,
+        chunk_token_limit=args.chunk_token_limit,
+        chunk_overlap=args.chunk_overlap,
+    )
+    write_query_embeddings(
+        queries=queries,
+        queries_path=queries_path,
+        model=model,
+        tokenizer=tokenizer,
+        sequence_length=sequence_length,
+        warmup_queries=args.warmup_queries,
+        measured_queries=args.measured_queries,
+        top_k=args.limit,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,22 +96,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-records", type=int, default=0, help="optional smoke-test record cap")
     parser.add_argument("--warmup-queries", type=int, default=50, help="warmup query count")
     parser.add_argument("--measured-queries", type=int, default=750, help="measured query count")
-    parser.add_argument(
-        "--embedding-runtime",
-        choices=("rust-coreml", "python-coreml"),
-        default="rust-coreml",
-        help="embedding runtime used to calculate document and query vectors",
-    )
-    parser.add_argument(
-        "--rust-embedder",
-        default=str(DEFAULT_RUST_EMBEDDER),
-        help="path to the embeddingkit-coreml-embed release binary",
-    )
-    parser.add_argument(
-        "--compute",
-        default="cpuAndNeuralEngine",
-        help="Core ML compute mode for rust-coreml: all, cpuAndNeuralEngine, cpuAndGPU, or cpu",
-    )
     return parser.parse_args()
 
 
@@ -127,7 +117,9 @@ def build_index(
     *,
     records: list[Any],
     index_dir: Path,
-    embedder: "TextEmbedder",
+    model: Any,
+    tokenizer: Any,
+    sequence_length: int,
     batch_size: int,
     record_prep_ms: float,
 ) -> None:
@@ -144,7 +136,7 @@ def build_index(
         texts = [record.text for record in batch]
 
         embed_start = time.perf_counter()
-        embeddings = embedder.embed_many(texts)
+        embeddings = [embed_one(model, tokenizer, text, sequence_length) for text in texts]
         total_embed_ms += elapsed_ms(embed_start)
 
         documents = []
@@ -186,7 +178,8 @@ def write_query_embeddings(
     *,
     queries: list[str],
     queries_path: Path,
-    embedder: "TextEmbedder",
+    model: Any,
+    tokenizer: Any,
     sequence_length: int,
     warmup_queries: int,
     measured_queries: int,
@@ -194,8 +187,8 @@ def write_query_embeddings(
 ) -> None:
     embed_start = time.perf_counter()
     query_records = [
-        {"query": query, "embedding": embedding}
-        for query, embedding in zip(queries, embedder.embed_many(queries))
+        {"query": query, "embedding": embed_one(model, tokenizer, query, sequence_length)}
+        for query in queries
     ]
     embed_ms = elapsed_ms(embed_start)
 
@@ -206,7 +199,6 @@ def write_query_embeddings(
                 "model": "sentence-transformers/all-MiniLM-L6-v2",
                 "sequence_length": sequence_length,
                 "dimension": DIMENSION,
-                "embedding_runtime": embedder.name,
                 "top_k": top_k,
                 "warmup_queries": warmup_queries,
                 "measured_queries": measured_queries,
@@ -222,139 +214,28 @@ def write_query_embeddings(
     print(f"Query embedding total ms: {embed_ms:.3f}")
 
 
-class TextEmbedder(Protocol):
-    name: str
-
-    def __enter__(self) -> "TextEmbedder":
-        ...
-
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        ...
-
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        ...
-
-
-def make_embedder(args: argparse.Namespace, model_dir: Path, sequence_length: int) -> TextEmbedder:
-    if args.embedding_runtime == "rust-coreml":
-        return RustCoreMLEmbedder(
-            executable=Path(args.rust_embedder),
-            model_dir=model_dir,
-            compute=args.compute,
-        )
-    return PythonCoreMLEmbedder(model_dir=model_dir, sequence_length=sequence_length)
-
-
-class RustCoreMLEmbedder:
-    name = "rust-coreml"
-
-    def __init__(self, *, executable: Path, model_dir: Path, compute: str) -> None:
-        self.executable = executable
-        self.model_dir = model_dir
-        self.compute = compute
-        self.process: subprocess.Popen[str] | None = None
-
-    def __enter__(self) -> "RustCoreMLEmbedder":
-        if not self.executable.exists():
-            raise RuntimeError(
-                f"Rust embedder binary not found at {self.executable}. "
-                "Build it with: cargo build -p embeddingkit-coreml --release "
-                "--bin embeddingkit-coreml-embed"
-            )
-        self.process = subprocess.Popen(
-            [
-                str(self.executable),
-                "--model-dir",
-                str(self.model_dir),
-                "--compute",
-                self.compute,
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-        return self
-
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        if self.process is None:
-            return
-        if self.process.stdin is not None:
-            self.process.stdin.close()
-        exit_code = self.process.wait()
-        self.process = None
-        if exc_type is None and exit_code != 0:
-            raise RuntimeError(f"Rust embedder exited with status {exit_code}")
-
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        if self.process is None or self.process.stdin is None or self.process.stdout is None:
-            raise RuntimeError("Rust embedder process is not running")
-
-        for text in texts:
-            self.process.stdin.write(json.dumps({"text": text}, separators=(",", ":")) + "\n")
-        self.process.stdin.flush()
-
-        embeddings = []
-        for _ in texts:
-            line = self.process.stdout.readline()
-            if line == "":
-                exit_code = self.process.poll()
-                raise RuntimeError(f"Rust embedder stopped before returning an embedding; status={exit_code}")
-            response = json.loads(line)
-            embedding = response["embedding"]
-            if len(embedding) != DIMENSION:
-                raise RuntimeError(f"embedding dimension {len(embedding)} != {DIMENSION}")
-            embeddings.append(embedding)
-        return embeddings
-
-
-class PythonCoreMLEmbedder:
-    name = "python-coreml"
-
-    def __init__(self, *, model_dir: Path, sequence_length: int) -> None:
-        import coremltools as ct
-        from transformers import AutoTokenizer
-
-        self.sequence_length = sequence_length
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir / "tokenizer")
-        model_package = next(model_dir.glob("*.mlpackage"))
-        self.model = ct.models.MLModel(str(model_package), compute_units=ct.ComputeUnit.ALL)
-
-    def __enter__(self) -> "PythonCoreMLEmbedder":
-        return self
-
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        return None
-
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_one(text) for text in texts]
-
-    def embed_one(self, text: str) -> list[float]:
-        import numpy as np
-
-        encoded = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.sequence_length,
-            return_tensors="np",
-        )
-        token_type_ids = encoded.get("token_type_ids")
-        if token_type_ids is None:
-            token_type_ids = np.zeros_like(encoded["input_ids"])
-        prediction = self.model.predict(
-            {
-                "input_ids": encoded["input_ids"].astype(np.int32),
-                "attention_mask": encoded["attention_mask"].astype(np.int32),
-                "token_type_ids": token_type_ids.astype(np.int32),
-            }
-        )
-        embedding = np.asarray(prediction["embedding"], dtype=np.float32).reshape(-1)
-        if embedding.shape[0] != DIMENSION:
-            raise RuntimeError(f"embedding dimension {embedding.shape[0]} != {DIMENSION}")
-        return embedding.tolist()
+def embed_one(model: Any, tokenizer: Any, text: str, sequence_length: int) -> list[float]:
+    encoded = tokenizer(
+        text,
+        padding="max_length",
+        truncation=True,
+        max_length=sequence_length,
+        return_tensors="np",
+    )
+    token_type_ids = encoded.get("token_type_ids")
+    if token_type_ids is None:
+        token_type_ids = np.zeros_like(encoded["input_ids"])
+    prediction = model.predict(
+        {
+            "input_ids": encoded["input_ids"].astype(np.int32),
+            "attention_mask": encoded["attention_mask"].astype(np.int32),
+            "token_type_ids": token_type_ids.astype(np.int32),
+        }
+    )
+    embedding = np.asarray(prediction["embedding"], dtype=np.float32).reshape(-1)
+    if embedding.shape[0] != DIMENSION:
+        raise RuntimeError(f"embedding dimension {embedding.shape[0]} != {DIMENSION}")
+    return embedding.tolist()
 
 
 def elapsed_ms(start: float) -> float:

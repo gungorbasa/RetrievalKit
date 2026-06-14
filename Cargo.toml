@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/embeddingkit-coreml",
     "crates/vectorkit-core",
     "crates/vectorkit-cli",
     "crates/vectorkit-ffi",

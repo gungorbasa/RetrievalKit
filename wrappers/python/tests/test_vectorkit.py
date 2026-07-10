@@ -11,10 +11,32 @@ from vectorkit import (
     Index,
     KeywordHit,
     SearchHit,
+    chunk_text,
     hybrid_search_text,
     search_text,
     where,
 )
+
+
+def test_chunk_text_uses_shared_rust_implementation() -> None:
+    assert chunk_text(
+        "abçdef", max_characters=4, overlap_characters=1, strategy="fixed"
+    ) == [
+        {"text": "abçd", "start_byte": 0, "end_byte": 5},
+        {"text": "def", "start_byte": 4, "end_byte": 7},
+    ]
+
+
+def test_chunk_text_prefers_sentences_and_validates_configuration() -> None:
+    assert [
+        chunk["text"]
+        for chunk in chunk_text(
+            "First sentence. Second sentence. Third.", max_characters=25
+        )
+    ] == ["First sentence.", "Second sentence. Third."]
+
+    with pytest.raises(ValueError, match="max_characters"):
+        chunk_text("text", max_characters=0)
 
 
 def embed(texts: list[str]) -> list[list[float]]:

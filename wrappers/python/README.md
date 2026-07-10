@@ -96,7 +96,7 @@ GitHub CI workflow yet.
 ## Example
 
 ```python
-from vectorkit import Index, hybrid_search_text, search_text
+from vectorkit import Index, chunk_text, hybrid_search_text, search_text
 
 
 def embed(texts):
@@ -107,7 +107,13 @@ def embed(texts):
 
 index = Index(dimension=4, metric="cosine", encoding="i8")
 
-texts = ["Python wrapper stays thin", "Rust core performs retrieval"]
+chunks = chunk_text(
+    "Python wrapper stays thin. Rust performs shared ingestion and retrieval.",
+    max_characters=48,
+    overlap_characters=8,
+    strategy="sentence",
+)
+texts = [chunk["text"] for chunk in chunks]
 embeddings = embed(texts)
 
 index.add(
@@ -145,6 +151,11 @@ hybrid_hits = hybrid_search_text(
     keyword_candidates=25,
 )
 ```
+
+Chunk limits and overlap are measured in Unicode characters. `start_byte` and
+`end_byte` are UTF-8 byte offsets into the original string. Sentence mode
+prefers sentence endings, then whitespace, and falls back to the hard character
+limit. The implementation lives in Rust and is shared with the Swift wrapper.
 
 ## Filter Syntax
 

@@ -10,6 +10,12 @@ Metadata: TypeAlias = dict[str, MetadataValue]
 Embedding: TypeAlias = Sequence[float]
 
 
+class TextChunk(TypedDict):
+    text: str
+    start_byte: int
+    end_byte: int
+
+
 class ChunkInputRequired(TypedDict):
     text: str
     embedding: Embedding
@@ -136,5 +142,6 @@ __all__ = [
     "RrfFusionTrace",
     "SearchHit",
     "SearchTrace",
+    "TextChunk",
     "WeightedNormalizedFusionTrace",
 ]

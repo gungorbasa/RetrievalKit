@@ -1097,7 +1097,7 @@ Batch indexing flow:
 
 ```text
 input documents
-  -> chunking by caller or SDK helper
+  -> chunking by caller or shared Rust SDK helper
   -> embedding by caller or embedding provider
   -> validation
   -> vector normalization
@@ -1109,6 +1109,13 @@ input documents
 ```
 
 V1 should prefer batch builds over fully dynamic optimization.
+
+The generic SDK helper provides deterministic fixed and sentence-aware
+chunking from `vectorkit-ingest`. Limits and overlap are Unicode-character
+based, and chunks retain UTF-8 byte offsets into the original document. Exact
+model-token budgets remain an embedding integration concern because tokenizer
+behavior varies by model. Swift and Python wrappers must expose the same Rust
+chunking behavior rather than reimplementing it.
 
 Incremental add:
 

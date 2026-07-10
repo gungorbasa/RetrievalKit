@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/vectorkit-core",
+    "crates/vectorkit-ingest",
     "crates/vectorkit-cli",
     "crates/vectorkit-ffi",
     "crates/vectorkit-python",

@@ -11,7 +11,16 @@ from .types import (
     HybridHit,
     KeywordHit,
     SearchHit,
+    TextChunk,
 )
+
+def chunk_text(
+    text: str,
+    *,
+    max_characters: int,
+    overlap_characters: int = 0,
+    strategy: str = "sentence",
+) -> list[TextChunk]: ...
 
 class VectorKitError(Exception): ...
 

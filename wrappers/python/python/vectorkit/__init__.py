@@ -17,6 +17,7 @@ from ._native import (
     PersistenceError,
     UnsupportedFormatError,
     VectorKitError,
+    chunk_text,
 )
 from .types import (
     AddDocumentResult,
@@ -36,6 +37,7 @@ from .types import (
     RrfFusionTrace,
     SearchHit,
     SearchTrace,
+    TextChunk,
     WeightedNormalizedFusionTrace,
 )
 
@@ -118,10 +120,12 @@ __all__ = [
     "RrfFusionTrace",
     "SearchHit",
     "SearchTrace",
+    "TextChunk",
     "UnsupportedFormatError",
     "VectorKitError",
     "WeightedNormalizedFusionTrace",
     "hybrid_search_text",
+    "chunk_text",
     "search_text",
     "where",
 ]

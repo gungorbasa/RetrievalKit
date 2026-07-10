@@ -196,6 +196,15 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   `target/embedding-models/bge-small-en-v1.5/` and should not be committed by
   default.
 
+## Ingestion Context
+
+- Generic text chunking lives in the separate Rust `vectorkit-ingest` crate so
+  retrieval remains isolated in `vectorkit-core`.
+- Fixed and sentence-aware strategies use Unicode-character limits and overlap;
+  returned ranges are UTF-8 byte offsets into the original text.
+- Swift and Python call the same Rust implementation. Model-token-aware
+  chunking remains an integration concern because tokenizers differ by model.
+
 ## Completed Optimizations
 
 - Late result materialization is implemented for exact vector search. The hot

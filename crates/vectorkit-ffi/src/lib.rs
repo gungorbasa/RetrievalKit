@@ -9,6 +9,7 @@ use vectorkit_core::{
     IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery, Metadata, MetadataValue,
     SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
+use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
 mod bench;
 
@@ -35,6 +36,9 @@ const VK_METADATA_TIMESTAMP_MILLIS: u32 = 4;
 
 const VK_FUSION_WEIGHTED_NORMALIZED_SCORE: u32 = 0;
 const VK_FUSION_RECIPROCAL_RANK: u32 = 1;
+
+const VK_CHUNKING_FIXED: u32 = 0;
+const VK_CHUNKING_SENTENCE: u32 = 1;
 
 #[repr(C)]
 pub struct VkStatus {
@@ -72,6 +76,19 @@ pub struct VkChunkInput {
 #[repr(C)]
 pub struct VkChunkIdBuffer {
     pub values: *mut u64,
+    pub count: usize,
+}
+
+#[repr(C)]
+pub struct VkTextChunk {
+    pub text: *mut c_char,
+    pub start_byte: usize,
+    pub end_byte: usize,
+}
+
+#[repr(C)]
+pub struct VkTextChunkBuffer {
+    pub chunks: *mut VkTextChunk,
     pub count: usize,
 }
 
@@ -280,6 +297,51 @@ pub unsafe extern "C" fn vectorkit_index_active_chunk_count(index: *const VkInde
     unsafe { &*index }.index.active_chunk_count()
 }
 
+/// Splits UTF-8 text using the shared Rust ingestion implementation.
+///
+/// # Safety
+///
+/// `text` must point to a valid null-terminated UTF-8 C string. `out_chunks`
+/// must point to writable memory. Free successful output with
+/// `vectorkit_text_chunks_free`.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_chunk_text(
+    text: *const c_char,
+    strategy: u32,
+    max_characters: usize,
+    overlap_characters: usize,
+    out_chunks: *mut VkTextChunkBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_chunks.is_null() {
+            return Err(FfiError::invalid_argument("out_chunks must not be null"));
+        }
+        let strategy = match strategy {
+            VK_CHUNKING_FIXED => ChunkingStrategy::Fixed,
+            VK_CHUNKING_SENTENCE => ChunkingStrategy::Sentence,
+            _ => {
+                return Err(FfiError::invalid_argument(format!(
+                    "unsupported chunking strategy code {strategy}"
+                )))
+            }
+        };
+        let config = ChunkingConfig::new(max_characters, overlap_characters, strategy)
+            .map_err(|error| FfiError::invalid_argument(error.to_string()))?;
+        let text = unsafe { read_c_string(text, "text") }?;
+        let chunks = chunk_text(&text, config)
+            .into_iter()
+            .map(|chunk| VkTextChunk {
+                text: string_to_owned_ptr(&chunk.text),
+                start_byte: chunk.start_byte,
+                end_byte: chunk.end_byte,
+            })
+            .collect();
+        unsafe { *out_chunks = text_chunk_buffer(chunks) };
+        Ok(())
+    })
+}
+
 /// Adds or replaces all chunks for a caller-owned document ID.
 ///
 /// # Safety
@@ -458,6 +520,23 @@ pub unsafe extern "C" fn vectorkit_chunk_id_buffer_free(buffer: VkChunkIdBuffer)
                 buffer.count,
             )))
         };
+    }
+}
+
+/// Frees chunks returned by `vectorkit_chunk_text`.
+///
+/// # Safety
+///
+/// `buffer.chunks` must be null or a pointer allocated by VectorKit FFI.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_text_chunks_free(buffer: VkTextChunkBuffer) {
+    if buffer.chunks.is_null() {
+        return;
+    }
+    let chunks =
+        unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.chunks, buffer.count)) };
+    for chunk in chunks.iter() {
+        unsafe { vectorkit_string_free(chunk.text) };
     }
 }
 
@@ -981,6 +1060,15 @@ fn chunk_id_buffer(values: Vec<u64>) -> VkChunkIdBuffer {
     buffer
 }
 
+fn text_chunk_buffer(mut chunks: Vec<VkTextChunk>) -> VkTextChunkBuffer {
+    let buffer = VkTextChunkBuffer {
+        chunks: chunks.as_mut_ptr(),
+        count: chunks.len(),
+    };
+    std::mem::forget(chunks);
+    buffer
+}
+
 fn search_result_buffer(index: &VkIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
     let mut hits = hits
         .into_iter()
@@ -1157,6 +1245,44 @@ mod tests {
         assert!(config.include_filtered);
         assert!(config.include_persistence);
         assert!(config.persist_bm25);
+    }
+
+    #[test]
+    fn chunking_ffi_returns_owned_text_and_offsets() {
+        let text = CString::new("abçdef").unwrap();
+        let mut status = VkStatus {
+            code: -1,
+            message: ptr::null_mut(),
+        };
+        let mut output = VkTextChunkBuffer {
+            chunks: ptr::null_mut(),
+            count: 0,
+        };
+
+        let success = unsafe {
+            vectorkit_chunk_text(
+                text.as_ptr(),
+                VK_CHUNKING_FIXED,
+                4,
+                1,
+                &mut output,
+                &mut status,
+            )
+        };
+
+        assert!(success);
+        assert_eq!(status.code, VK_STATUS_OK);
+        let chunks = unsafe { slice::from_raw_parts(output.chunks, output.count) };
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(
+            unsafe { CStr::from_ptr(chunks[0].text) }.to_str().unwrap(),
+            "abçd"
+        );
+        assert_eq!((chunks[0].start_byte, chunks[0].end_byte), (0, 5));
+        unsafe {
+            vectorkit_text_chunks_free(output);
+            vectorkit_status_clear(&mut status);
+        }
     }
 
     #[test]

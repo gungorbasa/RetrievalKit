@@ -48,6 +48,13 @@ import VectorKit
 
 let index = try VectorIndex(dimension: 3)
 
+let chunker = try TextChunker(
+    strategy: .sentence,
+    maxCharacters: 500,
+    overlapCharacters: 50
+)
+let textChunks = try chunker.chunks(for: documentText)
+
 try await index.upsert(
     document: Document(id: "note-1", metadata: ["source": .string("notes")]),
     chunks: [
@@ -72,6 +79,7 @@ for result in results {
 
 - Create/load/save `VectorIndex`.
 - Upsert and delete documents.
+- Shared Rust-backed fixed and sentence-aware text chunking.
 - Exact vector search.
 - BM25 keyword search.
 - Hybrid vector + keyword search.
@@ -88,3 +96,9 @@ The source package currently expects the XCFramework to be built in this
 repository before `swift build` or `swift test`. A public binary release should
 publish `VectorKitFFI.xcframework` and switch the binary target to a URL plus
 checksum for tagged distribution.
+
+`TextChunker` limits and overlap are measured in Unicode characters. Returned
+`startByte` and `endByte` values are UTF-8 byte offsets into the original text.
+Sentence mode prefers sentence endings, then whitespace, and falls back to the
+hard character limit. Token-aware chunking remains the responsibility of an
+embedding-model-specific integration layer.

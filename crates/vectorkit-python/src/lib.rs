@@ -9,12 +9,44 @@ use vectorkit_core::{
     IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata, MetadataValue, SearchHit,
     SearchQuery, StoredChunk, VectorEncoding, VectorKitError as CoreError, VectorMetric,
 };
+use vectorkit_ingest::{chunk_text as split_text, ChunkingConfig, ChunkingStrategy};
 
 pyo3::create_exception!(_native, VectorKitError, PyException);
 pyo3::create_exception!(_native, DimensionMismatchError, VectorKitError);
 pyo3::create_exception!(_native, PersistenceError, VectorKitError);
 pyo3::create_exception!(_native, FilterError, VectorKitError);
 pyo3::create_exception!(_native, UnsupportedFormatError, VectorKitError);
+
+#[pyfunction]
+#[pyo3(signature = (text, *, max_characters, overlap_characters = 0, strategy = "sentence"))]
+fn chunk_text(
+    py: Python<'_>,
+    text: &str,
+    max_characters: usize,
+    overlap_characters: usize,
+    strategy: &str,
+) -> PyResult<Py<PyAny>> {
+    let strategy = match strategy.to_ascii_lowercase().as_str() {
+        "fixed" => ChunkingStrategy::Fixed,
+        "sentence" => ChunkingStrategy::Sentence,
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "unsupported chunking strategy '{strategy}'; expected 'fixed' or 'sentence'"
+            )))
+        }
+    };
+    let config = ChunkingConfig::new(max_characters, overlap_characters, strategy)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let output = PyList::empty(py);
+    for chunk in split_text(text, config) {
+        let item = PyDict::new(py);
+        item.set_item("text", chunk.text)?;
+        item.set_item("start_byte", chunk.start_byte)?;
+        item.set_item("end_byte", chunk.end_byte)?;
+        output.append(item)?;
+    }
+    Ok(output.into_any().unbind())
+}
 
 #[pyclass(name = "Index")]
 struct PyIndex {
@@ -216,6 +248,7 @@ impl PyIndex {
 #[pymodule]
 fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIndex>()?;
+    m.add_function(wrap_pyfunction!(chunk_text, m)?)?;
     m.add("VectorKitError", py.get_type::<VectorKitError>())?;
     m.add(
         "DimensionMismatchError",

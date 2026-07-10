@@ -327,7 +327,12 @@ dependencies = [
  "serde_json",
  "simsimd",
  "vectorkit-core",
+ "vectorkit-ingest",
 ]
+
+[[package]]
+name = "vectorkit-ingest"
+version = "0.1.0"
 
 [[package]]
 name = "vectorkit-python"
@@ -335,6 +340,7 @@ version = "0.1.0"
 dependencies = [
  "pyo3",
  "vectorkit-core",
+ "vectorkit-ingest",
 ]
 
 [[package]]

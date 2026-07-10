@@ -31,6 +31,9 @@ extern "C" {
 #define VK_FUSION_WEIGHTED_NORMALIZED_SCORE 0
 #define VK_FUSION_RECIPROCAL_RANK 1
 
+#define VK_CHUNKING_FIXED 0
+#define VK_CHUNKING_SENTENCE 1
+
 typedef struct VkIndex VkIndex;
 typedef struct VkFilter VkFilter;
 
@@ -64,6 +67,17 @@ typedef struct VkChunkIdBuffer {
   uint64_t *values;
   size_t count;
 } VkChunkIdBuffer;
+
+typedef struct VkTextChunk {
+  char *text;
+  size_t start_byte;
+  size_t end_byte;
+} VkTextChunk;
+
+typedef struct VkTextChunkBuffer {
+  VkTextChunk *chunks;
+  size_t count;
+} VkTextChunkBuffer;
 
 typedef struct VkSearchHit {
   uint64_t chunk_id;
@@ -152,6 +166,14 @@ bool vectorkit_index_save(
 size_t vectorkit_index_dimension(const VkIndex *index);
 size_t vectorkit_index_active_chunk_count(const VkIndex *index);
 
+bool vectorkit_chunk_text(
+    const char *text,
+    uint32_t strategy,
+    size_t max_characters,
+    size_t overlap_characters,
+    VkTextChunkBuffer *out_chunks,
+    VkStatus *status);
+
 bool vectorkit_index_upsert_document(
     VkIndex *index,
     const char *document_id,
@@ -198,6 +220,7 @@ bool vectorkit_index_hybrid_search(
     VkStatus *status);
 
 void vectorkit_chunk_id_buffer_free(VkChunkIdBuffer buffer);
+void vectorkit_text_chunks_free(VkTextChunkBuffer buffer);
 void vectorkit_search_results_free(VkSearchResultBuffer buffer);
 void vectorkit_keyword_results_free(VkKeywordResultBuffer buffer);
 void vectorkit_hybrid_results_free(VkHybridResultBuffer buffer);

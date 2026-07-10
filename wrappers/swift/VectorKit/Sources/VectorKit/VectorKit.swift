@@ -276,7 +276,7 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
         }
     }
 
-    fileprivate static func from(status: VkStatus) -> VectorKitError {
+    static func from(status: VkStatus) -> VectorKitError {
         let message = status.message.map { String(cString: $0) } ?? "unknown VectorKit FFI error"
         switch status.code {
         case 1: return .invalidArgument(message)

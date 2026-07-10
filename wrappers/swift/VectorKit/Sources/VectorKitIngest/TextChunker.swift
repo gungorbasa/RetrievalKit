@@ -9,6 +9,39 @@ public struct TextChunk: Equatable, Sendable {
     public let startByte: Int
     /// Exclusive UTF-8 byte offset in the original input.
     public let endByte: Int
+
+    public init(text: String, startByte: Int, endByte: Int) {
+        self.text = text
+        self.startByte = startByte
+        self.endByte = endByte
+    }
+}
+
+/// Errors produced by the shared Rust text chunker or its Swift FFI boundary.
+public enum TextChunkingError: Error, Equatable, CustomStringConvertible, Sendable {
+    case invalidArgument(String)
+    case core(String)
+    case panic(String)
+    case unknown(code: Int32, message: String)
+
+    public var description: String {
+        switch self {
+        case .invalidArgument(let message), .core(let message), .panic(let message):
+            message
+        case .unknown(let code, let message):
+            "VectorKitIngest error \(code): \(message)"
+        }
+    }
+
+    fileprivate static func from(status: VkStatus) -> TextChunkingError {
+        let message = status.message.map { String(cString: $0) } ?? "unknown VectorKitIngest FFI error"
+        switch status.code {
+        case 1: return .invalidArgument(message)
+        case 2: return .core(message)
+        case 3: return .panic(message)
+        default: return .unknown(code: status.code, message: message)
+        }
+    }
 }
 
 /// Configures the shared Rust text chunker.
@@ -37,10 +70,10 @@ public struct TextChunker: Equatable, Sendable {
         overlapCharacters: Int = 0
     ) throws {
         guard maxCharacters > 0 else {
-            throw VectorKitError.invalidArgument("maxCharacters must be greater than zero")
+            throw TextChunkingError.invalidArgument("maxCharacters must be greater than zero")
         }
         guard overlapCharacters >= 0, overlapCharacters < maxCharacters else {
-            throw VectorKitError.invalidArgument(
+            throw TextChunkingError.invalidArgument(
                 "overlapCharacters must be non-negative and smaller than maxCharacters"
             )
         }
@@ -53,7 +86,7 @@ public struct TextChunker: Equatable, Sendable {
     public func chunks(for text: String) throws -> [TextChunk] {
         let input = strdup(text)
         guard let input else {
-            throw VectorKitError.invalidArgument("could not allocate UTF-8 input")
+            throw TextChunkingError.invalidArgument("could not allocate UTF-8 input")
         }
         defer { free(input) }
 
@@ -69,7 +102,7 @@ public struct TextChunker: Equatable, Sendable {
             &output,
             &status
         ) else {
-            throw VectorKitError.from(status: status)
+            throw TextChunkingError.from(status: status)
         }
         defer { vectorkit_text_chunks_free(output) }
 

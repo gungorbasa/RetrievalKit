@@ -11,11 +11,11 @@ from vectorkit import (
     Index,
     KeywordHit,
     SearchHit,
-    chunk_text,
     hybrid_search_text,
     search_text,
     where,
 )
+from vectorkit.ingest import chunk_text
 
 
 def test_chunk_text_uses_shared_rust_implementation() -> None:

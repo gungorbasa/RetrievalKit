@@ -45,6 +45,7 @@ default `Package.swift` and the XCFramework.
 
 ```swift
 import VectorKit
+import VectorKitIngest
 
 let index = try VectorIndex(dimension: 3)
 
@@ -79,7 +80,8 @@ for result in results {
 
 - Create/load/save `VectorIndex`.
 - Upsert and delete documents.
-- Shared Rust-backed fixed and sentence-aware text chunking.
+- Separate `VectorKitIngest` product with shared Rust-backed fixed and
+  sentence-aware text chunking.
 - Exact vector search.
 - BM25 keyword search.
 - Hybrid vector + keyword search.

@@ -96,7 +96,8 @@ GitHub CI workflow yet.
 ## Example
 
 ```python
-from vectorkit import Index, chunk_text, hybrid_search_text, search_text
+from vectorkit import Index, hybrid_search_text, search_text
+from vectorkit.ingest import chunk_text
 
 
 def embed(texts):
@@ -155,7 +156,8 @@ hybrid_hits = hybrid_search_text(
 Chunk limits and overlap are measured in Unicode characters. `start_byte` and
 `end_byte` are UTF-8 byte offsets into the original string. Sentence mode
 prefers sentence endings, then whitespace, and falls back to the hard character
-limit. The implementation lives in Rust and is shared with the Swift wrapper.
+limit. The implementation lives in Rust and is shared with the separate Swift
+`VectorKitIngest` product.
 
 ## Filter Syntax
 

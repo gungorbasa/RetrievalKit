@@ -1114,8 +1114,9 @@ The generic SDK helper provides deterministic fixed and sentence-aware
 chunking from `vectorkit-ingest`. Limits and overlap are Unicode-character
 based, and chunks retain UTF-8 byte offsets into the original document. Exact
 model-token budgets remain an embedding integration concern because tokenizer
-behavior varies by model. Swift and Python wrappers must expose the same Rust
-chunking behavior rather than reimplementing it.
+behavior varies by model. Swift exposes this through the separate
+`VectorKitIngest` product and Python through `vectorkit.ingest`; both call the
+same Rust implementation rather than reimplementing it.
 
 Incremental add:
 

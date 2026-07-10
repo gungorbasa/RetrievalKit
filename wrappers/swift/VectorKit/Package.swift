@@ -9,7 +9,8 @@ let package = Package(
         .iOS(.v15)
     ],
     products: [
-        .library(name: "VectorKit", targets: ["VectorKit"])
+        .library(name: "VectorKit", targets: ["VectorKit"]),
+        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"])
     ],
     targets: [
         .binaryTarget(
@@ -20,9 +21,17 @@ let package = Package(
             name: "VectorKit",
             dependencies: ["VectorKitFFI"]
         ),
+        .target(
+            name: "VectorKitIngest",
+            dependencies: ["VectorKitFFI"]
+        ),
         .testTarget(
             name: "VectorKitTests",
             dependencies: ["VectorKit"]
+        ),
+        .testTarget(
+            name: "VectorKitIngestTests",
+            dependencies: ["VectorKitIngest"]
         ),
     ],
     swiftLanguageModes: [.v6]

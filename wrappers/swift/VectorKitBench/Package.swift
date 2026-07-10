@@ -10,6 +10,9 @@ let package = Package(
     products: [
         .executable(name: "vectorkit-bench", targets: ["VectorKitBench"])
     ],
+    dependencies: [
+        .package(path: "../EmbeddingKit")
+    ],
     targets: [
         .systemLibrary(
             name: "CVectorKitFFI",
@@ -17,7 +20,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "VectorKitBench",
-            dependencies: ["CVectorKitFFI"],
+            dependencies: ["CVectorKitFFI", "EmbeddingKit"],
             linkerSettings: [
                 .unsafeFlags([
                     "../../../target/release/libvectorkit_ffi.a"

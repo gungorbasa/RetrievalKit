@@ -91,6 +91,98 @@ final class EmbeddingKitTests: XCTestCase {
         }
     }
 
+    func testBertWordPieceTokenizerMatchesExpectedCoreMLInputs() throws {
+        let tokenizerURL = try makeWordPieceTokenizerFixture()
+        let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 8)
+
+        let tokenized = try tokenizer.tokenize("Hello, VectorKit!")
+
+        XCTAssertEqual(tokenized.inputIDs, [101, 7592, 1010, 9207, 23615, 999, 102, 0])
+        XCTAssertEqual(tokenized.attentionMask, [1, 1, 1, 1, 1, 1, 1, 0])
+        XCTAssertEqual(tokenized.tokenTypeIDs, [0, 0, 0, 0, 0, 0, 0, 0])
+    }
+
+    func testBertWordPieceTokenizerNormalizesChineseAndAccentedText() throws {
+        let tokenizerURL = try makeWordPieceTokenizerFixture()
+        let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 12)
+
+        let tokenized = try tokenizer.tokenize("Héllo, 中文!")
+
+        XCTAssertEqual(tokenized.inputIDs, [101, 7592, 1010, 1746, 1861, 999, 102, 0, 0, 0, 0, 0])
+        XCTAssertEqual(tokenized.attentionMask, [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0])
+    }
+
+    func testBertWordPieceTokenizerTruncatesToSequenceLength() throws {
+        let tokenizerURL = try makeWordPieceTokenizerFixture()
+        let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 5)
+
+        let tokenized = try tokenizer.tokenize("hello private notes search")
+
+        XCTAssertEqual(tokenized.inputIDs, [101, 7592, 2797, 3964, 102])
+        XCTAssertEqual(tokenized.attentionMask, [1, 1, 1, 1, 1])
+    }
+
+    func testBertWordPieceTokenizerUsesUnknownForMissingWordPiece() throws {
+        let tokenizerURL = try makeWordPieceTokenizerFixture()
+        let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 5)
+
+        let tokenized = try tokenizer.tokenize("missing")
+
+        XCTAssertEqual(tokenized.inputIDs, [101, 100, 102, 0, 0])
+        XCTAssertEqual(tokenized.attentionMask, [1, 1, 1, 0, 0])
+    }
+
+    func testBertWordPieceTokenizerMatchesGeneratedComparisonTokenizersWhenPresent() throws {
+        let modelSlugs = [
+            "bge-small-en-v1.5",
+            "all-MiniLM-L6-v2",
+            "e5-small-v2",
+            "gte-small",
+            "snowflake-arctic-embed-xs",
+            "snowflake-arctic-embed-s",
+        ]
+        var comparedModels = 0
+
+        for slug in modelSlugs {
+            let tokenizerURL = repositoryRoot()
+                .appendingPathComponent("target/embedding-models/\(slug)/tokenizer/tokenizer.json")
+            guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
+                continue
+            }
+
+            comparedModels += 1
+            let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 12)
+            try assertTokenizer(
+                tokenizer,
+                text: "Hello, VectorKit!",
+                inputIDs: [101, 7592, 1010, 9207, 23615, 999, 102, 0, 0, 0, 0, 0],
+                attentionMask: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+                file: #filePath,
+                line: #line
+            )
+            try assertTokenizer(
+                tokenizer,
+                text: "Héllo, 中文!",
+                inputIDs: [101, 7592, 1010, 1746, 1861, 999, 102, 0, 0, 0, 0, 0],
+                attentionMask: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+                file: #filePath,
+                line: #line
+            )
+            try assertTokenizer(
+                tokenizer,
+                text: "unaffable",
+                inputIDs: [101, 14477, 20961, 3468, 102, 0, 0, 0, 0, 0, 0, 0],
+                attentionMask: [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                file: #filePath,
+                line: #line
+            )
+        }
+
+        guard comparedModels > 0 else {
+            throw XCTSkip("generated comparison tokenizer fixtures are not present")
+        }
+    }
+
     #if canImport(CoreML)
     func testCoreMLEmbedderUsesTokenizerAndBackend() async throws {
         let model = try EmbeddingModelInfo(identifier: "coreml-test", dimension: 3)
@@ -159,6 +251,88 @@ final class EmbeddingKitTests: XCTestCase {
         }
     }
     #endif
+}
+
+private func makeWordPieceTokenizerFixture() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("tokenizer.json")
+    let json = """
+    {
+      "version": "1.0",
+      "normalizer": {
+        "type": "BertNormalizer",
+        "clean_text": true,
+        "handle_chinese_chars": true,
+        "strip_accents": null,
+        "lowercase": true
+      },
+      "pre_tokenizer": {
+        "type": "BertPreTokenizer"
+      },
+      "post_processor": {
+        "type": "TemplateProcessing",
+        "special_tokens": {
+          "[CLS]": { "ids": [101] },
+          "[SEP]": { "ids": [102] }
+        }
+      },
+      "model": {
+        "type": "WordPiece",
+        "unk_token": "[UNK]",
+        "continuing_subword_prefix": "##",
+        "max_input_chars_per_word": 100,
+        "vocab": {
+          "[PAD]": 0,
+          "[UNK]": 100,
+          "[CLS]": 101,
+          "[SEP]": 102,
+          "!": 999,
+          ",": 1010,
+          "中": 1746,
+          "文": 1861,
+          "hello": 7592,
+          "private": 2797,
+          "notes": 3964,
+          "search": 3945,
+          "vector": 9207,
+          "##kit": 23615
+        }
+      }
+    }
+    """
+    try json.write(to: url, atomically: true, encoding: .utf8)
+    return url
+}
+
+private func assertTokenizer(
+    _ tokenizer: BertWordPieceTokenizer,
+    text: String,
+    inputIDs: [Int32],
+    attentionMask: [Int32],
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws {
+    let tokenized = try tokenizer.tokenize(text)
+    XCTAssertEqual(tokenized.inputIDs, inputIDs, file: file, line: line)
+    XCTAssertEqual(tokenized.attentionMask, attentionMask, file: file, line: line)
+    XCTAssertEqual(
+        tokenized.tokenTypeIDs,
+        Array(repeating: Int32(0), count: inputIDs.count),
+        file: file,
+        line: line
+    )
+}
+
+private func repositoryRoot() -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
 }
 
 #if canImport(CoreML)

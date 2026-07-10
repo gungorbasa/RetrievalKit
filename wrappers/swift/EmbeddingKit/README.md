@@ -32,6 +32,8 @@ let hits = try await index.search(embedding: embedding, topK: 5)
 - `EmbeddingRuntimeInfo`: runtime and requested/actual compute metadata.
 - `PrecomputedEmbedder`: deterministic provider for fixtures and tests.
 - `TextTokenizer`: tokenizer boundary for model-backed providers.
+- `BertWordPieceTokenizer`: Hugging Face `BertTokenizer`/WordPiece loader for
+  converted Core ML embedding models.
 - `CoreMLEmbedder`: Core ML provider behind `canImport(CoreML)`.
 - `EmbeddingBenchmark`: shared benchmark runner for single-query and batch
   latency measurement.
@@ -53,6 +55,17 @@ let embedder = CoreMLEmbedder(
 )
 ```
 
+For the converted Hugging Face BERT-family models, load the tokenizer from the
+generated model directory and pass the same fixed sequence length used during
+Core ML conversion:
+
+```swift
+let tokenizer = try BertWordPieceTokenizer(
+    tokenizerDirectory: modelDirectory.appendingPathComponent("tokenizer"),
+    sequenceLength: 512
+)
+```
+
 Benchmark reports already include requested and actual compute fields so we can
 compare:
 
@@ -60,9 +73,6 @@ compare:
 - `.cpuAndGPU`
 - `.cpuAndNeuralEngine`
 - `.all`
-
-Core ML and model conversion stay out of this initial package pass so the public
-API can settle before adding runtime dependencies.
 
 The Core ML provider expects a compiled model whose input/output boundary is:
 

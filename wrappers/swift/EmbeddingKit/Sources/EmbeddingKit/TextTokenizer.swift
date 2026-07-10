@@ -34,6 +34,12 @@ public struct TokenizedText: Equatable, Sendable {
     }
 }
 
+/// Counts model tokens without truncating to the model input sequence length.
+public protocol TextTokenCounter: Sendable {
+    /// Returns the number of tokens the model tokenizer would consume, including special tokens.
+    func countTokens(in text: String) throws -> Int
+}
+
 /// Provider-neutral tokenizer boundary used by model-backed embedders.
 public protocol TextTokenizer: Sendable {
     /// Tokenizer identifier or revision used for diagnostics.

@@ -1,7 +1,7 @@
 import Foundation
 
 /// BERT-compatible WordPiece tokenizer backed by a Hugging Face `tokenizer.json`.
-public struct BertWordPieceTokenizer: TextTokenizer {
+public struct BertWordPieceTokenizer: TextTokenizer, TextTokenCounter {
     public let identifier: String
     public let sequenceLength: Int
 
@@ -126,6 +126,13 @@ public struct BertWordPieceTokenizer: TextTokenizer {
             attentionMask: attentionMask,
             tokenTypeIDs: tokenTypeIDs
         )
+    }
+
+    public func countTokens(in text: String) throws -> Int {
+        guard !text.isEmpty else {
+            throw EmbeddingKitError.emptyInput
+        }
+        return wordPieceTokens(for: text).count + 2
     }
 
     private func wordPieceTokens(for text: String) -> [String] {

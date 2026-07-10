@@ -15,7 +15,13 @@ from vectorkit import (
     search_text,
     where,
 )
-from vectorkit.ingest import chunk_text
+from vectorkit.ingest import RustTextChunker, TextChunk, chunk_text
+from vectorkit.pipeline import (
+    EmbeddingDimensionMismatchError,
+    EmptyDocumentError,
+    InvalidChunkError,
+    Pipeline,
+)
 
 
 def test_chunk_text_uses_shared_rust_implementation() -> None:
@@ -46,6 +52,111 @@ def embed(texts: list[str]) -> list[list[float]]:
         "query alpha": [1.0, 0.0, 0.0, 0.0],
     }
     return [values.get(text, [0.0, 0.0, 1.0, 0.0]) for text in texts]
+
+
+def test_pipeline_ingests_raw_document_and_searches_text() -> None:
+    index = Index(dimension=4)
+    pipeline = Pipeline(index, embed=embed)
+
+    result = pipeline.add("doc-1", "alpha. beta.", metadata={"source": "notes"})
+    hits = pipeline.search("query alpha", limit=1)
+
+    assert len(result["chunk_ids"]) == 1
+    assert hits[0]["document_id"] == "doc-1"
+    assert hits[0]["metadata"]["source"] == "notes"
+    assert hits[0]["metadata"]["vectorkit.chunk.start_byte"] == 0
+
+
+def test_pipeline_embedding_failure_leaves_existing_document_unchanged() -> None:
+    index = Index(dimension=4)
+    index.add(
+        documents=[
+            {
+                "id": "doc-1",
+                "chunks": [{"text": "existing", "embedding": [1.0, 0.0, 0.0, 0.0]}],
+            }
+        ]
+    )
+
+    def fail(_texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("intentional embedding failure")
+
+    pipeline = Pipeline(
+        index, embed=fail, chunker=RustTextChunker(max_characters=20)
+    )
+
+    with pytest.raises(RuntimeError, match="intentional"):
+        pipeline.add("doc-1", "replacement")
+
+    assert index.search([1.0, 0.0, 0.0, 0.0])[0]["text"] == "existing"
+
+
+def test_pipeline_rejects_empty_documents_and_wrong_dimensions() -> None:
+    index = Index(dimension=4)
+    pipeline = Pipeline(
+        index,
+        embed=lambda _texts: [[1.0, 0.0]],
+        chunker=RustTextChunker(max_characters=20),
+    )
+
+    with pytest.raises(EmptyDocumentError, match="produced no chunks"):
+        pipeline.add("empty", " \n ")
+
+    with pytest.raises(
+        EmbeddingDimensionMismatchError,
+        match="Embedding dimension mismatch",
+    ):
+        pipeline.add("bad", "content")
+
+
+def test_pipeline_accepts_application_defined_chunker() -> None:
+    class CustomChunker:
+        def chunks(self, _text: str) -> list[TextChunk]:
+            return [
+                {"text": "alpha", "start_byte": 0, "end_byte": 5},
+                {"text": "beta", "start_byte": 6, "end_byte": 10},
+            ]
+
+    index = Index(dimension=4)
+    pipeline = Pipeline(index, embed=embed, chunker=CustomChunker())
+
+    result = pipeline.add("custom", "alpha beta")
+
+    assert len(result["chunk_ids"]) == 2
+
+
+def test_pipeline_rejects_invalid_custom_chunk_before_embedding() -> None:
+    class InvalidChunker:
+        def chunks(self, _text: str) -> list[TextChunk]:
+            return [{"text": "hello", "start_byte": 99, "end_byte": 1}]
+
+    index = Index(dimension=4)
+    pipeline = Pipeline(index, embed=embed, chunker=InvalidChunker())
+
+    with pytest.raises(InvalidChunkError, match="invalid UTF-8 range"):
+        pipeline.add("invalid", "hello")
+
+    assert index.active_chunk_count == 0
+
+
+def test_pipeline_subdivides_chunks_to_embedding_token_limit() -> None:
+    embedded_texts: list[str] = []
+
+    def recording_embed(texts: list[str]) -> list[list[float]]:
+        embedded_texts.extend(texts)
+        return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+    pipeline = Pipeline(
+        Index(dimension=4),
+        embed=recording_embed,
+        count_tokens=lambda text: len(text.split()) + 2,
+        max_tokens=4,
+    )
+
+    result = pipeline.add("token-aware", "one two three four five six")
+
+    assert len(result["chunk_ids"]) > 1
+    assert all(len(text.split()) + 2 <= 4 for text in embedded_texts)
 
 
 def test_add_search_filter_and_delete() -> None:

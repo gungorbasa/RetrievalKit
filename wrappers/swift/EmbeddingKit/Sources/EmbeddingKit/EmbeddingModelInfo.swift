@@ -74,6 +74,11 @@ public struct EmbeddingModelInfo: Codable, Equatable, Sendable {
         guard dimension > 0 else {
             throw EmbeddingKitError.invalidDimension(expected: 1, actual: dimension)
         }
+        if let maxInputTokens, maxInputTokens <= 0 {
+            throw EmbeddingKitError.unsupportedModelInterface(
+                "maxInputTokens must be greater than zero"
+            )
+        }
         self.identifier = identifier
         self.revision = revision
         self.dimension = dimension

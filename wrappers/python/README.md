@@ -95,6 +95,28 @@ GitHub CI workflow yet.
 
 ## Example
 
+Run the complete local example after `maturin develop`:
+
+```bash
+python examples/pipeline_quickstart.py
+```
+
+`Pipeline` defaults to the shared Rust sentence chunker. If your embedding
+provider exposes its tokenizer, pass both its exact token counter and model
+limit so oversized chunks are recursively subdivided before embedding:
+
+```python
+pipeline = Pipeline(
+    index,
+    embed=embed,
+    count_tokens=tokenizer.count_tokens,
+    max_tokens=model.max_input_tokens,
+)
+```
+
+Character limits are only a fallback because token counts depend on the model's
+tokenizer.
+
 ```python
 from vectorkit import Index, hybrid_search_text, search_text
 from vectorkit.ingest import chunk_text
@@ -158,6 +180,36 @@ Chunk limits and overlap are measured in Unicode characters. `start_byte` and
 prefers sentence endings, then whitespace, and falls back to the hard character
 limit. The implementation lives in Rust and is shared with the separate Swift
 `VectorKitIngest` product.
+
+## Document Pipeline
+
+The optional pipeline module composes chunking, a caller-provided embedding
+provider, indexing, and hybrid text search:
+
+```python
+from vectorkit import Index
+from vectorkit.pipeline import Pipeline
+
+index = Index(dimension=384, encoding="i8")
+pipeline = Pipeline(
+    index,
+    embed=embed,
+)
+
+pipeline.add("note-42", note_text, metadata={"source": "notes"})
+hits = pipeline.search("pricing decisions", limit=5)
+```
+
+All chunk embeddings are created and validated before the existing document is
+replaced. Empty input and embedding count or dimension mismatches fail without
+mutating the index.
+
+Applications can instead pass any object implementing `chunks(text)`. This
+allows Markdown-, transcript-, email-, or source-code-aware chunking while the
+pipeline continues to own embedding validation and atomic document upsert.
+The customization protocol lives in `vectorkit.pipeline`; the concrete
+`RustTextChunker` remains available from `vectorkit.ingest` when callers want
+non-default limits.
 
 ## Filter Syntax
 

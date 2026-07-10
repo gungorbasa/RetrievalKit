@@ -95,6 +95,7 @@ public extension CoreMLEmbeddingBackend {
 public actor CoreMLEmbedder: TextEmbedder {
     public nonisolated let modelInfo: EmbeddingModelInfo
     public nonisolated let runtimeInfo: EmbeddingRuntimeInfo
+    public nonisolated let tokenCounter: (any TextTokenCounter)?
 
     private let tokenizer: any TextTokenizer
     private let backend: any CoreMLEmbeddingBackend
@@ -106,6 +107,7 @@ public actor CoreMLEmbedder: TextEmbedder {
     ) {
         self.modelInfo = modelInfo
         self.runtimeInfo = backend.runtimeInfo
+        self.tokenCounter = tokenizer as? any TextTokenCounter
         self.tokenizer = tokenizer
         self.backend = backend
     }
@@ -118,6 +120,7 @@ public actor CoreMLEmbedder: TextEmbedder {
         let backend = try CoreMLModelBackendPool(configuration: configuration)
         self.modelInfo = modelInfo
         self.runtimeInfo = backend.runtimeInfo
+        self.tokenCounter = tokenizer as? any TextTokenCounter
         self.tokenizer = tokenizer
         self.backend = backend
     }

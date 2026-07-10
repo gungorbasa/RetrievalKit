@@ -204,8 +204,21 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   returned ranges are UTF-8 byte offsets into the original text.
 - Swift exposes chunking through the separate `VectorKitIngest` product and
   Python through `vectorkit.ingest`. Both call the same Rust implementation.
-  Model-token-aware chunking remains an integration concern because tokenizers
-  differ by model.
+  Tokenizers differ by model, so exact token counting remains provider-owned.
+- The optional Swift `VectorKitPipeline` package and Python
+  `vectorkit.pipeline` module compose chunking, embedding, document upsert, and
+  hybrid text search. They validate all embeddings before upsert, so provider
+  failures leave the previous document version unchanged.
+- The pipeline layer owns `DocumentChunker` in Swift and Python. Its default is
+  sentence-aware Rust chunking at 500 characters with 50 characters of overlap;
+  applications can override it for document-aware splitting. Pipeline validates
+  custom text, ordering, and UTF-8 source ranges before embedding, so overrides
+  do not weaken downstream index metadata.
+- Token-aware pipeline chunking is implemented. Swift automatically uses an
+  embedder's `TextTokenCounter` and `maxInputTokens`; Python accepts
+  `count_tokens` and `max_tokens`. Oversized chunks are recursively subdivided
+  while preserving original UTF-8 offsets. Providers without tokenizer access
+  keep the character-based default.
 
 ## Completed Optimizations
 

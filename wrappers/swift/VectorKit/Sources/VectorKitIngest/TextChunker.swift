@@ -46,6 +46,12 @@ public enum TextChunkingError: Error, Equatable, CustomStringConvertible, Sendab
 
 /// Configures the shared Rust text chunker.
 public struct TextChunker: Equatable, Sendable {
+    /// Opinionated sentence-aware default used by the high-level pipeline.
+    public static let pipelineDefault = try! TextChunker(
+        strategy: .sentence,
+        maxCharacters: 500,
+        overlapCharacters: 50
+    )
     public enum Strategy: Equatable, Sendable {
         /// Split exactly at the configured Unicode-character limit.
         case fixed

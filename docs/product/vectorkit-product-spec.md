@@ -1118,6 +1118,30 @@ behavior varies by model. Swift exposes this through the separate
 `VectorKitIngest` product and Python through `vectorkit.ingest`; both call the
 same Rust implementation rather than reimplementing it.
 
+An optional wrapper-level pipeline composes chunking, embedding, and indexing
+without moving model execution into Rust. Swift exposes this as the separate
+`VectorKitPipeline` package; Python exposes `vectorkit.pipeline`. The pipeline
+must finish and validate every chunk embedding before document upsert so an
+embedding failure cannot partially replace an existing document. Empty text is
+an ingestion error, not an implicit delete operation.
+
+The pipeline accepts an application-defined chunker through the same public
+boundary used by the built-in Rust chunker. Custom chunkers must return text and
+UTF-8 source byte ranges; embedding validation and index mutation remain owned
+by the pipeline.
+
+The custom chunker protocol belongs to the pipeline layer because it defines an
+orchestration policy, not a Rust ingestion primitive. Pipeline chooses an
+opinionated built-in default and validates custom chunk ordering, non-empty
+text, UTF-8 boundaries, ranges, and source-text correspondence before embedding.
+
+When an embedding provider exposes its exact tokenizer and model input limit,
+Pipeline recursively subdivides Rust-produced chunks until every chunk fits the
+token budget. Swift discovers this through `TextEmbedder`; Python accepts an
+explicit token-count callback and limit. Providers without tokenizer access use
+the documented character-based fallback. A document is represented by multiple
+chunk vectors; the SDK does not truncate the document into one lossy vector.
+
 Incremental add:
 
 - append vector

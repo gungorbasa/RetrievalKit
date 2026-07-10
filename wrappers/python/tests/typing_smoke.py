@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from vectorkit import DocumentInput, Filter, HybridHit, Index, SearchHit, where
+from vectorkit.ingest import RustTextChunker
+from vectorkit.pipeline import Pipeline
 
 
 def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None:
@@ -40,3 +44,23 @@ def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None
         matched_terms: list[str] = hybrid_hits[0]["matched_terms"]
         fusion_kind: str = hybrid_hits[0]["trace"]["fusion"]["kind"]
         _ = (matched_terms, fusion_kind)
+
+
+def typed_pipeline(pipeline: Pipeline) -> None:
+    result = pipeline.add("doc-1", "typed pipeline")
+    chunk_ids: list[int] = result["chunk_ids"]
+    hits: list[HybridHit] = pipeline.search("typed query")
+    _ = (chunk_ids, hits)
+
+
+def build_typed_pipeline(index: Index) -> Pipeline:
+    def embed(texts: Sequence[str]) -> list[list[float]]:
+        return [[0.0, 0.0] for _ in texts]
+
+    return Pipeline(
+        index,
+        embed=embed,
+        chunker=RustTextChunker(max_characters=500),
+        count_tokens=lambda text: len(text.split()),
+        max_tokens=256,
+    )

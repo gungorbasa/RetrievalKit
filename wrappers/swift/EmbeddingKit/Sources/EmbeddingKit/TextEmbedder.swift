@@ -6,6 +6,8 @@ public protocol TextEmbedder: Sendable {
     var modelInfo: EmbeddingModelInfo { get }
     /// Runtime and compute metadata for diagnostics and benchmarks.
     var runtimeInfo: EmbeddingRuntimeInfo { get }
+    /// Optional exact tokenizer counter used to prevent silent model-input truncation.
+    var tokenCounter: (any TextTokenCounter)? { get }
 
     /// Embeds a single text string.
     func embed(_ text: String) async throws -> [Float]
@@ -14,6 +16,8 @@ public protocol TextEmbedder: Sendable {
 }
 
 public extension TextEmbedder {
+    var tokenCounter: (any TextTokenCounter)? { nil }
+
     /// Default batch implementation for providers that only implement single-text embedding.
     func embed(_ texts: [String]) async throws -> [[Float]] {
         guard !texts.isEmpty else {

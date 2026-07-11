@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use vectorkit_core::{CorpusId, ExactVectorIndex, GenerationId};
 
@@ -15,6 +16,53 @@ const SNAPSHOTS_DIRECTORY: &str = ".snapshots";
 const CORE_DIRECTORY: &str = "core";
 const SCHEMA_FILE: &str = "schema.json";
 const GRAPH_FILE: &str = "graph.bin";
+const WRITER_LOCK_FILE: &str = ".writer.lock";
+const GENERATION_LEASE_FILE: &str = ".lease";
+
+#[derive(Debug)]
+pub(crate) struct GenerationLease {
+    file: File,
+}
+
+impl Drop for GenerationLease {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
+struct DatabaseLock {
+    file: File,
+}
+
+impl DatabaseLock {
+    fn acquire_shared(directory: &Path) -> Result<Self> {
+        let path = directory.join(WRITER_LOCK_FILE);
+        let file = open_lock_file(&path)?;
+        file.lock_shared()
+            .map_err(|error| io_error("acquire graph database open lock", &path, error))?;
+        Ok(Self { file })
+    }
+
+    fn try_acquire_writer(directory: &Path) -> Result<Self> {
+        let path = directory.join(WRITER_LOCK_FILE);
+        let file = open_lock_file(&path)?;
+        match file.try_lock_exclusive() {
+            Ok(()) => Ok(Self { file }),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(GraphError::WriterBusy {
+                    path: directory.display().to_string(),
+                })
+            }
+            Err(error) => Err(io_error("acquire graph database writer lock", &path, error)),
+        }
+    }
+}
+
+impl Drop for DatabaseLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GraphDatabaseFileSizes {
@@ -44,15 +92,18 @@ struct Checksums {
 pub(crate) fn save(index: &GraphIndex, directory: &Path) -> Result<GraphDatabaseFileSizes> {
     fs::create_dir_all(directory)
         .map_err(|error| io_error("create graph database directory", directory, error))?;
+    let _writer_lock = DatabaseLock::try_acquire_writer(directory)?;
     let snapshots = directory.join(SNAPSHOTS_DIRECTORY);
     fs::create_dir_all(&snapshots)
         .map_err(|error| io_error("create graph snapshots directory", &snapshots, error))?;
+    recover_snapshots(directory, &snapshots)?;
 
     let snapshot_id = next_snapshot_id(index.core.generation())?;
     let staging = snapshots.join(format!(".staging-{snapshot_id}"));
     let published = snapshots.join(&snapshot_id);
     fs::create_dir(&staging)
         .map_err(|error| io_error("create staged graph snapshot", &staging, error))?;
+    write_synced(&staging.join(GENERATION_LEASE_FILE), &[])?;
 
     let result = stage_and_publish(
         index,
@@ -119,13 +170,19 @@ fn stage_and_publish(
     fs::rename(&temporary_manifest, &manifest_path)
         .map_err(|error| io_error("activate graph manifest", &manifest_path, error))?;
     sync_directory(directory)?;
+    cleanup_unreferenced_snapshots(snapshots, &snapshot_id);
     Ok(sizes)
 }
 
 pub(crate) fn load(directory: &Path) -> Result<GraphIndex> {
+    let open_lock = DatabaseLock::acquire_shared(directory)?;
     let manifest = read_manifest(directory)?;
     let generation = generation_directory(directory, &manifest);
-    load_generation(&generation, &manifest)
+    let lease = acquire_generation_lease(&generation)?;
+    drop(open_lock);
+    let mut index = load_generation(&generation, &manifest)?;
+    index._generation_lease = Some(lease);
+    Ok(index)
 }
 
 pub(crate) fn validate(directory: &Path) -> Result<()> {
@@ -206,6 +263,72 @@ fn generation_directory(directory: &Path, manifest: &Manifest) -> PathBuf {
     directory
         .join(SNAPSHOTS_DIRECTORY)
         .join(&manifest.snapshot_id)
+}
+
+fn acquire_generation_lease(directory: &Path) -> Result<GenerationLease> {
+    let path = directory.join(GENERATION_LEASE_FILE);
+    let file = open_lock_file(&path)?;
+    file.lock_shared()
+        .map_err(|error| io_error("acquire graph generation lease", &path, error))?;
+    Ok(GenerationLease { file })
+}
+
+fn recover_snapshots(directory: &Path, snapshots: &Path) -> Result<()> {
+    let manifest_path = directory.join(MANIFEST_FILE);
+    let active = if manifest_path.exists() {
+        Some(read_manifest(directory)?.snapshot_id)
+    } else {
+        None
+    };
+    let entries = fs::read_dir(snapshots)
+        .map_err(|error| io_error("list graph snapshots", snapshots, error))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| io_error("read graph snapshot entry", snapshots, error))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(".staging-") {
+            let _ = fs::remove_dir_all(entry.path());
+        } else if active.as_deref() != Some(name.as_ref()) {
+            try_remove_unleased_generation(&entry.path());
+        }
+    }
+    Ok(())
+}
+
+fn cleanup_unreferenced_snapshots(snapshots: &Path, active: &str) {
+    let Ok(entries) = fs::read_dir(snapshots) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name() != active {
+            try_remove_unleased_generation(&entry.path());
+        }
+    }
+}
+
+fn try_remove_unleased_generation(directory: &Path) {
+    if !directory.is_dir() {
+        return;
+    }
+    let path = directory.join(GENERATION_LEASE_FILE);
+    let Ok(file) = open_lock_file(&path) else {
+        return;
+    };
+    if file.try_lock_exclusive().is_ok() {
+        let _ = fs::remove_dir_all(directory);
+        let _ = FileExt::unlock(&file);
+    }
+}
+
+fn open_lock_file(path: &Path) -> Result<File> {
+    File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .map_err(|error| io_error("open lock file", path, error))
 }
 
 fn read_exact_payload(path: &Path, expected: u64, label: &str) -> Result<Vec<u8>> {

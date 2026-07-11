@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use fs2::FileExt;
 use serde_json::Value;
 use vectorkit_graph::{GraphError, GraphIndex, GraphQuery, GraphScalar, Seed};
 
@@ -93,7 +94,7 @@ fn a_second_save_atomically_selects_a_complete_new_generation() {
     let second = active_generation(directory.path());
 
     assert_ne!(first, second);
-    assert!(first.is_dir());
+    assert!(!first.exists());
     assert!(second.is_dir());
     GraphIndex::validate_dir(directory.path()).unwrap();
 }
@@ -109,6 +110,51 @@ fn abandoned_staging_directory_is_never_loaded() {
 
     GraphIndex::validate_dir(directory.path()).unwrap();
     assert!(abandoned.exists());
+    graph.save_to_dir(directory.path()).unwrap();
+    assert!(!abandoned.exists());
+}
+
+#[test]
+fn writer_lock_is_process_safe_and_released_by_the_os_handle() {
+    let directory = TestDirectory::new("writer-lock");
+    let graph = GraphIndex::build(social_core(false), social_schema()).unwrap();
+    let lock_path = directory.path().join(".writer.lock");
+    let lock = fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)
+        .unwrap();
+    lock.lock_exclusive().unwrap();
+    assert!(matches!(
+        graph.save_to_dir(directory.path()).unwrap_err(),
+        GraphError::WriterBusy { .. }
+    ));
+    drop(lock);
+    graph.save_to_dir(directory.path()).unwrap();
+}
+
+#[test]
+fn loaded_generation_lease_defers_cleanup_until_reader_drop() {
+    let directory = TestDirectory::new("leases");
+    let graph = GraphIndex::build(social_core(false), social_schema()).unwrap();
+    graph.save_to_dir(directory.path()).unwrap();
+    let first = active_generation(directory.path());
+    let reader = GraphIndex::load_from_dir(directory.path()).unwrap();
+
+    graph.save_to_dir(directory.path()).unwrap();
+    let second = active_generation(directory.path());
+    assert_ne!(first, second);
+    assert!(first.exists());
+
+    drop(reader);
+    graph.save_to_dir(directory.path()).unwrap();
+    let third = active_generation(directory.path());
+    assert_ne!(second, third);
+    assert!(!first.exists());
+    assert!(!second.exists());
+    assert!(third.exists());
 }
 
 #[test]
@@ -160,4 +206,19 @@ fn manifest_rejects_unsafe_snapshot_paths_and_schema_corruption() {
         GraphIndex::validate_dir(directory.path()).unwrap_err(),
         GraphError::InvalidSnapshot { .. }
     ));
+}
+
+#[test]
+fn save_does_not_clean_generations_when_existing_manifest_is_invalid() {
+    let directory = TestDirectory::new("invalid-manifest-save");
+    let graph = GraphIndex::build(social_core(false), social_schema()).unwrap();
+    graph.save_to_dir(directory.path()).unwrap();
+    let active = active_generation(directory.path());
+    fs::write(directory.path().join("manifest.json"), b"not-json").unwrap();
+
+    assert!(matches!(
+        graph.save_to_dir(directory.path()).unwrap_err(),
+        GraphError::InvalidSnapshot { .. }
+    ));
+    assert!(active.exists());
 }

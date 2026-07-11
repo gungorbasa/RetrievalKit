@@ -165,9 +165,12 @@ against that exact corpus/generation, syncs the staged files and directories,
 renames the generation into place, and atomically replaces `manifest.json`.
 Only that manifest selects an active generation. A failure before manifest
 replacement leaves the previously active generation queryable. Read-only
-validation follows the complete load path and must not clean staging or old
-generations. Cross-process writer serialization, abandoned-generation cleanup,
-and generation leases are required before M3 is complete.
+validation follows the complete load path and does not clean staging or old
+generations. An OS-released exclusive database lock serializes writers. Loaders
+briefly hold a shared database lock while selecting and leasing the active
+generation, then retain a shared per-generation lease for the lifetime of the
+loaded `GraphIndex`. Locked-save recovery removes abandoned staging and
+unreferenced generations only when no reader lease is present.
 
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed

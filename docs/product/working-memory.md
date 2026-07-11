@@ -57,8 +57,14 @@ implemented, or superseded by the product spec.
   digests, reopens and validates the staged core/graph pair, syncs it, and only
   then atomically activates it through the graph manifest. Read-only validation,
   repeat saves, abandoned staging, unsafe manifest paths, truncation, appended
-  data, and same-size corruption have conformance coverage. Cross-process writer
-  locking, cleanup/recovery, and generation leases remain for M3.3.
+  data, and same-size corruption have conformance coverage.
+- M3.3 now serializes writers with an OS-released exclusive database lock.
+  Loaders use a short shared open lock and retain a shared per-generation lease,
+  preventing cleanup while a loaded index uses that generation. Locked saves
+  remove abandoned staging and unleased superseded generations; an invalid
+  existing manifest stops recovery without deleting snapshots. M3.4 still needs
+  checkpoint fault injection and persistence/open benchmark reporting before
+  the M3 gate is complete.
 
 ## Current Size, RAM, and Speed Goal
 

@@ -40,6 +40,7 @@ pub struct GraphIndex {
     schema: GraphSchema,
     storage: GraphStorage,
     build_stats: GraphBuildStats,
+    _generation_lease: Option<persistence::GenerationLease>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +65,7 @@ impl GraphIndex {
             schema,
             storage,
             build_stats,
+            _generation_lease: None,
         })
     }
 
@@ -92,6 +94,7 @@ impl GraphIndex {
             schema,
             storage,
             build_stats,
+            _generation_lease: None,
         })
     }
 

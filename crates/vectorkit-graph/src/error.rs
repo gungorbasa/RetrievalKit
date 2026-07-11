@@ -16,6 +16,9 @@ pub enum GraphError {
     InvalidSnapshot {
         message: String,
     },
+    WriterBusy {
+        path: String,
+    },
     MissingTarget {
         relationship: String,
         source_record_id: String,
@@ -39,6 +42,9 @@ impl Display for GraphError {
             }
             Self::InvalidQuery { message } => write!(f, "invalid graph query: {message}"),
             Self::InvalidSnapshot { message } => write!(f, "invalid graph snapshot: {message}"),
+            Self::WriterBusy { path } => {
+                write!(f, "graph database writer is already active for '{path}'")
+            }
             Self::MissingTarget {
                 relationship,
                 source_record_id,

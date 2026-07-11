@@ -20,6 +20,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Parallel Swift exact, keyword, and hybrid searches on one `VectorIndex`, with
   writer-preferring exclusive access for upsert, delete, save, and compaction.
   The C/FFI threading and handle-lifetime contract is now explicit.
+- Python retrieval, persistence, and maintenance release the GIL during
+  Rust-only work. Shared-index searches may run across Python threads, while
+  PyO3 exclusive borrowing rejects conflicting mutation safely.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

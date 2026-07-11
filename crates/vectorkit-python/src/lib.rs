@@ -68,16 +68,18 @@ impl PyIndex {
     }
 
     #[staticmethod]
-    fn load(path: PathBuf) -> PyResult<Self> {
-        Ok(Self {
-            inner: ExactVectorIndex::load_from_dir(path).map_err(py_error)?,
+    fn load(py: Python<'_>, path: PathBuf) -> PyResult<Self> {
+        py.detach(move || {
+            Ok(Self {
+                inner: ExactVectorIndex::load_from_dir(path).map_err(py_error)?,
+            })
         })
     }
 
     /// Verifies a saved index without changing it.
     #[staticmethod]
-    fn validate(path: PathBuf) -> PyResult<()> {
-        ExactVectorIndex::validate_dir(path).map_err(py_error)
+    fn validate(py: Python<'_>, path: PathBuf) -> PyResult<()> {
+        py.detach(move || ExactVectorIndex::validate_dir(path).map_err(py_error))
     }
 
     #[getter]
@@ -105,7 +107,7 @@ impl PyIndex {
             PyTypeError::new_err("documents must be a list of document dictionaries")
         })?;
 
-        let result = PyList::empty(py);
+        let mut parsed_documents = Vec::with_capacity(documents.len());
         for document in documents {
             let document = document
                 .cast::<PyDict>()
@@ -129,18 +131,32 @@ impl PyIndex {
                 });
             }
 
-            let chunk_ids = self
-                .inner
-                .upsert_document(
-                    Document {
-                        id: document_id.clone(),
-                        text: String::new(),
-                        metadata: document_metadata,
-                    },
-                    chunk_inputs,
-                )
-                .map_err(py_error)?;
+            parsed_documents.push((
+                document_id.clone(),
+                Document {
+                    id: document_id,
+                    text: String::new(),
+                    metadata: document_metadata,
+                },
+                chunk_inputs,
+            ));
+        }
 
+        let added = py.detach(move || {
+            parsed_documents
+                .into_iter()
+                .map(|(document_id, document, chunk_inputs)| {
+                    let chunk_ids = self
+                        .inner
+                        .upsert_document(document, chunk_inputs)
+                        .map_err(py_error)?;
+                    Ok((document_id, chunk_ids))
+                })
+                .collect::<PyResult<Vec<_>>>()
+        })?;
+
+        let result = PyList::empty(py);
+        for (document_id, chunk_ids) in added {
             let item = PyDict::new(py);
             item.set_item("id", document_id)?;
             item.set_item("chunk_ids", chunk_ids)?;
@@ -150,12 +166,12 @@ impl PyIndex {
         Ok(result.into_any().unbind())
     }
 
-    fn delete_document(&mut self, document_id: &str) -> usize {
-        self.inner.delete_document(document_id)
+    fn delete_document(&mut self, py: Python<'_>, document_id: String) -> usize {
+        py.detach(move || self.inner.delete_document(&document_id))
     }
 
     fn compact(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let report = self.inner.compact().map_err(py_error)?;
+        let report = py.detach(|| self.inner.compact().map_err(py_error))?;
         compaction_report_to_py(py, report)
     }
 
@@ -173,7 +189,7 @@ impl PyIndex {
             top_k: limit,
             filter,
         };
-        let hits = self.inner.search(&query).map_err(py_error)?;
+        let hits = py.detach(move || self.inner.search(&query).map_err(py_error))?;
         search_hits_to_py(py, &self.inner, &hits)
     }
 
@@ -181,17 +197,17 @@ impl PyIndex {
     fn keyword_search(
         &self,
         py: Python<'_>,
-        text: &str,
+        text: String,
         limit: usize,
         r#where: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let filter = parse_optional_filter(r#where)?;
         let query = KeywordQuery {
-            text: text.to_owned(),
+            text,
             top_k: limit,
             filter,
         };
-        let hits = self.inner.keyword_search(&query).map_err(py_error)?;
+        let hits = py.detach(move || self.inner.keyword_search(&query).map_err(py_error))?;
         keyword_hits_to_py(py, &self.inner, &hits)
     }
 
@@ -213,7 +229,7 @@ impl PyIndex {
     fn hybrid_search(
         &self,
         py: Python<'_>,
-        text: &str,
+        text: String,
         embedding: Vec<f32>,
         limit: usize,
         r#where: Option<&Bound<'_, PyAny>>,
@@ -244,21 +260,22 @@ impl PyIndex {
             }
         };
 
-        let hits = self.inner.hybrid_search(&query).map_err(py_error)?;
+        let hits = py.detach(move || self.inner.hybrid_search(&query).map_err(py_error))?;
         hybrid_hits_to_py(py, &self.inner, &hits)
     }
 
     #[pyo3(signature = (path, *, include_bm25 = true))]
-    fn save(&self, py: Python<'_>, path: PathBuf, include_bm25: bool) -> PyResult<Py<PyAny>> {
+    fn save(&mut self, py: Python<'_>, path: PathBuf, include_bm25: bool) -> PyResult<Py<PyAny>> {
         let options = if include_bm25 {
             vectorkit_core::IndexPersistenceOptions::hybrid()
         } else {
             vectorkit_core::IndexPersistenceOptions::vector_only()
         };
-        let report = self
-            .inner
-            .save_to_dir_with_options(path, options)
-            .map_err(py_error)?;
+        let report = py.detach(move || {
+            self.inner
+                .save_to_dir_with_options(path, options)
+                .map_err(py_error)
+        })?;
         file_size_report_to_py(py, report)
     }
 }

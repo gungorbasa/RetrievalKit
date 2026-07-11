@@ -127,6 +127,27 @@ unsupported manifests fail with `UnsupportedFormatError`.
 the failed operation, path, operating-system cause, and a recovery hint when the
 directory cannot be written.
 
+## Concurrency
+
+Exact, keyword, and hybrid search release the Python GIL while Rust performs
+retrieval. Multiple Python threads may search the same `Index` concurrently:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=4) as pool:
+    futures = [pool.submit(index.search, embedding, limit=10) for _ in range(4)]
+    result_sets = [future.result() for future in futures]
+```
+
+Load, validation, add, delete, save, and compaction also release the GIL during
+Rust-only work. Search methods hold a shared PyO3 borrow; add, delete, save, and
+compaction require an exclusive mutable borrow. If mutation is attempted while
+a search is active—or a search while mutation is active—PyO3 rejects the call
+with `RuntimeError: Already borrowed`. Coordinate those operations in the
+application instead of retrying blindly. The `Index` remains alive until every
+active native call returns.
+
 ## Compaction
 
 Updates and deletes create tombstones so search results change immediately

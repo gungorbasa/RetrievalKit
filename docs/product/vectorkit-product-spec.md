@@ -1314,6 +1314,9 @@ destruction require exclusive access. The Rust search path remains lock-free;
 FFI callers provide synchronization. Swift uses a writer-preferring
 asynchronous gate and detached native tasks so searches on one `VectorIndex`
 can overlap while mutations wait for active readers and block later readers.
+Python releases the GIL during Rust retrieval and permits shared PyO3 borrows
+for concurrent searches. Its mutation and persistence methods require exclusive
+borrows, so conflicting calls fail safely with `RuntimeError` instead of racing.
 - Index updates are predictable and recoverable.
 - 50K chunks meet the configured on-device retrieval target.
 

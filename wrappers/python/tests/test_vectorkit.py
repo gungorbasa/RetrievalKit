@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import sys
+import threading
 
 import pytest
 
@@ -458,6 +461,76 @@ def test_dimension_mismatch_is_specific_error() -> None:
     index = Index(dimension=4)
     with pytest.raises(DimensionMismatchError):
         index.search([1.0, 0.0])
+
+
+def test_shared_index_searches_run_across_python_threads_and_reject_mutation() -> None:
+    dimension = 128
+    chunk_count = 4_000
+    embedding = [1.0] + [0.0] * (dimension - 1)
+    index = Index(dimension=dimension)
+    index.add(
+        [
+            {
+                "id": "parallel-doc",
+                "chunks": [
+                    {"text": f"parallel local search {offset}", "embedding": embedding}
+                    for offset in range(chunk_count)
+                ],
+            }
+        ]
+    )
+
+    def run_search(operation: int) -> list[dict[str, object]]:
+        if operation % 3 == 0:
+            return index.search(embedding, limit=3)
+        if operation % 3 == 1:
+            return index.keyword_search("parallel local", limit=3)
+        return index.hybrid_search("parallel local", embedding, limit=3)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(run_search, operation) for operation in range(18)]
+        results = [future.result(timeout=10) for future in futures]
+
+    assert all(len(hits) == 3 for hits in results)
+    assert all(hits[0]["document_id"] == "parallel-doc" for hits in results)
+
+    ready = threading.Event()
+    begin_mutation = [False]
+    mutation_outcome: list[str] = []
+
+    def attempt_conflicting_mutation() -> None:
+        ready.set()
+        while not begin_mutation[0]:
+            pass
+        try:
+            index.compact()
+        except RuntimeError as error:
+            mutation_outcome.append(str(error))
+        else:
+            mutation_outcome.append("mutation unexpectedly ran")
+
+    worker = threading.Thread(target=attempt_conflicting_mutation)
+    worker.start()
+    assert ready.wait(timeout=1)
+
+    previous_switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1_000)
+    try:
+        begin_mutation[0] = True
+        hits = index.hybrid_search(
+            "parallel local search",
+            embedding,
+            limit=3,
+            vector_candidates=chunk_count,
+            keyword_candidates=chunk_count,
+        )
+    finally:
+        sys.setswitchinterval(previous_switch_interval)
+
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert len(hits) == 3
+    assert mutation_outcome == ["Already borrowed"]
 
 
 def test_search_text_uses_provider() -> None:

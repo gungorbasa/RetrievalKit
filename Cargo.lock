@@ -411,6 +411,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vectorkit-graph"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vectorkit-core",
+]
+
+[[package]]
 name = "vectorkit-ingest"
 version = "0.1.0"
 

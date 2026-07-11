@@ -18,11 +18,36 @@ implemented, or superseded by the product spec.
 - VectorKit is local-first retrieval for mobile/desktop, with iOS/macOS as the
   first wrapper target.
 - V1 remains exact vector search, BM25 keyword search, hybrid ranking,
-  filtering, persistence, and Swift integration.
+  filtering, persistence, and Swift integration. An optional fully local graph
+  package is now authorized behind gated M0-M5 milestones; graph-free core hot
+  paths and artifacts remain graph-neutral.
 - Do not add HNSW/ANN, server mode, sync, dashboards, or distributed database
   behavior unless the product spec changes.
 - Retrieval must stay fast on local devices. Avoid hot-path JSON, SQLite,
   network calls, avoidable allocation, and broad string lookups.
+
+## Optional Graph Roadmap Status
+
+- M0 product authorization and the customer fixture contract/template are in
+  place. The template deliberately contains no invented customer data.
+- M1 implements canonical `RecordStore` values/identities, persisted corpus and
+  generation identity, adaptive `CandidateScope`, scoped exact/BM25/hybrid
+  retrieval, and ordered bulk hydration in `vectorkit-core`.
+- The 10K x 384d local development comparison measured graph-free p95 changes
+  of exact +1.32%, BM25 +2.46%, and hybrid +2.66% versus pre-M1 using the median
+  of three final p95 runs. Repeat the <=3% release gate on pinned hardware.
+- M2 is authorized as a generic schema-driven package using domain-neutral
+  synthetic conformance fixtures. Customer data is deferred acceptance evidence
+  and must never become hard-coded schema behavior. Real-workload capacity and
+  device claims remain provisional until private customer validation occurs.
+- `vectorkit-graph` M2 now provides record/chunk node schemas, explicit typed
+  references and collections, validation policies, deterministic CSR adjacency,
+  exact property seeds, bounded multi-step traversal, cycles, canonical paths,
+  limits, cancellation, edge provenance, and graph-result projection into exact,
+  BM25, and hybrid candidate scopes. It consumes one core index and does not
+  expose a peer mutable handle.
+- M3 remains separate: graph schema/adjacency persistence, composite atomic
+  commit, recovery, generation leases, and reopen behavior are not implemented.
 
 ## Current Size, RAM, and Speed Goal
 

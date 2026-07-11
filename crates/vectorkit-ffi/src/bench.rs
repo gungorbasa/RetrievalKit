@@ -708,6 +708,7 @@ pub(crate) struct PersistedFileSizes {
     pub(crate) manifest_bytes: u64,
     pub(crate) vectors_bytes: u64,
     pub(crate) chunks_bytes: u64,
+    pub(crate) records_bytes: u64,
     pub(crate) bm25_bytes: u64,
     pub(crate) tombstones_bytes: u64,
 }
@@ -719,6 +720,7 @@ impl From<IndexFileSizeReport> for PersistedFileSizes {
             manifest_bytes: value.manifest_bytes,
             vectors_bytes: value.vectors_bytes,
             chunks_bytes: value.chunks_bytes,
+            records_bytes: value.records_bytes,
             bm25_bytes: value.bm25_bytes,
             tombstones_bytes: value.tombstones_bytes,
         }

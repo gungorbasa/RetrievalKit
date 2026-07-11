@@ -324,6 +324,10 @@ fn parse_encoding(encoding: &str) -> PyResult<VectorEncoding> {
 
 fn py_error(error: CoreError) -> PyErr {
     match error {
+        CoreError::InvalidIdentity { .. }
+        | CoreError::InvalidRecordValue { .. }
+        | CoreError::InvalidCandidateScope { .. }
+        | CoreError::StaleGeneration { .. } => VectorKitError::new_err(error.to_string()),
         CoreError::InvalidDimension { .. } => DimensionMismatchError::new_err(error.to_string()),
         CoreError::InvalidRange { .. } => FilterError::new_err(error.to_string()),
         CoreError::Persistence { .. } => PersistenceError::new_err(error.to_string()),
@@ -660,6 +664,7 @@ fn file_size_report_to_py(py: Python<'_>, report: IndexFileSizeReport) -> PyResu
     dict.set_item("manifest_bytes", report.manifest_bytes)?;
     dict.set_item("vectors_bytes", report.vectors_bytes)?;
     dict.set_item("chunks_bytes", report.chunks_bytes)?;
+    dict.set_item("records_bytes", report.records_bytes)?;
     dict.set_item("bm25_bytes", report.bm25_bytes)?;
     dict.set_item("tombstones_bytes", report.tombstones_bytes)?;
     dict.set_item("total_bytes", report.total_bytes())?;

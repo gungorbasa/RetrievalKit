@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vectorkit.dev/schemas/graph-customer-fixture-v1.json",
+  "title": "VectorKit sanitized graph customer fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "fixture_id", "status", "sanitization", "source", "queries", "mutations", "workload", "targets", "equivalence"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "fixture_id": { "$ref": "#/$defs/non_empty_string" },
+    "status": { "const": "complete" },
+    "sanitization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attested_by", "method", "removed_or_transformed"],
+      "properties": {
+        "attested_by": { "$ref": "#/$defs/non_empty_string" },
+        "method": { "$ref": "#/$defs/non_empty_string" },
+        "removed_or_transformed": { "type": "array", "items": { "$ref": "#/$defs/non_empty_string" } }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moss_record_shape", "records", "graph_construction_schema", "graph_sidecar_examples", "graph_engine"],
+      "properties": {
+        "moss_record_shape": { "type": "object", "minProperties": 1 },
+        "records": { "type": "array", "minItems": 1, "items": { "type": "object" } },
+        "graph_construction_schema": { "type": "object", "minProperties": 1 },
+        "graph_sidecar_examples": { "type": "array", "minItems": 1, "items": { "type": "object" } },
+        "graph_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "$ref": "#/$defs/non_empty_string" },
+            "version": { "$ref": "#/$defs/non_empty_string" }
+          }
+        }
+      }
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/query" }
+    },
+    "mutations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["updates", "deletions"],
+      "properties": {
+        "updates": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/mutation" } },
+        "deletions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/mutation" } }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_count", "chunk_count", "node_count", "edge_count", "maximum_degree", "updates_per_day"],
+      "properties": {
+        "record_count": { "$ref": "#/$defs/non_negative_integer" },
+        "chunk_count": { "$ref": "#/$defs/non_negative_integer" },
+        "node_count": { "$ref": "#/$defs/non_negative_integer" },
+        "edge_count": { "$ref": "#/$defs/non_negative_integer" },
+        "maximum_degree": { "$ref": "#/$defs/non_negative_integer" },
+        "updates_per_day": { "type": "number", "minimum": 0 }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["devices", "latency_method", "latency_budgets_ms", "maximum_rebuild_ms", "maximum_freshness_ms"],
+      "properties": {
+        "devices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/device" } },
+        "latency_method": { "$ref": "#/$defs/latency_method" },
+        "latency_budgets_ms": { "$ref": "#/$defs/latency_budgets" },
+        "maximum_rebuild_ms": { "type": "number", "exclusiveMinimum": 0 },
+        "maximum_freshness_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "equivalence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity_rules", "path_rules", "ordering_tolerance", "ranking_or_recall_threshold", "freshness_rule", "failure_expectations"],
+      "properties": {
+        "identity_rules": { "$ref": "#/$defs/non_empty_string" },
+        "path_rules": { "$ref": "#/$defs/non_empty_string" },
+        "ordering_tolerance": { "$ref": "#/$defs/non_empty_string" },
+        "ranking_or_recall_threshold": { "$ref": "#/$defs/non_empty_string" },
+        "freshness_rule": { "$ref": "#/$defs/non_empty_string" },
+        "failure_expectations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/non_empty_string" } }
+      }
+    }
+  },
+  "$defs": {
+    "non_empty_string": { "type": "string", "minLength": 1 },
+    "non_negative_integer": { "type": "integer", "minimum": 0 },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "current_query", "expected_node_ids", "expected_paths", "allowed_ordering_difference", "failure_expectation"],
+      "properties": {
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "current_query": {
+          "oneOf": [
+            { "$ref": "#/$defs/non_empty_string" },
+            { "type": "object", "minProperties": 1 }
+          ]
+        },
+        "expected_node_ids": { "type": "array", "items": { "$ref": "#/$defs/non_empty_string" } },
+        "expected_paths": { "type": "array", "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/non_empty_string" } } },
+        "allowed_ordering_difference": { "$ref": "#/$defs/non_empty_string" },
+        "failure_expectation": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operation", "input", "expected_active_node_ids", "expected_absent_node_ids"],
+      "properties": {
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "operation": { "enum": ["upsert", "delete"] },
+        "input": { "type": "object", "minProperties": 1 },
+        "expected_active_node_ids": { "type": "array", "items": { "$ref": "#/$defs/non_empty_string" } },
+        "expected_absent_node_ids": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/non_empty_string" } }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hardware", "os", "architecture"],
+      "properties": {
+        "hardware": { "$ref": "#/$defs/non_empty_string" },
+        "os": { "$ref": "#/$defs/non_empty_string" },
+        "architecture": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "latency_method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build_mode", "warmup_queries", "sample_count", "percentile_method", "concurrency", "embedding_time_excluded"],
+      "properties": {
+        "build_mode": { "const": "release" },
+        "warmup_queries": { "type": "integer", "minimum": 1 },
+        "sample_count": { "type": "integer", "minimum": 100 },
+        "percentile_method": { "$ref": "#/$defs/non_empty_string" },
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "embedding_time_excluded": { "const": true }
+      }
+    },
+    "latency_budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["graph_only_p50", "graph_only_p95", "composed_retrieval_p50", "composed_retrieval_p95"],
+      "properties": {
+        "graph_only_p50": { "type": "number", "exclusiveMinimum": 0 },
+        "graph_only_p95": { "type": "number", "exclusiveMinimum": 0 },
+        "composed_retrieval_p50": { "type": "number", "exclusiveMinimum": 0 },
+        "composed_retrieval_p95": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

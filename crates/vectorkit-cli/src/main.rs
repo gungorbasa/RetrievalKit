@@ -581,6 +581,14 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
         "current_metadata_filter_payload_mb: {:.3}",
         mib(report.index_size.metadata_filter_bytes)
     );
+    println!(
+        "current_record_store_payload_mb: {:.3}",
+        mib(report.index_size.record_store_bytes)
+    );
+    println!(
+        "current_chunk_identity_payload_mb: {:.3}",
+        mib(report.index_size.chunk_identity_bytes)
+    );
     if let Some(file_sizes) = report.persisted_file_sizes {
         println!(
             "persisted_total_index_mb: {:.3}",
@@ -597,6 +605,10 @@ fn run_synthetic_bench(config: SyntheticBenchConfig) -> Result<(), CliError> {
         println!(
             "persisted_chunks_mb: {:.3}",
             mib_u64(file_sizes.chunks_bytes)
+        );
+        println!(
+            "persisted_records_mb: {:.3}",
+            mib_u64(file_sizes.records_bytes)
         );
         println!("persisted_bm25_mb: {:.3}", mib_u64(file_sizes.bm25_bytes));
         println!(

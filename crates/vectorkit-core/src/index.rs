@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -11,19 +11,25 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::bm25::{Bm25Config, Bm25Index, PersistedBm25Index};
+use crate::candidate_scope::CandidateScope;
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
-use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
+use crate::metadata::{estimated_metadata_payload_bytes, Metadata, MetadataValue};
 use crate::metadata_index::MetadataFilterIndex;
+use crate::record_store::{
+    ChunkIdentity, ChunkKey, CorpusId, FieldName, GenerationId, Record, RecordId, RecordStore,
+    RecordType, RecordValue,
+};
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
     Chunk, ChunkId, ChunkInput, CompactionReport, Document, HybridFusion, HybridFusionTrace,
     HybridHit, HybridQuery, HybridTrace, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
-    IndexSizeEstimate, KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk,
-    VectorEncoding, VectorMetric,
+    IndexSizeEstimate, KeywordHit, KeywordQuery, RecordChunkInput, SearchHit, SearchQuery,
+    SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };
 
-const FORMAT_VERSION: u32 = 3;
+const FORMAT_VERSION: u32 = 4;
+const CHECKSUM_FORMAT_VERSION: u32 = 3;
 const TRANSACTIONAL_FORMAT_VERSION: u32 = 2;
 const LEGACY_FORMAT_VERSION: u32 = 1;
 const CREATED_WITH: &str = "vectorkit";
@@ -32,6 +38,7 @@ const SAVE_LOCK_FILE: &str = ".save.lock";
 const SNAPSHOTS_DIRECTORY: &str = ".snapshots";
 const VECTORS_FILE: &str = "vectors.vec";
 const CHUNKS_FILE: &str = "chunks.bin";
+const RECORDS_FILE: &str = "records.bin";
 const BM25_FILE: &str = "bm25.bin";
 const TOMBSTONES_FILE: &str = "tombstones.bin";
 const PERSISTENCE_COMPRESSION: FileCompression = FileCompression::Zstd;
@@ -46,10 +53,15 @@ const METADATA_BOOLEAN: u8 = 3;
 const METADATA_TIMESTAMP_MILLIS: u8 = 4;
 static SNAPSHOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+fn default_corpus_id() -> CorpusId {
+    CorpusId::new("default").expect("the built-in corpus ID is valid")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SaveCheckpoint {
     VectorsWritten,
     ChunksWritten,
+    RecordsWritten,
     Bm25Written,
     TombstonesWritten,
     SnapshotSynced,
@@ -89,6 +101,11 @@ impl Drop for SaveLock {
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
+    corpus_id: CorpusId,
+    generation: GenerationId,
+    record_store: RecordStore,
+    chunk_ids_by_identity: BTreeMap<ChunkIdentity, ChunkId>,
+    chunk_identities: BTreeMap<ChunkId, ChunkIdentity>,
     dimension: usize,
     metric: VectorMetric,
     vector_encoding: VectorEncoding,
@@ -111,6 +128,11 @@ impl ExactVectorIndex {
     /// Creates an empty exact vector index with configured vector storage.
     pub fn try_with_config(config: IndexConfig) -> Result<Self> {
         Self::try_with_config_and_bm25(config, Bm25Config::default())
+    }
+
+    /// Creates an empty index in an explicit stable corpus namespace.
+    pub fn try_with_config_in_corpus(config: IndexConfig, corpus_id: CorpusId) -> Result<Self> {
+        Self::from_parts_in_corpus(config, Bm25Config::default(), corpus_id)
     }
 
     /// Creates an empty exact vector index with configured vector and BM25 settings.
@@ -144,12 +166,33 @@ impl ExactVectorIndex {
         vector_encoding: VectorEncoding,
         bm25_config: Bm25Config,
     ) -> Result<Self> {
+        Self::from_parts_in_corpus(
+            IndexConfig {
+                dimension,
+                metric,
+                vector_encoding,
+            },
+            bm25_config,
+            default_corpus_id(),
+        )
+    }
+
+    fn from_parts_in_corpus(
+        config: IndexConfig,
+        bm25_config: Bm25Config,
+        corpus_id: CorpusId,
+    ) -> Result<Self> {
         Ok(Self {
-            dimension,
-            metric,
-            vector_encoding,
+            record_store: RecordStore::new(corpus_id.clone()),
+            corpus_id,
+            generation: GenerationId::INITIAL,
+            chunk_ids_by_identity: BTreeMap::new(),
+            chunk_identities: BTreeMap::new(),
+            dimension: config.dimension,
+            metric: config.metric,
+            vector_encoding: config.vector_encoding,
             chunks: Vec::new(),
-            encoded_vectors: EncodedVectorStore::new(vector_encoding)?,
+            encoded_vectors: EncodedVectorStore::new(config.vector_encoding)?,
             chunk_offsets: Vec::new(),
             active_offsets: Vec::new(),
             metadata_filter_index: MetadataFilterIndex::default(),
@@ -172,6 +215,45 @@ impl ExactVectorIndex {
     /// Returns the stored vector representation used by this index.
     pub fn vector_encoding(&self) -> VectorEncoding {
         self.vector_encoding
+    }
+
+    /// Returns the stable namespace this in-memory generation belongs to.
+    pub fn corpus_id(&self) -> &CorpusId {
+        &self.corpus_id
+    }
+
+    /// Returns the generation used to validate external candidate scopes.
+    pub fn generation(&self) -> GenerationId {
+        self.generation
+    }
+
+    /// Returns the canonical graph-neutral records behind derived retrieval data.
+    pub fn record_store(&self) -> &RecordStore {
+        &self.record_store
+    }
+
+    pub fn record(&self, record_id: &RecordId) -> Option<&Record> {
+        self.record_store.get(record_id)
+    }
+
+    pub fn hydrate_records<'a>(&'a self, record_ids: &[RecordId]) -> Vec<Option<&'a Record>> {
+        self.record_store.hydrate(record_ids)
+    }
+
+    /// Resolves a stable external chunk identity in the active generation.
+    pub fn chunk_id_for_identity(&self, identity: &ChunkIdentity) -> Option<ChunkId> {
+        self.chunk_ids_by_identity.get(identity).copied()
+    }
+
+    pub fn chunk_identity(&self, chunk_id: ChunkId) -> Option<&ChunkIdentity> {
+        self.chunk_identities.get(&chunk_id)
+    }
+
+    /// Iterates active external/internal chunk mappings in stable identity order.
+    pub fn chunk_identities(&self) -> impl Iterator<Item = (&ChunkIdentity, ChunkId)> {
+        self.chunk_ids_by_identity
+            .iter()
+            .map(|(identity, chunk_id)| (identity, *chunk_id))
     }
 
     /// Returns the total number of stored chunks, including tombstoned chunks.
@@ -216,6 +298,17 @@ impl ExactVectorIndex {
                 + self.active_offsets.len() * std::mem::size_of::<usize>(),
             bm25_bytes: self.bm25.estimated_payload_bytes(),
             metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
+            record_store_bytes: self.record_store.estimated_payload_bytes(),
+            chunk_identity_bytes: self
+                .chunk_ids_by_identity
+                .keys()
+                .map(|identity| {
+                    identity.record_id.as_str().len()
+                        + identity.chunk_key.as_str().len()
+                        + std::mem::size_of::<ChunkId>()
+                })
+                .sum::<usize>()
+                .saturating_mul(2),
         }
     }
 
@@ -239,6 +332,7 @@ impl ExactVectorIndex {
         options: IndexPersistenceOptions,
         mut checkpoint: impl FnMut(SaveCheckpoint) -> Result<()>,
     ) -> Result<IndexFileSizeReport> {
+        self.validate_record_state()?;
         let directory = directory.as_ref();
         fs::create_dir_all(directory)
             .map_err(|error| persistence_error("create directory", directory, &error))?;
@@ -255,6 +349,7 @@ impl ExactVectorIndex {
 
         let vectors_path = snapshot_directory.join(VECTORS_FILE);
         let chunks_path = snapshot_directory.join(CHUNKS_FILE);
+        let records_path = snapshot_directory.join(RECORDS_FILE);
         let bm25_path = snapshot_directory.join(BM25_FILE);
         let tombstones_path = snapshot_directory.join(TOMBSTONES_FILE);
         let manifest_path = directory.join(MANIFEST_FILE);
@@ -270,6 +365,24 @@ impl ExactVectorIndex {
             &compress_payload(&chunks_path, &chunk_payload, PERSISTENCE_COMPRESSION)?,
         )?;
         checkpoint(SaveCheckpoint::ChunksWritten)?;
+        let record_payload = serde_json::to_vec(&PersistedRecordState {
+            record_store: self.record_store.clone(),
+            chunk_identities: self
+                .chunk_ids_by_identity
+                .iter()
+                .map(|(identity, chunk_id)| (identity.clone(), *chunk_id))
+                .collect(),
+        })
+        .map_err(|error| VectorKitError::InvalidFormat {
+            message: format!("could not encode canonical records: {error}"),
+        })?;
+        let records_uncompressed_bytes =
+            checked_usize_to_u64(record_payload.len(), "record payload byte count")?;
+        write_file(
+            &records_path,
+            &compress_payload(&records_path, &record_payload, PERSISTENCE_COMPRESSION)?,
+        )?;
+        checkpoint(SaveCheckpoint::RecordsWritten)?;
         let mut bm25_uncompressed_bytes = 0;
         if options.include_bm25 {
             let bm25_payload = self.bm25.to_persisted().to_payload_bytes()?;
@@ -295,16 +408,22 @@ impl ExactVectorIndex {
             format_version: FORMAT_VERSION,
             snapshot_id: Some(snapshot_id.clone()),
             created_with: CREATED_WITH.to_owned(),
+            corpus_id: self.corpus_id.clone(),
+            generation: self.generation,
             dimension: self.dimension,
             metric: self.metric,
             vector_count: self.chunks.len(),
             active_chunk_count: self.active_chunk_count(),
             has_bm25: options.include_bm25,
+            has_records: true,
             vector_encoding: self.vector_encoding,
             vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
             chunk_bytes: file_size(&chunks_path)?,
             chunk_uncompressed_bytes,
             chunk_compression: PERSISTENCE_COMPRESSION,
+            records_bytes: file_size(&records_path)?,
+            records_uncompressed_bytes,
+            records_compression: PERSISTENCE_COMPRESSION,
             bm25_bytes: if options.include_bm25 {
                 file_size(&bm25_path)?
             } else {
@@ -321,6 +440,7 @@ impl ExactVectorIndex {
                 algorithm: ChecksumAlgorithm::Sha256,
                 vectors: sha256_file(&vectors_path)?,
                 chunks: sha256_file(&chunks_path)?,
+                records: Some(sha256_file(&records_path)?),
                 bm25: if options.include_bm25 {
                     Some(sha256_file(&bm25_path)?)
                 } else {
@@ -364,6 +484,7 @@ impl ExactVectorIndex {
         let data_directory = manifest.data_directory(directory)?;
         let vectors_path = data_directory.join(VECTORS_FILE);
         let chunks_path = data_directory.join(CHUNKS_FILE);
+        let records_path = data_directory.join(RECORDS_FILE);
         let bm25_path = data_directory.join(BM25_FILE);
         let tombstones_path = data_directory.join(TOMBSTONES_FILE);
 
@@ -440,19 +561,63 @@ impl ExactVectorIndex {
         } else {
             None
         };
+        let persisted_records = if manifest.has_records {
+            let record_payload = read_payload_file(
+                &records_path,
+                manifest.records_compression,
+                manifest.records_uncompressed_bytes,
+            )?;
+            Some(
+                serde_json::from_slice::<PersistedRecordState>(&record_payload).map_err(
+                    |error| VectorKitError::InvalidFormat {
+                        message: format!("could not decode canonical records: {error}"),
+                    },
+                )?,
+            )
+        } else {
+            None
+        };
 
-        let mut index = Self::from_parts(
-            manifest.dimension,
-            manifest.metric,
-            manifest.vector_encoding,
+        let mut index = Self::from_parts_in_corpus(
+            IndexConfig {
+                dimension: manifest.dimension,
+                metric: manifest.metric,
+                vector_encoding: manifest.vector_encoding,
+            },
             Bm25Config::default(),
+            manifest.corpus_id.clone(),
         )?;
+        index.generation = manifest.generation;
         index.encoded_vectors = encoded_vectors;
         index.chunks = chunks;
+        if let Some(persisted_records) = persisted_records {
+            index.record_store = persisted_records.record_store;
+            for (identity, chunk_id) in persisted_records.chunk_identities {
+                if index
+                    .chunk_ids_by_identity
+                    .insert(identity.clone(), chunk_id)
+                    .is_some()
+                {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!(
+                            "canonical record payload repeats chunk identity {}/{}",
+                            identity.record_id.as_str(),
+                            identity.chunk_key.as_str()
+                        ),
+                    });
+                }
+            }
+            index.chunk_identities = index
+                .chunk_ids_by_identity
+                .iter()
+                .map(|(identity, chunk_id)| (*chunk_id, identity.clone()))
+                .collect();
+        }
         if let Some(persisted_bm25) = persisted_bm25 {
             index.bm25 = Bm25Index::from_persisted(Bm25Config::default(), persisted_bm25)?;
         }
         index.rebuild_derived_state_from_loaded_chunks();
+        index.validate_record_state()?;
 
         if index.active_chunk_count() != manifest.active_chunk_count {
             return Err(VectorKitError::InvalidFormat {
@@ -485,6 +650,7 @@ impl ExactVectorIndex {
             manifest_bytes: file_size(&directory.join(MANIFEST_FILE))?,
             vectors_bytes: file_size(&data_directory.join(VECTORS_FILE))?,
             chunks_bytes: file_size(&data_directory.join(CHUNKS_FILE))?,
+            records_bytes: file_size_if_exists(&data_directory.join(RECORDS_FILE))?,
             bm25_bytes: file_size_if_exists(&data_directory.join(BM25_FILE))?,
             tombstones_bytes: file_size(&data_directory.join(TOMBSTONES_FILE))?,
         })
@@ -521,6 +687,7 @@ impl ExactVectorIndex {
                 .insert(offset, &stored_chunk.metadata);
         }
         self.chunks.push(stored_chunk);
+        self.generation = self.generation.next();
         Ok(())
     }
 
@@ -534,22 +701,73 @@ impl ExactVectorIndex {
         document: Document,
         chunk_inputs: Vec<ChunkInput>,
     ) -> Result<Vec<ChunkId>> {
+        let record_id = RecordId::new(document.id.clone())?;
+        let fields = document
+            .metadata
+            .iter()
+            .map(|(field, value)| {
+                Ok((
+                    FieldName::new(field.clone())?,
+                    record_value_from_metadata(value),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        let record = Record {
+            id: record_id,
+            record_type: RecordType::new("Document")?,
+            fields,
+            content: Some(document.text),
+        };
+        let record_chunks = chunk_inputs
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, chunk)| {
+                Ok(RecordChunkInput {
+                    key: ChunkKey::new(format!("ordinal-{ordinal}"))?,
+                    text: chunk.text,
+                    embedding: chunk.embedding,
+                    metadata: chunk.metadata,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.upsert_record(record, document.metadata, record_chunks)
+    }
+
+    /// Adds or replaces one canonical record and all of its derived chunks.
+    pub fn upsert_record(
+        &mut self,
+        record: Record,
+        projected_metadata: Metadata,
+        chunk_inputs: Vec<RecordChunkInput>,
+    ) -> Result<Vec<ChunkId>> {
+        record.validate()?;
         for chunk in &chunk_inputs {
             self.validate_dimension(chunk.embedding.len())?;
+        }
+        let mut keys = BTreeSet::new();
+        for chunk in &chunk_inputs {
+            if !keys.insert(chunk.key.clone()) {
+                return Err(VectorKitError::InvalidIdentity {
+                    kind: "ChunkKey",
+                    value: chunk.key.as_str().to_owned(),
+                    message: "must be unique within one record generation".to_owned(),
+                });
+            }
         }
         self.encoded_vectors
             .reserve_rows(chunk_inputs.len(), self.dimension);
 
+        let document_id = record.id.as_str().to_owned();
         let version = self
             .document_versions
-            .get(&document.id)
+            .get(&document_id)
             .copied()
             .unwrap_or(0)
             + 1;
 
         let mut deactivated_offsets = Vec::new();
         for (offset, chunk) in self.chunks.iter_mut().enumerate() {
-            if chunk.document_id == document.id {
+            if chunk.document_id == document_id {
                 if !chunk.deleted {
                     self.metadata_filter_index.remove(offset, &chunk.metadata);
                     deactivated_offsets.push(offset);
@@ -559,6 +777,7 @@ impl ExactVectorIndex {
             }
         }
         self.remove_active_offsets(&deactivated_offsets);
+        self.remove_chunk_identities_for_record(&record.id);
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
         for chunk_input in chunk_inputs {
@@ -570,19 +789,25 @@ impl ExactVectorIndex {
             self.push_embedding(&chunk_input.embedding);
             let stored_chunk = StoredChunk {
                 chunk_id,
-                document_id: document.id.clone(),
+                document_id: document_id.clone(),
                 text: chunk_input.text,
-                metadata: merge_metadata(&document.metadata, chunk_input.metadata),
+                metadata: merge_metadata(&projected_metadata, chunk_input.metadata),
                 deleted: false,
                 version,
             };
+            let identity = ChunkIdentity::new(record.id.clone(), chunk_input.key);
+            self.chunk_ids_by_identity
+                .insert(identity.clone(), chunk_id);
+            self.chunk_identities.insert(chunk_id, identity);
             self.active_offsets.push(offset);
             self.metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
             self.chunks.push(stored_chunk);
         }
 
-        self.document_versions.insert(document.id, version);
+        self.document_versions.insert(document_id, version);
+        self.record_store.upsert(record)?;
+        self.generation = self.generation.next();
 
         Ok(chunk_ids)
     }
@@ -592,6 +817,15 @@ impl ExactVectorIndex {
     /// Returns the number of chunks newly marked deleted. Repeated deletes are
     /// idempotent and return zero once no active chunks remain.
     pub fn delete_document(&mut self, document_id: &str) -> usize {
+        let record_id = RecordId::new(document_id.to_owned()).ok();
+        self.delete_record_by_id(document_id, record_id.as_ref())
+    }
+
+    pub fn delete_record(&mut self, record_id: &RecordId) -> usize {
+        self.delete_record_by_id(record_id.as_str(), Some(record_id))
+    }
+
+    fn delete_record_by_id(&mut self, document_id: &str, record_id: Option<&RecordId>) -> usize {
         let mut deleted_count = 0;
         let mut deactivated_offsets = Vec::new();
         for (offset, chunk) in self.chunks.iter_mut().enumerate() {
@@ -604,6 +838,13 @@ impl ExactVectorIndex {
             }
         }
         self.remove_active_offsets(&deactivated_offsets);
+        let removed_record = record_id.and_then(|id| self.record_store.delete(id));
+        if let Some(record_id) = record_id {
+            self.remove_chunk_identities_for_record(record_id);
+        }
+        if deleted_count > 0 || removed_record.is_some() {
+            self.generation = self.generation.next();
+        }
         deleted_count
     }
 
@@ -670,6 +911,7 @@ impl ExactVectorIndex {
         self.active_offsets = new_active_offsets;
         self.metadata_filter_index = new_metadata_filter_index;
         self.bm25 = new_bm25;
+        self.generation = self.generation.next();
 
         let chunks_after = self.chunks.len();
         let estimated_bytes_after = self.size_estimate().total_bytes();
@@ -692,9 +934,116 @@ impl ExactVectorIndex {
         self.chunks.get(*offset)
     }
 
+    /// Hydrates active chunks in one call while preserving input order.
+    ///
+    /// Missing, deleted, and superseded IDs produce `None`. Duplicate input IDs
+    /// produce duplicate references in the corresponding positions.
+    pub fn hydrate_chunks<'a>(&'a self, chunk_ids: &[ChunkId]) -> Vec<Option<&'a StoredChunk>> {
+        chunk_ids
+            .iter()
+            .map(|chunk_id| self.chunk(*chunk_id).filter(|chunk| !chunk.deleted))
+            .collect()
+    }
+
+    /// Validates and binds unranked internal IDs to the active corpus generation.
+    pub fn candidate_scope(
+        &self,
+        chunk_ids: impl IntoIterator<Item = ChunkId>,
+    ) -> Result<CandidateScope> {
+        let mut chunk_ids = chunk_ids.into_iter().collect::<Vec<_>>();
+        chunk_ids.sort_unstable();
+        chunk_ids.dedup();
+        for chunk_id in &chunk_ids {
+            let Some(chunk) = self.chunk(*chunk_id) else {
+                return Err(VectorKitError::InvalidCandidateScope {
+                    chunk_id: *chunk_id,
+                    message: "the ID is unavailable in this generation".to_owned(),
+                });
+            };
+            if chunk.deleted {
+                return Err(VectorKitError::InvalidCandidateScope {
+                    chunk_id: *chunk_id,
+                    message: "the ID is deleted or superseded in this generation".to_owned(),
+                });
+            }
+        }
+        Ok(CandidateScope::from_sorted_ids(
+            self.corpus_id.clone(),
+            self.generation,
+            chunk_ids,
+            self.chunk_offsets.len(),
+        ))
+    }
+
+    /// Resolves stable external identities and binds them to this generation.
+    pub fn candidate_scope_for_identities(
+        &self,
+        identities: impl IntoIterator<Item = ChunkIdentity>,
+    ) -> Result<CandidateScope> {
+        let chunk_ids = identities
+            .into_iter()
+            .map(|identity| {
+                self.chunk_id_for_identity(&identity).ok_or_else(|| {
+                    VectorKitError::InvalidIdentity {
+                        kind: "ChunkIdentity",
+                        value: format!(
+                            "{}/{}",
+                            identity.record_id.as_str(),
+                            identity.chunk_key.as_str()
+                        ),
+                        message: "is unavailable in the active generation".to_owned(),
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.candidate_scope(chunk_ids)
+    }
+
     /// Performs exact vector search over active chunks.
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
         self.search_vector_candidates(&query.embedding, query.top_k, query.filter.as_ref())
+    }
+
+    /// Performs exact vector ranking only inside a validated candidate scope.
+    pub fn search_in_candidates(
+        &self,
+        query: &SearchQuery,
+        scope: &CandidateScope,
+    ) -> Result<Vec<SearchHit>> {
+        self.search_vector_in_candidates(
+            &query.embedding,
+            query.top_k,
+            query.filter.as_ref(),
+            scope,
+        )
+    }
+
+    fn search_vector_in_candidates(
+        &self,
+        embedding: &[f32],
+        top_k: usize,
+        filter: Option<&Filter>,
+        scope: &CandidateScope,
+    ) -> Result<Vec<SearchHit>> {
+        self.validate_candidate_scope(scope)?;
+        self.validate_dimension(embedding.len())?;
+        if top_k == 0 || scope.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let encoded_query = self.encode_query_embedding(embedding)?;
+        let candidate_offsets = Some(self.scoped_offsets(scope, filter)?);
+        if let Some(hits) =
+            self.search_i8_offsets(top_k, &encoded_query, filter, &candidate_offsets)?
+        {
+            return Ok(hits);
+        }
+
+        let mut candidates = ScoredCandidateTopK::new(top_k);
+        for offset in candidate_offsets.into_iter().flatten() {
+            self.score_search_candidate(offset, filter, &encoded_query, &mut candidates)?;
+        }
+        Ok(self.materialize_search_hits(&candidates.into_sorted_vec()))
     }
 
     fn search_vector_candidates(
@@ -828,6 +1177,53 @@ impl ExactVectorIndex {
     /// Performs BM25 keyword search over active chunks.
     pub fn keyword_search(&self, query: &KeywordQuery) -> Result<Vec<KeywordHit>> {
         self.keyword_search_candidates(&query.text, query.top_k, query.filter.as_ref())
+    }
+
+    /// Performs BM25 ranking only inside a validated candidate scope.
+    pub fn keyword_search_in_candidates(
+        &self,
+        query: &KeywordQuery,
+        scope: &CandidateScope,
+    ) -> Result<Vec<KeywordHit>> {
+        self.keyword_search_text_in_candidates(
+            &query.text,
+            query.top_k,
+            query.filter.as_ref(),
+            scope,
+        )
+    }
+
+    fn keyword_search_text_in_candidates(
+        &self,
+        text: &str,
+        top_k: usize,
+        filter: Option<&Filter>,
+        scope: &CandidateScope,
+    ) -> Result<Vec<KeywordHit>> {
+        self.validate_candidate_scope(scope)?;
+        if top_k == 0 || scope.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let effective_scope = self.scope_intersect_filter(scope, filter)?;
+        let bm25_hits = self
+            .bm25
+            .search_top_k_in_scope(text, top_k, &effective_scope);
+        Ok(bm25_hits
+            .into_iter()
+            .filter_map(|hit| {
+                let chunk = self.chunk(hit.chunk_id)?;
+                if chunk.deleted {
+                    return None;
+                }
+                Some(KeywordHit {
+                    chunk_id: chunk.chunk_id,
+                    document_id: chunk.document_id.clone(),
+                    score: hit.score,
+                    matched_terms: hit.matched_terms,
+                })
+            })
+            .collect())
     }
 
     fn keyword_search_candidates(
@@ -981,6 +1377,156 @@ impl ExactVectorIndex {
             .collect())
     }
 
+    /// Performs exact vector and BM25 fusion only inside one candidate scope.
+    pub fn hybrid_search_in_candidates(
+        &self,
+        query: &HybridQuery,
+        scope: &CandidateScope,
+    ) -> Result<Vec<HybridHit>> {
+        self.validate_candidate_scope(scope)?;
+        self.validate_dimension(query.embedding.len())?;
+        if query.top_k == 0 || scope.is_empty() {
+            return Ok(Vec::new());
+        }
+        validate_hybrid_fusion(query.fusion)?;
+
+        let vector_hits = self.search_vector_in_candidates(
+            &query.embedding,
+            query.vector_top_k,
+            query.filter.as_ref(),
+            scope,
+        )?;
+        let keyword_hits = self.keyword_search_text_in_candidates(
+            &query.text,
+            query.keyword_top_k,
+            query.filter.as_ref(),
+            scope,
+        )?;
+
+        let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
+        for (rank_index, hit) in vector_hits.iter().enumerate() {
+            let candidate = candidates
+                .entry(hit.chunk_id)
+                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+            candidate.vector_score = Some(hit.score);
+            candidate.vector_rank = Some(rank_index + 1);
+        }
+        for (rank_index, hit) in keyword_hits.iter().enumerate() {
+            let candidate = candidates
+                .entry(hit.chunk_id)
+                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+            candidate.keyword_score = Some(hit.score);
+            candidate.keyword_rank = Some(rank_index + 1);
+            candidate.matched_terms.clone_from(&hit.matched_terms);
+        }
+
+        let mut candidates = candidates.into_values().collect::<Vec<_>>();
+        score_hybrid_candidates(&mut candidates, query.fusion)?;
+        sort_hybrid_candidates(&mut candidates);
+        Ok(candidates
+            .into_iter()
+            .take(query.top_k)
+            .filter_map(|candidate| {
+                let chunk = self.chunk(candidate.chunk_id)?;
+                if chunk.deleted {
+                    return None;
+                }
+                Some(HybridHit {
+                    chunk_id: candidate.chunk_id,
+                    document_id: candidate.document_id,
+                    score: candidate.hybrid_score,
+                    vector_score: candidate.vector_score,
+                    keyword_score: candidate.keyword_score,
+                    trace: HybridTrace {
+                        vector_rank: candidate.vector_rank,
+                        keyword_rank: candidate.keyword_rank,
+                        normalized_vector_score: candidate.normalized_vector_score,
+                        normalized_keyword_score: candidate.normalized_keyword_score,
+                        matched_terms: candidate.matched_terms,
+                        fusion: HybridFusionTrace::from(query.fusion),
+                        filter_matched: true,
+                    },
+                })
+            })
+            .collect())
+    }
+
+    fn validate_candidate_scope(&self, scope: &CandidateScope) -> Result<()> {
+        if scope.corpus_id() == &self.corpus_id && scope.generation() == self.generation {
+            return Ok(());
+        }
+        Err(VectorKitError::StaleGeneration {
+            expected_corpus: self.corpus_id.as_str().to_owned(),
+            expected_generation: self.generation.get(),
+            actual_corpus: scope.corpus_id().as_str().to_owned(),
+            actual_generation: scope.generation().get(),
+        })
+    }
+
+    fn scoped_offsets(
+        &self,
+        scope: &CandidateScope,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<usize>> {
+        let mut offsets = if scope.is_dense() {
+            self.active_offsets
+                .iter()
+                .copied()
+                .filter(|offset| {
+                    self.chunks
+                        .get(*offset)
+                        .is_some_and(|chunk| scope.contains(chunk.chunk_id))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            scope
+                .ids()
+                .filter_map(|chunk_id| {
+                    self.chunk_offsets
+                        .get(usize::try_from(chunk_id).ok()?)?
+                        .as_ref()
+                        .copied()
+                })
+                .collect::<Vec<_>>()
+        };
+        offsets.sort_unstable();
+
+        if let Some(filter) = filter {
+            if let Some(mut filter_offsets) =
+                self.metadata_filter_index.candidate_offsets(filter)?
+            {
+                filter_offsets.sort_unstable();
+                offsets = intersect_sorted_offsets(&offsets, &filter_offsets);
+            }
+        }
+        Ok(offsets)
+    }
+
+    fn scope_intersect_filter(
+        &self,
+        scope: &CandidateScope,
+        filter: Option<&Filter>,
+    ) -> Result<CandidateScope> {
+        let Some(filter) = filter else {
+            return Ok(scope.clone());
+        };
+        let mut ids = Vec::with_capacity(scope.len());
+        for chunk_id in scope.ids() {
+            let Some(chunk) = self.chunk(chunk_id) else {
+                continue;
+            };
+            if !chunk.deleted && filter.matches(&chunk.metadata)? {
+                ids.push(chunk_id);
+            }
+        }
+        Ok(CandidateScope::from_sorted_ids(
+            self.corpus_id.clone(),
+            self.generation,
+            ids,
+            self.chunk_offsets.len(),
+        ))
+    }
+
     fn validate_dimension(&self, actual: usize) -> Result<()> {
         if actual == self.dimension {
             Ok(())
@@ -1016,6 +1562,13 @@ impl ExactVectorIndex {
 
         self.active_offsets
             .retain(|active_offset| !offsets.contains(active_offset));
+    }
+
+    fn remove_chunk_identities_for_record(&mut self, record_id: &RecordId) {
+        self.chunk_ids_by_identity
+            .retain(|identity, _| &identity.record_id != record_id);
+        self.chunk_identities
+            .retain(|_, identity| &identity.record_id != record_id);
     }
 
     fn push_embedding(&mut self, embedding: &[f32]) {
@@ -1062,6 +1615,65 @@ impl ExactVectorIndex {
                 self.metadata_filter_index.insert(offset, &chunk.metadata);
             }
         }
+    }
+
+    fn validate_record_state(&self) -> Result<()> {
+        if self.record_store.corpus_id() != &self.corpus_id {
+            return Err(VectorKitError::InvalidFormat {
+                message: "canonical record corpus does not match the index corpus".to_owned(),
+            });
+        }
+        self.record_store.validate()?;
+        let mut seen_chunk_ids = BTreeSet::new();
+        for (identity, chunk_id) in &self.chunk_ids_by_identity {
+            if !seen_chunk_ids.insert(*chunk_id) {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "multiple external chunk identities resolve to internal chunk ID {chunk_id}"
+                    ),
+                });
+            }
+            if self.record_store.get(&identity.record_id).is_none() {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "chunk identity {}/{} references a missing canonical record",
+                        identity.record_id.as_str(),
+                        identity.chunk_key.as_str()
+                    ),
+                });
+            }
+            let Some(chunk) = self.chunk(*chunk_id) else {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "chunk identity {}/{} references unavailable internal chunk ID {chunk_id}",
+                        identity.record_id.as_str(),
+                        identity.chunk_key.as_str()
+                    ),
+                });
+            };
+            if chunk.deleted || chunk.document_id != identity.record_id.as_str() {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "chunk identity {}/{} does not resolve to its active canonical record",
+                        identity.record_id.as_str(),
+                        identity.chunk_key.as_str()
+                    ),
+                });
+            }
+            if self.chunk_identities.get(chunk_id) != Some(identity) {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "reverse identity mapping is missing for internal chunk ID {chunk_id}"
+                    ),
+                });
+            }
+        }
+        if self.chunk_identities.len() != self.chunk_ids_by_identity.len() {
+            return Err(VectorKitError::InvalidFormat {
+                message: "forward and reverse chunk identity mapping sizes differ".to_owned(),
+            });
+        }
+        Ok(())
     }
 
     fn score_search_candidate(
@@ -1125,11 +1737,17 @@ struct PersistedManifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     snapshot_id: Option<String>,
     created_with: String,
+    #[serde(default = "default_corpus_id")]
+    corpus_id: CorpusId,
+    #[serde(default)]
+    generation: GenerationId,
     dimension: usize,
     metric: VectorMetric,
     vector_count: usize,
     active_chunk_count: usize,
     has_bm25: bool,
+    #[serde(default)]
+    has_records: bool,
     vector_encoding: VectorEncoding,
     vector_bytes: usize,
     chunk_bytes: u64,
@@ -1137,6 +1755,12 @@ struct PersistedManifest {
     chunk_uncompressed_bytes: u64,
     #[serde(default)]
     chunk_compression: FileCompression,
+    #[serde(default)]
+    records_bytes: u64,
+    #[serde(default)]
+    records_uncompressed_bytes: u64,
+    #[serde(default)]
+    records_compression: FileCompression,
     bm25_bytes: u64,
     #[serde(default)]
     bm25_uncompressed_bytes: u64,
@@ -1154,8 +1778,16 @@ struct PersistedChecksums {
     vectors: String,
     chunks: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    records: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     bm25: Option<String>,
     tombstones: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedRecordState {
+    record_store: RecordStore,
+    chunk_identities: Vec<(ChunkIdentity, ChunkId)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1176,7 +1808,10 @@ impl PersistedManifest {
     fn validate(&self) -> Result<()> {
         if !matches!(
             self.format_version,
-            LEGACY_FORMAT_VERSION | TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION
+            LEGACY_FORMAT_VERSION
+                | TRANSACTIONAL_FORMAT_VERSION
+                | CHECKSUM_FORMAT_VERSION
+                | FORMAT_VERSION
         ) {
             return Err(VectorKitError::InvalidFormat {
                 message: format!("unsupported format version {}", self.format_version),
@@ -1185,14 +1820,16 @@ impl PersistedManifest {
 
         match (self.format_version, &self.snapshot_id) {
             (LEGACY_FORMAT_VERSION, None) => {}
-            (TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION, Some(snapshot_id))
-                if valid_snapshot_id(snapshot_id) => {}
+            (
+                TRANSACTIONAL_FORMAT_VERSION | CHECKSUM_FORMAT_VERSION | FORMAT_VERSION,
+                Some(snapshot_id),
+            ) if valid_snapshot_id(snapshot_id) => {}
             (LEGACY_FORMAT_VERSION, Some(_)) => {
                 return Err(VectorKitError::InvalidFormat {
                     message: "legacy format must not reference a snapshot generation".to_owned(),
                 });
             }
-            (TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION, _) => {
+            (TRANSACTIONAL_FORMAT_VERSION | CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, _) => {
                 return Err(VectorKitError::InvalidFormat {
                     message: format!(
                         "format version {} requires a safe snapshot_id",
@@ -1229,17 +1866,30 @@ impl PersistedManifest {
             });
         }
 
+        if !self.has_records
+            && (self.records_bytes != 0
+                || self.records_uncompressed_bytes != 0
+                || self.records_compression != FileCompression::None)
+        {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot report record payload data when has_records is false"
+                    .to_owned(),
+            });
+        }
+
         match (self.format_version, &self.checksums) {
-            (FORMAT_VERSION, Some(checksums)) => checksums.validate(self.has_bm25)?,
-            (FORMAT_VERSION, None) => {
+            (CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, Some(checksums)) => {
+                checksums.validate(self.has_bm25, self.has_records)?
+            }
+            (CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, None) => {
                 return Err(VectorKitError::InvalidFormat {
-                    message: "format version 3 requires checksums".to_owned(),
+                    message: format!("format version {} requires checksums", self.format_version),
                 });
             }
             (LEGACY_FORMAT_VERSION | TRANSACTIONAL_FORMAT_VERSION, None) => {}
             (_, Some(_)) => {
                 return Err(VectorKitError::InvalidFormat {
-                    message: "checksums require format version 3".to_owned(),
+                    message: "checksums require format version 3 or newer".to_owned(),
                 });
             }
             _ => unreachable!("format version was checked above"),
@@ -1262,10 +1912,11 @@ impl PersistedManifest {
 }
 
 impl PersistedChecksums {
-    fn validate(&self, has_bm25: bool) -> Result<()> {
+    fn validate(&self, has_bm25: bool, has_records: bool) -> Result<()> {
         for (name, checksum) in [
             (VECTORS_FILE, Some(self.vectors.as_str())),
             (CHUNKS_FILE, Some(self.chunks.as_str())),
+            (RECORDS_FILE, self.records.as_deref()),
             (BM25_FILE, self.bm25.as_deref()),
             (TOMBSTONES_FILE, Some(self.tombstones.as_str())),
         ] {
@@ -1279,6 +1930,7 @@ impl PersistedChecksums {
                     });
                 }
                 None if name == BM25_FILE && !has_bm25 => {}
+                None if name == RECORDS_FILE && !has_records => {}
                 None => {
                     return Err(VectorKitError::InvalidFormat {
                         message: format!("manifest is missing checksum for {name}"),
@@ -1289,6 +1941,12 @@ impl PersistedChecksums {
         if !has_bm25 && self.bm25.is_some() {
             return Err(VectorKitError::InvalidFormat {
                 message: "manifest cannot include a bm25 checksum when has_bm25 is false"
+                    .to_owned(),
+            });
+        }
+        if !has_records && self.records.is_some() {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot include a records checksum when has_records is false"
                     .to_owned(),
             });
         }
@@ -1340,6 +1998,12 @@ fn validate_snapshot_file_sizes(
         });
     }
     validate_file_size(&snapshot_directory.join(CHUNKS_FILE), manifest.chunk_bytes)?;
+    if manifest.has_records {
+        validate_file_size(
+            &snapshot_directory.join(RECORDS_FILE),
+            manifest.records_bytes,
+        )?;
+    }
     validate_file_size(
         &snapshot_directory.join(TOMBSTONES_FILE),
         manifest.tombstone_bytes,
@@ -1359,6 +2023,9 @@ fn validate_snapshot_checksums(
     };
     validate_file_checksum(&snapshot_directory.join(VECTORS_FILE), &checksums.vectors)?;
     validate_file_checksum(&snapshot_directory.join(CHUNKS_FILE), &checksums.chunks)?;
+    if let Some(expected) = &checksums.records {
+        validate_file_checksum(&snapshot_directory.join(RECORDS_FILE), expected)?;
+    }
     validate_file_checksum(
         &snapshot_directory.join(TOMBSTONES_FILE),
         &checksums.tombstones,
@@ -1411,7 +2078,13 @@ fn cleanup_unreferenced_snapshots(snapshots_directory: &Path, active_snapshot_id
 }
 
 fn cleanup_legacy_files(directory: &Path) {
-    for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+    for file_name in [
+        VECTORS_FILE,
+        CHUNKS_FILE,
+        RECORDS_FILE,
+        BM25_FILE,
+        TOMBSTONES_FILE,
+    ] {
         let _ = fs::remove_file(directory.join(file_name));
     }
 }
@@ -1983,10 +2656,38 @@ fn matches_filter(filter: Option<&Filter>, chunk: &StoredChunk) -> Result<bool> 
     }
 }
 
+fn intersect_sorted_offsets(left: &[usize], right: &[usize]) -> Vec<usize> {
+    let mut intersection = Vec::with_capacity(left.len().min(right.len()));
+    let (mut left_index, mut right_index) = (0, 0);
+    while left_index < left.len() && right_index < right.len() {
+        match left[left_index].cmp(&right[right_index]) {
+            Ordering::Less => left_index += 1,
+            Ordering::Greater => right_index += 1,
+            Ordering::Equal => {
+                intersection.push(left[left_index]);
+                left_index += 1;
+                right_index += 1;
+            }
+        }
+    }
+    intersection
+}
+
 fn merge_metadata(document_metadata: &Metadata, chunk_metadata: Metadata) -> Metadata {
     let mut metadata = document_metadata.clone();
     metadata.extend(chunk_metadata);
     metadata
+}
+
+fn record_value_from_metadata(value: &MetadataValue) -> RecordValue {
+    match value {
+        MetadataValue::String(value) => RecordValue::String(value.clone()),
+        MetadataValue::Integer(value) | MetadataValue::TimestampMillis(value) => {
+            RecordValue::I64(*value)
+        }
+        MetadataValue::Float(value) => RecordValue::F64(*value),
+        MetadataValue::Boolean(value) => RecordValue::Bool(*value),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2771,7 +3472,13 @@ mod tests {
 
     #[test]
     fn validation_rejects_same_size_corruption_in_every_snapshot_payload() {
-        for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+        for file_name in [
+            VECTORS_FILE,
+            CHUNKS_FILE,
+            RECORDS_FILE,
+            BM25_FILE,
+            TOMBSTONES_FILE,
+        ] {
             let directory = temp_index_dir(&format!("checksum-{file_name}"));
             let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
             index
@@ -2803,10 +3510,12 @@ mod tests {
         for (file_name, append) in [
             (VECTORS_FILE, false),
             (CHUNKS_FILE, false),
+            (RECORDS_FILE, false),
             (BM25_FILE, false),
             (TOMBSTONES_FILE, false),
             (VECTORS_FILE, true),
             (CHUNKS_FILE, true),
+            (RECORDS_FILE, true),
             (BM25_FILE, true),
             (TOMBSTONES_FILE, true),
         ] {
@@ -2959,6 +3668,7 @@ mod tests {
         for failure_checkpoint in [
             SaveCheckpoint::VectorsWritten,
             SaveCheckpoint::ChunksWritten,
+            SaveCheckpoint::RecordsWritten,
             SaveCheckpoint::Bm25Written,
             SaveCheckpoint::TombstonesWritten,
             SaveCheckpoint::SnapshotSynced,
@@ -3054,7 +3764,13 @@ mod tests {
         let manifest_path = directory.join(MANIFEST_FILE);
         let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
         let snapshot_directory = manifest.data_directory(&directory).unwrap();
-        for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+        for file_name in [
+            VECTORS_FILE,
+            CHUNKS_FILE,
+            RECORDS_FILE,
+            BM25_FILE,
+            TOMBSTONES_FILE,
+        ] {
             fs::rename(
                 snapshot_directory.join(file_name),
                 directory.join(file_name),

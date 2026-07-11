@@ -1,5 +1,6 @@
 use crate::filter::Filter;
 use crate::metadata::Metadata;
+use crate::record_store::ChunkKey;
 use serde::{Deserialize, Serialize};
 
 pub type ChunkId = u64;
@@ -51,6 +52,15 @@ pub struct StoredChunk {
 /// Caller-provided chunk data used when indexing or replacing a document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChunkInput {
+    pub text: String,
+    pub embedding: Vec<f32>,
+    pub metadata: Metadata,
+}
+
+/// Record-first retrievable unit with a stable caller/chunker key.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordChunkInput {
+    pub key: ChunkKey,
     pub text: String,
     pub embedding: Vec<f32>,
     pub metadata: Metadata,
@@ -343,6 +353,8 @@ pub struct IndexSizeEstimate {
     pub chunk_offset_bytes: usize,
     pub bm25_bytes: usize,
     pub metadata_filter_bytes: usize,
+    pub record_store_bytes: usize,
+    pub chunk_identity_bytes: usize,
 }
 
 impl IndexSizeEstimate {
@@ -357,7 +369,11 @@ impl IndexSizeEstimate {
     }
 
     pub fn auxiliary_bytes(&self) -> usize {
-        self.chunk_bytes() + self.bm25_bytes + self.metadata_filter_bytes
+        self.chunk_bytes()
+            + self.bm25_bytes
+            + self.metadata_filter_bytes
+            + self.record_store_bytes
+            + self.chunk_identity_bytes
     }
 
     pub fn total_bytes(&self) -> usize {
@@ -381,6 +397,7 @@ pub struct IndexFileSizeReport {
     pub manifest_bytes: u64,
     pub vectors_bytes: u64,
     pub chunks_bytes: u64,
+    pub records_bytes: u64,
     pub bm25_bytes: u64,
     pub tombstones_bytes: u64,
 }
@@ -390,6 +407,7 @@ impl IndexFileSizeReport {
         self.manifest_bytes
             + self.vectors_bytes
             + self.chunks_bytes
+            + self.records_bytes
             + self.bm25_bytes
             + self.tombstones_bytes
     }

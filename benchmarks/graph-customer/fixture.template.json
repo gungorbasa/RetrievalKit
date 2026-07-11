@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": null,
+  "status": "awaiting_customer_data",
+  "sanitization": {
+    "attested_by": null,
+    "method": null,
+    "removed_or_transformed": []
+  },
+  "source": {
+    "moss_record_shape": null,
+    "records": [],
+    "graph_construction_schema": null,
+    "graph_sidecar_examples": [],
+    "graph_engine": {
+      "name": null,
+      "version": null
+    }
+  },
+  "queries": [],
+  "mutations": {
+    "updates": [],
+    "deletions": []
+  },
+  "workload": {
+    "record_count": null,
+    "chunk_count": null,
+    "node_count": null,
+    "edge_count": null,
+    "maximum_degree": null,
+    "updates_per_day": null
+  },
+  "targets": {
+    "devices": [],
+    "latency_method": {
+      "build_mode": null,
+      "warmup_queries": null,
+      "sample_count": null,
+      "percentile_method": null,
+      "concurrency": null,
+      "embedding_time_excluded": null
+    },
+    "latency_budgets_ms": {
+      "graph_only_p50": null,
+      "graph_only_p95": null,
+      "composed_retrieval_p50": null,
+      "composed_retrieval_p95": null
+    },
+    "maximum_rebuild_ms": null,
+    "maximum_freshness_ms": null
+  },
+  "equivalence": {
+    "identity_rules": null,
+    "path_rules": null,
+    "ordering_tolerance": null,
+    "ranking_or_recall_threshold": null,
+    "freshness_rule": null,
+    "failure_expectations": []
+  }
+}

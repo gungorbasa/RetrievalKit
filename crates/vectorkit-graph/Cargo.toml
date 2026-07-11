@@ -1,0 +1,17 @@
+[package]
+name = "vectorkit-graph"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+vectorkit-core = { path = "../vectorkit-core" }
+
+[dev-dependencies]
+serde_json = "1.0.145"
+
+[[bench]]
+name = "bounded_traversal"
+harness = false

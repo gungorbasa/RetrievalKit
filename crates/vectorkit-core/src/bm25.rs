@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::candidate_scope::CandidateScope;
 use crate::error::{Result, VectorKitError};
 use crate::types::ChunkId;
 
@@ -214,6 +215,75 @@ impl Bm25Index {
         }
 
         self.search_with_limit(query, Some(top_k), Some(allowed_chunks))
+    }
+
+    pub fn search_top_k_in_scope(
+        &self,
+        query: &str,
+        top_k: usize,
+        scope: &CandidateScope,
+    ) -> Vec<Bm25Hit> {
+        if top_k == 0 || scope.is_empty() {
+            return Vec::new();
+        }
+
+        let query_terms = tokenize(query, &self.config.stop_words)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        if query_terms.is_empty() || self.active_chunks.is_empty() {
+            return Vec::new();
+        }
+        let active_count = self.active_chunks.len();
+        let average_length = self.average_active_chunk_length();
+        if average_length == 0.0 {
+            return Vec::new();
+        }
+
+        let mut scores: HashMap<ChunkId, f32> = HashMap::new();
+        let mut matched_terms: HashMap<ChunkId, Vec<String>> = HashMap::new();
+        for term in query_terms {
+            let Some(term_postings) = self.postings.get(&term) else {
+                continue;
+            };
+            let document_frequency = term_postings.active_document_frequency;
+            if document_frequency == 0 {
+                continue;
+            }
+            let idf = inverse_document_frequency(active_count, document_frequency);
+            for posting in &term_postings.postings {
+                if !self.active_chunks.contains(&posting.chunk_id)
+                    || !scope.contains(posting.chunk_id)
+                {
+                    continue;
+                }
+                let Some(&chunk_length) = self.chunk_lengths.get(&posting.chunk_id) else {
+                    continue;
+                };
+                let score = bm25_term_score(
+                    posting.term_frequency,
+                    chunk_length,
+                    average_length,
+                    idf,
+                    self.config.k1,
+                    self.config.b,
+                );
+                *scores.entry(posting.chunk_id).or_insert(0.0) += score;
+                matched_terms
+                    .entry(posting.chunk_id)
+                    .or_default()
+                    .push(term.clone());
+            }
+        }
+
+        let mut bounded_hits = Bm25HitTopK::new(top_k);
+        for (chunk_id, score) in scores {
+            bounded_hits.push(Bm25Hit {
+                chunk_id,
+                score,
+                matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
+            });
+        }
+        bounded_hits.into_sorted_vec()
     }
 
     fn search_with_limit(

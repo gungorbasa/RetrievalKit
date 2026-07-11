@@ -3,6 +3,25 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VectorKitError {
+    InvalidIdentity {
+        kind: &'static str,
+        value: String,
+        message: String,
+    },
+    InvalidRecordValue {
+        path: String,
+        message: String,
+    },
+    InvalidCandidateScope {
+        chunk_id: u64,
+        message: String,
+    },
+    StaleGeneration {
+        expected_corpus: String,
+        expected_generation: u64,
+        actual_corpus: String,
+        actual_generation: u64,
+    },
     InvalidDimension {
         expected: usize,
         actual: usize,
@@ -30,6 +49,26 @@ pub enum VectorKitError {
 impl Display for VectorKitError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidIdentity {
+                kind,
+                value,
+                message,
+            } => write!(f, "invalid {kind} '{value}': {message}"),
+            Self::InvalidRecordValue { path, message } => {
+                write!(f, "invalid canonical record value at '{path}': {message}")
+            }
+            Self::InvalidCandidateScope { chunk_id, message } => {
+                write!(f, "invalid candidate scope chunk ID {chunk_id}: {message}")
+            }
+            Self::StaleGeneration {
+                expected_corpus,
+                expected_generation,
+                actual_corpus,
+                actual_generation,
+            } => write!(
+                f,
+                "stale candidate scope: expected corpus '{expected_corpus}' generation {expected_generation}, got corpus '{actual_corpus}' generation {actual_generation}; rebuild the scope from the active index"
+            ),
             Self::InvalidDimension { expected, actual } => {
                 write!(
                     f,

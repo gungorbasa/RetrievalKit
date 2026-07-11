@@ -18,9 +18,9 @@ VectorKit is not a general vector database. It is a local retrieval engine with 
 
 Priority order:
 
-1. Correct retrieval behavior.
-2. Fast local query path.
-3. Simple Swift API.
+1. Fast local query path.
+2. Correct retrieval behavior.
+3. Simple APIs.
 4. Predictable persistence and reload behavior.
 5. Small-index optimization before ANN complexity.
 6. Server mode and sync later.
@@ -90,6 +90,69 @@ V1 does not include:
 - Built-in embedding model training.
 - General SQL query engine.
 
+## Optional Local Graph Roadmap
+
+VectorKit may add graph retrieval as a separate, optional, fully local package.
+This roadmap is additive to the graph-free product: `vectorkit-core` remains
+graph-neutral and continues to own the canonical records plus exact vector,
+BM25, hybrid, filtering, persistence, and hydration behavior. Applications that
+need graph retrieval use one composite `GraphIndex` mutable owner from the
+optional package. Applications that do not install it must not link graph code,
+open graph files, initialize graph state, or route ordinary queries through
+graph-aware dispatch.
+
+"Store once" means one canonical source record and payload owner, not one
+physical representation. Chunks, vector arrays, BM25 postings, flattened
+metadata indexes, stable-ID maps, and future graph adjacency are rebuildable
+derived structures. The query hot path continues to use dense internal `u64`
+`ChunkId` values. Stable external `RecordId`, `ChunkKey`, and future `NodeId`
+values resolve into generation-bound internal IDs before scoring.
+
+The roadmap is gated and must progress in order:
+
+```text
+M0 product authorization + generic conformance contract
+  -> M1 graph-neutral RecordStore, stable IDs, CandidateScope,
+        scoped exact/BM25/hybrid search, and bulk hydration
+      -> M2 optional Rust schema + bounded graph engine
+          -> M3 composite persistence + crash recovery
+              -> M4 first customer-selected wrapper
+                  -> M5 second wrapper + migration cutover
+```
+
+Milestone gates:
+
+- M0 defines a domain-neutral conformance contract without inventing customer
+  facts. Generic implementation uses synthetic fixtures spanning different
+  record, field, reference, collection, cycle, update, and deletion shapes.
+  Sanitized customer fixtures remain private acceptance evidence rather than a
+  prerequisite or a source of hard-coded schema concepts.
+- M1 is graph-neutral. It preserves the existing unscoped exact, BM25, and
+  hybrid function bodies wherever practical, adds generation-bound adaptive
+  candidate scoping and bulk hydration, and proves scoped/unscoped equivalence,
+  stale-generation rejection, filter intersection, and lifecycle correctness.
+- M2 may start after M1 tests and the graph-free unscoped latency gate pass.
+  It implements the generic typed schema and concrete bounded local engine
+  against synthetic conformance and scale fixtures. Its published capacity
+  envelope remains provisional until representative real workloads and pinned
+  target-device measurements establish headroom; workloads outside that
+  envelope trigger a separate embedded-backend design.
+- Every later milestone must preserve a coherent retrieval/graph generation,
+  deterministic results, typed failures, local-only operation, and one linked
+  core/state universe in graph-enabled wrappers.
+
+The canonical graph schema is defined once in Rust and persisted inside the
+graph-enabled database. Python and Swift builders marshal the same typed schema
+IR; they do not implement schema validation or maintain synchronized JSON
+sidecars. JSON export may exist for inspection or one-time migration only.
+
+The first optional graph release is limited to deterministic explicit
+references, reference collections, document/chunk structure, bounded typed
+traversal, and only the retrieval composition mode proven by the customer
+fixture. Arbitrary Cypher, automatic model extraction, PageRank and broad graph
+analytics, SQL metadata storage, ANN/HNSW, incremental graph mutation,
+JavaScript, and Kotlin remain out of scope until separately authorized.
+
 ## Small-Index MVP Strategy
 
 The first product version is optimized for fewer than 50K chunks.
@@ -124,6 +187,22 @@ high-quality hybrid retrieval
 HNSW should only be reconsidered after the exact/hybrid engine is polished and benchmarks show exact search cannot meet the target for real user datasets.
 
 ## Core Concepts
+
+### Canonical Record
+
+`RecordStore` is the graph-neutral canonical payload owner for a corpus. A
+record has a byte-exact stable `RecordId`, an ASCII `RecordType`, optional
+content, and typed nested fields. Retrieval chunks are derived from records and
+use stable caller/chunker `ChunkKey` values. Each generation persists a checked
+mapping from `(RecordId, ChunkKey)` to the active dense internal `u64 ChunkId`.
+Replacing a record retires its previous internal IDs and rebinds unchanged
+external chunk identities to the new generation. Deletion removes the record,
+its stable mappings, and every derived active chunk together.
+
+The existing document/chunk ingestion shape is a one-record adapter. It assigns
+positional chunk keys and is appropriate when callers do not need edit-stable
+chunk identities. Graph and other structured-index integrations use the
+record-first API with explicit stable chunk keys.
 
 ### Document
 
@@ -208,6 +287,7 @@ index_directory/
     <generation>/
       vectors.vec
       chunks.bin
+      records.bin
       bm25.bin
       tombstones.bin
 ```
@@ -220,7 +300,7 @@ Required fields:
 
 ```json
 {
-  "format_version": 3,
+  "format_version": 4,
   "snapshot_id": "<safe-generation-id>",
   "created_with": "vectorkit",
   "dimension": 384,
@@ -228,11 +308,15 @@ Required fields:
   "vector_count": 24000,
   "active_chunk_count": 23500,
   "has_bm25": true,
+  "has_records": true,
   "vector_encoding": "f32",
   "vector_bytes": 36864000,
   "chunk_bytes": 45678,
   "chunk_compression": "zstd",
   "chunk_uncompressed_bytes": 123456,
+  "records_bytes": 12345,
+  "records_compression": "zstd",
+  "records_uncompressed_bytes": 45678,
   "bm25_bytes": 34567,
   "bm25_compression": "zstd",
   "bm25_uncompressed_bytes": 123456,
@@ -241,6 +325,7 @@ Required fields:
     "algorithm": "sha256",
     "vectors": "<64-lowercase-hex-characters>",
     "chunks": "<64-lowercase-hex-characters>",
+    "records": "<64-lowercase-hex-characters>",
     "bm25": "<64-lowercase-hex-characters>",
     "tombstones": "<64-lowercase-hex-characters>"
   },
@@ -256,8 +341,9 @@ Load must fail clearly if:
 - file sizes do not match manifest counts.
 - compressed payloads fail to decompress.
 - decompressed file sizes do not match manifest counts when recorded.
-- checksum validation fails. Format V3 requires SHA-256 checksums for every
-  persisted payload; V1/V2 remain readable without them.
+- checksum validation fails. Format V3 and V4 require SHA-256 checksums for
+  every persisted payload; V1/V2 remain readable without them. V4 adds the
+  canonical record payload and stable external/internal chunk mapping.
 - a tombstone byte is not exactly `0` or `1`.
 
 `chunks.bin` and `bm25.bin` may be compressed at rest. Loading must
@@ -934,12 +1020,12 @@ lock serializes writers to the same directory, including across processes, so a
 crash cannot leave a stale logical lock and concurrent cleanup cannot remove the
 published generation.
 
-Format V3 manifests include SHA-256 checksums for vectors, chunks, BM25 when
-present, and tombstones. Rust `validate_dir`, Swift `VectorIndex.validate(at:)`,
+Format V4 manifests include SHA-256 checksums for vectors, chunks, canonical
+records, BM25 when present, and tombstones. Rust `validate_dir`, Swift `VectorIndex.validate(at:)`,
 and Python `Index.validate(path)` run the same complete validation path used by
 load. Checksum failures identify the damaged file and instruct callers to
-restore or rebuild the index. V1 and V2 indexes remain readable; their next save
-publishes a checksummed V3 snapshot.
+restore or rebuild the index. V1, V2, and V3 indexes remain readable; their next
+save publishes a checksummed V4 snapshot.
 
 ## Speed Requirements
 

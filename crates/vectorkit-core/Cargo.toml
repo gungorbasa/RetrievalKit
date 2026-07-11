@@ -16,3 +16,11 @@ zstd = "0.13.3"
 
 [build-dependencies]
 cc = "1.2.63"
+
+[[bench]]
+name = "graph_free_regression"
+harness = false
+
+[[bench]]
+name = "candidate_scope"
+harness = false

@@ -15,3 +15,7 @@ vectorkit-core = { path = "../vectorkit-core" }
 [[bench]]
 name = "bounded_traversal"
 harness = false
+
+[[bench]]
+name = "composite_persistence"
+harness = false

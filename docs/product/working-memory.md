@@ -62,9 +62,14 @@ implemented, or superseded by the product spec.
   Loaders use a short shared open lock and retain a shared per-generation lease,
   preventing cleanup while a loaded index uses that generation. Locked saves
   remove abandoned staging and unleased superseded generations; an invalid
-  existing manifest stops recovery without deleting snapshots. M3.4 still needs
-  checkpoint fault injection and persistence/open benchmark reporting before
-  the M3 gate is complete.
+  existing manifest stops recovery without deleting snapshots.
+- M3.4 injects failure at every pre-activation composite-save checkpoint and
+  proves the previous manifest remains byte-identical and loadable. The M1 Max
+  local persistence fixture measured save p95 98 ms and open/validate p95 10 ms
+  for 2K records/8K edges. Five interleaved current/pre-M1 graph-free runs
+  measured exact +0.44%, BM25 +1.01%, and hybrid +0.73%, passing the <=3% local
+  gate. See `docs/product/reports/graph-m3-benchmark-report.md`; pinned-device
+  release qualification is still required.
 
 ## Current Size, RAM, and Speed Goal
 

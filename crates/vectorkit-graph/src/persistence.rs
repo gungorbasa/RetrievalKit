@@ -70,6 +70,17 @@ pub struct GraphDatabaseFileSizes {
     pub graph_bytes: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SaveCheckpoint {
+    StagingCreated,
+    CoreWritten,
+    SchemaWritten,
+    GraphWritten,
+    StagingValidated,
+    GenerationPublished,
+    ManifestWritten,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
     format_version: u32,
@@ -90,6 +101,14 @@ struct Checksums {
 }
 
 pub(crate) fn save(index: &GraphIndex, directory: &Path) -> Result<GraphDatabaseFileSizes> {
+    save_with_checkpoints(index, directory, |_| Ok(()))
+}
+
+fn save_with_checkpoints(
+    index: &GraphIndex,
+    directory: &Path,
+    mut checkpoint: impl FnMut(SaveCheckpoint) -> Result<()>,
+) -> Result<GraphDatabaseFileSizes> {
     fs::create_dir_all(directory)
         .map_err(|error| io_error("create graph database directory", directory, error))?;
     let _writer_lock = DatabaseLock::try_acquire_writer(directory)?;
@@ -97,6 +116,7 @@ pub(crate) fn save(index: &GraphIndex, directory: &Path) -> Result<GraphDatabase
     fs::create_dir_all(&snapshots)
         .map_err(|error| io_error("create graph snapshots directory", &snapshots, error))?;
     recover_snapshots(directory, &snapshots)?;
+    cleanup_temporary_manifests(directory);
 
     let snapshot_id = next_snapshot_id(index.core.generation())?;
     let staging = snapshots.join(format!(".staging-{snapshot_id}"));
@@ -104,15 +124,18 @@ pub(crate) fn save(index: &GraphIndex, directory: &Path) -> Result<GraphDatabase
     fs::create_dir(&staging)
         .map_err(|error| io_error("create staged graph snapshot", &staging, error))?;
     write_synced(&staging.join(GENERATION_LEASE_FILE), &[])?;
-
-    let result = stage_and_publish(
-        index,
-        directory,
-        &snapshots,
-        &staging,
-        &published,
-        snapshot_id,
-    );
+    let result = (|| {
+        checkpoint(SaveCheckpoint::StagingCreated)?;
+        stage_and_publish(
+            index,
+            directory,
+            &snapshots,
+            &staging,
+            &published,
+            snapshot_id,
+            &mut checkpoint,
+        )
+    })();
     if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
     }
@@ -126,15 +149,19 @@ fn stage_and_publish(
     staging: &Path,
     published: &Path,
     snapshot_id: String,
+    checkpoint: &mut impl FnMut(SaveCheckpoint) -> Result<()>,
 ) -> Result<GraphDatabaseFileSizes> {
     let core_directory = staging.join(CORE_DIRECTORY);
     index.core.save_to_dir(&core_directory)?;
+    checkpoint(SaveCheckpoint::CoreWritten)?;
 
     let payload = index.snapshot_payload()?;
     let schema_path = staging.join(SCHEMA_FILE);
     let graph_path = staging.join(GRAPH_FILE);
     write_synced(&schema_path, &payload.schema_bytes)?;
+    checkpoint(SaveCheckpoint::SchemaWritten)?;
     write_synced(&graph_path, &payload.graph_bytes)?;
+    checkpoint(SaveCheckpoint::GraphWritten)?;
 
     let sizes = GraphDatabaseFileSizes {
         schema_bytes: byte_len(&payload.schema_bytes, "schema")?,
@@ -158,15 +185,18 @@ fn stage_and_publish(
     validate_manifest(&manifest)?;
     validate_generation(staging, &manifest)?;
     sync_directory(staging)?;
+    checkpoint(SaveCheckpoint::StagingValidated)?;
     fs::rename(staging, published)
         .map_err(|error| io_error("publish graph snapshot", published, error))?;
     sync_directory(snapshots)?;
+    checkpoint(SaveCheckpoint::GenerationPublished)?;
 
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| invalid_snapshot(format!("could not encode graph manifest: {error}")))?;
     let manifest_path = directory.join(MANIFEST_FILE);
     let temporary_manifest = directory.join(format!("manifest.{snapshot_id}.tmp"));
     write_synced(&temporary_manifest, &manifest_bytes)?;
+    checkpoint(SaveCheckpoint::ManifestWritten)?;
     fs::rename(&temporary_manifest, &manifest_path)
         .map_err(|error| io_error("activate graph manifest", &manifest_path, error))?;
     sync_directory(directory)?;
@@ -307,6 +337,19 @@ fn cleanup_unreferenced_snapshots(snapshots: &Path, active: &str) {
     }
 }
 
+fn cleanup_temporary_manifests(directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("manifest.") && name.ends_with(".tmp") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 fn try_remove_unleased_generation(directory: &Path) {
     if !directory.is_dir() {
         return;
@@ -403,5 +446,115 @@ fn io_error(action: &str, path: &Path, error: std::io::Error) -> GraphError {
 fn invalid_snapshot(message: impl Into<String>) -> GraphError {
     GraphError::InvalidSnapshot {
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use vectorkit_core::{
+        ChunkKey, ExactVectorIndex, IndexConfig, Metadata, Record, RecordChunkInput, RecordId,
+        RecordType, VectorEncoding, VectorMetric,
+    };
+
+    use super::{save_with_checkpoints, SaveCheckpoint, MANIFEST_FILE, SNAPSHOTS_DIRECTORY};
+    use crate::{GraphError, GraphIndex, GraphSchema, NodeType, RecordNodeSchema};
+
+    struct TestDirectory(std::path::PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "vectorkit-graph-faults-{}-{nonce}",
+                std::process::id()
+            ));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn failure_at_every_pre_activation_checkpoint_preserves_active_snapshot() {
+        let directory = TestDirectory::new();
+        let graph = fixture();
+        graph.save_to_dir(&directory.0).unwrap();
+        let original_manifest = std::fs::read(directory.0.join(MANIFEST_FILE)).unwrap();
+        let checkpoints = [
+            SaveCheckpoint::StagingCreated,
+            SaveCheckpoint::CoreWritten,
+            SaveCheckpoint::SchemaWritten,
+            SaveCheckpoint::GraphWritten,
+            SaveCheckpoint::StagingValidated,
+            SaveCheckpoint::GenerationPublished,
+            SaveCheckpoint::ManifestWritten,
+        ];
+
+        for target in checkpoints {
+            let error = save_with_checkpoints(&graph, &directory.0, |checkpoint| {
+                if checkpoint == target {
+                    Err(GraphError::InvalidSnapshot {
+                        message: format!("injected failure at {checkpoint:?}"),
+                    })
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap_err();
+            assert!(matches!(error, GraphError::InvalidSnapshot { .. }));
+            assert_eq!(
+                std::fs::read(directory.0.join(MANIFEST_FILE)).unwrap(),
+                original_manifest
+            );
+            GraphIndex::validate_dir(&directory.0).unwrap();
+        }
+
+        graph.save_to_dir(&directory.0).unwrap();
+        GraphIndex::validate_dir(&directory.0).unwrap();
+        let published = std::fs::read_dir(directory.0.join(SNAPSHOTS_DIRECTORY))
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+            .count();
+        assert_eq!(published, 1);
+    }
+
+    fn fixture() -> GraphIndex {
+        let config =
+            IndexConfig::new(2, VectorMetric::DotProduct).with_vector_encoding(VectorEncoding::F32);
+        let mut core = ExactVectorIndex::try_with_config(config).unwrap();
+        core.upsert_record(
+            Record {
+                id: RecordId::new("item").unwrap(),
+                record_type: RecordType::new("Item").unwrap(),
+                fields: BTreeMap::new(),
+                content: None,
+            },
+            Metadata::new(),
+            vec![RecordChunkInput {
+                key: ChunkKey::new("body").unwrap(),
+                text: "item".to_owned(),
+                embedding: vec![1.0, 0.0],
+                metadata: Metadata::new(),
+            }],
+        )
+        .unwrap();
+        let schema = GraphSchema::new(vec![RecordNodeSchema {
+            record_type: RecordType::new("Item").unwrap(),
+            node_type: NodeType::new("Item").unwrap(),
+            queryable_fields: vec![],
+        }]);
+        GraphIndex::build(core, schema).unwrap()
     }
 }

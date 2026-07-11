@@ -74,3 +74,7 @@ lock, safe active-generation selection, reader-held generation leases, and
 locked recovery cleanup for abandoned staging and unleased old generations.
 Wrapper APIs, arbitrary query languages, automatic extraction, analytics, and
 incremental mutation belong to later milestones.
+
+M3.4 adds checkpoint fault injection and the `composite_persistence` benchmark.
+The accepted local M1 Max run and graph-free regression comparison are recorded
+in `docs/product/reports/graph-m3-benchmark-report.md`.

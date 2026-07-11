@@ -256,6 +256,84 @@ final class VectorKitTests: XCTestCase {
         }
     }
 
+    func testReadWriteGateRunsReadsConcurrently() async throws {
+        let gate = AsyncReadWriteGate()
+        let release = AsyncTestLatch()
+        let readersStarted = expectation(description: "both readers started")
+        readersStarted.expectedFulfillmentCount = 2
+
+        async let first: Int = gate.withRead {
+            readersStarted.fulfill()
+            await release.wait()
+            return 1
+        }
+        async let second: Int = gate.withRead {
+            readersStarted.fulfill()
+            await release.wait()
+            return 2
+        }
+
+        await fulfillment(of: [readersStarted], timeout: 1)
+        await release.open()
+        let values = await [first, second]
+        XCTAssertEqual(values, [1, 2])
+    }
+
+    func testReadWriteGateKeepsMutationExclusiveAndPrefersWaitingWriter() async throws {
+        let gate = AsyncReadWriteGate()
+        let releaseReader = AsyncTestLatch()
+        let readerStarted = expectation(description: "reader started")
+        let writerAttempted = expectation(description: "writer attempted")
+        let writerStarted = expectation(description: "writer started")
+        let laterReaderAttempted = expectation(description: "later reader attempted")
+        let laterReaderStarted = expectation(description: "later reader started")
+        let events = AsyncEventRecorder()
+
+        let reader = Task {
+            await gate.withRead {
+                await events.append("reader-start")
+                readerStarted.fulfill()
+                await releaseReader.wait()
+                await events.append("reader-end")
+            }
+        }
+        await fulfillment(of: [readerStarted], timeout: 1)
+
+        let writer = Task {
+            writerAttempted.fulfill()
+            await gate.withWrite {
+                await events.append("writer")
+                writerStarted.fulfill()
+            }
+        }
+        await fulfillment(of: [writerAttempted], timeout: 1)
+        try await Task.sleep(for: .milliseconds(50))
+        let writerBlockedEvents = await events.values()
+        XCTAssertEqual(writerBlockedEvents, ["reader-start"])
+
+        let laterReader = Task {
+            laterReaderAttempted.fulfill()
+            await gate.withRead {
+                await events.append("later-reader")
+                laterReaderStarted.fulfill()
+            }
+        }
+
+        await fulfillment(of: [laterReaderAttempted], timeout: 1)
+        try await Task.sleep(for: .milliseconds(50))
+        let blockedEvents = await events.values()
+        XCTAssertEqual(blockedEvents, ["reader-start"])
+
+        await releaseReader.open()
+        await fulfillment(of: [writerStarted, laterReaderStarted], timeout: 1)
+        await reader.value
+        await writer.value
+        await laterReader.value
+
+        let recordedEvents = await events.values()
+        XCTAssertEqual(recordedEvents, ["reader-start", "reader-end", "writer", "later-reader"])
+    }
+
     func testBundledSocialNetworkIndexSupportsRealSearches() async throws {
         let resources = socialNetworkResourcesURL()
         let indexURL = resources.appendingPathComponent("social-network-index")
@@ -306,5 +384,36 @@ final class VectorKitTests: XCTestCase {
             .appendingPathComponent("VectorKitIOSBench")
             .appendingPathComponent("VectorKitIOSBench")
             .appendingPathComponent("Resources")
+    }
+}
+
+private actor AsyncTestLatch {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+private actor AsyncEventRecorder {
+    private var events: [String] = []
+
+    func append(_ event: String) {
+        events.append(event)
+    }
+
+    func values() -> [String] {
+        events
     }
 }

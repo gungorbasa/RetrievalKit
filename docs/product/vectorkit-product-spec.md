@@ -1307,6 +1307,13 @@ Success criteria:
 
 - App restart never corrupts an existing valid index.
 - Search can run concurrently with reads.
+
+The V1 concurrency contract permits concurrent exact, keyword, hybrid, filter,
+and count reads after indexing or loading. Upsert, delete, save, compaction, and
+destruction require exclusive access. The Rust search path remains lock-free;
+FFI callers provide synchronization. Swift uses a writer-preferring
+asynchronous gate and detached native tasks so searches on one `VectorIndex`
+can overlap while mutations wait for active readers and block later readers.
 - Index updates are predictable and recoverable.
 - 50K chunks meet the configured on-device retrieval target.
 

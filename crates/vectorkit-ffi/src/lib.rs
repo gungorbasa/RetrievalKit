@@ -282,7 +282,8 @@ pub unsafe extern "C" fn vectorkit_index_validate(
 /// # Safety
 ///
 /// `index` must be null or a pointer returned by `vectorkit_index_new` or
-/// `vectorkit_index_load` that has not already been freed.
+/// `vectorkit_index_load` that has not already been freed. No other operation
+/// may be using the handle.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_free(index: *mut VkIndex) {
     if !index.is_null() {
@@ -295,7 +296,8 @@ pub unsafe extern "C" fn vectorkit_index_free(index: *mut VkIndex) {
 /// # Safety
 ///
 /// `index` must be a valid VectorKit index pointer and `directory` must point
-/// to a valid null-terminated UTF-8 C string.
+/// to a valid null-terminated UTF-8 C string. The caller must provide exclusive
+/// access to the index for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_save(
     index: *mut VkIndex,
@@ -415,7 +417,7 @@ pub unsafe extern "C" fn vectorkit_chunk_text(
 /// # Safety
 ///
 /// All string, metadata, and embedding pointers must remain valid for the
-/// duration of this call.
+/// duration of this call. The caller must provide exclusive access to the index.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_upsert_document(
     index: *mut VkIndex,
@@ -451,7 +453,8 @@ pub unsafe extern "C" fn vectorkit_index_upsert_document(
 /// # Safety
 ///
 /// `index` must be valid and `document_id` must point to a valid
-/// null-terminated UTF-8 C string.
+/// null-terminated UTF-8 C string. The caller must provide exclusive access to
+/// the index.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_delete_document(
     index: *mut VkIndex,
@@ -475,7 +478,8 @@ pub unsafe extern "C" fn vectorkit_index_delete_document(
 ///
 /// # Safety
 ///
-/// `index` must be valid and `out_report` must point to writable memory.
+/// `index` must be valid, `out_report` must point to writable memory, and the
+/// caller must provide exclusive access to the index.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_compact(
     index: *mut VkIndex,
@@ -497,7 +501,10 @@ pub unsafe extern "C" fn vectorkit_index_compact(
 ///
 /// # Safety
 ///
-/// `embedding` must point to `embedding_len` contiguous `float` values.
+/// `embedding` must point to `embedding_len` contiguous `float` values. This
+/// call may run concurrently with other read-only calls on the same index, but
+/// not with save, mutation, compaction, or destruction. Each call requires its
+/// own filter, status, and output storage.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_search(
     index: *const VkIndex,
@@ -529,7 +536,9 @@ pub unsafe extern "C" fn vectorkit_index_search(
 ///
 /// # Safety
 ///
-/// `text` must point to a valid null-terminated UTF-8 C string.
+/// `text` must point to a valid null-terminated UTF-8 C string. This call may
+/// run concurrently with other read-only calls on the same index, subject to
+/// the same independent filter, status, and output-storage requirements.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_keyword_search(
     index: *const VkIndex,
@@ -560,7 +569,9 @@ pub unsafe extern "C" fn vectorkit_index_keyword_search(
 /// # Safety
 ///
 /// `text` must be valid UTF-8 and `embedding` must point to `embedding_len`
-/// contiguous `float` values.
+/// contiguous `float` values. This call may run concurrently with other
+/// read-only calls on the same index, subject to the same independent filter,
+/// status, and output-storage requirements.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_index_hybrid_search(
     index: *const VkIndex,
@@ -1340,6 +1351,12 @@ mod tests {
         assert!(config.include_filtered);
         assert!(config.include_persistence);
         assert!(config.persist_bm25);
+    }
+
+    #[test]
+    fn index_handle_contents_are_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<VkIndex>();
     }
 
     #[test]

@@ -76,6 +76,10 @@ Exit criteria:
 
 ## Phase 2: Thread-Safety and Lifecycle Contract
 
+Status: in progress. Rust, C/FFI, and Swift guarantees are implemented, and the
+Swift suite passes Thread Sanitizer. Python GIL behavior and thread-pool tests
+remain.
+
 Goal: make concurrency behavior explicit across Rust, FFI, Swift, and Python.
 
 Decisions to lock:

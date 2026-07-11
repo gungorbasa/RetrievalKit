@@ -364,36 +364,134 @@ public indirect enum Filter: Equatable, Sendable {
     }
 }
 
-/// Actor-isolated local retrieval index backed by the Rust core.
+/// Writer-preferring asynchronous gate used to protect one native index handle.
 ///
-/// `VectorIndex` owns one Rust index handle. All mutation, search, and
-/// persistence calls are actor-isolated, so callers use `await` outside the
-/// actor and no manual locking is exposed in Swift.
+/// Read operations may overlap. A write waits for existing readers, prevents
+/// new readers from entering, and runs alone.
+actor AsyncReadWriteGate {
+    private var activeReaders = 0
+    private var writerActive = false
+    private var waitingReaders: [CheckedContinuation<Void, Never>] = []
+    private var waitingWriters: [CheckedContinuation<Void, Never>] = []
+
+    func withRead<T: Sendable>(
+        _ operation: @Sendable () async throws -> T
+    ) async rethrows -> T {
+        await beginRead()
+        do {
+            let result = try await operation()
+            endRead()
+            return result
+        } catch {
+            endRead()
+            throw error
+        }
+    }
+
+    func withWrite<T: Sendable>(
+        _ operation: @Sendable () async throws -> T
+    ) async rethrows -> T {
+        await beginWrite()
+        do {
+            let result = try await operation()
+            endWrite()
+            return result
+        } catch {
+            endWrite()
+            throw error
+        }
+    }
+
+    private func beginRead() async {
+        guard writerActive || !waitingWriters.isEmpty else {
+            activeReaders += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waitingReaders.append(continuation)
+        }
+    }
+
+    private func endRead() {
+        activeReaders -= 1
+        guard activeReaders == 0, !waitingWriters.isEmpty else { return }
+        writerActive = true
+        waitingWriters.removeFirst().resume()
+    }
+
+    private func beginWrite() async {
+        guard writerActive || activeReaders > 0 else {
+            writerActive = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waitingWriters.append(continuation)
+        }
+    }
+
+    private func endWrite() {
+        if !waitingWriters.isEmpty {
+            waitingWriters.removeFirst().resume()
+            return
+        }
+
+        writerActive = false
+        let readers = waitingReaders
+        waitingReaders.removeAll(keepingCapacity: true)
+        activeReaders += readers.count
+        for reader in readers {
+            reader.resume()
+        }
+    }
+}
+
+/// Concurrent local retrieval index backed by the Rust core.
+///
+/// `VectorIndex` owns one Rust index handle. Its actor protects lifecycle and
+/// admission state; native work runs outside the actor under a shared-read or
+/// exclusive-write lease. Callers use `await` and never manage locks directly.
 public actor VectorIndex {
     private let handle: UInt
-
-    private var pointer: OpaquePointer {
-        OpaquePointer(bitPattern: handle)!
-    }
+    private let access = AsyncReadWriteGate()
 
     /// Required embedding dimension for indexed chunks and queries.
     public var dimension: Int {
-        Int(vectorkit_index_dimension(pointer))
+        get async {
+            let handle = handle
+            return await access.withRead {
+                Int(vectorkit_index_dimension(OpaquePointer(bitPattern: handle)))
+            }
+        }
     }
 
     /// Number of chunks currently eligible for search results.
     public var activeChunkCount: Int {
-        Int(vectorkit_index_active_chunk_count(pointer))
+        get async {
+            let handle = handle
+            return await access.withRead {
+                Int(vectorkit_index_active_chunk_count(OpaquePointer(bitPattern: handle)))
+            }
+        }
     }
 
     /// Total number of stored chunks, including deleted and superseded chunks.
     public var totalChunkCount: Int {
-        Int(vectorkit_index_total_chunk_count(pointer))
+        get async {
+            let handle = handle
+            return await access.withRead {
+                Int(vectorkit_index_total_chunk_count(OpaquePointer(bitPattern: handle)))
+            }
+        }
     }
 
     /// Number of deleted or superseded chunks that compaction can remove.
     public var tombstonedChunkCount: Int {
-        Int(vectorkit_index_tombstoned_chunk_count(pointer))
+        get async {
+            let handle = handle
+            return await access.withRead {
+                Int(vectorkit_index_tombstoned_chunk_count(OpaquePointer(bitPattern: handle)))
+            }
+        }
     }
 
     /// Creates an empty local index.
@@ -436,108 +534,144 @@ public actor VectorIndex {
     }
 
     /// Saves the loaded index to a local directory.
-    public func save(to directory: URL, includeBM25: Bool = true) throws {
-        let arena = CStringArena()
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_save(
-            pointer,
-            arena.copy(directory.path),
-            includeBM25,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    public func save(to directory: URL, includeBM25: Bool = true) async throws {
+        let handle = handle
+        let owner = self
+        try await access.withWrite {
+            try Task.checkCancellation()
+            try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                let arena = CStringArena()
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_save(
+                    OpaquePointer(bitPattern: handle),
+                    arena.copy(directory.path),
+                    includeBM25,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+            }.value
         }
     }
 
     /// Adds or replaces all chunks for a document and returns assigned chunk IDs.
     @discardableResult
-    public func upsert(document: Document, chunks: [ChunkInput]) throws -> [UInt64] {
-        let arena = CStringArena()
-        let documentMetadata = MetadataBuffer(document.metadata, arena: arena)
-        let chunkMetadata = chunks.map { MetadataBuffer($0.metadata, arena: arena) }
-        let embeddingBuffers = chunks.map { EmbeddingBuffer($0.embedding) }
-        let ffiChunks = ChunkInputBuffer(chunks.enumerated().map { index, chunk in
-            VkChunkInput(
-                text: arena.copy(chunk.text),
-                embedding: embeddingBuffers[index].pointer,
-                embedding_len: embeddingBuffers[index].count,
-                metadata: chunkMetadata[index].pointer,
-                metadata_len: chunkMetadata[index].count
-            )
-        })
-        var output = VkChunkIdBuffer(values: nil, count: 0)
+    public func upsert(document: Document, chunks: [ChunkInput]) async throws -> [UInt64] {
+        let handle = handle
+        let owner = self
+        return try await access.withWrite {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                let arena = CStringArena()
+                let documentMetadata = MetadataBuffer(document.metadata, arena: arena)
+                let chunkMetadata = chunks.map { MetadataBuffer($0.metadata, arena: arena) }
+                let embeddingBuffers = chunks.map { EmbeddingBuffer($0.embedding) }
+                let ffiChunks = ChunkInputBuffer(chunks.enumerated().map { index, chunk in
+                    VkChunkInput(
+                        text: arena.copy(chunk.text),
+                        embedding: embeddingBuffers[index].pointer,
+                        embedding_len: embeddingBuffers[index].count,
+                        metadata: chunkMetadata[index].pointer,
+                        metadata_len: chunkMetadata[index].count
+                    )
+                })
+                var output = VkChunkIdBuffer(values: nil, count: 0)
 
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_upsert_document(
-            pointer,
-            arena.copy(document.id),
-            arena.copy(document.text),
-            documentMetadata.pointer,
-            documentMetadata.count,
-            ffiChunks.pointer,
-            ffiChunks.count,
-            &output,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
-        }
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_upsert_document(
+                    OpaquePointer(bitPattern: handle),
+                    arena.copy(document.id),
+                    arena.copy(document.text),
+                    documentMetadata.pointer,
+                    documentMetadata.count,
+                    ffiChunks.pointer,
+                    ffiChunks.count,
+                    &output,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
 
-        defer { vectorkit_chunk_id_buffer_free(output) }
-        guard let values = output.values else {
-            return []
+                defer { vectorkit_chunk_id_buffer_free(output) }
+                guard let values = output.values else {
+                    return []
+                }
+                return Array(UnsafeBufferPointer(start: values, count: output.count))
+            }.value
         }
-        return Array(UnsafeBufferPointer(start: values, count: output.count))
     }
 
     /// Tombstones all active chunks for a document ID.
     @discardableResult
-    public func deleteDocument(id: String) throws -> Int {
-        let arena = CStringArena()
-        var deletedCount = 0
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_delete_document(
-            pointer,
-            arena.copy(id),
-            &deletedCount,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    public func deleteDocument(id: String) async throws -> Int {
+        let handle = handle
+        let owner = self
+        return try await access.withWrite {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                let arena = CStringArena()
+                var deletedCount = 0
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_delete_document(
+                    OpaquePointer(bitPattern: handle),
+                    arena.copy(id),
+                    &deletedCount,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+                return deletedCount
+            }.value
         }
-        return deletedCount
     }
 
     /// Rebuilds storage without deleted or superseded chunks.
     ///
     /// Surviving chunk IDs remain stable. Removed IDs are never reused.
-    public func compact() throws -> CompactionReport {
-        var output = VkCompactionReport(
-            chunks_before: 0,
-            chunks_after: 0,
-            chunks_removed: 0,
-            estimated_bytes_before: 0,
-            estimated_bytes_after: 0,
-            estimated_bytes_reclaimed: 0
-        )
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_compact(pointer, &output, &status)
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    public func compact() async throws -> CompactionReport {
+        let handle = handle
+        let owner = self
+        return try await access.withWrite {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                var output = VkCompactionReport(
+                    chunks_before: 0,
+                    chunks_after: 0,
+                    chunks_removed: 0,
+                    estimated_bytes_before: 0,
+                    estimated_bytes_after: 0,
+                    estimated_bytes_reclaimed: 0
+                )
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_compact(
+                    OpaquePointer(bitPattern: handle),
+                    &output,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+                return CompactionReport(
+                    chunksBefore: output.chunks_before,
+                    chunksAfter: output.chunks_after,
+                    chunksRemoved: output.chunks_removed,
+                    estimatedBytesBefore: output.estimated_bytes_before,
+                    estimatedBytesAfter: output.estimated_bytes_after,
+                    estimatedBytesReclaimed: output.estimated_bytes_reclaimed
+                )
+            }.value
         }
-        return CompactionReport(
-            chunksBefore: output.chunks_before,
-            chunksAfter: output.chunks_after,
-            chunksRemoved: output.chunks_removed,
-            estimatedBytesBefore: output.estimated_bytes_before,
-            estimatedBytesAfter: output.estimated_bytes_after,
-            estimatedBytesReclaimed: output.estimated_bytes_reclaimed
-        )
     }
 
     /// Performs exact vector search over active chunks.
@@ -545,29 +679,37 @@ public actor VectorIndex {
         embedding: [Float],
         topK: Int = 10,
         filter: Filter? = nil
-    ) throws -> [SearchResult] {
-        var output = VkSearchResultBuffer(hits: nil, count: 0)
-        let embeddingBuffer = EmbeddingBuffer(embedding)
-        let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_search(
-            pointer,
-            embeddingBuffer.pointer,
-            embeddingBuffer.count,
-            topK,
-            ffiFilter?.pointer,
-            &output,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    ) async throws -> [SearchResult] {
+        let handle = handle
+        let owner = self
+        return try await access.withRead {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                var output = VkSearchResultBuffer(hits: nil, count: 0)
+                let embeddingBuffer = EmbeddingBuffer(embedding)
+                let ffiFilter = try filter?.makeFFI()
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_search(
+                    OpaquePointer(bitPattern: handle),
+                    embeddingBuffer.pointer,
+                    embeddingBuffer.count,
+                    topK,
+                    ffiFilter?.pointer,
+                    &output,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+                defer { vectorkit_search_results_free(output) }
+                guard let hits = output.hits else {
+                    return []
+                }
+                return UnsafeBufferPointer(start: hits, count: output.count).map(SearchResult.init)
+            }.value
         }
-        defer { vectorkit_search_results_free(output) }
-        guard let hits = output.hits else {
-            return []
-        }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(SearchResult.init)
     }
 
     /// Performs BM25 keyword search over active chunks.
@@ -575,28 +717,36 @@ public actor VectorIndex {
         text: String,
         topK: Int = 10,
         filter: Filter? = nil
-    ) throws -> [KeywordResult] {
-        var output = VkKeywordResultBuffer(hits: nil, count: 0)
-        let arena = CStringArena()
-        let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_keyword_search(
-            pointer,
-            arena.copy(text),
-            topK,
-            ffiFilter?.pointer,
-            &output,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    ) async throws -> [KeywordResult] {
+        let handle = handle
+        let owner = self
+        return try await access.withRead {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                var output = VkKeywordResultBuffer(hits: nil, count: 0)
+                let arena = CStringArena()
+                let ffiFilter = try filter?.makeFFI()
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_keyword_search(
+                    OpaquePointer(bitPattern: handle),
+                    arena.copy(text),
+                    topK,
+                    ffiFilter?.pointer,
+                    &output,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+                defer { vectorkit_keyword_results_free(output) }
+                guard let hits = output.hits else {
+                    return []
+                }
+                return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
+            }.value
         }
-        defer { vectorkit_keyword_results_free(output) }
-        guard let hits = output.hits else {
-            return []
-        }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
     }
 
     /// Performs hybrid vector plus keyword search over active chunks.
@@ -606,33 +756,41 @@ public actor VectorIndex {
         topK: Int = 10,
         filter: Filter? = nil,
         options: HybridOptions = .default
-    ) throws -> [HybridResult] {
-        var output = VkHybridResultBuffer(hits: nil, count: 0)
-        let arena = CStringArena()
-        let embeddingBuffer = EmbeddingBuffer(embedding)
-        let ffiOptions = options.ffiValue
-        let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
-        defer { vectorkit_status_clear(&status) }
-        let succeeded = vectorkit_index_hybrid_search(
-            pointer,
-            arena.copy(text),
-            embeddingBuffer.pointer,
-            embeddingBuffer.count,
-            topK,
-            ffiFilter?.pointer,
-            ffiOptions,
-            &output,
-            &status
-        )
-        guard succeeded else {
-            throw VectorKitError.from(status: status)
+    ) async throws -> [HybridResult] {
+        let handle = handle
+        let owner = self
+        return try await access.withRead {
+            try Task.checkCancellation()
+            return try await Task.detached(priority: Task.currentPriority) {
+                defer { withExtendedLifetime(owner) {} }
+                var output = VkHybridResultBuffer(hits: nil, count: 0)
+                let arena = CStringArena()
+                let embeddingBuffer = EmbeddingBuffer(embedding)
+                let ffiOptions = options.ffiValue
+                let ffiFilter = try filter?.makeFFI()
+                var status = VkStatus(code: 0, message: nil)
+                defer { vectorkit_status_clear(&status) }
+                let succeeded = vectorkit_index_hybrid_search(
+                    OpaquePointer(bitPattern: handle),
+                    arena.copy(text),
+                    embeddingBuffer.pointer,
+                    embeddingBuffer.count,
+                    topK,
+                    ffiFilter?.pointer,
+                    ffiOptions,
+                    &output,
+                    &status
+                )
+                guard succeeded else {
+                    throw VectorKitError.from(status: status)
+                }
+                defer { vectorkit_hybrid_results_free(output) }
+                guard let hits = output.hits else {
+                    return []
+                }
+                return UnsafeBufferPointer(start: hits, count: output.count).map(HybridResult.init)
+            }.value
         }
-        defer { vectorkit_hybrid_results_free(output) }
-        guard let hits = output.hits else {
-            return []
-        }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(HybridResult.init)
     }
 }
 

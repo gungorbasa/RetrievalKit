@@ -2238,6 +2238,47 @@ mod tests {
     use super::*;
     use crate::metadata::{Metadata, MetadataValue};
 
+    #[test]
+    fn exact_vector_index_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<ExactVectorIndex>();
+    }
+
+    #[test]
+    fn immutable_index_supports_concurrent_read_only_searches() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("parallel local search", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        let index = std::sync::Arc::new(index);
+        let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+
+        let workers = (0..8)
+            .map(|_| {
+                let index = std::sync::Arc::clone(&index);
+                let start = std::sync::Arc::clone(&start);
+                std::thread::spawn(move || {
+                    start.wait();
+                    let exact = index.search(&SearchQuery::new(vec![1.0, 0.0], 1)).unwrap();
+                    let keyword = index
+                        .keyword_search(&KeywordQuery::new("parallel", 1))
+                        .unwrap();
+                    let hybrid = index
+                        .hybrid_search(&HybridQuery::new("parallel", vec![1.0, 0.0], 1))
+                        .unwrap();
+                    (exact[0].chunk_id, keyword[0].chunk_id, hybrid[0].chunk_id)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for worker in workers {
+            assert_eq!(worker.join().unwrap(), (0, 0, 0));
+        }
+    }
+
     fn chunk(chunk_id: ChunkId, document_id: &str, embedding: Vec<f32>) -> Chunk {
         Chunk {
             chunk_id,

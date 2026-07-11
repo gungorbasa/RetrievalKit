@@ -158,6 +158,21 @@ typedef struct VkHybridOptions {
 
 void vectorkit_status_clear(VkStatus *status);
 
+/*
+ * Threading contract for one VkIndex handle:
+ *
+ * - dimension/count accessors and exact, keyword, and hybrid search may run
+ *   concurrently after construction or loading.
+ * - save, upsert, delete, compaction, and free require exclusive access.
+ * - callers must not start new reads while an exclusive operation is waiting.
+ * - every concurrent call must use independent VkStatus, output buffers, and
+ *   VkFilter handles. Output buffers may be freed independently.
+ * - the handle must remain alive until every call using it has returned.
+ *
+ * The C ABI does not add locks. Callers are responsible for enforcing this
+ * contract; the Swift wrapper provides a writer-preferring asynchronous gate.
+ */
+
 VkIndex *vectorkit_index_new(
     size_t dimension,
     uint32_t metric,

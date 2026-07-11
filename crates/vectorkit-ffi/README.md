@@ -48,3 +48,12 @@ where keeping F32 ground-truth indexes alive would inflate RSS.
 Set `persist_bm25` to `false` to measure a compact vector-only persisted
 profile. Vector search and metadata filters still reload, but keyword and
 hybrid search need BM25 to be persisted or rebuilt separately.
+
+## Threading Contract
+
+After construction or loading, exact, keyword, and hybrid search plus the
+dimension/count accessors may use one `VkIndex` concurrently. Every call must
+own its status, output storage, and filter handle. Save, upsert, delete,
+compaction, and free require exclusive access, and the handle must outlive all
+calls. The C ABI intentionally adds no hidden locks; callers enforce this
+contract. The Swift wrapper supplies a writer-preferring asynchronous gate.

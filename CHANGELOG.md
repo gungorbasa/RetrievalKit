@@ -17,6 +17,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Checksummed persistence format V3 verifies vectors, chunks, BM25, and
   tombstones with SHA-256 before loading. Rust, Swift, and Python expose
   read-only validation APIs and typed corruption failures.
+- Parallel Swift exact, keyword, and hybrid searches on one `VectorIndex`, with
+  writer-preferring exclusive access for upsert, delete, save, and compaction.
+  The C/FFI threading and handle-lifetime contract is now explicit.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

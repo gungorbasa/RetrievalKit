@@ -89,10 +89,22 @@ for result in results {
 - Typed filter builders: equals, not-equals, exists, range, in-values, all, any.
 - Structured Swift errors mapped from Rust/FFI failures.
 
-`VectorIndex` is an actor. Mutating and query operations are isolated to the
-index instance and are called with `await` from outside the actor. `Filter` is
-an immutable `Sendable` value; temporary Rust filter handles are built inside
-the actor call and freed before returning.
+`VectorIndex` is the ownership boundary for one native index handle. Exact,
+keyword, and hybrid searches acquire shared read access and execute in detached
+tasks, so multiple calls on the same actor can genuinely run in parallel.
+Upsert, delete, save, and compaction acquire writer-preferring exclusive access:
+they wait for active searches, and later searches wait behind them.
+
+Call every operation with `await` from outside the actor. `Filter` is an
+immutable `Sendable` value; each search builds and frees its own temporary Rust
+filter handle, status, and output buffers. The actor is retained until detached
+native work finishes, so its Rust handle cannot be freed early.
+
+```swift
+async let semantic = index.search(embedding: semanticQuery)
+async let lexical = index.keywordSearch(text: "exact name")
+let (semanticHits, lexicalHits) = try await (semantic, lexical)
+```
 
 ## Persistence Safety
 
@@ -166,11 +178,11 @@ all active chunk IDs and never reuses removed IDs. The byte report estimates
 in-memory payload savings; call `save(to:)` afterward to publish a compacted
 disk snapshot.
 
-Compaction is actor-isolated and temporarily holds both the current and
-replacement structures. Calls on that `VectorIndex` wait until it finishes. Run
-it during a maintenance window and leave memory headroom, especially near the
-50K-chunk V1 ceiling. The estimate reports retained payload before and after
-compaction; it is not a peak-RSS measurement.
+Compaction holds exclusive index access and temporarily retains both the current
+and replacement structures. Calls on that `VectorIndex` wait until it finishes.
+Run it during a maintenance window and leave memory headroom, especially near
+the 50K-chunk V1 ceiling. The estimate reports retained payload before and
+after compaction; it is not a peak-RSS measurement.
 
 The source package currently expects the XCFramework to be built in this
 repository before `swift build` or `swift test`. A public binary release should

@@ -298,7 +298,11 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API are complete. The next production slice is the
-thread-safety and lifecycle contract, followed by memory-budget hardening.
+remaining Python and sanitizer work for the thread-safety and lifecycle
+contract, followed by memory-budget hardening. Rust/FFI now explicitly permit
+parallel immutable reads with exclusive mutation, and Swift uses a
+writer-preferring asynchronous gate plus detached native calls so searches on
+one `VectorIndex` genuinely overlap.
 
 - Add isolated iOS device benchmark presets for one scenario per app launch so
   RSS can be interpreted per scenario instead of as a sequential process-level

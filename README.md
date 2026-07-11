@@ -62,3 +62,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 The repository is currently source-first. Public package-registry distribution
 and hosted documentation are not available yet.
+
+Index updates and deletes use tombstones. Swift and Python expose explicit
+`compact()` operations that reclaim their in-memory payload; saving afterward
+publishes a smaller crash-safe snapshot.

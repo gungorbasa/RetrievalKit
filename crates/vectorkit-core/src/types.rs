@@ -367,6 +367,17 @@ impl IndexSizeEstimate {
     }
 }
 
+/// Result of rebuilding an index without tombstoned chunks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CompactionReport {
+    pub chunks_before: usize,
+    pub chunks_after: usize,
+    pub chunks_removed: usize,
+    pub estimated_bytes_before: usize,
+    pub estimated_bytes_after: usize,
+    pub estimated_bytes_reclaimed: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct IndexFileSizeReport {
     pub manifest_bytes: u64,

@@ -21,6 +21,7 @@ from ._native import (
 from .types import (
     AddDocumentResult,
     ChunkInput,
+    CompactionReport,
     DocumentInput,
     Embedding,
     FileSizeReport,
@@ -98,6 +99,7 @@ def hybrid_search_text(
 __all__ = [
     "AddDocumentResult",
     "ChunkInput",
+    "CompactionReport",
     "DimensionMismatchError",
     "DocumentInput",
     "Embedding",

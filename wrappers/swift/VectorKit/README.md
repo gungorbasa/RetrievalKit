@@ -128,6 +128,28 @@ let loadedIndex = try VectorIndex.load(from: indexURL)
 Failures surface as `VectorKitError.core` values whose message contains the
 failed operation, path, operating-system cause, and a recovery hint.
 
+## Compaction
+
+Updates and deletes create tombstones so search results change immediately
+without rewriting the full index. Reclaim their memory before saving a smaller
+snapshot:
+
+```swift
+if await index.tombstonedChunkCount > 0 {
+    let report = try await index.compact()
+    print(
+        "Removed \(report.chunksRemoved) chunks; "
+            + "reclaimed about \(report.estimatedBytesReclaimed) bytes"
+    )
+    try await index.save(to: indexURL)
+}
+```
+
+`compact()` is an inexpensive no-op when there are no tombstones. It preserves
+all active chunk IDs and never reuses removed IDs. The byte report estimates
+in-memory payload savings; call `save(to:)` afterward to publish a compacted
+disk snapshot.
+
 The source package currently expects the XCFramework to be built in this
 repository before `swift build` or `swift test`. A public binary release should
 publish `VectorKitFFI.xcframework` and switch the binary target to a URL plus

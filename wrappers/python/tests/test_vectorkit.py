@@ -213,6 +213,48 @@ def test_add_search_filter_and_delete() -> None:
     )
 
 
+def test_compact_reclaims_tombstones_and_preserves_results(tmp_path) -> None:
+    index = Index(dimension=4)
+    first = index.add(
+        documents=[
+            {
+                "id": "doc-1",
+                "chunks": [
+                    {"text": "old", "embedding": [1.0, 0.0, 0.0, 0.0]}
+                ],
+            }
+        ]
+    )
+    replacement = index.add(
+        documents=[
+            {
+                "id": "doc-1",
+                "chunks": [
+                    {"text": "current", "embedding": [0.0, 1.0, 0.0, 0.0]}
+                ],
+            }
+        ]
+    )
+    hit_before = index.search([0.0, 1.0, 0.0, 0.0])[0]
+    assert index.total_chunk_count == 2
+    assert index.tombstoned_chunk_count == 1
+
+    report = index.compact()
+
+    assert report["chunks_before"] == 2
+    assert report["chunks_after"] == 1
+    assert report["chunks_removed"] == 1
+    assert report["estimated_bytes_reclaimed"] > 0
+    assert index.total_chunk_count == 1
+    assert index.tombstoned_chunk_count == 0
+    assert index.search([0.0, 1.0, 0.0, 0.0])[0] == hit_before
+    assert hit_before["chunk_id"] == replacement[0]["chunk_ids"][0]
+    assert hit_before["chunk_id"] != first[0]["chunk_ids"][0]
+
+    index.save(tmp_path)
+    assert Index.load(tmp_path).search([0.0, 1.0, 0.0, 0.0])[0] == hit_before
+
+
 def test_where_helpers_and_keyword_search() -> None:
     index = Index(dimension=4)
     index.add(

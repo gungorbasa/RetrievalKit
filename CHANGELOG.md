@@ -11,6 +11,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Cross-process save locking prevents concurrent writers from publishing and
   cleaning generations out of order. Locks are released by the operating system
   if a process exits or crashes.
+- Explicit Rust, Swift, and Python index compaction removes tombstoned payloads,
+  preserves active chunk IDs, reports estimated reclaimed memory, and remains a
+  cheap no-op when there is nothing to reclaim.
 - Token-aware Swift and Python ingestion pipelines with custom chunker support.
 
 ### Compatibility

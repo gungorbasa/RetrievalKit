@@ -228,6 +228,11 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   generations after success. V1 root-file indexes remain readable and migrate
   on their next save. An OS-released file lock serializes cross-process saves.
   Failure-injection tests cover every pre-publication stage and lock contention.
+- Explicit compaction is implemented in Rust and exposed through Swift and
+  Python. It atomically rebuilds vectors, chunks, BM25, metadata filters, and ID
+  lookups using only active chunks, preserves active IDs and monotonic ID
+  allocation, reports estimated memory reclaimed, and is a cheap no-op without
+  tombstones. Saving afterward publishes the compacted snapshot.
 
 - Late result materialization is implemented for exact vector search. The hot
   loop keeps only `chunk_id`, `offset`, and score, then builds final `SearchHit`

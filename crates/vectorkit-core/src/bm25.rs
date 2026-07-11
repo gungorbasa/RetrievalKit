@@ -76,6 +76,10 @@ impl Bm25Index {
         }
     }
 
+    pub fn config(&self) -> &Bm25Config {
+        &self.config
+    }
+
     pub fn add_chunk(&mut self, chunk_id: ChunkId, text: &str, active: bool) {
         self.remove_chunk_terms(chunk_id);
 

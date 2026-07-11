@@ -42,6 +42,15 @@ typedef struct VkStatus {
   char *message;
 } VkStatus;
 
+typedef struct VkCompactionReport {
+  size_t chunks_before;
+  size_t chunks_after;
+  size_t chunks_removed;
+  size_t estimated_bytes_before;
+  size_t estimated_bytes_after;
+  size_t estimated_bytes_reclaimed;
+} VkCompactionReport;
+
 typedef struct VkMetadataValue {
   uint32_t value_type;
   const char *string_value;
@@ -165,6 +174,8 @@ bool vectorkit_index_save(
 
 size_t vectorkit_index_dimension(const VkIndex *index);
 size_t vectorkit_index_active_chunk_count(const VkIndex *index);
+size_t vectorkit_index_total_chunk_count(const VkIndex *index);
+size_t vectorkit_index_tombstoned_chunk_count(const VkIndex *index);
 
 bool vectorkit_chunk_text(
     const char *text,
@@ -189,6 +200,11 @@ bool vectorkit_index_delete_document(
     VkIndex *index,
     const char *document_id,
     size_t *deleted_count,
+    VkStatus *status);
+
+bool vectorkit_index_compact(
+    VkIndex *index,
+    VkCompactionReport *out_report,
     VkStatus *status);
 
 bool vectorkit_index_search(

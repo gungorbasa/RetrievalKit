@@ -111,6 +111,27 @@ loaded_index = Index.load(path)
 the failed operation, path, operating-system cause, and a recovery hint when the
 directory cannot be written.
 
+## Compaction
+
+Updates and deletes create tombstones so search results change immediately
+without rewriting the full index. Reclaim their memory before saving a smaller
+snapshot:
+
+```python
+if index.tombstoned_chunk_count > 0:
+    report = index.compact()
+    print(
+        f"removed {report['chunks_removed']} chunks; "
+        f"reclaimed about {report['estimated_bytes_reclaimed']} bytes"
+    )
+    index.save(path)
+```
+
+`compact()` is an inexpensive no-op when there are no tombstones. It preserves
+all active chunk IDs and never reuses removed IDs. The byte report estimates
+in-memory payload savings; call `save()` afterward to publish a compacted disk
+snapshot and receive actual persisted file sizes.
+
 ## Platform Wheels
 
 The local `scripts/build-python-wheel.sh` helper builds for the platform and

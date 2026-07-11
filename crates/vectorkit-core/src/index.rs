@@ -16,10 +16,10 @@ use crate::metadata::{estimated_metadata_payload_bytes, Metadata};
 use crate::metadata_index::MetadataFilterIndex;
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
-    Chunk, ChunkId, ChunkInput, Document, HybridFusion, HybridFusionTrace, HybridHit, HybridQuery,
-    HybridTrace, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions, IndexSizeEstimate,
-    KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding,
-    VectorMetric,
+    Chunk, ChunkId, ChunkInput, CompactionReport, Document, HybridFusion, HybridFusionTrace,
+    HybridHit, HybridQuery, HybridTrace, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
+    IndexSizeEstimate, KeywordHit, KeywordQuery, SearchHit, SearchQuery, SearchTrace, StoredChunk,
+    VectorEncoding, VectorMetric,
 };
 
 const FORMAT_VERSION: u32 = 2;
@@ -180,6 +180,11 @@ impl ExactVectorIndex {
     /// Returns the number of chunks currently eligible for search results.
     pub fn active_chunk_count(&self) -> usize {
         self.active_offsets.len()
+    }
+
+    /// Returns the number of stored chunks currently marked deleted.
+    pub fn tombstoned_chunk_count(&self) -> usize {
+        self.chunks.len().saturating_sub(self.active_offsets.len())
     }
 
     /// Returns an approximate payload byte breakdown for the currently loaded index.
@@ -567,6 +572,82 @@ impl ExactVectorIndex {
         }
         self.remove_active_offsets(&deactivated_offsets);
         deleted_count
+    }
+
+    /// Rebuilds in-memory storage without tombstoned chunks.
+    ///
+    /// Active chunk IDs, document versions, and the next chunk ID are preserved.
+    /// Deleted chunk IDs stop resolving through `chunk` and are never reused.
+    /// Replacement structures are fully built before the index is mutated.
+    pub fn compact(&mut self) -> Result<CompactionReport> {
+        let chunks_before = self.chunks.len();
+        let estimated_bytes_before = self.size_estimate().total_bytes();
+        if self.tombstoned_chunk_count() == 0 {
+            return Ok(CompactionReport {
+                chunks_before,
+                chunks_after: chunks_before,
+                chunks_removed: 0,
+                estimated_bytes_before,
+                estimated_bytes_after: estimated_bytes_before,
+                estimated_bytes_reclaimed: 0,
+            });
+        }
+        let active_offsets = self.active_offsets.clone();
+
+        let new_vectors = self
+            .encoded_vectors
+            .select_rows(&active_offsets, self.dimension)?;
+        let new_chunks = active_offsets
+            .iter()
+            .map(|&offset| {
+                self.chunks
+                    .get(offset)
+                    .cloned()
+                    .ok_or_else(|| VectorKitError::InvalidFormat {
+                        message: format!(
+                            "active chunk offset {offset} is unavailable during compaction"
+                        ),
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let mut new_chunk_offsets = Vec::new();
+        let mut new_metadata_filter_index = MetadataFilterIndex::default();
+        let mut new_bm25 = Bm25Index::new(self.bm25.config().clone());
+        for (offset, chunk) in new_chunks.iter().enumerate() {
+            let chunk_id =
+                usize::try_from(chunk.chunk_id).map_err(|_| VectorKitError::InvalidFormat {
+                    message: format!(
+                        "active chunk ID {} does not fit this platform during compaction",
+                        chunk.chunk_id
+                    ),
+                })?;
+            if new_chunk_offsets.len() <= chunk_id {
+                new_chunk_offsets.resize(chunk_id + 1, None);
+            }
+            new_chunk_offsets[chunk_id] = Some(offset);
+            new_metadata_filter_index.insert(offset, &chunk.metadata);
+            new_bm25.add_chunk(chunk.chunk_id, &chunk.text, true);
+        }
+        let new_active_offsets = (0..new_chunks.len()).collect::<Vec<_>>();
+
+        self.encoded_vectors = new_vectors;
+        self.chunks = new_chunks;
+        self.chunk_offsets = new_chunk_offsets;
+        self.active_offsets = new_active_offsets;
+        self.metadata_filter_index = new_metadata_filter_index;
+        self.bm25 = new_bm25;
+
+        let chunks_after = self.chunks.len();
+        let estimated_bytes_after = self.size_estimate().total_bytes();
+        Ok(CompactionReport {
+            chunks_before,
+            chunks_after,
+            chunks_removed: chunks_before.saturating_sub(chunks_after),
+            estimated_bytes_before,
+            estimated_bytes_after,
+            estimated_bytes_reclaimed: estimated_bytes_before.saturating_sub(estimated_bytes_after),
+        })
     }
 
     /// Returns a stored chunk by its internal ID.
@@ -2100,6 +2181,156 @@ mod tests {
 
         assert_eq!(index.len(), 2);
         assert_eq!(index.active_chunk_count(), 1);
+    }
+
+    #[test]
+    fn compaction_removes_tombstones_and_preserves_active_ids_and_results() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        let first_ids = index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("old version", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        let replacement_ids = index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("replacement searchable", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        let deleted_ids = index
+            .upsert_document(
+                document("doc-2"),
+                vec![chunk_input("deleted text", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        assert_eq!(index.delete_document("doc-2"), 1);
+
+        let vector_before = index.search(&SearchQuery::new(vec![0.0, 1.0], 10)).unwrap();
+        let keyword_before = index
+            .keyword_search(&KeywordQuery::new("replacement", 10))
+            .unwrap();
+        let report = index.compact().unwrap();
+
+        assert_eq!(report.chunks_before, 3);
+        assert_eq!(report.chunks_after, 1);
+        assert_eq!(report.chunks_removed, 2);
+        assert!(report.estimated_bytes_reclaimed > 0);
+        assert_eq!(
+            report.estimated_bytes_before - report.estimated_bytes_after,
+            report.estimated_bytes_reclaimed
+        );
+        assert_eq!(index.len(), 1);
+        assert_eq!(index.active_chunk_count(), 1);
+        assert!(index.chunk(first_ids[0]).is_none());
+        assert!(index.chunk(deleted_ids[0]).is_none());
+        assert_eq!(
+            index.chunk(replacement_ids[0]).unwrap().text,
+            "replacement searchable"
+        );
+        assert_eq!(
+            index.search(&SearchQuery::new(vec![0.0, 1.0], 10)).unwrap(),
+            vector_before
+        );
+        assert_eq!(
+            index
+                .keyword_search(&KeywordQuery::new("replacement", 10))
+                .unwrap(),
+            keyword_before
+        );
+
+        let next_ids = index
+            .upsert_document(document("doc-3"), vec![chunk_input("next", vec![1.0, 0.0])])
+            .unwrap();
+        assert!(next_ids[0] > deleted_ids[0]);
+    }
+
+    #[test]
+    fn compaction_preserves_every_supported_vector_encoding() {
+        for encoding in [
+            VectorEncoding::F32,
+            VectorEncoding::F16,
+            VectorEncoding::BF16,
+            VectorEncoding::I8ScalarQuantized,
+        ] {
+            let mut index = ExactVectorIndex::try_with_config(
+                IndexConfig::new(3, VectorMetric::DotProduct).with_vector_encoding(encoding),
+            )
+            .unwrap();
+            index
+                .upsert_document(
+                    document("deleted"),
+                    vec![chunk_input("deleted", vec![0.0, 1.0, 0.0])],
+                )
+                .unwrap();
+            index.delete_document("deleted");
+            index
+                .upsert_document(
+                    document("active"),
+                    vec![chunk_input("active", vec![1.0, 0.0, 0.0])],
+                )
+                .unwrap();
+            let before = index
+                .search(&SearchQuery::new(vec![1.0, 0.0, 0.0], 1))
+                .unwrap();
+
+            index.compact().unwrap();
+
+            assert_eq!(
+                index
+                    .search(&SearchQuery::new(vec![1.0, 0.0, 0.0], 1))
+                    .unwrap(),
+                before,
+                "encoding {encoding:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compaction_is_idempotent_when_no_tombstones_exist() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("active", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let first = index.compact().unwrap();
+        let second = index.compact().unwrap();
+
+        assert_eq!(first.chunks_removed, 0);
+        assert_eq!(second.chunks_removed, 0);
+        assert_eq!(second.estimated_bytes_reclaimed, 0);
+    }
+
+    #[test]
+    fn compaction_failure_does_not_partially_replace_storage() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("deleted"),
+                vec![chunk_input("deleted", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.delete_document("deleted");
+        index
+            .upsert_document(
+                document("active"),
+                vec![chunk_input("active", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        index.active_offsets.push(999);
+        let chunks_before = index.chunks.clone();
+        let vectors_before = index.encoded_vectors.to_payload_bytes();
+        let active_offsets_before = index.active_offsets.clone();
+
+        let error = index.compact().unwrap_err();
+
+        assert!(error.to_string().contains("vector row 999 is unavailable"));
+        assert_eq!(index.chunks, chunks_before);
+        assert_eq!(index.encoded_vectors.to_payload_bytes(), vectors_before);
+        assert_eq!(index.active_offsets, active_offsets_before);
     }
 
     #[test]

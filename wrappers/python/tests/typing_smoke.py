@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from vectorkit import DocumentInput, Filter, HybridHit, Index, SearchHit, where
+from vectorkit import (
+    CompactionReport,
+    DocumentInput,
+    Filter,
+    HybridHit,
+    Index,
+    SearchHit,
+    where,
+)
 from vectorkit.ingest import RustTextChunker
 from vectorkit.pipeline import Pipeline
 
@@ -27,6 +35,7 @@ def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None
     )
 
     index.add(documents)
+    compaction: CompactionReport = index.compact()
     vector_hits: list[SearchHit] = index.search(query_embedding, where=filters)
     hybrid_hits: list[HybridHit] = index.hybrid_search(
         "python wrapper",
@@ -38,7 +47,7 @@ def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None
         score: float = vector_hits[0]["score"]
         document_id: str = vector_hits[0]["document_id"]
         filter_matched: bool = vector_hits[0]["trace"]["filter_matched"]
-        _ = (score, document_id, filter_matched)
+        _ = (score, document_id, filter_matched, compaction)
 
     if hybrid_hits:
         matched_terms: list[str] = hybrid_hits[0]["matched_terms"]

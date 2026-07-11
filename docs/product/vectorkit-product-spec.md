@@ -1274,6 +1274,13 @@ Deliverables:
 - SIMD/vector math optimization.
 - Filter bitset optimization.
 
+Compaction is an explicit Rust-core operation surfaced through the wrappers. It
+builds replacement vector, chunk, BM25, metadata-filter, active-offset, and
+chunk-lookup structures before swapping them into the index. Active chunk IDs,
+document versions, and the monotonic next ID are preserved; removed IDs stop
+resolving and are never reused. Compaction changes loaded memory only. Callers
+save afterward when they want a smaller transactional disk snapshot.
+
 Success criteria:
 
 - App restart never corrupts an existing valid index.

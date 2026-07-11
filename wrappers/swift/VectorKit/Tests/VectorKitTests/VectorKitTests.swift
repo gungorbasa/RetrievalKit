@@ -80,6 +80,38 @@ final class VectorKitTests: XCTestCase {
         XCTAssertTrue(results.isEmpty)
     }
 
+    func testCompactionReclaimsTombstonesAndPreservesResults() async throws {
+        let index = try VectorIndex(dimension: 2)
+        let oldIDs = try await index.upsert(
+            document: Document(id: "doc-1"),
+            chunks: [ChunkInput(text: "old", embedding: [1, 0])]
+        )
+        let activeIDs = try await index.upsert(
+            document: Document(id: "doc-1"),
+            chunks: [ChunkInput(text: "current", embedding: [0, 1])]
+        )
+        let resultsBefore = try await index.search(embedding: [0, 1], topK: 1)
+        let totalBefore = await index.totalChunkCount
+        let tombstonesBefore = await index.tombstonedChunkCount
+
+        let report = try await index.compact()
+        let resultsAfter = try await index.search(embedding: [0, 1], topK: 1)
+        let totalAfter = await index.totalChunkCount
+        let tombstonesAfter = await index.tombstonedChunkCount
+
+        XCTAssertEqual(totalBefore, 2)
+        XCTAssertEqual(tombstonesBefore, 1)
+        XCTAssertEqual(report.chunksBefore, 2)
+        XCTAssertEqual(report.chunksAfter, 1)
+        XCTAssertEqual(report.chunksRemoved, 1)
+        XCTAssertGreaterThan(report.estimatedBytesReclaimed, 0)
+        XCTAssertEqual(resultsAfter, resultsBefore)
+        XCTAssertEqual(resultsAfter.first?.chunkID, activeIDs[0])
+        XCTAssertNotEqual(resultsAfter.first?.chunkID, oldIDs[0])
+        XCTAssertEqual(totalAfter, 1)
+        XCTAssertEqual(tombstonesAfter, 0)
+    }
+
     func testSaveAndLoadRoundTrip() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vectorkit-swift-tests-\(UUID().uuidString)")

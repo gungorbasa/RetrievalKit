@@ -56,6 +56,66 @@ impl EncodedVectorStore {
         }
     }
 
+    pub fn select_rows(&self, rows: &[usize], dimension: usize) -> Result<Self> {
+        let mut selected = Self::new(match self {
+            Self::F32(_) => VectorEncoding::F32,
+            Self::F16(_) => VectorEncoding::F16,
+            Self::BF16(_) => VectorEncoding::BF16,
+            Self::I8ScalarQuantized { .. } => VectorEncoding::I8ScalarQuantized,
+        })?;
+        selected.reserve_rows(rows.len(), dimension);
+
+        for &row in rows {
+            let start = row
+                .checked_mul(dimension)
+                .ok_or_else(|| invalid_row(row, dimension))?;
+            let end = start
+                .checked_add(dimension)
+                .ok_or_else(|| invalid_row(row, dimension))?;
+            match (self, &mut selected) {
+                (Self::F32(source), Self::F32(target)) => target.extend_from_slice(
+                    source
+                        .get(start..end)
+                        .ok_or_else(|| invalid_row(row, dimension))?,
+                ),
+                (Self::F16(source), Self::F16(target)) => target.extend_from_slice(
+                    source
+                        .get(start..end)
+                        .ok_or_else(|| invalid_row(row, dimension))?,
+                ),
+                (Self::BF16(source), Self::BF16(target)) => target.extend_from_slice(
+                    source
+                        .get(start..end)
+                        .ok_or_else(|| invalid_row(row, dimension))?,
+                ),
+                (
+                    Self::I8ScalarQuantized {
+                        values: source_values,
+                        scales: source_scales,
+                    },
+                    Self::I8ScalarQuantized {
+                        values: target_values,
+                        scales: target_scales,
+                    },
+                ) => {
+                    target_values.extend_from_slice(
+                        source_values
+                            .get(start..end)
+                            .ok_or_else(|| invalid_row(row, dimension))?,
+                    );
+                    target_scales.push(
+                        *source_scales
+                            .get(row)
+                            .ok_or_else(|| invalid_row(row, dimension))?,
+                    );
+                }
+                _ => unreachable!("selected store uses the source encoding"),
+            }
+        }
+
+        Ok(selected)
+    }
+
     pub fn score_at(
         &self,
         metric: VectorMetric,
@@ -193,6 +253,12 @@ impl EncodedVectorStore {
                 encoding: encoding.as_str().to_owned(),
             }),
         }
+    }
+}
+
+fn invalid_row(row: usize, dimension: usize) -> VectorKitError {
+    VectorKitError::InvalidFormat {
+        message: format!("vector row {row} is unavailable for compaction at dimension {dimension}"),
     }
 }
 

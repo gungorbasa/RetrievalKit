@@ -287,6 +287,32 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     }
 }
 
+/// Summary of memory reclaimed by removing tombstoned chunks.
+public struct CompactionReport: Equatable, Sendable {
+    public let chunksBefore: Int
+    public let chunksAfter: Int
+    public let chunksRemoved: Int
+    public let estimatedBytesBefore: Int
+    public let estimatedBytesAfter: Int
+    public let estimatedBytesReclaimed: Int
+
+    public init(
+        chunksBefore: Int,
+        chunksAfter: Int,
+        chunksRemoved: Int,
+        estimatedBytesBefore: Int,
+        estimatedBytesAfter: Int,
+        estimatedBytesReclaimed: Int
+    ) {
+        self.chunksBefore = chunksBefore
+        self.chunksAfter = chunksAfter
+        self.chunksRemoved = chunksRemoved
+        self.estimatedBytesBefore = estimatedBytesBefore
+        self.estimatedBytesAfter = estimatedBytesAfter
+        self.estimatedBytesReclaimed = estimatedBytesReclaimed
+    }
+}
+
 /// Immutable metadata filter used by search APIs.
 public indirect enum Filter: Equatable, Sendable {
     /// Matches chunks where a metadata field equals a value.
@@ -354,6 +380,16 @@ public actor VectorIndex {
     /// Number of chunks currently eligible for search results.
     public var activeChunkCount: Int {
         Int(vectorkit_index_active_chunk_count(pointer))
+    }
+
+    /// Total number of stored chunks, including deleted and superseded chunks.
+    public var totalChunkCount: Int {
+        Int(vectorkit_index_total_chunk_count(pointer))
+    }
+
+    /// Number of deleted or superseded chunks that compaction can remove.
+    public var tombstonedChunkCount: Int {
+        Int(vectorkit_index_tombstoned_chunk_count(pointer))
     }
 
     /// Creates an empty local index.
@@ -461,6 +497,34 @@ public actor VectorIndex {
             throw VectorKitError.from(status: status)
         }
         return deletedCount
+    }
+
+    /// Rebuilds storage without deleted or superseded chunks.
+    ///
+    /// Surviving chunk IDs remain stable. Removed IDs are never reused.
+    public func compact() throws -> CompactionReport {
+        var output = VkCompactionReport(
+            chunks_before: 0,
+            chunks_after: 0,
+            chunks_removed: 0,
+            estimated_bytes_before: 0,
+            estimated_bytes_after: 0,
+            estimated_bytes_reclaimed: 0
+        )
+        var status = VkStatus(code: 0, message: nil)
+        defer { vectorkit_status_clear(&status) }
+        let succeeded = vectorkit_index_compact(pointer, &output, &status)
+        guard succeeded else {
+            throw VectorKitError.from(status: status)
+        }
+        return CompactionReport(
+            chunksBefore: output.chunks_before,
+            chunksAfter: output.chunks_after,
+            chunksRemoved: output.chunks_removed,
+            estimatedBytesBefore: output.estimated_bytes_before,
+            estimatedBytesAfter: output.estimated_bytes_after,
+            estimatedBytesReclaimed: output.estimated_bytes_reclaimed
+        )
     }
 
     /// Performs exact vector search over active chunks.

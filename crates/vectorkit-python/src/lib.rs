@@ -5,9 +5,10 @@ use pyo3::exceptions::{PyException, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 use vectorkit_core::{
-    ChunkInput, Document, ExactVectorIndex, Filter, HybridFusionTrace, HybridHit, HybridQuery,
-    IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata, MetadataValue, SearchHit,
-    SearchQuery, StoredChunk, VectorEncoding, VectorKitError as CoreError, VectorMetric,
+    ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridFusionTrace, HybridHit,
+    HybridQuery, IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata,
+    MetadataValue, SearchHit, SearchQuery, StoredChunk, VectorEncoding,
+    VectorKitError as CoreError, VectorMetric,
 };
 use vectorkit_ingest::{chunk_text as split_text, ChunkingConfig, ChunkingStrategy};
 
@@ -87,6 +88,11 @@ impl PyIndex {
         self.inner.len()
     }
 
+    #[getter]
+    fn tombstoned_chunk_count(&self) -> usize {
+        self.inner.tombstoned_chunk_count()
+    }
+
     fn add(&mut self, py: Python<'_>, documents: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let documents = documents.cast::<PyList>().map_err(|_| {
             PyTypeError::new_err("documents must be a list of document dictionaries")
@@ -139,6 +145,11 @@ impl PyIndex {
 
     fn delete_document(&mut self, document_id: &str) -> usize {
         self.inner.delete_document(document_id)
+    }
+
+    fn compact(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let report = self.inner.compact().map_err(py_error)?;
+        compaction_report_to_py(py, report)
     }
 
     #[pyo3(signature = (embedding, *, limit = 10, r#where = None))]
@@ -626,5 +637,19 @@ fn file_size_report_to_py(py: Python<'_>, report: IndexFileSizeReport) -> PyResu
     dict.set_item("bm25_bytes", report.bm25_bytes)?;
     dict.set_item("tombstones_bytes", report.tombstones_bytes)?;
     dict.set_item("total_bytes", report.total_bytes())?;
+    Ok(dict.into_any().unbind())
+}
+
+fn compaction_report_to_py(py: Python<'_>, report: CompactionReport) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item("chunks_before", report.chunks_before)?;
+    dict.set_item("chunks_after", report.chunks_after)?;
+    dict.set_item("chunks_removed", report.chunks_removed)?;
+    dict.set_item("estimated_bytes_before", report.estimated_bytes_before)?;
+    dict.set_item("estimated_bytes_after", report.estimated_bytes_after)?;
+    dict.set_item(
+        "estimated_bytes_reclaimed",
+        report.estimated_bytes_reclaimed,
+    )?;
     Ok(dict.into_any().unbind())
 }

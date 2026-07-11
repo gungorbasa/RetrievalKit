@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .types import (
     AddDocumentResult,
+    CompactionReport,
     DocumentInput,
     Embedding,
     FileSizeReport,
@@ -57,9 +58,14 @@ class Index:
     @property
     def total_chunk_count(self) -> int: ...
 
+    @property
+    def tombstoned_chunk_count(self) -> int: ...
+
     def add(self, documents: list[DocumentInput]) -> list[AddDocumentResult]: ...
 
     def delete_document(self, document_id: str) -> int: ...
+
+    def compact(self) -> CompactionReport: ...
 
     def search(
         self,

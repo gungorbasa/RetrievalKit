@@ -124,9 +124,19 @@ class FileSizeReport(TypedDict):
     total_bytes: int
 
 
+class CompactionReport(TypedDict):
+    chunks_before: int
+    chunks_after: int
+    chunks_removed: int
+    estimated_bytes_before: int
+    estimated_bytes_after: int
+    estimated_bytes_reclaimed: int
+
+
 __all__ = [
     "AddDocumentResult",
     "ChunkInput",
+    "CompactionReport",
     "DocumentInput",
     "Embedding",
     "Filter",

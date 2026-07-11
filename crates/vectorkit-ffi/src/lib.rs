@@ -5,9 +5,9 @@ use std::ptr;
 use std::slice;
 
 use vectorkit_core::{
-    ChunkInput, Document, ExactVectorIndex, Filter, HybridFusion, HybridHit, HybridQuery,
-    IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery, Metadata, MetadataValue,
-    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridFusion, HybridHit,
+    HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery, Metadata,
+    MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
@@ -44,6 +44,30 @@ const VK_CHUNKING_SENTENCE: u32 = 1;
 pub struct VkStatus {
     pub code: i32,
     pub message: *mut c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct VkCompactionReport {
+    pub chunks_before: usize,
+    pub chunks_after: usize,
+    pub chunks_removed: usize,
+    pub estimated_bytes_before: usize,
+    pub estimated_bytes_after: usize,
+    pub estimated_bytes_reclaimed: usize,
+}
+
+impl From<CompactionReport> for VkCompactionReport {
+    fn from(report: CompactionReport) -> Self {
+        Self {
+            chunks_before: report.chunks_before,
+            chunks_after: report.chunks_after,
+            chunks_removed: report.chunks_removed,
+            estimated_bytes_before: report.estimated_bytes_before,
+            estimated_bytes_after: report.estimated_bytes_after,
+            estimated_bytes_reclaimed: report.estimated_bytes_reclaimed,
+        }
+    }
 }
 
 #[repr(C)]
@@ -297,6 +321,32 @@ pub unsafe extern "C" fn vectorkit_index_active_chunk_count(index: *const VkInde
     unsafe { &*index }.index.active_chunk_count()
 }
 
+/// Returns the total number of stored chunks, including tombstones.
+///
+/// # Safety
+///
+/// `index` must be null or a valid VectorKit index pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_total_chunk_count(index: *const VkIndex) -> usize {
+    if index.is_null() {
+        return 0;
+    }
+    unsafe { &*index }.index.len()
+}
+
+/// Returns the number of tombstoned chunks.
+///
+/// # Safety
+///
+/// `index` must be null or a valid VectorKit index pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_tombstoned_chunk_count(index: *const VkIndex) -> usize {
+    if index.is_null() {
+        return 0;
+    }
+    unsafe { &*index }.index.tombstoned_chunk_count()
+}
+
 /// Splits UTF-8 text using the shared Rust ingestion implementation.
 ///
 /// # Safety
@@ -399,6 +449,28 @@ pub unsafe extern "C" fn vectorkit_index_delete_document(
         let document_id = unsafe { read_c_string(document_id, "document_id") }?;
         let count = index.index.delete_document(&document_id);
         unsafe { *deleted_count = count };
+        Ok(())
+    })
+}
+
+/// Rebuilds index storage without tombstoned chunks.
+///
+/// # Safety
+///
+/// `index` must be valid and `out_report` must point to writable memory.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_compact(
+    index: *mut VkIndex,
+    out_report: *mut VkCompactionReport,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_report.is_null() {
+            return Err(FfiError::invalid_argument("out_report must not be null"));
+        }
+        let index = unsafe { index_mut(index) }?;
+        let report = index.index.compact()?;
+        unsafe { *out_report = report.into() };
         Ok(())
     })
 }
@@ -1527,6 +1599,19 @@ mod tests {
         assert_status_ok(&status);
         assert_eq!(deleted_count, 2);
         assert_eq!(unsafe { vectorkit_index_active_chunk_count(index) }, 0);
+        assert_eq!(unsafe { vectorkit_index_total_chunk_count(index) }, 2);
+        assert_eq!(unsafe { vectorkit_index_tombstoned_chunk_count(index) }, 2);
+
+        let mut compaction = VkCompactionReport::default();
+        let compacted = unsafe { vectorkit_index_compact(index, &mut compaction, &mut status) };
+        assert!(compacted);
+        assert_status_ok(&status);
+        assert_eq!(compaction.chunks_before, 2);
+        assert_eq!(compaction.chunks_after, 0);
+        assert_eq!(compaction.chunks_removed, 2);
+        assert!(compaction.estimated_bytes_reclaimed > 0);
+        assert_eq!(unsafe { vectorkit_index_total_chunk_count(index) }, 0);
+        assert_eq!(unsafe { vectorkit_index_tombstoned_chunk_count(index) }, 0);
 
         unsafe {
             vectorkit_filter_free(filter);

@@ -26,6 +26,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - An isolated memory benchmark now measures sampled peak RSS across build,
   cold/warm search, save, unload, load, delete, and compaction. JSON budgets can
   fail the CLI, and the iOS app provides one-scenario-per-launch target presets.
+- Automated iOS memory presets print JSON to the attached device console and
+  exit with a budget-aware status. iPhone 17 Pro Max measurements now define
+  provisional 24K compact-target and 50K extended-capacity budgets.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

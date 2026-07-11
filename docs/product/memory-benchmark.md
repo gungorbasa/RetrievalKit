@@ -53,6 +53,9 @@ For unattended Xcode runs, add these launch arguments:
 --memory-scenario 24k-384d-i8-hybrid-t25
 ```
 
+Automated launch-argument runs print the JSON report to standard output and
+exit with status `0` on success or `2` when a configured budget fails.
+
 The app exposes the full `24K`/`50K` × `384d`/`768d` × `F32`/`F16`/`I8` ×
 vector-only/hybrid matrix at a 25% tombstone ratio. It also includes 10% and
 50% compaction presets for the compact `24K × 384d I8` hybrid case.
@@ -76,10 +79,7 @@ Supported budget fields are:
 - `max_compaction_peak_increase_mib`
 
 RSS budgets fail clearly on platforms where process RSS is unavailable.
-Persisted and latency budgets work everywhere. The iOS presets apply the known
-10 ms target to 24K scenarios, a provisional 20 ms diagnostic target to 50K,
-and the product's 20 MiB persisted gate to `24K × 384d I8`.
-
-Peak-RSS limits are deliberately not baked into the presets yet. Establish them
-from repeated release runs on supported device classes, then check those values
-into scenario configs instead of choosing them from simulator or Mac results.
+Persisted and latency budgets work everywhere. The I8 hybrid presets now carry
+iPhone 17 Pro Max gates for 24K × 384d/768d and 50K × 384d. Other presets keep
+diagnostic latency limits until repeated device measurements justify RSS and
+compaction gates. Do not derive device budgets from simulator or Mac results.

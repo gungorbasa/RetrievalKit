@@ -67,6 +67,12 @@ final class BenchmarkViewModel: ObservableObject {
                 } else {
                     status = "Completed \(mode.title)"
                 }
+
+                if case .memory = mode,
+                   ProcessInfo.processInfo.arguments.contains("--memory-scenario") {
+                    writeBenchmarkResultToStandardOutput(result)
+                    exit(memoryBudgetsPassed(result) ? EXIT_SUCCESS : 2)
+                }
             } catch {
                 output = "\(error)"
                 summary = "\(error)"
@@ -76,6 +82,14 @@ final class BenchmarkViewModel: ObservableObject {
             isRunning = false
         }
     }
+}
+
+private func writeBenchmarkResultToStandardOutput(_ result: String) {
+    guard let data = "\(result)\n".data(using: .utf8) else {
+        return
+    }
+    FileHandle.standardOutput.write(data)
+    try? FileHandle.standardOutput.synchronize()
 }
 
 enum BenchmarkMode: Equatable {
@@ -177,6 +191,24 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
         ]
         if chunks == 24_000 && dimension == 384 && encoding == "i8" {
             budgets["max_persisted_mib"] = 20.0
+        }
+        if chunks == 24_000 && dimension == 384 && encoding == "i8" && workload == "hybrid" {
+            budgets["max_peak_rss_mib"] = 140.0
+            budgets["max_peak_delta_mib"] = 96.0
+            budgets["max_compaction_peak_increase_mib"] = 8.0
+        }
+        if chunks == 24_000 && dimension == 768 && encoding == "i8" && workload == "hybrid" {
+            budgets["max_peak_rss_mib"] = 184.0
+            budgets["max_peak_delta_mib"] = 136.0
+            budgets["max_persisted_mib"] = 20.0
+            budgets["max_compaction_peak_increase_mib"] = 8.0
+        }
+        if chunks == 50_000 && dimension == 384 && encoding == "i8" && workload == "hybrid" {
+            budgets["max_peak_rss_mib"] = 224.0
+            budgets["max_peak_delta_mib"] = 180.0
+            budgets["max_persisted_mib"] = 24.0
+            budgets["max_search_p95_ms"] = 16.0
+            budgets["max_compaction_peak_increase_mib"] = 40.0
         }
 
         let config: [String: Any] = [

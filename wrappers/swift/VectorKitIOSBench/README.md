@@ -45,6 +45,11 @@ To start one preset automatically, add an Xcode scheme launch argument:
 --memory-scenario 24k-384d-i8-hybrid-t25
 ```
 
+Launch-argument runs write the complete JSON report to standard output and exit
+with status `0` on success or `2` when a configured budget is exceeded. This
+allows `devicectl --console` and CI/device-lab jobs to collect results without
+copying text from the UI.
+
 See `docs/product/memory-benchmark.md` for the report schema, budgets, CLI
 command, and measurement limitations.
 

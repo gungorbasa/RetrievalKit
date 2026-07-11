@@ -299,25 +299,34 @@ The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
 The active production slice is physical-device memory-budget validation. The
-isolated Rust/FFI and iOS harness is implemented; release runs on target devices
-must now establish peak-RSS and compaction budgets. Rust/FFI explicitly permit
+isolated Rust/FFI and iOS harness is implemented, and iPhone 17 Pro Max budgets
+are checked in for 24K × 384d/768d I8 hybrid plus the 50K × 384d extended tier.
+Rust/FFI explicitly permit
 parallel immutable reads with exclusive mutation. Swift uses a
 writer-preferring asynchronous gate plus detached native calls; Python releases
 the GIL for Rust work, permits parallel shared searches, and rejects conflicting
 exclusive operations through PyO3 borrowing.
 
-- Run the isolated presets on target iPhone/iPad hardware and record repeatable
-  build/load/search/save/compaction peaks. Check in budgets only after those
-  device results exist.
-- A local release diagnostic for `24K × 384d I8` hybrid at 25% tombstones saved
-  `9.226 MiB`, peaked at about `85.55 MiB` RSS, and produced `11.883 ms`
-  post-load P95. It correctly failed the configured `10 ms` latency gate; do
-  not treat this Mac run as the physical-device decision.
+- iPhone 17 Pro Max release results are in
+  `docs/product/reports/iphone-17-pro-max-memory-budget-report.md`. The compact
+  24K target stayed at or below 124.89 MiB peak RSS and 6.187 ms post-load P95
+  across five runs. The 50K profile stayed near 198 MiB but reached 14.479 ms
+  P95 and is classified as an extended-capacity tier.
+- Run F16/F32 presets next, then repeat the compact target on older supported
+  iPhone/iPad classes before generalizing budgets.
+- `24K × 768d I8` passed at 18.015 MiB persisted and at most 7.827 ms P95;
+  its observed peak RSS ranged from 133.84 to 162.42 MiB. A diagnostic
+  `50K × 768d I8` run reached 37.519 MiB persisted and 220.02 MiB peak RSS, so
+  it is not a compact profile.
+- The 24K encoding comparison kept P95 below 10 ms in every case. Persisted
+  size was 17.923/35.501 MiB for 384d F16/F32 and 35.501/70.658 MiB for 768d
+  F16/F32. I8 remains the universal compact encoding; F32 remains the
+  correctness reference.
 - Add a same-encoding hybrid candidate-quality benchmark that compares smaller
   candidate limits such as `10/25` or `25/25` against a high-candidate reference
   such as `50/50` or `100/100`.
-- Add compact `768d` experiments: `persist_bm25=false`, lower-bit candidate
-  encodings, and optional F16 rerank store.
+- Add compact vector-only comparisons and evaluate whether an optional F16
+  rerank store is justified by realistic quality measurements.
 - Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
   distributions, then persist and report actual file sizes.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

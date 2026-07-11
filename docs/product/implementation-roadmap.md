@@ -116,8 +116,9 @@ Exit criteria:
 
 ## Phase 3: Memory-Budget Hardening
 
-Status: benchmark harness complete; physical-device measurements and final
-device-class budgets remain.
+Status: the full 24K 384d/768d F32/F16/I8 matrix and 50K I8 profiles are
+validated on iPhone 17 Pro Max. Older device classes remain; 50K F16/F32 are
+outside the compact-size scope.
 
 Goal: prove the index is safe on target mobile hardware, including maintenance
 operations rather than search alone.
@@ -147,9 +148,7 @@ Implemented harness:
 
 Remaining validation:
 
-- Run release builds repeatedly on supported physical iPhone/iPad classes.
-- Establish checked-in peak-RSS and compaction headroom budgets from those
-  measurements.
+- Repeat the compact target on older supported iPhone/iPad classes.
 - Decide whether compaction needs a streaming alternative.
 
 Exit criteria:

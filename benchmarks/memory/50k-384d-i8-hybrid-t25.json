@@ -1,6 +1,6 @@
 {
-  "scenario_id": "24k-384d-i8-hybrid-t25",
-  "chunks": 24000,
+  "scenario_id": "50k-384d-i8-hybrid-t25",
+  "chunks": 50000,
   "dimension": 384,
   "encoding": "i8",
   "workload": "hybrid",
@@ -13,10 +13,10 @@
   "seed": 42,
   "sample_interval_ms": 1,
   "budgets": {
-    "max_peak_rss_mib": 140.0,
-    "max_peak_delta_mib": 96.0,
-    "max_persisted_mib": 20.0,
-    "max_search_p95_ms": 10.0,
-    "max_compaction_peak_increase_mib": 8.0
+    "max_peak_rss_mib": 224.0,
+    "max_peak_delta_mib": 180.0,
+    "max_persisted_mib": 24.0,
+    "max_search_p95_ms": 16.0,
+    "max_compaction_peak_increase_mib": 40.0
   }
 }

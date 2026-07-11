@@ -263,13 +263,16 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     case core(String)
     /// Panic caught at the FFI boundary.
     case panic(String)
+    /// A persisted index failed an integrity check.
+    case corruptIndex(String)
     /// Unknown FFI status code.
     case unknown(code: Int32, message: String)
 
     /// Human-readable error message.
     public var description: String {
         switch self {
-        case .invalidArgument(let message), .core(let message), .panic(let message):
+        case .invalidArgument(let message), .core(let message), .panic(let message),
+             .corruptIndex(let message):
             message
         case .unknown(let code, let message):
             "VectorKit error \(code): \(message)"
@@ -282,6 +285,7 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
         case 1: return .invalidArgument(message)
         case 2: return .core(message)
         case 3: return .panic(message)
+        case 4: return .corruptIndex(message)
         default: return .unknown(code: status.code, message: message)
         }
     }
@@ -420,6 +424,15 @@ public actor VectorIndex {
             }
         }
         return VectorIndex(pointer: pointer)
+    }
+
+    /// Verifies a saved index without changing it or retaining it in memory.
+    public static func validate(at directory: URL) throws {
+        try FFI.withStatusBool { status in
+            directory.path.withCString { path in
+                vectorkit_index_validate(path, status)
+            }
+        }
     }
 
     /// Saves the loaded index to a local directory.

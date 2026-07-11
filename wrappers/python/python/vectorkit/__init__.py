@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 
 from . import where
 from ._native import (
+    CorruptIndexError,
     DimensionMismatchError,
     FilterError,
     Index,
@@ -100,6 +101,7 @@ __all__ = [
     "AddDocumentResult",
     "ChunkInput",
     "CompactionReport",
+    "CorruptIndexError",
     "DimensionMismatchError",
     "DocumentInput",
     "Embedding",

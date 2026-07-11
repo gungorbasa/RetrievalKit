@@ -295,6 +295,11 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Likely Next Tasks
 
+The consolidated execution order is maintained in
+`docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
+read-only validation API are complete. The next production slice is the
+thread-safety and lifecycle contract, followed by memory-budget hardening.
+
 - Add isolated iOS device benchmark presets for one scenario per app launch so
   RSS can be interpreted per scenario instead of as a sequential process-level
   value.

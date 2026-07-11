@@ -57,6 +57,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [Swift wrapper](wrappers/swift/VectorKit/README.md)
 - [Pipeline orchestration](wrappers/swift/VectorKitPipeline/README.md)
 - [Product specification](docs/product/vectorkit-product-spec.md)
+- [Implementation roadmap](docs/product/implementation-roadmap.md)
 - [Documentation index](docs/README.md)
 - [Release and migration notes](CHANGELOG.md)
 
@@ -66,3 +67,7 @@ and hosted documentation are not available yet.
 Index updates and deletes use tombstones. Swift and Python expose explicit
 `compact()` operations that reclaim their in-memory payload; saving afterward
 publishes a smaller crash-safe snapshot.
+
+New snapshots include SHA-256 integrity checks for every persisted payload.
+Rust, Swift, and Python expose read-only validation APIs, and checksum failures
+surface as typed corruption errors with restore-or-rebuild guidance.

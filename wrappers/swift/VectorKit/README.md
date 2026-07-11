@@ -125,8 +125,24 @@ try await index.save(to: indexURL)
 let loadedIndex = try VectorIndex.load(from: indexURL)
 ```
 
-Failures surface as `VectorKitError.core` values whose message contains the
-failed operation, path, operating-system cause, and a recovery hint.
+New saves use a checksummed V3 manifest. Validate a stored index without
+retaining it for search:
+
+```swift
+do {
+    try VectorIndex.validate(at: indexURL)
+} catch VectorKitError.corruptIndex(let message) {
+    print(message) // restore a known-good copy or rebuild the index
+}
+```
+
+V1 and V2 indexes remain readable without checksums. Their next save publishes
+a V3 generation. Integrity failures are surfaced as
+`VectorKitError.corruptIndex`.
+
+Filesystem failures surface as `VectorKitError.core` values whose message
+contains the failed operation, path, operating-system cause, and a recovery
+hint.
 
 ## Compaction
 

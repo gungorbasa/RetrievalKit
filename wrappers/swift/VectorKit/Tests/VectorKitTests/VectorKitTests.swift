@@ -159,6 +159,43 @@ final class VectorKitTests: XCTestCase {
         }
     }
 
+    func testValidateDetectsCorruptPersistedPayload() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vectorkit-validation-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let index = try VectorIndex(dimension: 2)
+        try await index.upsert(
+            document: Document(id: "doc-1"),
+            chunks: [ChunkInput(text: "alpha", embedding: [1, 0])]
+        )
+        try await index.save(to: directory)
+        try VectorIndex.validate(at: directory)
+
+        let manifestData = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        )
+        let snapshotID = try XCTUnwrap(manifest["snapshot_id"] as? String)
+        let vectorsURL = directory
+            .appendingPathComponent(".snapshots")
+            .appendingPathComponent(snapshotID)
+            .appendingPathComponent("vectors.vec")
+        var payload = try Data(contentsOf: vectorsURL)
+        payload[0] ^= 0xff
+        try payload.write(to: vectorsURL)
+
+        do {
+            try VectorIndex.validate(at: directory)
+            XCTFail("expected corruption failure")
+        } catch {
+            guard case VectorKitError.corruptIndex(let message) = error else {
+                return XCTFail("expected corrupt index error, got \(error)")
+            }
+            XCTAssertTrue(message.contains("SHA-256 checksum mismatch"))
+        }
+    }
+
     func testDimensionMismatchMapsToCoreError() async throws {
         let index = try VectorIndex(dimension: 2)
 

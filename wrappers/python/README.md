@@ -107,6 +107,22 @@ index.save(path)
 loaded_index = Index.load(path)
 ```
 
+New saves use a checksummed V3 manifest. Validate a stored index without keeping
+it loaded for search:
+
+```python
+from vectorkit import CorruptIndexError, Index
+
+try:
+    Index.validate(path)
+except CorruptIndexError as error:
+    print(error)  # restore a known-good copy or rebuild the index
+```
+
+V1 and V2 indexes remain readable without checksums. Their next save publishes
+a V3 generation. Corrupt payloads fail with `CorruptIndexError`; invalid or
+unsupported manifests fail with `UnsupportedFormatError`.
+
 `save` returns actual persisted file sizes. It raises `PersistenceError` with
 the failed operation, path, operating-system cause, and a recovery hint when the
 directory cannot be written.

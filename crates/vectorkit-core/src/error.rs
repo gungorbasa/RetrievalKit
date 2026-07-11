@@ -21,6 +21,10 @@ pub enum VectorKitError {
     InvalidFormat {
         message: String,
     },
+    CorruptIndex {
+        path: String,
+        message: String,
+    },
 }
 
 impl Display for VectorKitError {
@@ -50,6 +54,12 @@ impl Display for VectorKitError {
             }
             Self::InvalidFormat { message } => {
                 write!(f, "invalid index format: {message}")
+            }
+            Self::CorruptIndex { path, message } => {
+                write!(
+                    f,
+                    "corrupt index file '{path}': {message}. Restore the index from a known-good copy, or rebuild and replace the index directory"
+                )
             }
         }
     }

@@ -1,13 +1,14 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{Cursor, Write};
+use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::bm25::{Bm25Config, Bm25Index, PersistedBm25Index};
 use crate::error::{Result, VectorKitError};
@@ -22,7 +23,8 @@ use crate::types::{
     VectorEncoding, VectorMetric,
 };
 
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 3;
+const TRANSACTIONAL_FORMAT_VERSION: u32 = 2;
 const LEGACY_FORMAT_VERSION: u32 = 1;
 const CREATED_WITH: &str = "vectorkit";
 const MANIFEST_FILE: &str = "manifest.json";
@@ -310,6 +312,17 @@ impl ExactVectorIndex {
                 FileCompression::None
             },
             tombstone_bytes: file_size(&tombstones_path)?,
+            checksums: Some(PersistedChecksums {
+                algorithm: ChecksumAlgorithm::Sha256,
+                vectors: sha256_file(&vectors_path)?,
+                chunks: sha256_file(&chunks_path)?,
+                bm25: if options.include_bm25 {
+                    Some(sha256_file(&bm25_path)?)
+                } else {
+                    None
+                },
+                tombstones: sha256_file(&tombstones_path)?,
+            }),
             normalization: match self.metric {
                 VectorMetric::Cosine => "unit_l2",
                 VectorMetric::DotProduct => "none",
@@ -319,6 +332,7 @@ impl ExactVectorIndex {
 
         manifest.validate()?;
         validate_snapshot_file_sizes(&manifest, &snapshot_directory)?;
+        validate_snapshot_checksums(&manifest, &snapshot_directory)?;
         sync_directory(&snapshot_directory)?;
         sync_directory(&snapshots_directory)?;
         checkpoint(SaveCheckpoint::SnapshotSynced)?;
@@ -348,11 +362,8 @@ impl ExactVectorIndex {
         let bm25_path = data_directory.join(BM25_FILE);
         let tombstones_path = data_directory.join(TOMBSTONES_FILE);
 
-        validate_file_size(&chunks_path, manifest.chunk_bytes)?;
-        if manifest.has_bm25 {
-            validate_file_size(&bm25_path, manifest.bm25_bytes)?;
-        }
-        validate_file_size(&tombstones_path, manifest.tombstone_bytes)?;
+        validate_snapshot_file_sizes(&manifest, &data_directory)?;
+        validate_snapshot_checksums(&manifest, &data_directory)?;
         let vector_bytes = read_file(&vectors_path)?;
         if vector_bytes.len() != manifest.vector_bytes {
             return Err(VectorKitError::InvalidFormat {
@@ -397,8 +408,17 @@ impl ExactVectorIndex {
             });
         }
         for (offset, (chunk, tombstone)) in chunks.iter().zip(&tombstones).enumerate() {
+            if *tombstone > 1 {
+                return Err(VectorKitError::CorruptIndex {
+                    path: tombstones_path.display().to_string(),
+                    message: format!(
+                        "invalid tombstone byte {tombstone} at offset {offset}; expected 0 or 1"
+                    ),
+                });
+            }
             if chunk.deleted != (*tombstone != 0) {
-                return Err(VectorKitError::InvalidFormat {
+                return Err(VectorKitError::CorruptIndex {
+                    path: tombstones_path.display().to_string(),
                     message: format!("chunk {offset} tombstone does not match chunk record"),
                 });
             }
@@ -440,6 +460,14 @@ impl ExactVectorIndex {
         }
 
         Ok(index)
+    }
+
+    /// Verifies a saved index without modifying it.
+    ///
+    /// Validation covers the manifest, file sizes, checksums when present, all
+    /// persisted payloads, tombstone values, and cross-file consistency.
+    pub fn validate_dir(directory: impl AsRef<Path>) -> Result<()> {
+        Self::load_from_dir(directory).map(|_| ())
     }
 
     /// Returns actual file sizes for a saved index directory.
@@ -1110,7 +1138,25 @@ struct PersistedManifest {
     #[serde(default)]
     bm25_compression: FileCompression,
     tombstone_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    checksums: Option<PersistedChecksums>,
     normalization: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedChecksums {
+    algorithm: ChecksumAlgorithm,
+    vectors: String,
+    chunks: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bm25: Option<String>,
+    tombstones: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ChecksumAlgorithm {
+    Sha256,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1123,7 +1169,10 @@ enum FileCompression {
 
 impl PersistedManifest {
     fn validate(&self) -> Result<()> {
-        if self.format_version != FORMAT_VERSION && self.format_version != LEGACY_FORMAT_VERSION {
+        if !matches!(
+            self.format_version,
+            LEGACY_FORMAT_VERSION | TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION
+        ) {
             return Err(VectorKitError::InvalidFormat {
                 message: format!("unsupported format version {}", self.format_version),
             });
@@ -1131,15 +1180,19 @@ impl PersistedManifest {
 
         match (self.format_version, &self.snapshot_id) {
             (LEGACY_FORMAT_VERSION, None) => {}
-            (FORMAT_VERSION, Some(snapshot_id)) if valid_snapshot_id(snapshot_id) => {}
+            (TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION, Some(snapshot_id))
+                if valid_snapshot_id(snapshot_id) => {}
             (LEGACY_FORMAT_VERSION, Some(_)) => {
                 return Err(VectorKitError::InvalidFormat {
                     message: "legacy format must not reference a snapshot generation".to_owned(),
                 });
             }
-            (FORMAT_VERSION, _) => {
+            (TRANSACTIONAL_FORMAT_VERSION | FORMAT_VERSION, _) => {
                 return Err(VectorKitError::InvalidFormat {
-                    message: "format version 2 requires a safe snapshot_id".to_owned(),
+                    message: format!(
+                        "format version {} requires a safe snapshot_id",
+                        self.format_version
+                    ),
                 });
             }
             _ => unreachable!("format version was checked above"),
@@ -1171,6 +1224,22 @@ impl PersistedManifest {
             });
         }
 
+        match (self.format_version, &self.checksums) {
+            (FORMAT_VERSION, Some(checksums)) => checksums.validate(self.has_bm25)?,
+            (FORMAT_VERSION, None) => {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "format version 3 requires checksums".to_owned(),
+                });
+            }
+            (LEGACY_FORMAT_VERSION | TRANSACTIONAL_FORMAT_VERSION, None) => {}
+            (_, Some(_)) => {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "checksums require format version 3".to_owned(),
+                });
+            }
+            _ => unreachable!("format version was checked above"),
+        }
+
         Ok(())
     }
 
@@ -1185,6 +1254,48 @@ impl PersistedManifest {
             None => Ok(index_directory.to_path_buf()),
         }
     }
+}
+
+impl PersistedChecksums {
+    fn validate(&self, has_bm25: bool) -> Result<()> {
+        for (name, checksum) in [
+            (VECTORS_FILE, Some(self.vectors.as_str())),
+            (CHUNKS_FILE, Some(self.chunks.as_str())),
+            (BM25_FILE, self.bm25.as_deref()),
+            (TOMBSTONES_FILE, Some(self.tombstones.as_str())),
+        ] {
+            match checksum {
+                Some(value) if valid_sha256(value) => {}
+                Some(_) => {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!(
+                            "manifest checksum for {name} must be 64 lowercase hex characters"
+                        ),
+                    });
+                }
+                None if name == BM25_FILE && !has_bm25 => {}
+                None => {
+                    return Err(VectorKitError::InvalidFormat {
+                        message: format!("manifest is missing checksum for {name}"),
+                    });
+                }
+            }
+        }
+        if !has_bm25 && self.bm25.is_some() {
+            return Err(VectorKitError::InvalidFormat {
+                message: "manifest cannot include a bm25 checksum when has_bm25 is false"
+                    .to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn valid_snapshot_id(snapshot_id: &str) -> bool {
@@ -1217,8 +1328,9 @@ fn validate_snapshot_file_sizes(
     if vector_bytes != manifest.vector_bytes as u64 {
         return Err(VectorKitError::InvalidFormat {
             message: format!(
-                "manifest vector bytes {} do not match snapshot vector bytes {vector_bytes}",
-                manifest.vector_bytes
+                "manifest vector bytes {} do not match '{}' size {vector_bytes}",
+                manifest.vector_bytes,
+                vectors_path.display()
             ),
         });
     }
@@ -1231,6 +1343,55 @@ fn validate_snapshot_file_sizes(
         validate_file_size(&snapshot_directory.join(BM25_FILE), manifest.bm25_bytes)?;
     }
     Ok(())
+}
+
+fn validate_snapshot_checksums(
+    manifest: &PersistedManifest,
+    snapshot_directory: &Path,
+) -> Result<()> {
+    let Some(checksums) = &manifest.checksums else {
+        return Ok(());
+    };
+    validate_file_checksum(&snapshot_directory.join(VECTORS_FILE), &checksums.vectors)?;
+    validate_file_checksum(&snapshot_directory.join(CHUNKS_FILE), &checksums.chunks)?;
+    validate_file_checksum(
+        &snapshot_directory.join(TOMBSTONES_FILE),
+        &checksums.tombstones,
+    )?;
+    if let Some(expected) = &checksums.bm25 {
+        validate_file_checksum(&snapshot_directory.join(BM25_FILE), expected)?;
+    }
+    Ok(())
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let file = fs::File::open(path)
+        .map_err(|error| persistence_error("open for checksum", path, &error))?;
+    let mut reader = BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let bytes_read = reader
+            .read(&mut buffer)
+            .map_err(|error| persistence_error("read for checksum", path, &error))?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn validate_file_checksum(path: &Path, expected: &str) -> Result<()> {
+    let actual = sha256_file(path)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(VectorKitError::CorruptIndex {
+            path: path.display().to_string(),
+            message: format!("SHA-256 checksum mismatch: expected {expected}, found {actual}"),
+        })
+    }
 }
 
 fn cleanup_unreferenced_snapshots(snapshots_directory: &Path, active_snapshot_id: &str) {
@@ -2511,6 +2672,14 @@ mod tests {
         assert!(manifest.chunk_uncompressed_bytes > 0);
         assert_eq!(manifest.bm25_compression, FileCompression::Zstd);
         assert!(manifest.bm25_uncompressed_bytes > 0);
+        let checksums = manifest.checksums.as_ref().unwrap();
+        assert_eq!(checksums.algorithm, ChecksumAlgorithm::Sha256);
+        assert!(valid_sha256(&checksums.vectors));
+        assert!(valid_sha256(&checksums.chunks));
+        assert!(valid_sha256(checksums.bm25.as_deref().unwrap()));
+        assert!(valid_sha256(&checksums.tombstones));
+
+        ExactVectorIndex::validate_dir(&directory).unwrap();
 
         let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
         assert_eq!(loaded.dimension(), 2);
@@ -2549,6 +2718,173 @@ mod tests {
         assert_eq!(filtered_hits[0].chunk_id, 0);
 
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn validation_rejects_same_size_corruption_in_every_snapshot_payload() {
+        for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+            let directory = temp_index_dir(&format!("checksum-{file_name}"));
+            let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+            index
+                .upsert_document(
+                    document("doc-1"),
+                    vec![chunk_input("checksum data", vec![1.0, 0.0])],
+                )
+                .unwrap();
+            index.save_to_dir(&directory).unwrap();
+
+            let manifest: PersistedManifest =
+                read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+            let path = manifest.data_directory(&directory).unwrap().join(file_name);
+            let mut bytes = read_file(&path).unwrap();
+            bytes[0] ^= 0xff;
+            write_file(&path, &bytes).unwrap();
+
+            let error = ExactVectorIndex::validate_dir(&directory).unwrap_err();
+            assert!(matches!(error, VectorKitError::CorruptIndex { .. }));
+            assert!(error.to_string().contains("SHA-256 checksum mismatch"));
+            assert!(error.to_string().contains(file_name));
+
+            let _ = fs::remove_dir_all(directory);
+        }
+    }
+
+    #[test]
+    fn validation_rejects_truncated_and_appended_snapshot_payloads() {
+        for (file_name, append) in [
+            (VECTORS_FILE, false),
+            (CHUNKS_FILE, false),
+            (BM25_FILE, false),
+            (TOMBSTONES_FILE, false),
+            (VECTORS_FILE, true),
+            (CHUNKS_FILE, true),
+            (BM25_FILE, true),
+            (TOMBSTONES_FILE, true),
+        ] {
+            let directory = temp_index_dir(&format!("size-{file_name}-{append}"));
+            let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+            index
+                .upsert_document(
+                    document("doc-1"),
+                    vec![chunk_input("size data", vec![1.0, 0.0])],
+                )
+                .unwrap();
+            index.save_to_dir(&directory).unwrap();
+
+            let manifest: PersistedManifest =
+                read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+            let path = manifest.data_directory(&directory).unwrap().join(file_name);
+            let mut bytes = read_file(&path).unwrap();
+            if append {
+                bytes.push(0);
+            } else {
+                bytes.pop();
+            }
+            write_file(&path, &bytes).unwrap();
+
+            let error = ExactVectorIndex::validate_dir(&directory).unwrap_err();
+            assert!(error.to_string().contains("manifest"));
+            assert!(error.to_string().contains(file_name));
+
+            let _ = fs::remove_dir_all(directory);
+        }
+    }
+
+    #[test]
+    fn validation_rejects_malformed_manifest_checksum() {
+        let directory = temp_index_dir("malformed-manifest-checksum");
+        let index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index.save_to_dir(&directory).unwrap();
+
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        manifest.checksums.as_mut().unwrap().vectors = "not-a-sha256".to_owned();
+        write_json_file(&manifest_path, &manifest).unwrap();
+
+        let error = ExactVectorIndex::validate_dir(&directory).unwrap_err();
+        assert!(matches!(error, VectorKitError::InvalidFormat { .. }));
+        assert!(error.to_string().contains("64 lowercase hex characters"));
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn validation_does_not_clean_or_modify_index_directory() {
+        let directory = temp_index_dir("validation-is-read-only");
+        let index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index.save_to_dir(&directory).unwrap();
+
+        let abandoned_snapshot = directory.join(SNAPSHOTS_DIRECTORY).join("abandoned");
+        fs::create_dir(&abandoned_snapshot).unwrap();
+        let temporary_manifest = directory.join("manifest.abandoned.tmp");
+        write_file(&temporary_manifest, b"unfinished").unwrap();
+        let manifest_before = read_file(&directory.join(MANIFEST_FILE)).unwrap();
+
+        ExactVectorIndex::validate_dir(&directory).unwrap();
+
+        assert!(abandoned_snapshot.exists());
+        assert!(temporary_manifest.exists());
+        assert_eq!(
+            read_file(&directory.join(MANIFEST_FILE)).unwrap(),
+            manifest_before
+        );
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn validation_rejects_non_boolean_tombstone_bytes_in_v2_indexes() {
+        let directory = temp_index_dir("invalid-tombstone-byte");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("active", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        let tombstones_path = manifest
+            .data_directory(&directory)
+            .unwrap()
+            .join(TOMBSTONES_FILE);
+        manifest.format_version = TRANSACTIONAL_FORMAT_VERSION;
+        manifest.checksums = None;
+        write_json_file(&manifest_path, &manifest).unwrap();
+        write_file(&tombstones_path, &[2]).unwrap();
+
+        let error = ExactVectorIndex::validate_dir(&directory).unwrap_err();
+        assert!(matches!(error, VectorKitError::CorruptIndex { .. }));
+        assert!(error.to_string().contains("expected 0 or 1"));
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn loader_accepts_transactional_v2_manifest_without_checksums() {
+        let directory = temp_index_dir("v2-without-checksums");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("v2 data", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        manifest.format_version = TRANSACTIONAL_FORMAT_VERSION;
+        manifest.checksums = None;
+        write_json_file(&manifest_path, &manifest).unwrap();
+
+        ExactVectorIndex::validate_dir(&directory).unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(loaded.chunk(0).unwrap().text, "v2 data");
+
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]
@@ -2678,6 +3014,7 @@ mod tests {
         }
         manifest.format_version = LEGACY_FORMAT_VERSION;
         manifest.snapshot_id = None;
+        manifest.checksums = None;
         write_json_file(&manifest_path, &manifest).unwrap();
         fs::remove_dir_all(directory.join(SNAPSHOTS_DIRECTORY)).unwrap();
 

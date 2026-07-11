@@ -13,6 +13,7 @@ extern "C" {
 #define VK_STATUS_INVALID_ARGUMENT 1
 #define VK_STATUS_CORE_ERROR 2
 #define VK_STATUS_PANIC 3
+#define VK_STATUS_CORRUPT_INDEX 4
 
 #define VK_METRIC_COSINE 0
 #define VK_METRIC_DOT_PRODUCT 1
@@ -164,6 +165,8 @@ VkIndex *vectorkit_index_new(
     VkStatus *status);
 
 VkIndex *vectorkit_index_load(const char *directory, VkStatus *status);
+
+bool vectorkit_index_validate(const char *directory, VkStatus *status);
 void vectorkit_index_free(VkIndex *index);
 
 bool vectorkit_index_save(

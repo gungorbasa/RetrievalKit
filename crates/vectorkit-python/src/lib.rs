@@ -17,6 +17,7 @@ pyo3::create_exception!(_native, DimensionMismatchError, VectorKitError);
 pyo3::create_exception!(_native, PersistenceError, VectorKitError);
 pyo3::create_exception!(_native, FilterError, VectorKitError);
 pyo3::create_exception!(_native, UnsupportedFormatError, VectorKitError);
+pyo3::create_exception!(_native, CorruptIndexError, VectorKitError);
 
 #[pyfunction]
 #[pyo3(signature = (text, *, max_characters, overlap_characters = 0, strategy = "sentence"))]
@@ -71,6 +72,12 @@ impl PyIndex {
         Ok(Self {
             inner: ExactVectorIndex::load_from_dir(path).map_err(py_error)?,
         })
+    }
+
+    /// Verifies a saved index without changing it.
+    #[staticmethod]
+    fn validate(path: PathBuf) -> PyResult<()> {
+        ExactVectorIndex::validate_dir(path).map_err(py_error)
     }
 
     #[getter]
@@ -271,6 +278,7 @@ fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         "UnsupportedFormatError",
         py.get_type::<UnsupportedFormatError>(),
     )?;
+    m.add("CorruptIndexError", py.get_type::<CorruptIndexError>())?;
     Ok(())
 }
 
@@ -303,6 +311,7 @@ fn py_error(error: CoreError) -> PyErr {
         CoreError::InvalidRange { .. } => FilterError::new_err(error.to_string()),
         CoreError::Persistence { .. } => PersistenceError::new_err(error.to_string()),
         CoreError::InvalidFormat { .. } => UnsupportedFormatError::new_err(error.to_string()),
+        CoreError::CorruptIndex { .. } => CorruptIndexError::new_err(error.to_string()),
         CoreError::UnsupportedVectorEncoding { .. } => {
             UnsupportedFormatError::new_err(error.to_string())
         }

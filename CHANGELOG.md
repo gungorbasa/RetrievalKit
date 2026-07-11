@@ -14,6 +14,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Explicit Rust, Swift, and Python index compaction removes tombstoned payloads,
   preserves active chunk IDs, reports estimated reclaimed memory, and remains a
   cheap no-op when there is nothing to reclaim.
+- Checksummed persistence format V3 verifies vectors, chunks, BM25, and
+  tombstones with SHA-256 before loading. Rust, Swift, and Python expose
+  read-only validation APIs and typed corruption failures.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.
@@ -22,8 +25,9 @@ and replacement structures to guarantee an all-or-nothing swap.
 ### Compatibility
 
 - Existing persistence format V1 indexes remain readable.
-- Saving a V1 index writes format V2 and migrates its payload into `.snapshots`.
-- V2 index directories should be treated as VectorKit-owned. Applications must
+- Saving a V1 or V2 index writes format V3 and migrates or upgrades its payload
+  into a checksummed generation under `.snapshots`.
+- Index directories should be treated as VectorKit-owned. Applications must
   not modify `.snapshots` or `manifest.json` directly.
 
 ### Upgrade

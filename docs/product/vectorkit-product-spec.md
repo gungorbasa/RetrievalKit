@@ -204,13 +204,12 @@ Use separate storage for each responsibility.
 ```text
 index_directory/
   manifest.json
-  vectors.vec
-  chunks.bin
-  metadata.bin
-  keywords.bin
-  bm25.bin
-  hnsw.bin
-  tombstones.bin
+  .snapshots/
+    <generation>/
+      vectors.vec
+      chunks.bin
+      bm25.bin
+      tombstones.bin
 ```
 
 ### Manifest
@@ -221,21 +220,30 @@ Required fields:
 
 ```json
 {
-  "format_version": 1,
+  "format_version": 3,
+  "snapshot_id": "<safe-generation-id>",
   "created_with": "vectorkit",
   "dimension": 384,
   "metric": "cosine",
-  "vector_count": 100000,
-  "active_chunk_count": 99500,
-  "has_hnsw": true,
+  "vector_count": 24000,
+  "active_chunk_count": 23500,
   "has_bm25": true,
   "vector_encoding": "f32",
-  "vector_bytes_per_value": 4,
+  "vector_bytes": 36864000,
+  "chunk_bytes": 45678,
   "chunk_compression": "zstd",
   "chunk_uncompressed_bytes": 123456,
+  "bm25_bytes": 34567,
   "bm25_compression": "zstd",
   "bm25_uncompressed_bytes": 123456,
-  "embedding_model": "caller-provided",
+  "tombstone_bytes": 24000,
+  "checksums": {
+    "algorithm": "sha256",
+    "vectors": "<64-lowercase-hex-characters>",
+    "chunks": "<64-lowercase-hex-characters>",
+    "bm25": "<64-lowercase-hex-characters>",
+    "tombstones": "<64-lowercase-hex-characters>"
+  },
   "normalization": "unit_l2"
 }
 ```
@@ -248,7 +256,9 @@ Load must fail clearly if:
 - file sizes do not match manifest counts.
 - compressed payloads fail to decompress.
 - decompressed file sizes do not match manifest counts when recorded.
-- checksum validation fails when checksums are enabled.
+- checksum validation fails. Format V3 requires SHA-256 checksums for every
+  persisted payload; V1/V2 remain readable without them.
+- a tombstone byte is not exactly `0` or `1`.
 
 `chunks.bin` and `bm25.bin` may be compressed at rest. Loading must
 transparently decompress them before rebuilding in-memory search structures so
@@ -911,6 +921,8 @@ Tests must verify:
 - manifest mismatches fail.
 - interrupted build does not corrupt the last valid index.
 - tombstones persist across reloads.
+- same-size payload corruption, truncation, and appended bytes are rejected.
+- read-only validation reports corruption without changing the index directory.
 
 Persistence uses immutable generation directories under `.snapshots`. Writers
 fully write, sync, and validate generation file sizes before atomically
@@ -921,6 +933,13 @@ layout and cleans abandoned or superseded files. An OS-released exclusive file
 lock serializes writers to the same directory, including across processes, so a
 crash cannot leave a stale logical lock and concurrent cleanup cannot remove the
 published generation.
+
+Format V3 manifests include SHA-256 checksums for vectors, chunks, BM25 when
+present, and tombstones. Rust `validate_dir`, Swift `VectorIndex.validate(at:)`,
+and Python `Index.validate(path)` run the same complete validation path used by
+load. Checksum failures identify the damaged file and instruct callers to
+restore or rebuild the index. V1 and V2 indexes remain readable; their next save
+publishes a checksummed V3 snapshot.
 
 ## Speed Requirements
 

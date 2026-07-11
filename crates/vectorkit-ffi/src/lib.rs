@@ -19,6 +19,7 @@ const VK_STATUS_OK: i32 = 0;
 const VK_STATUS_INVALID_ARGUMENT: i32 = 1;
 const VK_STATUS_CORE_ERROR: i32 = 2;
 const VK_STATUS_PANIC: i32 = 3;
+const VK_STATUS_CORRUPT_INDEX: i32 = 4;
 
 const VK_METRIC_COSINE: u32 = 0;
 const VK_METRIC_DOT_PRODUCT: u32 = 1;
@@ -256,6 +257,23 @@ pub unsafe extern "C" fn vectorkit_index_load(
         let directory = unsafe { read_c_string(directory, "directory") }?;
         let index = ExactVectorIndex::load_from_dir(directory)?;
         Ok(Box::into_raw(Box::new(VkIndex { index })))
+    })
+}
+
+/// Verifies a saved index without modifying it.
+///
+/// # Safety
+///
+/// `directory` must point to a valid null-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_index_validate(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        ExactVectorIndex::validate_dir(directory)?;
+        Ok(())
     })
 }
 
@@ -892,8 +910,13 @@ impl FfiError {
     }
 
     fn core(error: vectorkit_core::VectorKitError) -> Self {
+        let code = if matches!(error, vectorkit_core::VectorKitError::CorruptIndex { .. }) {
+            VK_STATUS_CORRUPT_INDEX
+        } else {
+            VK_STATUS_CORE_ERROR
+        };
         Self {
-            code: VK_STATUS_CORE_ERROR,
+            code,
             message: error.to_string(),
         }
     }

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from vectorkit import (
     ChunkInput,
+    CorruptIndexError,
     DimensionMismatchError,
     DocumentInput,
     Filter,
@@ -431,6 +434,24 @@ def test_save_error_includes_operation_cause_and_recovery_hint(tmp_path) -> None
     assert "persistence create directory failed" in message
     assert str(blocking_file / "index") in message
     assert "parent directory is writable when saving" in message
+
+
+def test_validate_detects_corrupt_persisted_payload(tmp_path) -> None:
+    index = Index(dimension=2)
+    index.add(
+        [{"id": "doc-1", "chunks": [{"text": "alpha", "embedding": [1.0, 0.0]}]}]
+    )
+    index.save(tmp_path)
+    assert Index.validate(tmp_path) is None
+
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    vectors_path = tmp_path / ".snapshots" / manifest["snapshot_id"] / "vectors.vec"
+    payload = bytearray(vectors_path.read_bytes())
+    payload[0] ^= 0xFF
+    vectors_path.write_bytes(payload)
+
+    with pytest.raises(CorruptIndexError, match="SHA-256 checksum mismatch"):
+        Index.validate(tmp_path)
 
 
 def test_dimension_mismatch_is_specific_error() -> None:

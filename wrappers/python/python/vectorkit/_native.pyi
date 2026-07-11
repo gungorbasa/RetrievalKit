@@ -38,6 +38,9 @@ class FilterError(VectorKitError): ...
 class UnsupportedFormatError(VectorKitError): ...
 
 
+class CorruptIndexError(VectorKitError): ...
+
+
 class Index:
     def __init__(
         self,
@@ -48,6 +51,9 @@ class Index:
 
     @staticmethod
     def load(path: str | Path) -> Index: ...
+
+    @staticmethod
+    def validate(path: str | Path) -> None: ...
 
     @property
     def dimension(self) -> int: ...

@@ -215,6 +215,8 @@ struct RequiredText {
 
 #[derive(Debug, Deserialize)]
 struct QualityGates {
+    #[serde(default)]
+    min_relevance_recall_at_k: Option<f64>,
     min_ndcg_at_k: f64,
     min_mrr: f64,
     min_recall_vs_reference: f64,
@@ -907,6 +909,14 @@ fn evaluate_gates(
         .iter()
         .filter(|run| [run.vector_candidates, run.keyword_candidates] == fixture.default_pair)
     {
+        if let Some(minimum) = fixture.quality_gates.min_relevance_recall_at_k {
+            if run.relevance_recall_at_k < minimum {
+                violations.push(format!(
+                    "{} default relevance recall@{} {:.4} is below {:.4}",
+                    run.encoding, fixture.top_k, run.relevance_recall_at_k, minimum
+                ));
+            }
+        }
         if run.ndcg_at_k < fixture.quality_gates.min_ndcg_at_k {
             violations.push(format!(
                 "{} default NDCG@{} {:.4} is below {:.4}",
@@ -939,6 +949,17 @@ fn evaluate_gates(
         }
         violations.extend(run.lifecycle_violations.iter().cloned());
     }
+    for run in vector_only_runs {
+        if let Some(minimum) = fixture.quality_gates.min_relevance_recall_at_k {
+            if run.relevance_recall_at_k < minimum {
+                violations.push(format!(
+                    "{} vector-only relevance recall@{} {:.4} is below {:.4}",
+                    run.encoding, run.top_k, run.relevance_recall_at_k, minimum
+                ));
+            }
+        }
+        violations.extend(run.lifecycle_violations.iter().cloned());
+    }
     for run in vector_only_runs.iter().filter(|run| run.encoding == "i8") {
         if run.recall_at_k_vs_f32 < fixture.quality_gates.min_i8_vector_recall_vs_f32 {
             violations.push(format!(
@@ -948,7 +969,6 @@ fn evaluate_gates(
                 fixture.quality_gates.min_i8_vector_recall_vs_f32
             ));
         }
-        violations.extend(run.lifecycle_violations.iter().cloned());
     }
     GateResult {
         passed: violations.is_empty(),
@@ -1048,6 +1068,20 @@ mod tests {
     fn checked_in_fixture_passes_quality_gates() {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../benchmarks/retrieval-quality/v1/fixture.json");
+        let outcome = run(&[
+            "--fixture".to_owned(),
+            fixture.display().to_string(),
+            "--iterations".to_owned(),
+            "1".to_owned(),
+        ])
+        .unwrap();
+        assert!(outcome.passed, "{}", outcome.json);
+    }
+
+    #[test]
+    fn harder_v2_fixture_passes_quality_gates() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../benchmarks/retrieval-quality/v2/fixture.json");
         let outcome = run(&[
             "--fixture".to_owned(),
             fixture.display().to_string(),

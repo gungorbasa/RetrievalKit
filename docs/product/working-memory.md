@@ -320,16 +320,30 @@ exclusive operations through PyO3 borrowing.
   size was 17.923/35.501 MiB for 384d F16/F32 and 35.501/70.658 MiB for 768d
   F16/F32. I8 remains the universal compact encoding; F32 remains the
   correctness reference.
-- Retrieval-quality V1 is checked in under `benchmarks/retrieval-quality/v1`.
-  On 282 documents and 12 judged queries, I8 recall@5 versus the F32 `100/100`
-  reference was `0.7333` at `10/25`, `0.90` at `25/25`, and `0.95` at the
-  current `50/50` default. Keep `50/50`; grow real-user judgments before tuning.
-- Realistic MiniLM vector-only comparison now measures I8 against exact F32
-  without BM25. I8 retained `0.9833` of F32 top 5 and `1.0` of F32 top 10,
-  with `1.0` top-result agreement and relevance recall. Do not add an F16/F32
-  rerank store without harder production-derived evidence that it is needed.
-- Add ambiguous real-user queries and multi-grade judgments to the next fixture
-  version so NDCG and MRR become more discriminating.
+- Retrieval-quality V2 is checked in under `benchmarks/retrieval-quality/v2`.
+  It expands to 306 documents and 42 graded queries with ambiguity and competing
+  documents. I8 `50/50` hybrid overlap versus F32 `100/100` is `0.9762`; human
+  relevance recall is `0.9028`, MRR is `1.0`, and NDCG is `0.9272`.
+- BM25-free I8 vector search retains `1.0` of F32 top 5 and `0.9976` of F32 top
+  10, with `1.0` top-result agreement. Do not add an F16/F32 rerank store without
+  production-derived evidence that it is needed.
+- Smaller hybrid pools have slightly better V2 human relevance than `50/50`,
+  despite lower reference overlap. Keep `50/50` provisional and revisit `25/25`
+  when anonymized application queries and relevance feedback exist.
+- `retrieval-quality-evaluation-standard.md` records the V3 gold-standard plan:
+  TREC-compatible qrels/runs, pooled blind judgments, standard metric
+  cross-checks, BEIR adapters, per-category gates, and paired confidence
+  intervals. Moss uses qrels with Hit Rate, MRR, and NDCG on SciFact, NFCorpus,
+  and mini MS MARCO; VectorKit should retain its additional fidelity and
+  lifecycle checks.
+- NIST TREC evaluation is a committed future milestone, but it does not block
+  Phase 5 release distribution. First add TREC-compatible qrels/run output and
+  standard metric cross-checks; after packaging is stable, run an appropriate
+  official collection and evaluate TREC RAG participation.
+- A manual-only GitHub Actions workflow can run Rust format/Clippy/tests, V2
+  quality gates, Python lint/type/tests plus installed-wheel smoke, and a full
+  Apple XCFramework build followed by Swift tests. It has no push or pull-request
+  trigger and does not upload artifacts, create releases, or change Package.swift.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
   older devices that may not report `dotprod`.
 - Explore parallel exact scan only after target-device benchmarks show remaining

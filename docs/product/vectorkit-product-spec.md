@@ -1040,6 +1040,10 @@ Synthetic and matrix reports must include recall@k against `F32` exact search
 for every non-`F32` encoding. `F32` reports recall as `1.0` because it is the
 ground-truth baseline.
 
+Encoding fidelity and human relevance are separate benchmark tracks. F32 exact
+overlap validates compact or approximate retrieval; it does not prove that the
+ranking satisfies a user’s information need.
+
 Later file-backed benchmark command:
 
 ```bash
@@ -1092,6 +1096,32 @@ Metrics:
 - selected exact query plan
 - filtered query latency by selectivity bucket
 - filtered recall@10 vs F32 exact filtered search
+
+Human-judged retrieval reports must additionally include:
+
+- NDCG@5 and NDCG@10
+- human relevance Recall@5 and Recall@10
+- Success@1 / Hit Rate
+- Precision@5
+- MRR@10
+- MAP where binary judgments are available
+- per-category and worst-decile results
+- zero deleted, superseded, stale, filter, and persistence violations
+
+Human relevance fixtures must use versioned qrels independent of search output.
+For locked release evaluation, pool results from vector-only F32/I8, BM25,
+hybrid RRF, weighted fusion, and every candidate configuration under
+consideration. Blind judgments to originating system and rank.
+
+Future gold-standard compatibility:
+
+- Emit standard TREC qrels and run files.
+- Cross-check metric calculations with `trec_eval` or `ir_measures`.
+- Evaluate on BEIR SciFact and NFCorpus for external comparability.
+- Run an appropriate official NIST TREC collection once release distribution
+  is stable, and evaluate participating in the NIST TREC RAG track.
+- Keep a separate product-specific locked set built from anonymized real-user
+  queries; external benchmarks do not replace product evaluation.
 
 Filter selectivity benchmark buckets:
 

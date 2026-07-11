@@ -37,6 +37,12 @@ All notable user-facing changes and persistence migrations are recorded here.
   storage. Hybrid queries default to 50/50 candidates and RRF with `rrf_k=60`,
   matching the measured V1 quality configuration. F32 and weighted fusion
   remain explicit options.
+- Retrieval-quality V2 expands the benchmark to 306 documents and 42 graded,
+  ambiguous queries. It adds a human relevance-recall gate while preserving V1
+  as a historical baseline.
+- A manual-only verification workflow can check Rust, the V2 retrieval-quality
+  gates, Python typing/lint/tests and installed wheels, plus Apple XCFramework
+  and Swift builds without running automatically or publishing artifacts.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

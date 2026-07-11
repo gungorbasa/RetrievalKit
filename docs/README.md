@@ -11,8 +11,12 @@ Current implementation source of truth:
   context and recent decisions that should survive chat changes
 - [`product/memory-benchmark.md`](product/memory-benchmark.md) for isolated RSS,
   persistence, search, and compaction validation
+- [`product/reports/retrieval-quality-v2-report.md`](product/reports/retrieval-quality-v2-report.md)
+  for the active harder vector-only and hybrid quality evidence
+- [`product/retrieval-quality-evaluation-standard.md`](product/retrieval-quality-evaluation-standard.md)
+  for the Moss comparison, industry gold standards, and V3 evaluation plan
 - [`product/reports/retrieval-quality-v1-report.md`](product/reports/retrieval-quality-v1-report.md)
-  for relevance, encoding-recall, and hybrid candidate-limit evidence
+  for the original 12-query baseline
 - [`product/size-speed-report.md`](product/size-speed-report.md) for the current
   compact-index footprint and retrieval-speed analysis
 

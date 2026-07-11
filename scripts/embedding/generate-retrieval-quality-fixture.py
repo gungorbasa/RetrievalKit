@@ -21,12 +21,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         type=Path,
-        default=ROOT / "benchmarks/retrieval-quality/v1/source.json",
+        default=ROOT / "benchmarks/retrieval-quality/v2/source.json",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "benchmarks/retrieval-quality/v1/fixture.json",
+        default=ROOT / "benchmarks/retrieval-quality/v2/fixture.json",
     )
     parser.add_argument(
         "--model-dir",
@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    source = json.loads(args.source.read_text())
+    source = load_source(args.source)
     model_info = source["model"]
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_dir / "tokenizer", local_files_only=True
@@ -84,6 +84,29 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(fixture, indent=2, sort_keys=True) + "\n")
     print(f"Wrote {args.output}")
+
+
+def load_source(path: Path) -> dict[str, Any]:
+    source = json.loads(path.read_text())
+    base_source = source.pop("base_source", None)
+    if base_source is None:
+        return source
+
+    base_path = (path.parent / base_source).resolve()
+    base = load_source(base_path)
+    for key in ("documents", "queries", "replacements", "deletions"):
+        additions = source.pop(f"additional_{key}", [])
+        base[key] = [*base.get(key, []), *additions]
+    query_overrides = source.pop("query_overrides", {})
+    known_query_ids = {query["id"] for query in base["queries"]}
+    unknown_query_ids = sorted(set(query_overrides) - known_query_ids)
+    if unknown_query_ids:
+        raise ValueError(f"query overrides reference unknown ids: {unknown_query_ids}")
+    for query in base["queries"]:
+        query.update(query_overrides.get(query["id"], {}))
+    base["quality_gates"].update(source.pop("quality_gate_overrides", {}))
+    base.update(source)
+    return base
 
 
 def generate_distractors(count: int) -> list[dict[str, Any]]:

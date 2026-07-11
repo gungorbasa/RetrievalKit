@@ -11,7 +11,7 @@ Run the benchmark:
 ```bash
 cargo run --release -p vectorkit-cli -- \
   bench quality \
-  --fixture benchmarks/retrieval-quality/v1/fixture.json \
+  --fixture benchmarks/retrieval-quality/v2/fixture.json \
   --iterations 50
 ```
 
@@ -26,6 +26,10 @@ Regenerate embeddings after intentionally editing `source.json`:
 target/embedding-conversion-venv/bin/python \
   scripts/embedding/generate-retrieval-quality-fixture.py
 ```
+
+V2 inherits the V1 source and adds competing documents, ambiguous queries,
+graded relevance judgments, and a direct relevance-recall gate. V1 remains
+checked in as the original baseline.
 
 Generation uses the local converted
 `sentence-transformers/all-MiniLM-L6-v2` Core ML model. Review relevance

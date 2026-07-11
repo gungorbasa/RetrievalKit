@@ -160,11 +160,11 @@ Exit criteria:
 
 ## Phase 4: Real Retrieval-Quality Benchmark
 
-Status: V1 fixture and regression runner complete. The baseline uses real
-MiniLM embeddings, graded judgments, filters, deletion/replacement checks,
-persistence reload, hybrid candidate-limit gates, and a BM25-free exact F32/I8
-comparison at top 5 and top 10. Future fixture versions should add judgments
-from real application usage.
+Status: V2 fixture and regression runner complete. The active baseline uses 42
+graded queries, real MiniLM embeddings, competing documents, filters,
+deletion/replacement checks, persistence reload, hybrid candidate-limit gates,
+and a BM25-free exact F32/I8 comparison at top 5 and top 10. A later fixture
+should add judgments from real application usage.
 
 Goal: tune hybrid retrieval using realistic text and metadata instead of
 synthetic score distributions.
@@ -193,7 +193,27 @@ V1 decision:
   measured `0.7333`.
 - Keep candidate limits as public per-query overrides.
 
+Future gold-standard milestone, non-blocking for Phase 5:
+
+- Emit TREC-compatible qrels and run files and validate VectorKit metrics with
+  `trec_eval` or `ir_measures`.
+- Run at least SciFact and NFCorpus for external BEIR/Moss comparison.
+- Build pooled, blind relevance judgments across vector, BM25, RRF, weighted
+  fusion, and candidate configurations.
+- Grow a locked 300–500-query release set from anonymized application queries.
+- Run an appropriate official NIST TREC collection and evaluate participation
+  in the TREC RAG track after the release pipeline is stable.
+
+This milestone strengthens claims and later ranking decisions. It does not
+delay packaging the already-tested V1 SDK.
+
 ## Phase 5: Release and Distribution
+
+Status: a manual-only verification workflow is checked in for Rust, V2
+retrieval quality, Python, the Apple XCFramework build, and Swift tests. It does
+not run on pushes or pull requests. Automatic CI, artifact uploads, release
+checksums, tag automation, and the remote Swift binary target are intentionally
+deferred until VectorKit is ready to release.
 
 Goal: make VectorKit installable without cloning the repository or manually
 building Rust artifacts.
@@ -250,7 +270,8 @@ Implement one independently releasable slice at a time:
 4. Isolated memory/compaction device benchmark presets.
 5. Real retrieval-quality fixture and candidate-limit report.
 6. CI and public Apple package distribution.
-7. Reassess parallel exact search and ANN using the collected evidence.
+7. Add TREC-compatible external and production-derived quality evaluation.
+8. Reassess parallel exact search and ANN using the collected evidence.
 
 Each slice should update tests, wrapper docs, the changelog, and working memory,
 then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
@@ -262,3 +283,5 @@ then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
 - Automatic compaction policies before device memory and latency data exists.
 - New retrieval abstractions without two concrete implementations.
 - Embedding-model execution inside the Rust retrieval core.
+- NIST TREC participation before release distribution is working; retain it as
+  a committed post-release evaluation milestone.

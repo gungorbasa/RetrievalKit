@@ -12,9 +12,13 @@ use vectorkit_core::{
 use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
 mod bench;
+#[cfg(feature = "graph")]
+mod graph;
 mod memory_bench;
 
 pub use bench::vectorkit_bench_synthetic_json;
+#[cfg(feature = "graph")]
+pub use graph::vectorkit_graph_ffi_abi_version;
 pub use memory_bench::{memory_benchmark_json, vectorkit_bench_memory_json};
 
 const VK_STATUS_OK: i32 = 0;

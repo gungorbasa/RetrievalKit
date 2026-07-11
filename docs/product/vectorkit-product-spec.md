@@ -172,6 +172,14 @@ generation, then retain a shared per-generation lease for the lifetime of the
 loaded `GraphIndex`. Locked-save recovery removes abandoned staging and
 unreferenced generations only when no reader lease is present.
 
+M4 Swift packaging uses an aggregate native artifact. `vectorkit-ffi` keeps its
+graph dependency behind an off-by-default Cargo feature. Base users link the
+graph-free `VectorKitFFI`; graph users select `VectorKitGraphFFI`, built from the
+same crate with the `graph` feature and exporting both retrieval and graph entry
+points. Applications must not link both artifacts. This gives graph-enabled
+users one Rust core implementation and one native handle universe without
+adding graph code to the base product.
+
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed
 traversal, and only the retrieval composition mode proven by the customer

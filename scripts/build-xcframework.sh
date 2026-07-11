@@ -3,9 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_ffi.h"
+GRAPH_HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_graph_ffi.h"
 BUILD_DIR="$ROOT_DIR/target/apple"
 FRAMEWORK_NAME="VectorKitFFI"
-XCFRAMEWORK_PATH="$BUILD_DIR/$FRAMEWORK_NAME.xcframework"
+GRAPH_BUILD=0
 MIN_IOS_VERSION="${MIN_IOS_VERSION:-15.0}"
 MIN_MACOS_VERSION="${MIN_MACOS_VERSION:-14.0}"
 
@@ -16,12 +17,13 @@ IOS_SIMULATOR_TARGET="aarch64-apple-ios-sim"
 usage() {
   cat <<'EOF'
 usage:
-  scripts/build-xcframework.sh [--macos-only]
+  scripts/build-xcframework.sh [--macos-only] [--graph]
 
 Builds target/apple/VectorKitFFI.xcframework from vectorkit-ffi.
 
 Options:
   --macos-only   build only the local macOS arm64 slice; useful for script smoke checks
+  --graph        build the aggregate VectorKitGraphFFI artifact instead of the base artifact
   --help, -h     show this help
 
 Install all Apple Rust targets before the full build:
@@ -35,6 +37,10 @@ while [[ $# -gt 0 ]]; do
     --macos-only)
       MACOS_ONLY=1
       ;;
+    --graph)
+      GRAPH_BUILD=1
+      FRAMEWORK_NAME="VectorKitGraphFFI"
+      ;;
     --help|-h)
       usage
       exit 0
@@ -47,6 +53,8 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+XCFRAMEWORK_PATH="$BUILD_DIR/$FRAMEWORK_NAME.xcframework"
 
 require_tool() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -67,16 +75,16 @@ build_with_deployment_target() {
   case "$platform" in
     macos)
       MACOSX_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
       ;;
     ios)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
       ;;
     ios-simulator)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
       IPHONESIMULATOR_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
       ;;
     *)
       echo "unsupported platform for $rust_target: $platform" >&2
@@ -134,7 +142,12 @@ create_framework_from_static_lib() {
   rm -rf "$framework_dir"
   mkdir -p "$headers_dir" "$modules_dir"
   cp "$static_lib" "$framework_dir/$FRAMEWORK_NAME"
-  cp "$HEADER_PATH" "$headers_dir/$FRAMEWORK_NAME.h"
+  if [[ "$GRAPH_BUILD" == "1" ]]; then
+    cp "$HEADER_PATH" "$headers_dir/vectorkit_ffi.h"
+    cp "$GRAPH_HEADER_PATH" "$headers_dir/$FRAMEWORK_NAME.h"
+  else
+    cp "$HEADER_PATH" "$headers_dir/$FRAMEWORK_NAME.h"
+  fi
   module_map "$modules_dir"
   framework_info_plist "$framework_dir"
 
@@ -170,6 +183,15 @@ main() {
   if [[ ! -f "$HEADER_PATH" ]]; then
     echo "missing header: $HEADER_PATH" >&2
     exit 1
+  fi
+  if [[ "$GRAPH_BUILD" == "1" && ! -f "$GRAPH_HEADER_PATH" ]]; then
+    echo "missing graph header: $GRAPH_HEADER_PATH" >&2
+    exit 1
+  fi
+
+  CARGO_FEATURE_ARGS=()
+  if [[ "$GRAPH_BUILD" == "1" ]]; then
+    CARGO_FEATURE_ARGS=(--features graph)
   fi
 
   local required_targets=("$MACOS_TARGET" "$IOS_DEVICE_TARGET" "$IOS_SIMULATOR_TARGET")

@@ -70,6 +70,12 @@ implemented, or superseded by the product spec.
   measured exact +0.44%, BM25 +1.01%, and hybrid +0.73%, passing the <=3% local
   gate. See `docs/product/reports/graph-m3-benchmark-report.md`; pinned-device
   release qualification is still required.
+- M4.1 selected and proved the Swift aggregate packaging topology. The existing
+  `vectorkit-ffi` crate has an off-by-default `graph` feature; base
+  `VectorKitFFI` remains graph-free, while `VectorKitGraphFFI` is built with the
+  feature and contains the base retrieval symbols plus graph ABI symbols in one
+  static library. Graph-enabled apps select the aggregate instead of linking
+  both artifacts.
 
 ## Current Size, RAM, and Speed Goal
 

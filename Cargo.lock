@@ -448,6 +448,7 @@ dependencies = [
  "serde_json",
  "simsimd",
  "vectorkit-core",
+ "vectorkit-graph",
  "vectorkit-ingest",
 ]
 

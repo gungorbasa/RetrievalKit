@@ -8,11 +8,16 @@ repository.workspace = true
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
+[features]
+default = []
+graph = ["dep:vectorkit-graph"]
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 simsimd = "6.5.16"
 vectorkit-core = { path = "../vectorkit-core" }
+vectorkit-graph = { path = "../vectorkit-graph", optional = true }
 vectorkit-ingest = { path = "../vectorkit-ingest" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]

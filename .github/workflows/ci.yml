@@ -76,8 +76,10 @@ jobs:
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
 
-      - name: Build local XCFramework
-        run: scripts/build-xcframework.sh
+      - name: Build base and graph aggregate XCFrameworks
+        run: |
+          scripts/build-xcframework.sh
+          scripts/build-xcframework.sh --graph
 
       - name: Run Swift package tests
         run: swift test --package-path wrappers/swift/VectorKit

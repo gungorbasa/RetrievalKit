@@ -13,6 +13,9 @@ pub enum GraphError {
     InvalidQuery {
         message: String,
     },
+    InvalidSnapshot {
+        message: String,
+    },
     MissingTarget {
         relationship: String,
         source_record_id: String,
@@ -35,6 +38,7 @@ impl Display for GraphError {
                 write!(f, "invalid graph record '{record_id}': {message}")
             }
             Self::InvalidQuery { message } => write!(f, "invalid graph query: {message}"),
+            Self::InvalidSnapshot { message } => write!(f, "invalid graph snapshot: {message}"),
             Self::MissingTarget {
                 relationship,
                 source_record_id,

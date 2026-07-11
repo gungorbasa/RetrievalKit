@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use vectorkit_core::{FieldName, RecordType};
@@ -7,6 +8,29 @@ use crate::error::{GraphError, Result};
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_IDENTIFIER_BYTES: usize = 64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SchemaHash([u8; 32]);
+
+impl SchemaHash {
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl Display for SchemaHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0 {
+            write!(f, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}
 
 macro_rules! graph_identifier {
     ($name:ident, $label:literal) => {
@@ -129,6 +153,53 @@ impl GraphSchema {
 
     pub fn validate(&self) -> Result<()> {
         self.validate_internal().map(|_| ())
+    }
+
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>> {
+        let normalized = self.canonicalized()?;
+        serde_json::to_vec(&normalized).map_err(|error| GraphError::InvalidSchema {
+            message: format!("could not encode canonical schema: {error}"),
+        })
+    }
+
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self> {
+        let schema: Self =
+            serde_json::from_slice(bytes).map_err(|error| GraphError::InvalidSchema {
+                message: format!("could not decode canonical schema: {error}"),
+            })?;
+        let canonical = schema.canonical_bytes()?;
+        if canonical != bytes {
+            return Err(GraphError::InvalidSchema {
+                message: "schema bytes are valid but not canonically encoded".to_owned(),
+            });
+        }
+        Ok(schema)
+    }
+
+    pub fn schema_hash(&self) -> Result<SchemaHash> {
+        let hash = blake3::hash(&self.canonical_bytes()?);
+        Ok(SchemaHash::from_bytes(*hash.as_bytes()))
+    }
+
+    pub(crate) fn canonicalized(&self) -> Result<Self> {
+        self.validate()?;
+        let mut normalized = self.clone();
+        for mapping in &mut normalized.record_nodes {
+            mapping.queryable_fields.sort();
+        }
+        normalized.record_nodes.sort_by(|left, right| {
+            left.record_type
+                .cmp(&right.record_type)
+                .then_with(|| left.node_type.cmp(&right.node_type))
+        });
+        normalized.relationships.sort_by(|left, right| {
+            left.relationship_type
+                .cmp(&right.relationship_type)
+                .then_with(|| left.source_node_type.cmp(&right.source_node_type))
+                .then_with(|| left.target_node_type.cmp(&right.target_node_type))
+                .then_with(|| left.source_field.cmp(&right.source_field))
+        });
+        Ok(normalized)
     }
 
     pub(crate) fn validate_internal(&self) -> Result<ValidatedSchema<'_>> {

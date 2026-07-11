@@ -2,6 +2,7 @@ mod builder;
 mod error;
 mod query;
 mod schema;
+mod snapshot;
 mod storage;
 
 use std::collections::BTreeSet;
@@ -20,7 +21,9 @@ pub use query::{
 pub use schema::{
     Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphSchema,
     MissingTargetPolicy, NodeType, RecordNodeSchema, RelationshipSchema, RelationshipType,
+    SchemaHash,
 };
+pub use snapshot::GraphSnapshotPayload;
 pub use storage::{
     Direction, EdgeId, EdgeProvenance, GraphPathEdge, GraphScalar, NodeId, NodeSource,
 };
@@ -52,7 +55,36 @@ pub struct ProjectedScope {
 impl GraphIndex {
     /// Consumes the core index so graph-enabled callers have one mutable owner.
     pub fn build(core: ExactVectorIndex, schema: GraphSchema) -> Result<Self> {
+        let schema = schema.canonicalized()?;
         let (storage, build_stats) = build_graph(&core, &schema)?;
+        Ok(Self {
+            core,
+            schema,
+            storage,
+            build_stats,
+        })
+    }
+
+    /// Encodes the canonical schema and generation-bound graph state without
+    /// touching the filesystem. Atomic bundle persistence is layered on this
+    /// payload by the package persistence API.
+    pub fn snapshot_payload(&self) -> Result<GraphSnapshotPayload> {
+        snapshot::encode_snapshot(
+            &self.storage,
+            &self.schema,
+            self.core.corpus_id(),
+            self.core.generation(),
+        )
+    }
+
+    /// Restores a graph snapshot against its canonical core generation.
+    /// Corpus, generation, schema hash, node sources, and projected chunk IDs
+    /// are validated before the index becomes queryable.
+    pub fn from_snapshot_payload(
+        core: ExactVectorIndex,
+        payload: &GraphSnapshotPayload,
+    ) -> Result<Self> {
+        let (schema, storage, build_stats) = snapshot::decode_snapshot(&core, payload)?;
         Ok(Self {
             core,
             schema,

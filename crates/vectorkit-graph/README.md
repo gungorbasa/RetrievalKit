@@ -57,6 +57,15 @@ M2 supports:
 - record/chunk projection into generation-bound `CandidateScope` values;
 - delegated exact, BM25, and hybrid ranking without changing core hot paths.
 
-Graph persistence, composite commits/recovery, wrapper APIs, arbitrary query
-languages, automatic extraction, analytics, and incremental mutation belong to
-later milestones.
+M3.1 adds the persistence contract beneath the eventual filesystem bundle:
+
+- schemas are normalized to deterministic JSON and identified by a BLAKE3 hash;
+- graph state uses a bounded, versioned binary payload tied to the core corpus
+  and generation;
+- restore validates schema identity, node sources, relationships, projected
+  chunk IDs, ordinals, lengths, UTF-8, and trailing data before activation.
+
+`GraphIndex::snapshot_payload` and `GraphIndex::from_snapshot_payload` expose
+that in-memory contract. Atomic filesystem commits/recovery, wrapper APIs,
+arbitrary query languages, automatic extraction, analytics, and incremental
+mutation belong to later milestones.

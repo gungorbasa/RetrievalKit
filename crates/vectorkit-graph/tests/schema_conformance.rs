@@ -26,6 +26,50 @@ fn generic_schema_build_is_deterministic_across_ingestion_order() {
 }
 
 #[test]
+fn canonical_schema_bytes_and_hash_ignore_declaration_order() {
+    let canonical = social_schema();
+    let mut reordered = canonical.clone();
+    reordered.record_nodes.reverse();
+    reordered.relationships.reverse();
+    for mapping in &mut reordered.record_nodes {
+        mapping.queryable_fields.reverse();
+    }
+
+    let bytes = canonical.canonical_bytes().unwrap();
+    assert_eq!(bytes, reordered.canonical_bytes().unwrap());
+    assert_eq!(
+        canonical.schema_hash().unwrap(),
+        reordered.schema_hash().unwrap()
+    );
+    assert_eq!(
+        GraphSchema::from_canonical_bytes(&bytes)
+            .unwrap()
+            .canonical_bytes()
+            .unwrap(),
+        bytes
+    );
+}
+
+#[test]
+fn canonical_schema_decoder_rejects_noncanonical_json() {
+    let canonical = social_schema().canonical_bytes().unwrap();
+    let mut padded = canonical.clone();
+    padded.push(b'\n');
+    assert!(matches!(
+        GraphSchema::from_canonical_bytes(&padded).unwrap_err(),
+        GraphError::InvalidSchema { .. }
+    ));
+
+    let mut reordered = social_schema();
+    reordered.record_nodes.reverse();
+    let noncanonical_order = serde_json::to_vec(&reordered).unwrap();
+    assert!(matches!(
+        GraphSchema::from_canonical_bytes(&noncanonical_order).unwrap_err(),
+        GraphError::InvalidSchema { .. }
+    ));
+}
+
+#[test]
 fn schema_rejects_duplicate_node_and_relationship_types() {
     let duplicate_nodes = GraphSchema::new(vec![
         RecordNodeSchema {

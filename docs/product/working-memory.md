@@ -46,8 +46,12 @@ implemented, or superseded by the product spec.
   limits, cancellation, edge provenance, and graph-result projection into exact,
   BM25, and hybrid candidate scopes. It consumes one core index and does not
   expose a peer mutable handle.
-- M3 remains separate: graph schema/adjacency persistence, composite atomic
-  commit, recovery, generation leases, and reopen behavior are not implemented.
+- M3.1 now defines deterministic canonical schema JSON with a BLAKE3 identity
+  and a bounded versioned graph snapshot payload tied to the core corpus and
+  generation. Round-trip, deterministic encoding, corruption, truncation,
+  trailing-byte, schema-hash, and stale-generation tests pass. M3.2 still needs
+  to compose this payload with core persistence through atomic staging,
+  validation, and activation; recovery and generation leases follow afterward.
 
 ## Current Size, RAM, and Speed Goal
 

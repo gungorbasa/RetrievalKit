@@ -1280,6 +1280,9 @@ chunk-lookup structures before swapping them into the index. Active chunk IDs,
 document versions, and the monotonic next ID are preserved; removed IDs stop
 resolving and are never reused. Compaction changes loaded memory only. Callers
 save afterward when they want a smaller transactional disk snapshot.
+The all-or-nothing rebuild temporarily retains current and replacement
+structures, so wrappers document compaction as a maintenance operation that
+requires memory headroom and blocks operations on the same index instance.
 
 Success criteria:
 

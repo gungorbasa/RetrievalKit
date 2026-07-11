@@ -184,7 +184,7 @@ impl ExactVectorIndex {
 
     /// Returns the number of stored chunks currently marked deleted.
     pub fn tombstoned_chunk_count(&self) -> usize {
-        self.chunks.len().saturating_sub(self.active_offsets.len())
+        self.chunks.iter().filter(|chunk| chunk.deleted).count()
     }
 
     /// Returns an approximate payload byte breakdown for the currently loaded index.
@@ -605,7 +605,7 @@ impl ExactVectorIndex {
                     .cloned()
                     .ok_or_else(|| VectorKitError::InvalidFormat {
                         message: format!(
-                            "active chunk offset {offset} is unavailable during compaction"
+                            "active chunk offset {offset} is unavailable during compaction; reload the index from its last saved snapshot before retrying"
                         ),
                     })
             })
@@ -618,7 +618,7 @@ impl ExactVectorIndex {
             let chunk_id =
                 usize::try_from(chunk.chunk_id).map_err(|_| VectorKitError::InvalidFormat {
                     message: format!(
-                        "active chunk ID {} does not fit this platform during compaction",
+                        "active chunk ID {} does not fit this platform during compaction; compact and save the index on a platform with wider pointer support first",
                         chunk.chunk_id
                     ),
                 })?;

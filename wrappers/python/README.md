@@ -132,6 +132,11 @@ all active chunk IDs and never reuses removed IDs. The byte report estimates
 in-memory payload savings; call `save()` afterward to publish a compacted disk
 snapshot and receive actual persisted file sizes.
 
+Compaction is synchronous and temporarily holds both the current and replacement
+structures. Run it away from latency-sensitive work and leave memory headroom,
+especially near the 50K-chunk V1 ceiling. The estimate reports retained payload
+before and after compaction; it is not a peak-RSS measurement.
+
 ## Platform Wheels
 
 The local `scripts/build-python-wheel.sh` helper builds for the platform and

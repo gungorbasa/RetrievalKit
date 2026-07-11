@@ -258,7 +258,9 @@ impl EncodedVectorStore {
 
 fn invalid_row(row: usize, dimension: usize) -> VectorKitError {
     VectorKitError::InvalidFormat {
-        message: format!("vector row {row} is unavailable for compaction at dimension {dimension}"),
+        message: format!(
+            "vector row {row} is unavailable for compaction at dimension {dimension}; reload the index from its last saved snapshot before retrying compaction"
+        ),
     }
 }
 

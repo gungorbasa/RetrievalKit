@@ -81,6 +81,11 @@ implemented, or superseded by the product spec.
   canonical schema, finalization consumes the builder into one graph handle,
   and that handle supports composite save/load/validation. JSON is limited to
   cold schema and ingestion paths; M4.3 query hot paths remain typed C ABI.
+- M4.2b adds the `VectorKitGraph` Swift product with generic `Encodable` schema,
+  canonical record, metadata, and chunk types. Actor-owned builder/index handles
+  preserve native ownership; finalization consumes the builder. Swift integration
+  tests cover schema marshaling, record ingestion, consumed-builder rejection,
+  and composite save/validate/load.
 
 ## Current Size, RAM, and Speed Goal
 

@@ -10,12 +10,17 @@ let package = Package(
     ],
     products: [
         .library(name: "VectorKit", targets: ["VectorKit"]),
-        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"])
+        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"]),
+        .library(name: "VectorKitGraph", targets: ["VectorKitGraph"])
     ],
     targets: [
         .systemLibrary(
             name: "VectorKitFFI",
             path: "Sources/CVectorKitFFI"
+        ),
+        .systemLibrary(
+            name: "VectorKitGraphFFI",
+            path: "Sources/CVectorKitGraphFFI"
         ),
         .target(
             name: "VectorKit",
@@ -35,6 +40,11 @@ let package = Package(
                 ])
             ]
         ),
+        .target(
+            name: "VectorKitGraph",
+            dependencies: ["VectorKitGraphFFI"],
+            linkerSettings: [.unsafeFlags(["../../../target/debug/libvectorkit_ffi.a"])]
+        ),
         .testTarget(
             name: "VectorKitTests",
             dependencies: ["VectorKit"]
@@ -42,6 +52,10 @@ let package = Package(
         .testTarget(
             name: "VectorKitIngestTests",
             dependencies: ["VectorKitIngest"]
+        ),
+        .testTarget(
+            name: "VectorKitGraphTests",
+            dependencies: ["VectorKitGraph"]
         ),
     ],
     swiftLanguageModes: [.v6]

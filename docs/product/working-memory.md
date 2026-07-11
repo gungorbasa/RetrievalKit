@@ -76,6 +76,11 @@ implemented, or superseded by the product spec.
   feature and contains the base retrieval symbols plus graph ABI symbols in one
   static library. Graph-enabled apps select the aggregate instead of linking
   both artifacts.
+- M4.2a adds the aggregate native lifecycle boundary: a corpus-bound builder
+  ingests generic canonical record/chunk batches, Rust decodes and validates the
+  canonical schema, finalization consumes the builder into one graph handle,
+  and that handle supports composite save/load/validation. JSON is limited to
+  cold schema and ingestion paths; M4.3 query hot paths remain typed C ABI.
 
 ## Current Size, RAM, and Speed Goal
 

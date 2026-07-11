@@ -29,6 +29,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Automated iOS memory presets print JSON to the attached device console and
   exit with a budget-aware status. iPhone 17 Pro Max measurements now define
   provisional 24K compact-target and 50K extended-capacity budgets.
+- A versioned MiniLM retrieval-quality fixture now gates relevance, F32/I8
+  overlap, candidate limits, filters, deletions, replacements, persistence
+  reload, and latency. Its V1 evidence keeps `50/50` as the hybrid default.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

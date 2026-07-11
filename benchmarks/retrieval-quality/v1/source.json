@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "fixture_id": "personal-workspace-v1",
+  "model": {
+    "id": "sentence-transformers/all-MiniLM-L6-v2",
+    "slug": "all-MiniLM-L6-v2",
+    "sequence_length": 256,
+    "dimension": 384
+  },
+  "top_k": 5,
+  "distractor_count": 256,
+  "candidate_pairs": [[10, 25], [25, 25], [50, 50], [100, 100]],
+  "default_pair": [50, 50],
+  "quality_gates": {
+    "min_ndcg_at_k": 0.9,
+    "min_mrr": 0.9,
+    "min_recall_vs_reference": 0.95,
+    "min_i8_recall_vs_f32": 0.95
+  },
+  "documents": [
+    {"id":"atlas-launch-plan","text":"Project Atlas launch checklist: freeze the API schema on Monday, finish App Store screenshots on Wednesday, run the migration rehearsal on Thursday, and release to production on June 18.","metadata":{"kind":"plan","department":"engineering","project":"atlas"}},
+    {"id":"atlas-risk-register","text":"Project Atlas risk register: the largest risks are delayed security review, incomplete offline migration testing, and missing rollback telemetry.","metadata":{"kind":"risk","department":"engineering","project":"atlas"}},
+    {"id":"aurora-roadmap","text":"Project Aurora roadmap covers a new photo editor, shared albums, color grading presets, and an autumn beta release.","metadata":{"kind":"plan","department":"design","project":"aurora"}},
+    {"id":"invoice-1042","text":"Acme Cloud invoice INV-1042 totals 4,280 dollars and is due on July 15. It covers the annual observability subscription.","metadata":{"kind":"invoice","department":"finance","vendor":"acme-cloud"}},
+    {"id":"invoice-1043","text":"Acme Cloud invoice INV-1043 totals 860 dollars and is due on August 1. It covers additional log retention.","metadata":{"kind":"invoice","department":"finance","vendor":"acme-cloud"}},
+    {"id":"oauth-token-rotation","text":"Zero-downtime API credential rotation: create a second OAuth client secret, deploy it alongside the active secret, verify traffic, revoke the old credential, and audit failed authentication attempts.","metadata":{"kind":"runbook","department":"engineering","topic":"security"}},
+    {"id":"password-reset","text":"Employee password reset guide: verify identity with the help desk, expire active sessions, issue a temporary password, and require multi-factor authentication at the next login.","metadata":{"kind":"runbook","department":"it","topic":"security"}},
+    {"id":"kyoto-itinerary","text":"Kyoto spring itinerary: visit Fushimi Inari before sunrise, walk the Philosopher's Path during cherry blossom season, reserve a tea ceremony in Gion, and take the train to Arashiyama.","metadata":{"kind":"travel","region":"japan","season":"spring"}},
+    {"id":"paris-itinerary","text":"Paris autumn itinerary: tour the Orsay museum, walk along Canal Saint-Martin, visit the covered passages, and book dinner near the Bastille.","metadata":{"kind":"travel","region":"france","season":"autumn"}},
+    {"id":"sourdough-starter","text":"Revive a weak sourdough starter by keeping it warm and feeding equal weights of starter, water, and bread flour every twelve hours until it reliably doubles.","metadata":{"kind":"recipe","topic":"bread"}},
+    {"id":"espresso-calibration","text":"Espresso calibration notes: use eighteen grams of coffee, target thirty-six grams out in twenty-eight seconds, and adjust the grinder before changing dose.","metadata":{"kind":"recipe","topic":"coffee"}},
+    {"id":"battery-drain","text":"Phone battery drain troubleshooting: inspect background activity, disable unnecessary location access, check cellular signal strength, update the operating system, and review battery health.","metadata":{"kind":"support","topic":"mobile"}},
+    {"id":"wifi-troubleshooting","text":"Office Wi-Fi troubleshooting: confirm the access point, renew the DHCP lease, forget and rejoin the network, test DNS, and capture a wireless diagnostic bundle.","metadata":{"kind":"support","topic":"network"}},
+    {"id":"engineering-q3-planning","text":"Engineering Q3 planning meeting: prioritize offline search reliability, finish the Swift package release, reduce index load time, and add corruption recovery guidance.","metadata":{"kind":"meeting","department":"engineering","quarter":"q3"}},
+    {"id":"sales-q3-planning","text":"Sales Q3 planning meeting: focus on enterprise renewals, customer references, expansion pipeline, and a new partner enablement program.","metadata":{"kind":"meeting","department":"sales","quarter":"q3"}},
+    {"id":"harbor-incident-current","text":"Incident SEV-2026-041: Harbor API requests failed after a certificate chain expired. The current remediation is automated certificate rotation with a seven-day expiry alert.","metadata":{"kind":"incident","department":"engineering","status":"current"}},
+    {"id":"deprecated-oauth-guide","text":"Legacy OAuth handbook: stop all API traffic, replace the only client secret, restart every service, and ignore old credential failures.","metadata":{"kind":"runbook","department":"engineering","status":"deprecated"}},
+    {"id":"garden-watering","text":"Balcony garden watering schedule: water tomatoes deeply in the morning, check herbs daily during heat, and reduce watering after heavy rain.","metadata":{"kind":"note","topic":"garden"}},
+    {"id":"book-club","text":"Book club notes for The Left Hand of Darkness discuss identity, diplomacy, loyalty, and the journey across the Gobrin ice.","metadata":{"kind":"note","topic":"books"}},
+    {"id":"camera-backup","text":"Camera backup workflow: copy cards to two local drives, verify checksums, upload selects to object storage, and format cards only after verification.","metadata":{"kind":"runbook","topic":"photography"}},
+    {"id":"running-plan","text":"Half-marathon training plan: one interval workout, one tempo run, one long easy run, and two recovery sessions each week.","metadata":{"kind":"plan","topic":"fitness"}},
+    {"id":"tax-checklist","text":"Year-end tax checklist: export payroll reports, reconcile contractor payments, collect charitable receipts, and review estimated tax installments.","metadata":{"kind":"checklist","department":"finance"}},
+    {"id":"design-critique","text":"Design critique notes: simplify the empty state, increase text contrast, align card padding, and preserve keyboard navigation.","metadata":{"kind":"meeting","department":"design"}},
+    {"id":"release-retrospective","text":"Release retrospective: staging data was stale, rollback ownership was unclear, and the team will add a preflight checklist plus named incident commander.","metadata":{"kind":"meeting","department":"engineering"}},
+    {"id":"vendor-security-review","text":"Vendor security review requires a data-flow diagram, encryption details, retention policy, subprocessors, and the latest penetration test summary.","metadata":{"kind":"checklist","department":"security"}}
+  ],
+  "deletions": ["deprecated-oauth-guide"],
+  "replacements": [
+    {
+      "document_id": "remote-work-policy",
+      "initial_text": "Remote work policy draft: employees should visit an office when convenient, with no minimum schedule.",
+      "replacement_text": "Remote work policy approved: employees assigned to a hub work from the office on three anchor days each week; accessibility accommodations remain available.",
+      "metadata": {"kind":"policy","department":"people","status":"current"}
+    }
+  ],
+  "queries": [
+    {"id":"exact-atlas","category":"exact_name","text":"Project Atlas launch checklist","relevance":{"atlas-launch-plan":3,"atlas-risk-register":1}},
+    {"id":"exact-invoice","category":"exact_name","text":"INV-1042 due date and total","relevance":{"invoice-1042":3,"invoice-1043":1}},
+    {"id":"semantic-credentials","category":"semantic","text":"How can we replace expired API credentials without downtime?","relevance":{"oauth-token-rotation":3,"harbor-incident-current":1},"forbidden_document_ids":["deprecated-oauth-guide"]},
+    {"id":"semantic-kyoto","category":"semantic","text":"Ideas for a spring trip to Japan with temples and blossoms","relevance":{"kyoto-itinerary":3}},
+    {"id":"semantic-starter","category":"semantic","text":"My bread culture is sluggish and no longer rising. How should I feed it?","relevance":{"sourdough-starter":3}},
+    {"id":"semantic-battery","category":"semantic","text":"Why is my phone losing charge so quickly?","relevance":{"battery-drain":3}},
+    {"id":"filtered-engineering","category":"filter","text":"What are the Q3 planning priorities?","filter":{"field":"department","value":"engineering"},"relevance":{"engineering-q3-planning":3}},
+    {"id":"filtered-sales","category":"filter","text":"What are the Q3 planning priorities?","filter":{"field":"department","value":"sales"},"relevance":{"sales-q3-planning":3}},
+    {"id":"deleted-legacy","category":"delete","text":"legacy OAuth client secret handbook","relevance":{"oauth-token-rotation":1},"forbidden_document_ids":["deprecated-oauth-guide"]},
+    {"id":"replacement-policy","category":"replacement","text":"How many office days are required by the remote work policy?","relevance":{"remote-work-policy":3},"required_text":{"document_id":"remote-work-policy","contains":"three anchor days"}},
+    {"id":"exact-incident","category":"exact_name","text":"SEV-2026-041 certificate failure","relevance":{"harbor-incident-current":3}},
+    {"id":"semantic-backup","category":"semantic","text":"How do I safely copy photos before erasing a memory card?","relevance":{"camera-backup":3}}
+  ]
+}

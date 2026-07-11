@@ -160,6 +160,11 @@ Exit criteria:
 
 ## Phase 4: Real Retrieval-Quality Benchmark
 
+Status: V1 fixture and regression runner complete. The baseline uses real
+MiniLM embeddings, graded judgments, filters, deletion/replacement checks,
+persistence reload, F32/I8 comparison, and candidate-limit gates. Future fixture
+versions should add judgments from real application usage.
+
 Goal: tune hybrid retrieval using realistic text and metadata instead of
 synthetic score distributions.
 
@@ -179,6 +184,13 @@ Exit criteria:
 - Exact names, semantic paraphrases, filters, deletes, and replacements are all
   represented in the fixture.
 - Benchmark reports are reproducible from a checked-in command.
+
+V1 decision:
+
+- Keep `50/50` as the default candidate pair. I8 recall@5 against the F32
+  `100/100` reference measured `0.95`; `25/25` measured `0.90` and `10/25`
+  measured `0.7333`.
+- Keep candidate limits as public per-query overrides.
 
 ## Phase 5: Release and Distribution
 

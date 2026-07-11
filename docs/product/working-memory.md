@@ -116,12 +116,10 @@ Local Rust CLI hybrid work after BM25/runtime optimizations:
 - Keyword candidate count is comparatively cheap after the BM25 changes.
 - Hybrid candidate limits are intentionally public and per-query:
   `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
-  Do not over-optimize the default yet; callers can tune it, and real-data
-  candidate-quality benchmarks should guide any default change.
-- Current benchmark `recall@k vs f32` compares encodings at the same candidate
-  limits. It does not answer whether `10/10` returns the same final results as
-  `50/50` for the same encoding. Add a same-encoding high-candidate-reference
-  comparison before changing candidate defaults for quality reasons.
+  The V1 fixture compares each pair with both a same-encoding `100/100`
+  reference and F32 `100/100`. Keep `50/50` as the default because it is the
+  smallest tested pair that meets the `0.95` I8-versus-F32 recall gate; callers
+  can still choose smaller limits when latency matters more than overlap.
 
 Physical-device validation using the iOS `Device` mode has now run on an
 iPhone with iOS 26.5. Source report:
@@ -322,13 +320,14 @@ exclusive operations through PyO3 borrowing.
   size was 17.923/35.501 MiB for 384d F16/F32 and 35.501/70.658 MiB for 768d
   F16/F32. I8 remains the universal compact encoding; F32 remains the
   correctness reference.
-- Add a same-encoding hybrid candidate-quality benchmark that compares smaller
-  candidate limits such as `10/25` or `25/25` against a high-candidate reference
-  such as `50/50` or `100/100`.
+- Retrieval-quality V1 is checked in under `benchmarks/retrieval-quality/v1`.
+  On 282 documents and 12 judged queries, I8 recall@5 versus the F32 `100/100`
+  reference was `0.7333` at `10/25`, `0.90` at `25/25`, and `0.95` at the
+  current `50/50` default. Keep `50/50`; grow real-user judgments before tuning.
 - Add compact vector-only comparisons and evaluate whether an optional F16
   rerank store is justified by realistic quality measurements.
-- Add a fixture-backed benchmark with realistic chunk text, metadata, and BM25
-  distributions, then persist and report actual file sizes.
+- Add ambiguous real-user queries and multi-grade judgments to the next fixture
+  version so NDCG and MRR become more discriminating.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
   older devices that may not report `dotprod`.
 - Explore parallel exact scan only after target-device benchmarks show remaining

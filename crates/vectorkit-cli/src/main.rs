@@ -16,6 +16,8 @@ use vectorkit_core::{
 };
 use vectorkit_ffi::memory_benchmark_json;
 
+mod quality;
+
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
 
 fn main() {
@@ -42,7 +44,22 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "memory" => {
             run_memory_bench(rest)
         }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "quality" => {
+            run_quality_bench(rest)
+        }
         _ => Err(CliError::usage()),
+    }
+}
+
+fn run_quality_bench(args: &[String]) -> Result<(), CliError> {
+    let outcome = quality::run(args).map_err(CliError::InvalidArgument)?;
+    println!("{}", outcome.json);
+    if outcome.passed {
+        Ok(())
+    } else {
+        Err(CliError::InvalidArgument(
+            "retrieval-quality benchmark failed a configured quality gate".to_owned(),
+        ))
     }
 }
 
@@ -1918,6 +1935,7 @@ impl CliError {
                 "  vectorkit bench kernels [options]",
                 "  vectorkit bench topk [options]",
                 "  vectorkit bench memory [--config <scenario.json> | --config-json <json>]",
+                "  vectorkit bench quality --fixture <fixture.json> [--iterations <n>]",
                 "",
                 "synthetic options:",
                 "  --chunks <n>       default 1000",

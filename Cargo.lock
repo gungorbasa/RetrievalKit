@@ -377,6 +377,8 @@ checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 name = "vectorkit-cli"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "simsimd",
  "vectorkit-core",
  "vectorkit-ffi",

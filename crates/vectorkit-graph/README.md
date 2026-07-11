@@ -66,6 +66,9 @@ M3.1 adds the persistence contract beneath the eventual filesystem bundle:
   chunk IDs, ordinals, lengths, UTF-8, and trailing data before activation.
 
 `GraphIndex::snapshot_payload` and `GraphIndex::from_snapshot_payload` expose
-that in-memory contract. Atomic filesystem commits/recovery, wrapper APIs,
-arbitrary query languages, automatic extraction, analytics, and incremental
-mutation belong to later milestones.
+that in-memory contract. M3.2 adds `save_to_dir`, `load_from_dir`, and
+`validate_dir` for a composite immutable generation containing a complete core
+database, `schema.json`, and `graph.bin`. Staging is fully reopened and verified
+before an atomic graph manifest selects it. Writer locking, cleanup/recovery,
+generation leases, wrapper APIs, arbitrary query languages, automatic
+extraction, analytics, and incremental mutation belong to later milestones.

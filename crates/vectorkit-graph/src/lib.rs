@@ -1,5 +1,6 @@
 mod builder;
 mod error;
+mod persistence;
 mod query;
 mod schema;
 mod snapshot;
@@ -14,6 +15,7 @@ use vectorkit_core::{
 
 pub use builder::GraphBuildStats;
 pub use error::{GraphError, Result};
+pub use persistence::GraphDatabaseFileSizes;
 pub use query::{
     CancellationToken, GraphMatch, GraphQuery, GraphQueryTrace, GraphResult, QueryLimits, Seed,
     Traverse, TruncationReason,
@@ -91,6 +93,24 @@ impl GraphIndex {
             storage,
             build_stats,
         })
+    }
+
+    /// Atomically publishes a composite core + graph snapshot directory.
+    pub fn save_to_dir(
+        &self,
+        directory: impl AsRef<std::path::Path>,
+    ) -> Result<GraphDatabaseFileSizes> {
+        persistence::save(self, directory.as_ref())
+    }
+
+    /// Opens the active composite snapshot after validating all payloads.
+    pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
+        persistence::load(directory.as_ref())
+    }
+
+    /// Runs the complete read-only validation path used by `load_from_dir`.
+    pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
+        persistence::validate(directory.as_ref())
     }
 
     pub fn schema(&self) -> &GraphSchema {

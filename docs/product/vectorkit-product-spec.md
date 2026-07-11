@@ -146,6 +146,29 @@ graph-enabled database. Python and Swift builders marshal the same typed schema
 IR; they do not implement schema validation or maintain synchronized JSON
 sidecars. JSON export may exist for inspection or one-time migration only.
 
+M3 composite persistence uses one graph manifest to activate one immutable
+core/graph generation:
+
+```text
+graph_database/
+  manifest.json
+  .snapshots/
+    <safe-generation-id>/
+      core/                 # complete vectorkit-core database
+      schema.json           # canonical schema bytes
+      graph.bin             # versioned graph snapshot payload
+```
+
+Saving writes the core database and graph payloads into a staging generation,
+checks payload sizes and BLAKE3 checksums, reopens the core, validates the graph
+against that exact corpus/generation, syncs the staged files and directories,
+renames the generation into place, and atomically replaces `manifest.json`.
+Only that manifest selects an active generation. A failure before manifest
+replacement leaves the previously active generation queryable. Read-only
+validation follows the complete load path and must not clean staging or old
+generations. Cross-process writer serialization, abandoned-generation cleanup,
+and generation leases are required before M3 is complete.
+
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed
 traversal, and only the retrieval composition mode proven by the customer

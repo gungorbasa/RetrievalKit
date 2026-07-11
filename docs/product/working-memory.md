@@ -51,7 +51,14 @@ implemented, or superseded by the product spec.
   generation. Round-trip, deterministic encoding, corruption, truncation,
   trailing-byte, schema-hash, and stale-generation tests pass. M3.2 still needs
   to compose this payload with core persistence through atomic staging,
-  validation, and activation; recovery and generation leases follow afterward.
+  validation, and activation.
+- M3.2 now persists one composite immutable generation containing a complete
+  core database, `schema.json`, and `graph.bin`. It checks sizes and BLAKE3
+  digests, reopens and validates the staged core/graph pair, syncs it, and only
+  then atomically activates it through the graph manifest. Read-only validation,
+  repeat saves, abandoned staging, unsafe manifest paths, truncation, appended
+  data, and same-size corruption have conformance coverage. Cross-process writer
+  locking, cleanup/recovery, and generation leases remain for M3.3.
 
 ## Current Size, RAM, and Speed Goal
 

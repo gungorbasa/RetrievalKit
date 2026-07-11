@@ -10,17 +10,12 @@ let package = Package(
     ],
     products: [
         .library(name: "VectorKit", targets: ["VectorKit"]),
-        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"]),
-        .library(name: "VectorKitGraph", targets: ["VectorKitGraph"])
+        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"])
     ],
     targets: [
         .binaryTarget(
             name: "VectorKitFFI",
             path: "../../../target/apple/VectorKitFFI.xcframework"
-        ),
-        .binaryTarget(
-            name: "VectorKitGraphFFI",
-            path: "../../../target/apple/VectorKitGraphFFI.xcframework"
         ),
         .target(
             name: "VectorKit",
@@ -30,10 +25,6 @@ let package = Package(
             name: "VectorKitIngest",
             dependencies: ["VectorKitFFI"]
         ),
-        .target(
-            name: "VectorKitGraph",
-            dependencies: ["VectorKitGraphFFI"]
-        ),
         .testTarget(
             name: "VectorKitTests",
             dependencies: ["VectorKit"]
@@ -41,10 +32,6 @@ let package = Package(
         .testTarget(
             name: "VectorKitIngestTests",
             dependencies: ["VectorKitIngest"]
-        ),
-        .testTarget(
-            name: "VectorKitGraphTests",
-            dependencies: ["VectorKitGraph"]
         ),
     ],
     swiftLanguageModes: [.v6]

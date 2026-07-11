@@ -190,48 +190,6 @@ Run it during a maintenance window and leave memory headroom, especially near
 the 50K-chunk V1 ceiling. The estimate reports retained payload before and
 after compaction; it is not a peak-RSS measurement.
 
-## Optional graph product
-
-`VectorKitGraph` is a separate product backed by the aggregate
-`VectorKitGraphFFI.xcframework`. Graph-enabled apps select it instead of linking
-both native artifacts. `GraphIndexBuilder` accepts domain-neutral records and
-consumes itself when `build(schema:)` creates the sole graph owner:
-
-```swift
-import VectorKitGraph
-
-let builder = try GraphIndexBuilder(dimension: 384, corpusID: "catalog")
-try await builder.upsert(GraphRecordBatch(
-    record: GraphRecord(
-        id: "product-1",
-        recordType: "Product",
-        fields: ["category_id": .string("category-1")]
-    ),
-    chunks: [GraphChunk(
-        key: "body",
-        text: "searchable product text",
-        embedding: embedding
-    )]
-))
-let graph = try await builder.build(schema: GraphSchema(
-    recordNodes: [
-        GraphRecordNodeSchema(recordType: "Product", nodeType: "Product"),
-        GraphRecordNodeSchema(recordType: "Category", nodeType: "Category")
-    ],
-    relationships: [GraphRelationshipSchema(
-        relationshipType: "IN_CATEGORY",
-        sourceNodeType: "Product",
-        targetNodeType: "Category",
-        sourceField: GraphFieldPath("category_id"),
-        cardinality: .one
-    )]
-))
-try await graph.save(to: databaseURL)
-```
-
-Schema and record JSON are cold-path transport validated in Rust. Graph queries
-and composed retrieval use typed native calls in the next API unit.
-
 The source package currently expects the XCFramework to be built in this
 repository before `swift build` or `swift test`. A public binary release should
 publish `VectorKitFFI.xcframework` and switch the binary target to a URL plus

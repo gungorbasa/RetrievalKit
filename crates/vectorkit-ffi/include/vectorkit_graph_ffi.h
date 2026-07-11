@@ -43,6 +43,34 @@ bool vectorkit_graph_index_save(
 bool vectorkit_graph_index_validate(const char *directory, VkStatus *status);
 void vectorkit_graph_index_free(VkGraphIndex *index);
 
+typedef struct VkGraphResult VkGraphResult;
+typedef struct VkGraphCancellation VkGraphCancellation;
+typedef struct { const char *node_type; uint32_t source_type; const char *record_id; const char *chunk_key; } VkGraphNodeRef;
+typedef struct { uint32_t value_type; const char *string_value; int64_t integer_value; bool bool_value; } VkGraphScalar;
+typedef struct { const char *relationship; uint32_t direction; size_t min_hops; size_t max_hops; } VkGraphStep;
+typedef struct { size_t max_hops; size_t max_visited; size_t max_results; size_t max_working_bytes; } VkGraphLimits;
+typedef struct {
+    uint32_t seed_type;
+    const VkGraphNodeRef *node_ids; size_t node_id_count;
+    const char *seed_node_type;
+    const char *const *field_segments; size_t field_segment_count;
+    const VkGraphScalar *values; size_t value_count;
+    const VkGraphStep *steps; size_t step_count;
+    VkGraphLimits limits;
+} VkGraphQuery;
+typedef struct { char *node_type; uint32_t source_type; char *record_id; char *chunk_key; size_t depth; size_t path_length; } VkGraphMatch;
+typedef struct { size_t seed_count; size_t visited_states; size_t traversed_edges; size_t result_count; size_t diagnostics; uint32_t truncation_reason; } VkGraphTrace;
+
+VkGraphResult *vectorkit_graph_query(const VkGraphIndex *index, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
+size_t vectorkit_graph_result_count(const VkGraphResult *result);
+bool vectorkit_graph_result_match(const VkGraphResult *result, size_t index, VkGraphMatch *out_match, VkStatus *status);
+void vectorkit_graph_match_clear(VkGraphMatch *value);
+VkGraphTrace vectorkit_graph_result_trace(const VkGraphResult *result);
+void vectorkit_graph_result_free(VkGraphResult *result);
+VkGraphCancellation *vectorkit_graph_cancellation_new(void);
+void vectorkit_graph_cancellation_cancel(const VkGraphCancellation *value);
+void vectorkit_graph_cancellation_free(VkGraphCancellation *value);
+
 #ifdef __cplusplus
 }
 #endif

@@ -86,6 +86,15 @@ implemented, or superseded by the product spec.
   preserve native ownership; finalization consumes the builder. Swift integration
   tests cover schema marshaling, record ingestion, consumed-builder rejection,
   and composite save/validate/load.
+- Full Swift linkage testing proved the base and aggregate static artifacts
+  cannot coexist in one SwiftPM test bundle without duplicate core symbols.
+  `VectorKitGraph` therefore lives in its own Swift package and is selected
+  instead of the base package, enforcing the intended single-core topology.
+- M4.3a adds typed C/Swift graph queries for node-ID seeds and bounded traversal,
+  opaque native result ownership, materialized matches, limit/truncation traces,
+  and atomic cancellation. Separate base and graph Swift package test suites
+  pass without co-linking native artifacts. Equality seeds, path provenance,
+  candidate projection, and composed rankers remain in M4.3b.
 
 ## Current Size, RAM, and Speed Goal
 

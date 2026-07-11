@@ -32,6 +32,18 @@ struct BenchmarkView: View {
                         .buttonStyle(.bordered)
                         .disabled(model.isRunning)
 
+                        Menu {
+                            ForEach(model.memoryPresets) { preset in
+                                Button(preset.title) {
+                                    model.run(.memory(preset))
+                                }
+                            }
+                        } label: {
+                            Label("Memory", systemImage: "memorychip")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.isRunning || model.memoryScenarioRequiresRelaunch)
+
                         Button {
                             model.run(.fullDefault)
                         } label: {
@@ -82,6 +94,9 @@ struct BenchmarkView: View {
             .navigationTitle("VectorKit Bench")
         }
         .navigationViewStyle(.stack)
+        .task {
+            model.runLaunchScenarioIfPresent()
+        }
     }
 }
 

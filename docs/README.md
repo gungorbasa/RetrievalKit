@@ -9,6 +9,8 @@ Current implementation source of truth:
 - [`product/vectorkit-product-spec.md`](product/vectorkit-product-spec.md)
 - [`product/working-memory.md`](product/working-memory.md) for active handoff
   context and recent decisions that should survive chat changes
+- [`product/memory-benchmark.md`](product/memory-benchmark.md) for isolated RSS,
+  persistence, search, and compaction validation
 - [`product/size-speed-report.md`](product/size-speed-report.md) for the current
   compact-index footprint and retrieval-speed analysis
 

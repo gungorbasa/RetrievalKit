@@ -116,6 +116,9 @@ Exit criteria:
 
 ## Phase 3: Memory-Budget Hardening
 
+Status: benchmark harness complete; physical-device measurements and final
+device-class budgets remain.
+
 Goal: prove the index is safe on target mobile hardware, including maintenance
 operations rather than search alone.
 
@@ -131,6 +134,23 @@ Work:
   streaming alternative.
 - Add configurable benchmark budget failures so regressions fail checks rather
   than only appearing in reports.
+
+Implemented harness:
+
+- One scenario per CLI process or iOS app launch.
+- Sampled RSS checkpoints for build, search, save, unload, load, delete, and
+  compaction.
+- Cold search plus warmed P50/P95/P99 latency.
+- Machine-readable budget violations and nonzero CLI failure.
+- iOS presets for the target chunk/dimension/encoding/workload matrix and
+  10%/25%/50% compact-target tombstone ratios.
+
+Remaining validation:
+
+- Run release builds repeatedly on supported physical iPhone/iPad classes.
+- Establish checked-in peak-RSS and compaction headroom budgets from those
+  measurements.
+- Decide whether compaction needs a streaming alternative.
 
 Exit criteria:
 

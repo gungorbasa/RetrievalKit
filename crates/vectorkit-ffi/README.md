@@ -6,6 +6,7 @@ The first exported entrypoint is:
 
 ```c
 char *vectorkit_bench_synthetic_json(const char *config_json);
+char *vectorkit_bench_memory_json(const char *config_json);
 void vectorkit_string_free(char *ptr);
 ```
 
@@ -48,6 +49,11 @@ where keeping F32 ground-truth indexes alive would inflate RSS.
 Set `persist_bm25` to `false` to measure a compact vector-only persisted
 profile. Vector search and metadata filters still reload, but keyword and
 hybrid search need BM25 to be persisted or rebuilt separately.
+
+`vectorkit_bench_memory_json` runs one isolated lifecycle scenario. It samples
+phase RSS on Apple platforms, exercises persistence and compaction, and checks
+optional memory, disk, and latency budgets. Run each invocation in a fresh
+process. See `docs/product/memory-benchmark.md` for the schema and commands.
 
 ## Threading Contract
 

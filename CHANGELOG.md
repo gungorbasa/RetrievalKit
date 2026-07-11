@@ -23,6 +23,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Python retrieval, persistence, and maintenance release the GIL during
   Rust-only work. Shared-index searches may run across Python threads, while
   PyO3 exclusive borrowing rejects conflicting mutation safely.
+- An isolated memory benchmark now measures sampled peak RSS across build,
+  cold/warm search, save, unload, load, delete, and compaction. JSON budgets can
+  fail the CLI, and the iOS app provides one-scenario-per-launch target presets.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

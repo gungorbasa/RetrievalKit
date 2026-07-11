@@ -1,0 +1,16 @@
+{
+  "scenario_id": "smoke",
+  "chunks": 128,
+  "dimension": 32,
+  "encoding": "i8",
+  "workload": "hybrid",
+  "queries": 3,
+  "warmup_queries": 1,
+  "top_k": 5,
+  "vector_candidates": 10,
+  "keyword_candidates": 10,
+  "tombstone_ratio": 0.25,
+  "seed": 42,
+  "sample_interval_ms": 1,
+  "budgets": {}
+}

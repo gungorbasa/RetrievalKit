@@ -749,8 +749,12 @@ pub(crate) struct ProcessMemorySnapshot {
 }
 
 impl ProcessMemorySnapshot {
-    fn current() -> Option<Self> {
+    pub(crate) fn current() -> Option<Self> {
         process_memory_snapshot()
+    }
+
+    pub(crate) fn resident_bytes(self) -> u64 {
+        self.resident_bytes
     }
 }
 

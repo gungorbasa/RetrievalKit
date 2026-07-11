@@ -3,6 +3,7 @@ use std::collections::BinaryHeap;
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -13,6 +14,7 @@ use vectorkit_core::{
     IndexFileSizeReport, IndexSizeEstimate, KeywordQuery, Metadata, MetadataValue, SearchQuery,
     VectorEncoding, VectorMetric,
 };
+use vectorkit_ffi::memory_benchmark_json;
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
 
@@ -37,7 +39,34 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "topk" => {
             run_topk_bench(TopKBenchConfig::parse(rest)?)
         }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "memory" => {
+            run_memory_bench(rest)
+        }
         _ => Err(CliError::usage()),
+    }
+}
+
+fn run_memory_bench(args: &[String]) -> Result<(), CliError> {
+    let config_json =
+        match args {
+            [] => String::new(),
+            [flag, path] if flag == "--config" => fs::read_to_string(path).map_err(|error| {
+                CliError::InvalidArgument(format!("failed to read memory config '{path}': {error}"))
+            })?,
+            [flag, json] if flag == "--config-json" => json.clone(),
+            _ => return Err(CliError::InvalidArgument(
+                "usage: vectorkit bench memory [--config <scenario.json> | --config-json <json>]"
+                    .to_owned(),
+            )),
+        };
+    let (json, passed) = memory_benchmark_json(&config_json);
+    println!("{json}");
+    if passed {
+        Ok(())
+    } else {
+        Err(CliError::InvalidArgument(
+            "memory benchmark failed or exceeded a configured budget".to_owned(),
+        ))
     }
 }
 
@@ -1888,6 +1917,7 @@ impl CliError {
                 "  vectorkit bench matrix [options]",
                 "  vectorkit bench kernels [options]",
                 "  vectorkit bench topk [options]",
+                "  vectorkit bench memory [--config <scenario.json> | --config-json <json>]",
                 "",
                 "synthetic options:",
                 "  --chunks <n>       default 1000",

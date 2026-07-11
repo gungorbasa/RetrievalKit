@@ -1,0 +1,19 @@
+{
+  "scenario_id": "24k-384d-i8-hybrid-t25",
+  "chunks": 24000,
+  "dimension": 384,
+  "encoding": "i8",
+  "workload": "hybrid",
+  "queries": 50,
+  "warmup_queries": 3,
+  "top_k": 10,
+  "vector_candidates": 50,
+  "keyword_candidates": 50,
+  "tombstone_ratio": 0.25,
+  "seed": 42,
+  "sample_interval_ms": 1,
+  "budgets": {
+    "max_persisted_mib": 20.0,
+    "max_search_p95_ms": 10.0
+  }
+}

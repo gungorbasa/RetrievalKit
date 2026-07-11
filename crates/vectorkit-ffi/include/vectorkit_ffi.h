@@ -317,6 +317,13 @@ void vectorkit_filter_free(VkFilter *filter);
 // vectorkit_string_free.
 char *vectorkit_bench_synthetic_json(const char *config_json);
 
+/**
+ * Runs one isolated memory benchmark scenario and returns a JSON report.
+ * Run each scenario in a fresh process. Free the result with
+ * `vectorkit_string_free`.
+ */
+char *vectorkit_bench_memory_json(const char *config_json);
+
 // Frees a string returned by VectorKit FFI.
 void vectorkit_string_free(char *ptr);
 

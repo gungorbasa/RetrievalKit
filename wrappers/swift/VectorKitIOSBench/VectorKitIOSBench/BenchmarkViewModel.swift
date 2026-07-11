@@ -8,31 +8,65 @@ final class BenchmarkViewModel: ObservableObject {
     @Published private(set) var status = "Ready"
     @Published private(set) var summary = "Run Device on physical hardware for the validation report."
     @Published private(set) var output = "{}"
+    @Published private(set) var memoryScenarioRequiresRelaunch = false
+
+    let memoryPresets = MemoryScenarioPreset.all
+
+    func runLaunchScenarioIfPresent() {
+        guard
+            !memoryScenarioRequiresRelaunch,
+            let flagIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--memory-scenario"),
+            ProcessInfo.processInfo.arguments.indices.contains(flagIndex + 1),
+            let preset = MemoryScenarioPreset.find(
+                id: ProcessInfo.processInfo.arguments[flagIndex + 1]
+            )
+        else {
+            return
+        }
+        run(.memory(preset))
+    }
 
     func run(_ mode: BenchmarkMode) {
         guard !isRunning else {
             return
         }
+        if case .memory = mode {
+            guard !memoryScenarioRequiresRelaunch else {
+                status = "Relaunch required"
+                summary = "A benchmark already ran in this process. Relaunch the app, then run the memory preset first."
+                return
+            }
+        }
+        memoryScenarioRequiresRelaunch = true
 
         isRunning = true
         status = "Running \(mode.title)"
         summary = "Running..."
         output = "{}"
 
+        let configJSON = mode.configJSON(device: UIDevice.current)
         Task {
             do {
                 let result = try await Task.detached(priority: .userInitiated) {
                     switch mode {
                     case .realData:
                         try runRealDataSearch()
+                    case .memory:
+                        try runVectorKitMemoryBenchmark(configJSON: configJSON)
                     default:
-                        try runVectorKitBenchmark(configJSON: mode.configJSON)
+                        try runVectorKitBenchmark(configJSON: configJSON)
                     }
                 }.value
 
                 output = prettyPrintedJSON(result)
                 summary = benchmarkSummary(result, mode: mode)
-                status = responseSucceeded(result) ? "Completed \(mode.title)" : "Benchmark returned an error"
+                if !responseSucceeded(result) {
+                    status = "Benchmark returned an error"
+                } else if case .memory = mode, !memoryBudgetsPassed(result) {
+                    status = "Budget exceeded"
+                } else {
+                    status = "Completed \(mode.title)"
+                }
             } catch {
                 output = "\(error)"
                 summary = "\(error)"
@@ -44,8 +78,9 @@ final class BenchmarkViewModel: ObservableObject {
     }
 }
 
-enum BenchmarkMode {
+enum BenchmarkMode: Equatable {
     case realData
+    case memory(MemoryScenarioPreset)
     case smallSmoke
     case deviceValidation
     case fullDefault
@@ -55,6 +90,8 @@ enum BenchmarkMode {
         switch self {
         case .realData:
             return "real data"
+        case .memory(let preset):
+            return preset.id
         case .smallSmoke:
             return "smoke"
         case .deviceValidation:
@@ -66,10 +103,13 @@ enum BenchmarkMode {
         }
     }
 
-    var configJSON: String? {
+    @MainActor
+    func configJSON(device: UIDevice) -> String? {
         switch self {
         case .realData:
             return nil
+        case .memory(let preset):
+            return preset.configJSON(device: device)
         case .smallSmoke:
             return """
             {
@@ -110,6 +150,108 @@ enum BenchmarkMode {
             }
             """
         }
+    }
+}
+
+struct MemoryScenarioPreset: Identifiable, Equatable {
+    let id: String
+    let chunks: Int
+    let dimension: Int
+    let encoding: String
+    let workload: String
+    let tombstoneRatio: Double
+
+    var title: String {
+        "\(chunks / 1000)K · \(dimension)d · \(encoding.uppercased()) · \(workload == "hybrid" ? "hybrid" : "vector") · t\(Int(tombstoneRatio * 100))"
+    }
+
+    @MainActor
+    func configJSON(device: UIDevice) -> String? {
+        #if DEBUG
+        let buildConfiguration = "debug"
+        #else
+        let buildConfiguration = "release"
+        #endif
+        var budgets: [String: Any] = [
+            "max_search_p95_ms": chunks <= 24_000 ? 10.0 : 20.0
+        ]
+        if chunks == 24_000 && dimension == 384 && encoding == "i8" {
+            budgets["max_persisted_mib"] = 20.0
+        }
+
+        let config: [String: Any] = [
+            "scenario_id": id,
+            "chunks": chunks,
+            "dimension": dimension,
+            "encoding": encoding,
+            "workload": workload,
+            "queries": 50,
+            "warmup_queries": 3,
+            "top_k": 10,
+            "vector_candidates": 50,
+            "keyword_candidates": 50,
+            "tombstone_ratio": tombstoneRatio,
+            "sample_interval_ms": 1,
+            "budgets": budgets,
+            "environment": [
+                "device_model": device.model,
+                "os_version": "\(device.systemName) \(device.systemVersion)",
+                "build_configuration": buildConfiguration,
+                "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+            ]
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return json
+    }
+
+    static let all: [Self] = {
+        var presets: [Self] = []
+        for chunks in [24_000, 50_000] {
+            for dimension in [384, 768] {
+                for encoding in ["f32", "f16", "i8"] {
+                    for workload in ["vector_only", "hybrid"] {
+                        presets.append(Self(
+                            id: "\(chunks / 1000)k-\(dimension)d-\(encoding)-\(workload)-t25",
+                            chunks: chunks,
+                            dimension: dimension,
+                            encoding: encoding,
+                            workload: workload,
+                            tombstoneRatio: 0.25
+                        ))
+                    }
+                }
+            }
+        }
+        for ratio in [0.10, 0.50] {
+            presets.append(Self(
+                id: "24k-384d-i8-hybrid-t\(Int(ratio * 100))",
+                chunks: 24_000,
+                dimension: 384,
+                encoding: "i8",
+                workload: "hybrid",
+                tombstoneRatio: ratio
+            ))
+        }
+        return presets
+    }()
+
+    static func find(id: String) -> Self? {
+        if id == "smoke" {
+            return Self(
+                id: "smoke",
+                chunks: 128,
+                dimension: 32,
+                encoding: "i8",
+                workload: "hybrid",
+                tombstoneRatio: 0.25
+            )
+        }
+        return all.first { $0.id == id }
     }
 }
 
@@ -155,6 +297,25 @@ private func runVectorKitBenchmark(configJSON: String?) throws -> String {
         throw BenchmarkError.invalidUtf8
     }
 
+    return result
+}
+
+private func runVectorKitMemoryBenchmark(configJSON: String?) throws -> String {
+    let resultPointer: UnsafeMutablePointer<CChar>?
+    if let configJSON {
+        resultPointer = configJSON.withCString { pointer in
+            vectorkit_bench_memory_json(pointer)
+        }
+    } else {
+        resultPointer = vectorkit_bench_memory_json(nil)
+    }
+    guard let resultPointer else {
+        throw BenchmarkError.nullResult
+    }
+    defer { vectorkit_string_free(resultPointer) }
+    guard let result = String(validatingCString: resultPointer) else {
+        throw BenchmarkError.invalidUtf8
+    }
     return result
 }
 
@@ -512,10 +673,27 @@ private func responseSucceeded(_ json: String) -> Bool {
     return ok
 }
 
+private func memoryBudgetsPassed(_ json: String) -> Bool {
+    guard
+        let data = json.data(using: .utf8),
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let report = object["report"] as? [String: Any],
+        let budgets = report["budgets"] as? [String: Any],
+        let passed = budgets["passed"] as? Bool
+    else {
+        return false
+    }
+    return passed
+}
+
 @MainActor
 private func benchmarkSummary(_ json: String, mode: BenchmarkMode) -> String {
     if mode == .realData {
         return realDataSummary(json)
+    }
+
+    if case .memory = mode {
+        return memoryBenchmarkSummary(json)
     }
 
     guard
@@ -564,6 +742,37 @@ private func benchmarkSummary(_ json: String, mode: BenchmarkMode) -> String {
         )
     }
 
+    return lines.joined(separator: "\n")
+}
+
+@MainActor
+private func memoryBenchmarkSummary(_ json: String) -> String {
+    guard
+        let data = json.data(using: .utf8),
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        object["ok"] as? Bool == true,
+        let report = object["report"] as? [String: Any],
+        let scenario = report["scenario"] as? [String: Any],
+        let budgets = report["budgets"] as? [String: Any]
+    else {
+        return "No successful memory benchmark report."
+    }
+
+    let peakMiB = bytesToMiB(report["peak_rss_bytes"] as? Double)
+    let deltaMiB = bytesToMiB(report["peak_delta_bytes"] as? Double)
+    let files = report["persisted_file_sizes"] as? [String: Any]
+    let persistedMiB = bytesToMiB(files?["total_bytes"] as? Double)
+    let search = report["post_load_search"] as? [String: Any]
+    let p95 = search?["p95_ms"] as? Double ?? 0
+    let passed = budgets["passed"] as? Bool ?? false
+    var lines = [
+        "\(scenario["scenario_id"] as? String ?? "unknown") on \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
+        String(format: "peak RSS %.2f MiB · delta %.2f MiB · persisted %.2f MiB", peakMiB, deltaMiB, persistedMiB),
+        String(format: "post-load search p95 %.3f ms · budgets %@", p95, passed ? "PASS" : "FAIL")
+    ]
+    if let violations = budgets["violations"] as? [String], !violations.isEmpty {
+        lines.append(contentsOf: violations.map { "• \($0)" })
+    }
     return lines.joined(separator: "\n")
 }
 

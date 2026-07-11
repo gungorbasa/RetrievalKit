@@ -298,15 +298,21 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
-The next production slice is memory-budget hardening. Rust/FFI explicitly
-permit parallel immutable reads with exclusive mutation. Swift uses a
+The active production slice is physical-device memory-budget validation. The
+isolated Rust/FFI and iOS harness is implemented; release runs on target devices
+must now establish peak-RSS and compaction budgets. Rust/FFI explicitly permit
+parallel immutable reads with exclusive mutation. Swift uses a
 writer-preferring asynchronous gate plus detached native calls; Python releases
 the GIL for Rust work, permits parallel shared searches, and rejects conflicting
 exclusive operations through PyO3 borrowing.
 
-- Add isolated iOS device benchmark presets for one scenario per app launch so
-  RSS can be interpreted per scenario instead of as a sequential process-level
-  value.
+- Run the isolated presets on target iPhone/iPad hardware and record repeatable
+  build/load/search/save/compaction peaks. Check in budgets only after those
+  device results exist.
+- A local release diagnostic for `24K × 384d I8` hybrid at 25% tombstones saved
+  `9.226 MiB`, peaked at about `85.55 MiB` RSS, and produced `11.883 ms`
+  post-load P95. It correctly failed the configured `10 ms` latency gate; do
+  not treat this Mac run as the physical-device decision.
 - Add a same-encoding hybrid candidate-quality benchmark that compares smaller
   candidate limits such as `10/25` or `25/25` against a high-candidate reference
   such as `50/50` or `100/100`.
@@ -318,6 +324,4 @@ exclusive operations through PyO3 borrowing.
   older devices that may not report `dotprod`.
 - Explore parallel exact scan only after target-device benchmarks show remaining
   CPU pressure.
-- Add payload/RSS memory reporting to the benchmark output.
-- Validate the compact target on a target Apple device through the Swift
-  wrapper once the wrapper can load persisted indexes.
+- Validate the compact target and compaction headroom on target Apple devices.

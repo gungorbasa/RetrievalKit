@@ -12,8 +12,10 @@ use vectorkit_core::{
 use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
 mod bench;
+mod memory_bench;
 
 pub use bench::vectorkit_bench_synthetic_json;
+pub use memory_bench::{memory_benchmark_json, vectorkit_bench_memory_json};
 
 const VK_STATUS_OK: i32 = 0;
 const VK_STATUS_INVALID_ARGUMENT: i32 = 1;

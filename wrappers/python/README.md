@@ -79,6 +79,38 @@ wheel is only for compatible macOS arm64 CPython 3.14 environments.
 Use `--skip-smoke-test` only when you need to produce a wheel without validating
 the installed package.
 
+## Persistence Safety
+
+`Index.save(path)` writes and syncs a complete immutable generation before
+atomically publishing it through `manifest.json`. If a save is interrupted, the
+previously published generation remains loadable. The next successful save
+removes abandoned and superseded generations. Existing V1 root-file indexes
+remain readable and migrate automatically on their next save.
+
+Only one writer may save a given directory at a time. VectorKit uses an
+OS-released lock, so a process crash does not leave the directory permanently
+locked; a competing save fails with an actionable `PersistenceError`.
+
+Treat the index directory as VectorKit-owned; do not modify `.snapshots` or
+`manifest.json` directly.
+
+```python
+from pathlib import Path
+
+from vectorkit import Index
+
+path = Path("./search-index")
+index = Index(dimension=384)
+index.save(path)
+
+# On the next app launch:
+loaded_index = Index.load(path)
+```
+
+`save` returns actual persisted file sizes. It raises `PersistenceError` with
+the failed operation, path, operating-system cause, and a recovery hint when the
+directory cannot be written.
+
 ## Platform Wheels
 
 The local `scripts/build-python-wheel.sh` helper builds for the platform and

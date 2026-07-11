@@ -912,6 +912,16 @@ Tests must verify:
 - interrupted build does not corrupt the last valid index.
 - tombstones persist across reloads.
 
+Persistence uses immutable generation directories under `.snapshots`. Writers
+fully write, sync, and validate generation file sizes before atomically
+publishing the generation through `manifest.json`. Failures before publication
+leave the previous manifest and generation untouched. The loader accepts legacy
+V1 root-file indexes; the next successful save migrates them to the generation
+layout and cleans abandoned or superseded files. An OS-released exclusive file
+lock serializes writers to the same directory, including across processes, so a
+crash cannot leave a stale logical lock and concurrent cleanup cannot remove the
+published generation.
+
 ## Speed Requirements
 
 Measure these separately:

@@ -10,6 +10,7 @@ from vectorkit import (
     HybridHit,
     Index,
     KeywordHit,
+    PersistenceError,
     SearchHit,
     hybrid_search_text,
     search_text,
@@ -361,6 +362,33 @@ def test_save_load_round_trip(tmp_path) -> None:
     loaded = Index.load(tmp_path)
     hits = loaded.search([1.0, 0.0, 0.0, 0.0], where={"project": "vectorkit"})
     assert [hit["document_id"] for hit in hits] == ["doc-1"]
+
+    index.add(
+        documents=[
+            {
+                "id": "doc-2",
+                "chunks": [
+                    {"text": "beta", "embedding": [0.0, 1.0, 0.0, 0.0]}
+                ],
+            }
+        ]
+    )
+    index.save(tmp_path)
+    reloaded = Index.load(tmp_path)
+    assert reloaded.active_chunk_count == 2
+
+
+def test_save_error_includes_operation_cause_and_recovery_hint(tmp_path) -> None:
+    blocking_file = tmp_path / "not-a-directory"
+    blocking_file.write_text("file")
+
+    with pytest.raises(PersistenceError) as caught:
+        Index(dimension=4).save(blocking_file / "index")
+
+    message = str(caught.value)
+    assert "persistence create directory failed" in message
+    assert str(blocking_file / "index") in message
+    assert "parent directory is writable when saving" in message
 
 
 def test_dimension_mismatch_is_specific_error() -> None:

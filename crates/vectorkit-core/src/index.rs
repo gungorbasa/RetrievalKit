@@ -1,9 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
-use std::fs;
-use std::io::Cursor;
+use std::fs::{self, OpenOptions};
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 use crate::bm25::{Bm25Config, Bm25Index, PersistedBm25Index};
@@ -19,10 +22,12 @@ use crate::types::{
     VectorMetric,
 };
 
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
+const LEGACY_FORMAT_VERSION: u32 = 1;
 const CREATED_WITH: &str = "vectorkit";
 const MANIFEST_FILE: &str = "manifest.json";
-const MANIFEST_TMP_FILE: &str = "manifest.json.tmp";
+const SAVE_LOCK_FILE: &str = ".save.lock";
+const SNAPSHOTS_DIRECTORY: &str = ".snapshots";
 const VECTORS_FILE: &str = "vectors.vec";
 const CHUNKS_FILE: &str = "chunks.bin";
 const BM25_FILE: &str = "bm25.bin";
@@ -37,6 +42,48 @@ const METADATA_INTEGER: u8 = 1;
 const METADATA_FLOAT: u8 = 2;
 const METADATA_BOOLEAN: u8 = 3;
 const METADATA_TIMESTAMP_MILLIS: u8 = 4;
+static SNAPSHOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SaveCheckpoint {
+    VectorsWritten,
+    ChunksWritten,
+    Bm25Written,
+    TombstonesWritten,
+    SnapshotSynced,
+    ManifestWritten,
+}
+
+struct SaveLock {
+    file: fs::File,
+}
+
+impl SaveLock {
+    fn acquire(directory: &Path) -> Result<Self> {
+        let path = directory.join(SAVE_LOCK_FILE);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|error| persistence_error("open save lock", &path, &error))?;
+        file.try_lock_exclusive().map_err(|error| {
+            persistence_error(
+                "acquire exclusive save lock because another save may already be running",
+                &path,
+                &error,
+            )
+        })?;
+        Ok(Self { file })
+    }
+}
+
+impl Drop for SaveLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
@@ -171,18 +218,38 @@ impl ExactVectorIndex {
         directory: impl AsRef<Path>,
         options: IndexPersistenceOptions,
     ) -> Result<IndexFileSizeReport> {
+        self.save_to_dir_with_checkpoints(directory, options, |_| Ok(()))
+    }
+
+    fn save_to_dir_with_checkpoints(
+        &self,
+        directory: impl AsRef<Path>,
+        options: IndexPersistenceOptions,
+        mut checkpoint: impl FnMut(SaveCheckpoint) -> Result<()>,
+    ) -> Result<IndexFileSizeReport> {
         let directory = directory.as_ref();
         fs::create_dir_all(directory)
-            .map_err(|_| persistence_error("create directory", directory))?;
+            .map_err(|error| persistence_error("create directory", directory, &error))?;
+        let _save_lock = SaveLock::acquire(directory)?;
 
-        let vectors_path = directory.join(VECTORS_FILE);
-        let chunks_path = directory.join(CHUNKS_FILE);
-        let bm25_path = directory.join(BM25_FILE);
-        let tombstones_path = directory.join(TOMBSTONES_FILE);
+        let snapshots_directory = directory.join(SNAPSHOTS_DIRECTORY);
+        fs::create_dir_all(&snapshots_directory).map_err(|error| {
+            persistence_error("create snapshots directory", &snapshots_directory, &error)
+        })?;
+        let snapshot_id = next_snapshot_id()?;
+        let snapshot_directory = snapshots_directory.join(&snapshot_id);
+        fs::create_dir(&snapshot_directory)
+            .map_err(|error| persistence_error("create snapshot", &snapshot_directory, &error))?;
+
+        let vectors_path = snapshot_directory.join(VECTORS_FILE);
+        let chunks_path = snapshot_directory.join(CHUNKS_FILE);
+        let bm25_path = snapshot_directory.join(BM25_FILE);
+        let tombstones_path = snapshot_directory.join(TOMBSTONES_FILE);
         let manifest_path = directory.join(MANIFEST_FILE);
-        let manifest_tmp_path = directory.join(MANIFEST_TMP_FILE);
+        let manifest_tmp_path = directory.join(format!("manifest.{snapshot_id}.tmp"));
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
+        checkpoint(SaveCheckpoint::VectorsWritten)?;
         let chunk_payload = encode_chunks(&self.chunks)?;
         let chunk_uncompressed_bytes =
             checked_usize_to_u64(chunk_payload.len(), "chunk payload byte count")?;
@@ -190,6 +257,7 @@ impl ExactVectorIndex {
             &chunks_path,
             &compress_payload(&chunks_path, &chunk_payload, PERSISTENCE_COMPRESSION)?,
         )?;
+        checkpoint(SaveCheckpoint::ChunksWritten)?;
         let mut bm25_uncompressed_bytes = 0;
         if options.include_bm25 {
             let bm25_payload = self.bm25.to_persisted().to_payload_bytes()?;
@@ -199,9 +267,8 @@ impl ExactVectorIndex {
                 &bm25_path,
                 &compress_payload(&bm25_path, &bm25_payload, PERSISTENCE_COMPRESSION)?,
             )?;
-        } else if bm25_path.exists() {
-            fs::remove_file(&bm25_path).map_err(|_| persistence_error("remove", &bm25_path))?;
         }
+        checkpoint(SaveCheckpoint::Bm25Written)?;
         write_file(
             &tombstones_path,
             &self
@@ -210,9 +277,11 @@ impl ExactVectorIndex {
                 .map(|chunk| u8::from(chunk.deleted))
                 .collect::<Vec<_>>(),
         )?;
+        checkpoint(SaveCheckpoint::TombstonesWritten)?;
 
         let manifest = PersistedManifest {
             format_version: FORMAT_VERSION,
+            snapshot_id: Some(snapshot_id.clone()),
             created_with: CREATED_WITH.to_owned(),
             dimension: self.dimension,
             metric: self.metric,
@@ -243,9 +312,20 @@ impl ExactVectorIndex {
             .to_owned(),
         };
 
+        manifest.validate()?;
+        validate_snapshot_file_sizes(&manifest, &snapshot_directory)?;
+        sync_directory(&snapshot_directory)?;
+        sync_directory(&snapshots_directory)?;
+        checkpoint(SaveCheckpoint::SnapshotSynced)?;
         write_json_file(&manifest_tmp_path, &manifest)?;
+        checkpoint(SaveCheckpoint::ManifestWritten)?;
         fs::rename(&manifest_tmp_path, &manifest_path)
-            .map_err(|_| persistence_error("publish manifest", &manifest_path))?;
+            .map_err(|error| persistence_error("publish manifest", &manifest_path, &error))?;
+        sync_directory(directory)?;
+
+        cleanup_unreferenced_snapshots(&snapshots_directory, &snapshot_id);
+        cleanup_legacy_files(directory);
+        cleanup_temporary_manifests(directory);
 
         Self::persisted_file_sizes(directory)
     }
@@ -257,10 +337,11 @@ impl ExactVectorIndex {
         let manifest: PersistedManifest = read_json_file(&manifest_path)?;
         manifest.validate()?;
 
-        let vectors_path = directory.join(VECTORS_FILE);
-        let chunks_path = directory.join(CHUNKS_FILE);
-        let bm25_path = directory.join(BM25_FILE);
-        let tombstones_path = directory.join(TOMBSTONES_FILE);
+        let data_directory = manifest.data_directory(directory)?;
+        let vectors_path = data_directory.join(VECTORS_FILE);
+        let chunks_path = data_directory.join(CHUNKS_FILE);
+        let bm25_path = data_directory.join(BM25_FILE);
+        let tombstones_path = data_directory.join(TOMBSTONES_FILE);
 
         validate_file_size(&chunks_path, manifest.chunk_bytes)?;
         if manifest.has_bm25 {
@@ -359,12 +440,15 @@ impl ExactVectorIndex {
     /// Returns actual file sizes for a saved index directory.
     pub fn persisted_file_sizes(directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
         let directory = directory.as_ref();
+        let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE))?;
+        manifest.validate()?;
+        let data_directory = manifest.data_directory(directory)?;
         Ok(IndexFileSizeReport {
             manifest_bytes: file_size(&directory.join(MANIFEST_FILE))?,
-            vectors_bytes: file_size(&directory.join(VECTORS_FILE))?,
-            chunks_bytes: file_size(&directory.join(CHUNKS_FILE))?,
-            bm25_bytes: file_size_if_exists(&directory.join(BM25_FILE))?,
-            tombstones_bytes: file_size(&directory.join(TOMBSTONES_FILE))?,
+            vectors_bytes: file_size(&data_directory.join(VECTORS_FILE))?,
+            chunks_bytes: file_size(&data_directory.join(CHUNKS_FILE))?,
+            bm25_bytes: file_size_if_exists(&data_directory.join(BM25_FILE))?,
+            tombstones_bytes: file_size(&data_directory.join(TOMBSTONES_FILE))?,
         })
     }
 
@@ -924,6 +1008,8 @@ impl ExactVectorIndex {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedManifest {
     format_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    snapshot_id: Option<String>,
     created_with: String,
     dimension: usize,
     metric: VectorMetric,
@@ -956,10 +1042,26 @@ enum FileCompression {
 
 impl PersistedManifest {
     fn validate(&self) -> Result<()> {
-        if self.format_version != FORMAT_VERSION {
+        if self.format_version != FORMAT_VERSION && self.format_version != LEGACY_FORMAT_VERSION {
             return Err(VectorKitError::InvalidFormat {
                 message: format!("unsupported format version {}", self.format_version),
             });
+        }
+
+        match (self.format_version, &self.snapshot_id) {
+            (LEGACY_FORMAT_VERSION, None) => {}
+            (FORMAT_VERSION, Some(snapshot_id)) if valid_snapshot_id(snapshot_id) => {}
+            (LEGACY_FORMAT_VERSION, Some(_)) => {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "legacy format must not reference a snapshot generation".to_owned(),
+                });
+            }
+            (FORMAT_VERSION, _) => {
+                return Err(VectorKitError::InvalidFormat {
+                    message: "format version 2 requires a safe snapshot_id".to_owned(),
+                });
+            }
+            _ => unreachable!("format version was checked above"),
         }
 
         if self.created_with != CREATED_WITH {
@@ -990,6 +1092,94 @@ impl PersistedManifest {
 
         Ok(())
     }
+
+    fn data_directory(&self, index_directory: &Path) -> Result<PathBuf> {
+        match &self.snapshot_id {
+            Some(snapshot_id) if valid_snapshot_id(snapshot_id) => {
+                Ok(index_directory.join(SNAPSHOTS_DIRECTORY).join(snapshot_id))
+            }
+            Some(_) => Err(VectorKitError::InvalidFormat {
+                message: "snapshot_id contains unsafe path characters".to_owned(),
+            }),
+            None => Ok(index_directory.to_path_buf()),
+        }
+    }
+}
+
+fn valid_snapshot_id(snapshot_id: &str) -> bool {
+    !snapshot_id.is_empty()
+        && snapshot_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn next_snapshot_id() -> Result<String> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| VectorKitError::Persistence {
+            operation: "create snapshot identifier because the system clock is before Unix epoch"
+                .to_owned(),
+            path: SNAPSHOTS_DIRECTORY.to_owned(),
+            cause: "system clock is earlier than 1970-01-01".to_owned(),
+        })?
+        .as_nanos();
+    let sequence = SNAPSHOT_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
+    Ok(format!("{nanos}-{}-{sequence}", std::process::id()))
+}
+
+fn validate_snapshot_file_sizes(
+    manifest: &PersistedManifest,
+    snapshot_directory: &Path,
+) -> Result<()> {
+    let vectors_path = snapshot_directory.join(VECTORS_FILE);
+    let vector_bytes = file_size(&vectors_path)?;
+    if vector_bytes != manifest.vector_bytes as u64 {
+        return Err(VectorKitError::InvalidFormat {
+            message: format!(
+                "manifest vector bytes {} do not match snapshot vector bytes {vector_bytes}",
+                manifest.vector_bytes
+            ),
+        });
+    }
+    validate_file_size(&snapshot_directory.join(CHUNKS_FILE), manifest.chunk_bytes)?;
+    validate_file_size(
+        &snapshot_directory.join(TOMBSTONES_FILE),
+        manifest.tombstone_bytes,
+    )?;
+    if manifest.has_bm25 {
+        validate_file_size(&snapshot_directory.join(BM25_FILE), manifest.bm25_bytes)?;
+    }
+    Ok(())
+}
+
+fn cleanup_unreferenced_snapshots(snapshots_directory: &Path, active_snapshot_id: &str) {
+    let Ok(entries) = fs::read_dir(snapshots_directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name() != active_snapshot_id {
+            let _ = fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+fn cleanup_legacy_files(directory: &Path) {
+    for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+        let _ = fs::remove_file(directory.join(file_name));
+    }
+}
+
+fn cleanup_temporary_manifests(directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if file_name.starts_with("manifest.") && file_name.ends_with(".tmp") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -1008,11 +1198,32 @@ fn read_json_file<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
 }
 
 fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
-    fs::write(path, bytes).map_err(|_| persistence_error("write", path))
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| persistence_error("open for writing", path, &error))?;
+    file.write_all(bytes)
+        .map_err(|error| persistence_error("write", path, &error))?;
+    file.sync_all()
+        .map_err(|error| persistence_error("sync", path, &error))
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<()> {
+    fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| persistence_error("sync directory", path, &error))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>> {
-    fs::read(path).map_err(|_| persistence_error("read", path))
+    fs::read(path).map_err(|error| persistence_error("read", path, &error))
 }
 
 fn compress_payload(path: &Path, bytes: &[u8], compression: FileCompression) -> Result<Vec<u8>> {
@@ -1050,14 +1261,14 @@ fn read_payload_file(
 fn file_size(path: &Path) -> Result<u64> {
     fs::metadata(path)
         .map(|metadata| metadata.len())
-        .map_err(|_| persistence_error("stat", path))
+        .map_err(|error| persistence_error("stat", path, &error))
 }
 
 fn file_size_if_exists(path: &Path) -> Result<u64> {
     match fs::metadata(path) {
         Ok(metadata) => Ok(metadata.len()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
-        Err(_) => Err(persistence_error("stat", path)),
+        Err(error) => Err(persistence_error("stat", path, &error)),
     }
 }
 
@@ -1506,10 +1717,11 @@ fn checked_u64_to_usize(value: u64, label: &str) -> Result<usize> {
     })
 }
 
-fn persistence_error(operation: &str, path: &Path) -> VectorKitError {
+fn persistence_error(operation: &str, path: &Path, error: &std::io::Error) -> VectorKitError {
     VectorKitError::Persistence {
         operation: operation.to_owned(),
         path: display_path(path),
+        cause: error.to_string(),
     }
 }
 
@@ -2062,6 +2274,8 @@ mod tests {
             file_sizes
         );
         let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+        assert_eq!(manifest.format_version, FORMAT_VERSION);
+        assert!(manifest.snapshot_id.is_some());
         assert_eq!(manifest.chunk_compression, FileCompression::Zstd);
         assert!(manifest.chunk_uncompressed_bytes > 0);
         assert_eq!(manifest.bm25_compression, FileCompression::Zstd);
@@ -2104,6 +2318,148 @@ mod tests {
         assert_eq!(filtered_hits[0].chunk_id, 0);
 
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn failed_snapshot_save_preserves_previous_generation_at_every_checkpoint() {
+        let directory = temp_index_dir("transactional-save-failures");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("previous generation", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+        let original_manifest = read_file(&directory.join(MANIFEST_FILE)).unwrap();
+
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("replacement generation", vec![0.0, 1.0])],
+            )
+            .unwrap();
+
+        for failure_checkpoint in [
+            SaveCheckpoint::VectorsWritten,
+            SaveCheckpoint::ChunksWritten,
+            SaveCheckpoint::Bm25Written,
+            SaveCheckpoint::TombstonesWritten,
+            SaveCheckpoint::SnapshotSynced,
+            SaveCheckpoint::ManifestWritten,
+        ] {
+            let result = index.save_to_dir_with_checkpoints(
+                &directory,
+                IndexPersistenceOptions::default(),
+                |checkpoint| {
+                    if checkpoint == failure_checkpoint {
+                        Err(VectorKitError::Persistence {
+                            operation: format!("simulate failure after {checkpoint:?}"),
+                            path: directory.display().to_string(),
+                            cause: "injected test failure".to_owned(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                },
+            );
+
+            assert!(result.is_err());
+            assert_eq!(
+                read_file(&directory.join(MANIFEST_FILE)).unwrap(),
+                original_manifest
+            );
+            let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+            assert_eq!(loaded.len(), 1);
+            assert_eq!(loaded.chunk(0).unwrap().text, "previous generation");
+        }
+
+        index.save_to_dir(&directory).unwrap();
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded.chunk(1).unwrap().text, "replacement generation");
+        assert_eq!(
+            fs::read_dir(directory.join(SNAPSHOTS_DIRECTORY))
+                .unwrap()
+                .count(),
+            1
+        );
+        assert!(fs::read_dir(&directory).unwrap().all(|entry| {
+            let name = entry.unwrap().file_name();
+            let name = name.to_string_lossy();
+            !(name.starts_with("manifest.") && name.ends_with(".tmp"))
+        }));
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn concurrent_save_is_rejected_without_changing_published_generation() {
+        let directory = temp_index_dir("concurrent-save");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("published", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+        let original_manifest = read_file(&directory.join(MANIFEST_FILE)).unwrap();
+
+        let lock = SaveLock::acquire(&directory).unwrap();
+        let error = index.save_to_dir(&directory).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("another save may already be running"));
+        assert_eq!(
+            read_file(&directory.join(MANIFEST_FILE)).unwrap(),
+            original_manifest
+        );
+        drop(lock);
+
+        index.save_to_dir(&directory).unwrap();
+        ExactVectorIndex::load_from_dir(&directory).unwrap();
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn loader_accepts_legacy_root_file_layout() {
+        let directory = temp_index_dir("legacy-layout");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("legacy data", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        let snapshot_directory = manifest.data_directory(&directory).unwrap();
+        for file_name in [VECTORS_FILE, CHUNKS_FILE, BM25_FILE, TOMBSTONES_FILE] {
+            fs::rename(
+                snapshot_directory.join(file_name),
+                directory.join(file_name),
+            )
+            .unwrap();
+        }
+        manifest.format_version = LEGACY_FORMAT_VERSION;
+        manifest.snapshot_id = None;
+        write_json_file(&manifest_path, &manifest).unwrap();
+        fs::remove_dir_all(directory.join(SNAPSHOTS_DIRECTORY)).unwrap();
+
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(loaded.chunk(0).unwrap().text, "legacy data");
+        assert_eq!(
+            ExactVectorIndex::persisted_file_sizes(&directory)
+                .unwrap()
+                .tombstones_bytes,
+            1
+        );
+
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]

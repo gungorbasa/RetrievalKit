@@ -222,6 +222,13 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Completed Optimizations
 
+- Crash-safe transactional persistence is implemented in the Rust core. Format
+  V2 stores immutable generations under `.snapshots`, syncs and validates a new
+  generation before atomically publishing `manifest.json`, and cleans stale
+  generations after success. V1 root-file indexes remain readable and migrate
+  on their next save. An OS-released file lock serializes cross-process saves.
+  Failure-injection tests cover every pre-publication stage and lock contention.
+
 - Late result materialization is implemented for exact vector search. The hot
   loop keeps only `chunk_id`, `offset`, and score, then builds final `SearchHit`
   values after sorting the winning candidates.

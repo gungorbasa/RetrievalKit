@@ -100,6 +100,31 @@ final class VectorKitTests: XCTestCase {
         XCTAssertEqual(dimension, 2)
         XCTAssertEqual(activeChunkCount, 1)
         XCTAssertEqual(results.first?.text, "persisted chunk")
+
+        try await index.upsert(
+            document: Document(id: "doc-2"),
+            chunks: [ChunkInput(text: "second snapshot", embedding: [1, 0])]
+        )
+        try await index.save(to: directory)
+        let reloaded = try VectorIndex.load(from: directory)
+        let reloadedChunkCount = await reloaded.activeChunkCount
+        XCTAssertEqual(reloadedChunkCount, 2)
+    }
+
+    func testSaveErrorIncludesOperationCauseAndRecoveryHint() async throws {
+        let blockingFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vectorkit-blocking-file-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: blockingFile) }
+        try Data("file".utf8).write(to: blockingFile)
+
+        let index = try VectorIndex(dimension: 2)
+        do {
+            try await index.save(to: blockingFile.appendingPathComponent("index"))
+            XCTFail("expected persistence failure")
+        } catch let error as VectorKitError {
+            XCTAssertTrue(error.description.contains("persistence create directory failed"))
+            XCTAssertTrue(error.description.contains("parent directory is writable when saving"))
+        }
     }
 
     func testDimensionMismatchMapsToCoreError() async throws {

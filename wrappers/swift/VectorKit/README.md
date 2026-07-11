@@ -94,6 +94,40 @@ index instance and are called with `await` from outside the actor. `Filter` is
 an immutable `Sendable` value; temporary Rust filter handles are built inside
 the actor call and freed before returning.
 
+## Persistence Safety
+
+`save(to:)` publishes a complete immutable snapshot. VectorKit writes and syncs
+the new generation before atomically switching `manifest.json`, so an
+interrupted save leaves the previously published generation loadable. A later
+successful save removes abandoned and superseded generations. Existing V1
+root-file indexes remain readable and migrate to snapshots on their next save.
+
+Only one writer may save a given directory at a time. VectorKit uses an
+OS-released lock, so a process crash does not leave the directory permanently
+locked; a competing save fails without changing the published generation.
+
+Applications should treat the index directory as VectorKit-owned and must not
+edit `.snapshots` or `manifest.json` directly.
+
+```swift
+import Foundation
+import VectorKit
+
+let index = try VectorIndex(dimension: 384)
+let applicationSupportURL = FileManager.default.urls(
+    for: .applicationSupportDirectory,
+    in: .userDomainMask
+)[0]
+let indexURL = applicationSupportURL.appendingPathComponent("search-index")
+try await index.save(to: indexURL)
+
+// On the next app launch:
+let loadedIndex = try VectorIndex.load(from: indexURL)
+```
+
+Failures surface as `VectorKitError.core` values whose message contains the
+failed operation, path, operating-system cause, and a recovery hint.
+
 The source package currently expects the XCFramework to be built in this
 repository before `swift build` or `swift test`. A public binary release should
 publish `VectorKitFFI.xcframework` and switch the binary target to a URL plus

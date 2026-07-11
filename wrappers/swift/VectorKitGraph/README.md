@@ -9,3 +9,6 @@ aggregate `VectorKitGraphFFI` artifact. Install it instead of the base
 cold-path transport validated in Rust. `GraphIndex.query` uses typed native
 node-ID seeds, bounded traversal steps, limits, result matches, traces, and an
 atomic `GraphCancellationToken`; query hot paths do not parse JSON.
+Each `GraphQueryResult` retains its native generation-bound candidate scope and
+can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
+chunk IDs or changing the graph-free ranking implementations.

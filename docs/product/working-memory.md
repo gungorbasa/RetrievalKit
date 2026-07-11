@@ -95,6 +95,10 @@ implemented, or superseded by the product spec.
   and atomic cancellation. Separate base and graph Swift package test suites
   pass without co-linking native artifacts. Equality seeds, path provenance,
   candidate projection, and composed rankers remain in M4.3b.
+- M4.3b now retains each native graph result with its generation-bound projected
+  candidate scope and exposes scoped exact, BM25, and hybrid ranking in Swift.
+  Typed C ABI tests and Swift integration tests prove all three rankers return
+  only the graph-selected record. Equality seeds and path provenance remain.
 
 ## Current Size, RAM, and Speed Goal
 

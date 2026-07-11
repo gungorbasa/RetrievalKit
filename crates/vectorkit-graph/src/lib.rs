@@ -132,6 +132,10 @@ impl GraphIndex {
         self.storage.edges.len()
     }
 
+    pub fn chunk_text(&self, chunk_id: ChunkId) -> Option<&str> {
+        self.core.chunk(chunk_id).map(|chunk| chunk.text.as_str())
+    }
+
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
         self.core.search(query).map_err(GraphError::from)
     }

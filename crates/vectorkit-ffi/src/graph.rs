@@ -4,7 +4,8 @@ use std::slice;
 
 use serde::Deserialize;
 use vectorkit_core::{
-    ChunkKey, CorpusId, ExactVectorIndex, IndexConfig, Metadata, Record, RecordChunkInput,
+    CandidateScope, ChunkKey, CorpusId, ExactVectorIndex, HybridHit, HybridQuery, IndexConfig,
+    KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput, SearchHit, SearchQuery,
 };
 use vectorkit_graph::{
     CancellationToken, Direction, GraphIndex, GraphQuery, GraphResult, GraphScalar, NodeId,
@@ -13,7 +14,10 @@ use vectorkit_graph::{
 use vectorkit_graph::{FieldPath, GraphSchema, NodeType, RelationshipType};
 
 use super::{
-    ffi_bool, ffi_ptr, parse_encoding_code, parse_metric, read_c_string, FfiError, VkStatus,
+    ffi_bool, ffi_ptr, optional_filter, parse_encoding_code, parse_hybrid_fusion, parse_metric,
+    read_c_string, read_f32_slice, string_array, string_to_owned_ptr, FfiError, VkFilter,
+    VkHybridHit, VkHybridOptions, VkHybridResultBuffer, VkKeywordHit, VkKeywordResultBuffer,
+    VkSearchHit, VkSearchResultBuffer, VkStatus,
 };
 
 pub struct VkGraphBuilder {
@@ -29,6 +33,11 @@ pub struct VkGraphResult {
 }
 pub struct VkGraphCancellation {
     token: CancellationToken,
+}
+pub struct VkGraphScope {
+    scope: CandidateScope,
+    pub source_nodes: usize,
+    pub resolved_chunks: usize,
 }
 
 #[repr(C)]
@@ -346,6 +355,150 @@ pub unsafe extern "C" fn vectorkit_graph_result_free(result: *mut VkGraphResult)
         drop(unsafe { Box::from_raw(result) });
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_result_project(
+    index: *const VkGraphIndex,
+    result: *const VkGraphResult,
+    status: *mut VkStatus,
+) -> *mut VkGraphScope {
+    ffi_ptr(status, || {
+        let index = unsafe { index.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph index must not be null"))?;
+        let result = unsafe { result.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
+        let projected = index.index.project_candidates(&result.result)?;
+        Ok(Box::into_raw(Box::new(VkGraphScope {
+            scope: projected.scope,
+            source_nodes: projected.trace.source_nodes,
+            resolved_chunks: projected.trace.resolved_chunks,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_free(scope: *mut VkGraphScope) {
+    if !scope.is_null() {
+        drop(unsafe { Box::from_raw(scope) });
+    }
+}
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_source_nodes(scope: *const VkGraphScope) -> usize {
+    unsafe { scope.as_ref() }.map_or(0, |value| value.source_nodes)
+}
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_resolved_chunks(
+    scope: *const VkGraphScope,
+) -> usize {
+    unsafe { scope.as_ref() }.map_or(0, |value| value.resolved_chunks)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_search(
+    index: *const VkGraphIndex,
+    scope: *const VkGraphScope,
+    embedding: *const f32,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkSearchResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { graph_index(index) }?;
+        let scope = unsafe { graph_scope(scope) }?;
+        let mut query = SearchQuery::new(
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        );
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        unsafe {
+            *out_results = graph_search_buffer(
+                index,
+                index.index.search_in_candidates(&query, &scope.scope)?,
+            )
+        };
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_keyword_search(
+    index: *const VkGraphIndex,
+    scope: *const VkGraphScope,
+    text: *const c_char,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkKeywordResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { graph_index(index) }?;
+        let scope = unsafe { graph_scope(scope) }?;
+        let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        unsafe {
+            *out_results = graph_keyword_buffer(
+                index,
+                index
+                    .index
+                    .keyword_search_in_candidates(&query, &scope.scope)?,
+            )
+        };
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_scope_hybrid_search(
+    index: *const VkGraphIndex,
+    scope: *const VkGraphScope,
+    text: *const c_char,
+    embedding: *const f32,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { graph_index(index) }?;
+        let scope = unsafe { graph_scope(scope) }?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        query.fusion = parse_hybrid_fusion(options)?;
+        unsafe {
+            *out_results = graph_hybrid_buffer(
+                index,
+                index
+                    .index
+                    .hybrid_search_in_candidates(&query, &scope.scope)?,
+            )
+        };
+        Ok(())
+    })
+}
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_cancellation_new() -> *mut VkGraphCancellation {
     Box::into_raw(Box::new(VkGraphCancellation {
@@ -488,6 +641,77 @@ unsafe fn ffi_slice<'a, T>(
     Ok(unsafe { slice::from_raw_parts(pointer, count) })
 }
 
+unsafe fn graph_index<'a>(value: *const VkGraphIndex) -> Result<&'a VkGraphIndex, FfiError> {
+    unsafe { value.as_ref() }
+        .ok_or_else(|| FfiError::invalid_argument("graph index must not be null"))
+}
+unsafe fn graph_scope<'a>(value: *const VkGraphScope) -> Result<&'a VkGraphScope, FfiError> {
+    unsafe { value.as_ref() }
+        .ok_or_else(|| FfiError::invalid_argument("graph scope must not be null"))
+}
+fn boxed_buffer<T>(values: Vec<T>) -> (*mut T, usize) {
+    let mut values = values.into_boxed_slice();
+    let result = (values.as_mut_ptr(), values.len());
+    std::mem::forget(values);
+    result
+}
+fn graph_search_buffer(index: &VkGraphIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| VkSearchHit {
+            chunk_id: hit.chunk_id,
+            document_id: string_to_owned_ptr(&hit.document_id),
+            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
+            score: hit.score,
+            vector_score: hit.trace.vector_score,
+            filter_matched: hit.trace.filter_matched,
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkSearchResultBuffer { hits, count }
+}
+fn graph_keyword_buffer(index: &VkGraphIndex, hits: Vec<KeywordHit>) -> VkKeywordResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| VkKeywordHit {
+            chunk_id: hit.chunk_id,
+            document_id: string_to_owned_ptr(&hit.document_id),
+            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
+            score: hit.score,
+            matched_terms: string_array(hit.matched_terms),
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkKeywordResultBuffer { hits, count }
+}
+fn graph_hybrid_buffer(index: &VkGraphIndex, hits: Vec<HybridHit>) -> VkHybridResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| VkHybridHit {
+            chunk_id: hit.chunk_id,
+            document_id: string_to_owned_ptr(&hit.document_id),
+            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
+            score: hit.score,
+            has_vector_score: hit.vector_score.is_some(),
+            vector_score: hit.vector_score.unwrap_or_default(),
+            has_keyword_score: hit.keyword_score.is_some(),
+            keyword_score: hit.keyword_score.unwrap_or_default(),
+            has_vector_rank: hit.trace.vector_rank.is_some(),
+            vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+            has_keyword_rank: hit.trace.keyword_rank.is_some(),
+            keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+            has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+            normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+            has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+            normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+            matched_terms: string_array(hit.trace.matched_terms),
+            filter_matched: hit.trace.filter_matched,
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkHybridResultBuffer { hits, count }
+}
+
 impl From<vectorkit_graph::GraphError> for FfiError {
     fn from(error: vectorkit_graph::GraphError) -> Self {
         Self {
@@ -600,6 +824,49 @@ mod tests {
             unsafe { vectorkit_graph_result_trace(result) }.result_count,
             1
         );
+        let scope = unsafe { vectorkit_graph_result_project(index, result, &mut status) };
+        assert!(!scope.is_null());
+        assert_eq!(unsafe { vectorkit_graph_scope_resolved_chunks(scope) }, 1);
+        let embedding = [1.0_f32, 0.0];
+        let mut exact = VkSearchResultBuffer {
+            hits: std::ptr::null_mut(),
+            count: 0,
+        };
+        assert!(unsafe {
+            vectorkit_graph_scope_search(
+                index,
+                scope,
+                embedding.as_ptr(),
+                2,
+                10,
+                std::ptr::null(),
+                &mut exact,
+                &mut status,
+            )
+        });
+        assert_eq!(exact.count, 1);
+        let text = CString::new("generic").unwrap();
+        let mut keyword = VkKeywordResultBuffer {
+            hits: std::ptr::null_mut(),
+            count: 0,
+        };
+        assert!(unsafe {
+            vectorkit_graph_scope_keyword_search(
+                index,
+                scope,
+                text.as_ptr(),
+                10,
+                std::ptr::null(),
+                &mut keyword,
+                &mut status,
+            )
+        });
+        assert_eq!(keyword.count, 1);
+        unsafe {
+            super::super::vectorkit_search_results_free(exact);
+            super::super::vectorkit_keyword_results_free(keyword);
+            vectorkit_graph_scope_free(scope)
+        };
         unsafe {
             vectorkit_graph_match_clear(&mut matched);
             vectorkit_graph_result_free(result)

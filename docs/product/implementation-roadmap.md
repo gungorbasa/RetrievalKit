@@ -162,8 +162,9 @@ Exit criteria:
 
 Status: V1 fixture and regression runner complete. The baseline uses real
 MiniLM embeddings, graded judgments, filters, deletion/replacement checks,
-persistence reload, F32/I8 comparison, and candidate-limit gates. Future fixture
-versions should add judgments from real application usage.
+persistence reload, hybrid candidate-limit gates, and a BM25-free exact F32/I8
+comparison at top 5 and top 10. Future fixture versions should add judgments
+from real application usage.
 
 Goal: tune hybrid retrieval using realistic text and metadata instead of
 synthetic score distributions.

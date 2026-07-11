@@ -250,8 +250,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   metadata allowlists, O(1) active average document length, and cached active
   document frequency. Persistence remains deterministic through the existing
   sorted binary format.
-- Hybrid search supports weighted normalized score fusion as the default and
-  RRF as an explicit option. Result traces expose vector/keyword ranks, raw
+- Hybrid search defaults to RRF with `rrf_k=60`; weighted normalized score
+  fusion remains explicit. Result traces expose vector/keyword ranks, raw
   scores, normalized scores when applicable, matched terms, and fusion config.
 - Hybrid candidate limits are exposed through the Rust public API with
   `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
@@ -324,8 +324,10 @@ exclusive operations through PyO3 borrowing.
   On 282 documents and 12 judged queries, I8 recall@5 versus the F32 `100/100`
   reference was `0.7333` at `10/25`, `0.90` at `25/25`, and `0.95` at the
   current `50/50` default. Keep `50/50`; grow real-user judgments before tuning.
-- Add compact vector-only comparisons and evaluate whether an optional F16
-  rerank store is justified by realistic quality measurements.
+- Realistic MiniLM vector-only comparison now measures I8 against exact F32
+  without BM25. I8 retained `0.9833` of F32 top 5 and `1.0` of F32 top 10,
+  with `1.0` top-result agreement and relevance recall. Do not add an F16/F32
+  rerank store without harder production-derived evidence that it is needed.
 - Add ambiguous real-user queries and multi-grade judgments to the next fixture
   version so NDCG and MRR become more discriminating.
 - Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially

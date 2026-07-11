@@ -1,5 +1,9 @@
 # Hybrid CLI Benchmark Report
 
+Status: historical latency evidence. The later MiniLM retrieval-quality fixture
+supersedes its default recommendation: production hybrid search now defaults to
+RRF with `rrf_k=60` and `50/50` candidates.
+
 Run date: 2026-06-10
 
 Environment:
@@ -86,8 +90,9 @@ set, but at this candidate size the overhead is not meaningful:
 | 768 | f32 | 1.195 ms | 1.174 ms | +0.021 ms |
 | 768 | i8 | 1.010 ms | 1.001 ms | +0.009 ms |
 
-This supports keeping weighted normalized score fusion as the default from a
-latency perspective. Ranking quality still needs a realistic relevance fixture.
+This showed weighted normalized fusion was affordable from a latency
+perspective. The later realistic relevance fixture selected RRF as the measured
+production default.
 
 ### 3. Hybrid is roughly vector candidate time plus keyword candidate time
 
@@ -137,7 +142,9 @@ term trace construction are the first places to inspect.
 
 ## Product Recommendation
 
-Keep weighted normalized score fusion as the default hybrid mode for now.
+Historical recommendation: keep weighted normalized score fusion as the
+default until realistic quality evidence exists. That evidence now exists, and
+the active product specification defaults to RRF with `rrf_k=60`.
 
 This benchmark does not prove weighted fusion has better ranking quality than
 RRF, but it shows the latency cost is negligible at the current default

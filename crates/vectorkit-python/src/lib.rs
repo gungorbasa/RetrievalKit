@@ -58,7 +58,7 @@ struct PyIndex {
 #[pymethods]
 impl PyIndex {
     #[new]
-    #[pyo3(signature = (dimension, metric = "cosine", encoding = "f32"))]
+    #[pyo3(signature = (dimension, metric = "cosine", encoding = "i8"))]
     fn new(dimension: usize, metric: &str, encoding: &str) -> PyResult<Self> {
         let config = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding(encoding)?);
@@ -219,7 +219,7 @@ impl PyIndex {
         r#where = None,
         vector_candidates = None,
         keyword_candidates = None,
-        fusion = "weighted",
+        fusion = "rrf",
         vector_weight = 0.6,
         keyword_weight = 0.4,
         rrf_k = 60.0

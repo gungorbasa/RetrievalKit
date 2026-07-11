@@ -8,6 +8,17 @@ final class VectorKitTests: XCTestCase {
         var embedding: [Float]
     }
 
+    func testProductionHybridDefaultsMatchQualityBenchmark() {
+        XCTAssertEqual(
+            HybridOptions.default,
+            HybridOptions(
+                vectorTopK: 50,
+                keywordTopK: 50,
+                fusion: .reciprocalRank(rrfK: 60)
+            )
+        )
+    }
+
     func testExactSearchReturnsIndexedChunk() async throws {
         let index = try VectorIndex(dimension: 3)
 
@@ -123,6 +134,12 @@ final class VectorKitTests: XCTestCase {
             chunks: [ChunkInput(text: "persisted chunk", embedding: [0, 1])]
         )
         try await index.save(to: directory)
+
+        let manifestData = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        )
+        XCTAssertEqual(manifest["vector_encoding"] as? String, "I8ScalarQuantized")
 
         let loaded = try VectorIndex.load(from: directory)
         let results = try await loaded.search(embedding: [0, 1], topK: 1)

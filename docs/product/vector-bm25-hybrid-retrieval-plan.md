@@ -1,5 +1,9 @@
 # Vector, BM25, And Hybrid Retrieval Plan
 
+Status: implemented. The later MiniLM quality benchmark sets the active V1
+defaults to I8 vector storage, `50/50` candidates, and RRF with `rrf_k=60`.
+Refer to `vectorkit-product-spec.md` for current decisions.
+
 This note captures the current direction for improving VectorKit retrieval
 quality and speed. It is library-level guidance, not specific to any one
 example dataset.

@@ -148,10 +148,11 @@ pub struct HybridQuery {
 }
 
 impl HybridQuery {
-    /// Creates a hybrid search request with stable V1 candidate defaults.
+    /// Creates a hybrid search request with experiment-backed V1 defaults.
     ///
     /// `top_k` controls the final fused result count. The default pre-fusion
-    /// candidate limits are `vector_top_k = 50` and `keyword_top_k = 50`.
+    /// candidate limits are `vector_top_k = 50` and `keyword_top_k = 50`, and
+    /// the default fusion is reciprocal rank fusion with `rrf_k = 60`.
     /// Override them with [`HybridQuery::with_candidate_limits`] when lower
     /// latency or broader candidate recall is more important for a query.
     pub fn new(text: impl Into<String>, embedding: Vec<f32>, top_k: usize) -> Self {
@@ -162,10 +163,7 @@ impl HybridQuery {
             vector_top_k: 50,
             keyword_top_k: 50,
             filter: None,
-            fusion: HybridFusion::WeightedNormalizedScore {
-                vector_weight: 0.6,
-                keyword_weight: 0.4,
-            },
+            fusion: HybridFusion::ReciprocalRank { rrf_k: 60.0 },
         }
     }
 
@@ -277,12 +275,12 @@ pub struct IndexConfig {
 }
 
 impl IndexConfig {
-    /// Creates an index configuration using `F32` vector storage.
+    /// Creates an index configuration using compact I8 vector storage.
     pub fn new(dimension: usize, metric: VectorMetric) -> Self {
         Self {
             dimension,
             metric,
-            vector_encoding: VectorEncoding::F32,
+            vector_encoding: VectorEncoding::I8ScalarQuantized,
         }
     }
 
@@ -417,5 +415,21 @@ impl IndexPersistenceOptions {
 impl Default for IndexPersistenceOptions {
     fn default() -> Self {
         Self::hybrid()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_defaults_match_quality_benchmark() {
+        let config = IndexConfig::new(384, VectorMetric::Cosine);
+        assert_eq!(config.vector_encoding, VectorEncoding::I8ScalarQuantized);
+
+        let query = HybridQuery::new("query", vec![0.0; 384], 5);
+        assert_eq!(query.vector_top_k, 50);
+        assert_eq!(query.keyword_top_k, 50);
+        assert_eq!(query.fusion, HybridFusion::ReciprocalRank { rrf_k: 60.0 });
     }
 }

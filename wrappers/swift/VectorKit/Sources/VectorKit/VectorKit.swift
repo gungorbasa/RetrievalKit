@@ -217,14 +217,14 @@ public struct HybridOptions: Equatable, Sendable {
     /// Fusion strategy used to rank the final results.
     public var fusion: Fusion
 
-    /// Stable V1 defaults: 50 vector candidates, 50 keyword candidates, 0.6/0.4 weighted fusion.
+    /// Experiment-backed V1 defaults: 50 vector candidates, 50 keyword candidates, RRF with k=60.
     public static let `default` = HybridOptions()
 
     /// Creates hybrid search options.
     public init(
         vectorTopK: Int = 50,
         keywordTopK: Int = 50,
-        fusion: Fusion = .weightedNormalizedScore(vectorWeight: 0.6, keywordWeight: 0.4)
+        fusion: Fusion = .reciprocalRank(rrfK: 60)
     ) {
         self.vectorTopK = vectorTopK
         self.keywordTopK = keywordTopK
@@ -498,7 +498,7 @@ public actor VectorIndex {
     public init(
         dimension: Int,
         metric: VectorMetric = .cosine,
-        encoding: VectorEncoding = .f32
+        encoding: VectorEncoding = .i8ScalarQuantized
     ) throws {
         let pointer = try FFI.withStatusPointer { status in
             vectorkit_index_new(dimension, metric.ffiValue, encoding.ffiValue, status)

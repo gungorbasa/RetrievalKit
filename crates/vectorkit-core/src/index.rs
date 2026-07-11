@@ -129,8 +129,13 @@ impl ExactVectorIndex {
         metric: VectorMetric,
         bm25_config: Bm25Config,
     ) -> Self {
-        Self::from_parts(dimension, metric, VectorEncoding::F32, bm25_config)
-            .expect("F32 vector encoding is supported")
+        Self::from_parts(
+            dimension,
+            metric,
+            VectorEncoding::I8ScalarQuantized,
+            bm25_config,
+        )
+        .expect("I8 scalar-quantized vector encoding is supported")
     }
 
     fn from_parts(
@@ -2547,7 +2552,10 @@ mod tests {
 
         let estimate = index.size_estimate();
 
-        assert_eq!(estimate.vector_bytes, 2 * std::mem::size_of::<f32>());
+        assert_eq!(
+            estimate.vector_bytes,
+            2 * std::mem::size_of::<i8>() + std::mem::size_of::<f32>()
+        );
         assert_eq!(estimate.chunk_record_bytes, std::mem::size_of::<ChunkId>());
         assert_eq!(estimate.document_id_bytes, "doc-1".len());
         assert_eq!(estimate.text_bytes, "chunk 1".len());
@@ -2725,7 +2733,7 @@ mod tests {
         let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
         assert_eq!(loaded.dimension(), 2);
         assert_eq!(loaded.metric(), VectorMetric::Cosine);
-        assert_eq!(loaded.vector_encoding(), VectorEncoding::F32);
+        assert_eq!(loaded.vector_encoding(), VectorEncoding::I8ScalarQuantized);
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded.active_chunk_count(), 1);
         assert!(loaded.chunk(1).unwrap().deleted);
@@ -3176,10 +3184,7 @@ mod tests {
         assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
         assert_eq!(
             shared_hit.trace.fusion,
-            HybridFusionTrace::WeightedNormalizedScore {
-                vector_weight: 0.6,
-                keyword_weight: 0.4
-            }
+            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
         );
 
         let _ = std::fs::remove_dir_all(directory);
@@ -3216,7 +3221,7 @@ mod tests {
         assert_eq!(vector_hit.trace.keyword_rank, None);
         assert!(vector_hit.vector_score.is_some());
         assert_eq!(vector_hit.keyword_score, None);
-        assert_eq!(vector_hit.trace.normalized_vector_score, Some(1.0));
+        assert_eq!(vector_hit.trace.normalized_vector_score, None);
         assert_eq!(vector_hit.trace.normalized_keyword_score, None);
         assert!(vector_hit.trace.matched_terms.is_empty());
 
@@ -3843,13 +3848,10 @@ mod tests {
         assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
         assert_eq!(
             shared_hit.trace.fusion,
-            HybridFusionTrace::WeightedNormalizedScore {
-                vector_weight: 0.6,
-                keyword_weight: 0.4
-            }
+            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
         );
-        assert!(shared_hit.trace.normalized_vector_score.is_some());
-        assert!(shared_hit.trace.normalized_keyword_score.is_some());
+        assert_eq!(shared_hit.trace.normalized_vector_score, None);
+        assert_eq!(shared_hit.trace.normalized_keyword_score, None);
     }
 
     #[test]

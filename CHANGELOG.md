@@ -31,7 +31,12 @@ All notable user-facing changes and persistence migrations are recorded here.
   provisional 24K compact-target and 50K extended-capacity budgets.
 - A versioned MiniLM retrieval-quality fixture now gates relevance, F32/I8
   overlap, candidate limits, filters, deletions, replacements, persistence
-  reload, and latency. Its V1 evidence keeps `50/50` as the hybrid default.
+  reload, and latency. Its V1 evidence keeps `50/50` as the hybrid default and
+  confirms 98.33% top-5 and 100% top-10 I8/F32 vector-only overlap.
+- New Rust, Swift, and Python indexes now default to I8 scalar-quantized vector
+  storage. Hybrid queries default to 50/50 candidates and RRF with `rrf_k=60`,
+  matching the measured V1 quality configuration. F32 and weighted fusion
+  remain explicit options.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

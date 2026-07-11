@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use vectorkit_core::{
     Chunk, ChunkInput, Document, ExactVectorIndex, Filter, HybridQuery, IndexConfig, Metadata,
-    MetadataValue, VectorEncoding, VectorMetric,
+    MetadataValue, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 pub(crate) struct QualityOutcome {
@@ -219,6 +219,7 @@ struct QualityGates {
     min_mrr: f64,
     min_recall_vs_reference: f64,
     min_i8_recall_vs_f32: f64,
+    min_i8_vector_recall_vs_f32: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -235,6 +236,7 @@ struct QualityReport<'a> {
     default_pair: [usize; 2],
     indexes: Vec<IndexProfile>,
     runs: Vec<QualityRun>,
+    vector_only_runs: Vec<VectorOnlyRun>,
     categories: Vec<CategorySummary>,
     gates: GateResult,
 }
@@ -254,12 +256,35 @@ struct QualityRun {
 }
 
 #[derive(Debug, Serialize)]
+struct VectorOnlyRun {
+    encoding: &'static str,
+    top_k: usize,
+    relevance_recall_at_k: f64,
+    mrr: f64,
+    ndcg_at_k: f64,
+    recall_at_k_vs_f32: f64,
+    top_1_agreement_vs_f32: f64,
+    ordered_result_agreement_vs_f32: f64,
+    differences_vs_f32: Vec<VectorResultDifference>,
+    latency: LatencyStats,
+    lifecycle_violations: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct VectorResultDifference {
+    query_id: String,
+    f32_document_ids: Vec<String>,
+    encoding_document_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct IndexProfile {
     encoding: &'static str,
     estimated_in_memory_payload_bytes: usize,
     persisted_bytes: u64,
     load_ms: f64,
     post_load_rankings_match: bool,
+    post_load_vector_rankings_match: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -302,6 +327,7 @@ fn benchmark(fixture: &Fixture, iterations: usize) -> Result<QualityReport<'_>, 
     let directory = TemporaryDirectory::new()?;
     let f32_built = build_index(fixture, VectorEncoding::F32)?;
     let f32_before_load = reference_results(&f32_built, fixture, reference_pair)?;
+    let f32_vector_before_load = vector_results(&f32_built, fixture, 10)?;
     let (f32, f32_profile) = persist_reload(
         f32_built,
         directory.path.join("f32"),
@@ -309,9 +335,11 @@ fn benchmark(fixture: &Fixture, iterations: usize) -> Result<QualityReport<'_>, 
         fixture,
         reference_pair,
         &f32_before_load,
+        &f32_vector_before_load,
     )?;
     let i8_built = build_index(fixture, VectorEncoding::I8ScalarQuantized)?;
     let i8_before_load = reference_results(&i8_built, fixture, reference_pair)?;
+    let i8_vector_before_load = vector_results(&i8_built, fixture, 10)?;
     let (i8, i8_profile) = persist_reload(
         i8_built,
         directory.path.join("i8"),
@@ -319,6 +347,7 @@ fn benchmark(fixture: &Fixture, iterations: usize) -> Result<QualityReport<'_>, 
         fixture,
         reference_pair,
         &i8_before_load,
+        &i8_vector_before_load,
     )?;
     let f32_reference = reference_results(&f32, fixture, reference_pair)?;
     let i8_reference = reference_results(&i8, fixture, reference_pair)?;
@@ -340,8 +369,10 @@ fn benchmark(fixture: &Fixture, iterations: usize) -> Result<QualityReport<'_>, 
         }
     }
 
+    let vector_only_runs = benchmark_vector_only(fixture, &f32, &i8, iterations)?;
+
     let categories = category_summaries(fixture, &i8, fixture.default_pair)?;
-    let gates = evaluate_gates(fixture, &runs);
+    let gates = evaluate_gates(fixture, &runs, &vector_only_runs);
     Ok(QualityReport {
         schema_version: 1,
         fixture_id: &fixture.fixture_id,
@@ -355,6 +386,7 @@ fn benchmark(fixture: &Fixture, iterations: usize) -> Result<QualityReport<'_>, 
         default_pair: fixture.default_pair,
         indexes: vec![f32_profile, i8_profile],
         runs,
+        vector_only_runs,
         categories,
         gates,
     })
@@ -367,6 +399,7 @@ fn persist_reload(
     fixture: &Fixture,
     reference_pair: [usize; 2],
     before_load: &[Vec<RankedDocument>],
+    vector_before_load: &[Vec<RankedDocument>],
 ) -> Result<(ExactVectorIndex, IndexProfile), String> {
     let estimated_in_memory_payload_bytes = index.size_estimate().total_bytes();
     let files = index
@@ -377,12 +410,14 @@ fn persist_reload(
     let loaded = ExactVectorIndex::load_from_dir(&path).map_err(|error| error.to_string())?;
     let load_ms = millis(started.elapsed());
     let after_load = reference_results(&loaded, fixture, reference_pair)?;
+    let vector_after_load = vector_results(&loaded, fixture, 10)?;
     let profile = IndexProfile {
         encoding,
         estimated_in_memory_payload_bytes,
         persisted_bytes: files.total_bytes(),
         load_ms,
         post_load_rankings_match: before_load == after_load,
+        post_load_vector_rankings_match: vector_before_load == vector_after_load,
     };
     Ok((loaded, profile))
 }
@@ -463,6 +498,139 @@ fn reference_results(
         .iter()
         .map(|query| search(index, query, fixture.top_k, pair))
         .collect()
+}
+
+fn vector_results(
+    index: &ExactVectorIndex,
+    fixture: &Fixture,
+    top_k: usize,
+) -> Result<Vec<Vec<RankedDocument>>, String> {
+    fixture
+        .queries
+        .iter()
+        .map(|query| vector_search(index, query, top_k))
+        .collect()
+}
+
+fn benchmark_vector_only(
+    fixture: &Fixture,
+    f32: &ExactVectorIndex,
+    i8: &ExactVectorIndex,
+    iterations: usize,
+) -> Result<Vec<VectorOnlyRun>, String> {
+    let depths = BTreeSet::from([fixture.top_k, 10]);
+    let mut runs = Vec::with_capacity(depths.len() * 2);
+    for top_k in depths {
+        let f32_reference = vector_results(f32, fixture, top_k)?;
+        runs.push(benchmark_vector_encoding(
+            fixture,
+            f32,
+            "f32",
+            top_k,
+            &f32_reference,
+            iterations,
+        )?);
+        runs.push(benchmark_vector_encoding(
+            fixture,
+            i8,
+            "i8",
+            top_k,
+            &f32_reference,
+            iterations,
+        )?);
+    }
+    Ok(runs)
+}
+
+fn benchmark_vector_encoding(
+    fixture: &Fixture,
+    index: &ExactVectorIndex,
+    encoding: &'static str,
+    top_k: usize,
+    f32_reference: &[Vec<RankedDocument>],
+    iterations: usize,
+) -> Result<VectorOnlyRun, String> {
+    let results = vector_results(index, fixture, top_k)?;
+    let relevance_recall_at_k = average(
+        fixture
+            .queries
+            .iter()
+            .zip(&results)
+            .map(|(query, hits)| relevance_recall(query, hits)),
+    );
+    let mrr = average(
+        fixture
+            .queries
+            .iter()
+            .zip(&results)
+            .map(|(query, hits)| reciprocal_rank(query, hits)),
+    );
+    let ndcg_at_k = average(
+        fixture
+            .queries
+            .iter()
+            .zip(&results)
+            .map(|(query, hits)| ndcg(query, hits, top_k)),
+    );
+    let recall_at_k_vs_f32 = average(
+        results
+            .iter()
+            .zip(f32_reference)
+            .map(|(hits, reference)| overlap_recall(hits, reference)),
+    );
+    let top_1_agreement_vs_f32 = average(
+        results
+            .iter()
+            .zip(f32_reference)
+            .map(|(hits, reference)| top_1_agreement(hits, reference)),
+    );
+    let ordered_result_agreement_vs_f32 = average(
+        results
+            .iter()
+            .zip(f32_reference)
+            .map(|(hits, reference)| f64::from(hits == reference)),
+    );
+    let differences_vs_f32 = fixture
+        .queries
+        .iter()
+        .zip(&results)
+        .zip(f32_reference)
+        .filter(|((_, hits), reference)| hits != reference)
+        .map(|((query, hits), reference)| VectorResultDifference {
+            query_id: query.id.clone(),
+            f32_document_ids: reference
+                .iter()
+                .map(|hit| hit.document_id.clone())
+                .collect(),
+            encoding_document_ids: hits.iter().map(|hit| hit.document_id.clone()).collect(),
+        })
+        .collect();
+    let lifecycle_violations = lifecycle_violations(fixture, index, &results);
+
+    for query in &fixture.queries {
+        black_box(vector_search(index, query, top_k)?);
+    }
+    let mut durations = Vec::with_capacity(iterations * fixture.queries.len());
+    for _ in 0..iterations {
+        for query in &fixture.queries {
+            let start = Instant::now();
+            black_box(vector_search(index, query, top_k)?);
+            durations.push(start.elapsed());
+        }
+    }
+    Ok(VectorOnlyRun {
+        encoding,
+        top_k,
+        relevance_recall_at_k,
+        mrr,
+        ndcg_at_k,
+        recall_at_k_vs_f32,
+        top_1_agreement_vs_f32,
+        ordered_result_agreement_vs_f32,
+        differences_vs_f32,
+        latency: latency_stats(durations),
+        lifecycle_violations,
+    })
 }
 
 fn benchmark_pair(
@@ -567,6 +735,31 @@ fn search(
         })
 }
 
+fn vector_search(
+    index: &ExactVectorIndex,
+    query: &FixtureQuery,
+    top_k: usize,
+) -> Result<Vec<RankedDocument>, String> {
+    let mut request = SearchQuery::new(query.embedding.clone(), top_k);
+    if let Some(filter) = &query.filter {
+        request = request.with_filter(Filter::Equals {
+            field: filter.field.clone(),
+            value: MetadataValue::String(filter.value.clone()),
+        });
+    }
+    index
+        .search(&request)
+        .map_err(|error| error.to_string())
+        .map(|hits| {
+            hits.into_iter()
+                .map(|hit| RankedDocument {
+                    document_id: hit.document_id,
+                    chunk_id: hit.chunk_id,
+                })
+                .collect()
+        })
+}
+
 fn relevance_recall(query: &FixtureQuery, hits: &[RankedDocument]) -> f64 {
     let relevant = query
         .relevance
@@ -635,6 +828,14 @@ fn overlap_recall(hits: &[RankedDocument], reference: &[RankedDocument]) -> f64 
         / reference.len() as f64
 }
 
+fn top_1_agreement(hits: &[RankedDocument], reference: &[RankedDocument]) -> f64 {
+    match (hits.first(), reference.first()) {
+        (Some(hit), Some(expected)) => f64::from(hit.document_id == expected.document_id),
+        (None, None) => 1.0,
+        _ => 0.0,
+    }
+}
+
 fn lifecycle_violations(
     fixture: &Fixture,
     index: &ExactVectorIndex,
@@ -696,7 +897,11 @@ fn category_summaries(
         .collect())
 }
 
-fn evaluate_gates(fixture: &Fixture, runs: &[QualityRun]) -> GateResult {
+fn evaluate_gates(
+    fixture: &Fixture,
+    runs: &[QualityRun],
+    vector_only_runs: &[VectorOnlyRun],
+) -> GateResult {
     let mut violations = Vec::new();
     for run in runs
         .iter()
@@ -730,6 +935,17 @@ fn evaluate_gates(fixture: &Fixture, runs: &[QualityRun]) -> GateResult {
             violations.push(format!(
                 "i8 default recall vs F32 reference {:.4} is below {:.4}",
                 run.recall_at_k_vs_f32_reference, fixture.quality_gates.min_i8_recall_vs_f32
+            ));
+        }
+        violations.extend(run.lifecycle_violations.iter().cloned());
+    }
+    for run in vector_only_runs.iter().filter(|run| run.encoding == "i8") {
+        if run.recall_at_k_vs_f32 < fixture.quality_gates.min_i8_vector_recall_vs_f32 {
+            violations.push(format!(
+                "i8 vector-only recall@{} vs F32 {:.4} is below {:.4}",
+                run.top_k,
+                run.recall_at_k_vs_f32,
+                fixture.quality_gates.min_i8_vector_recall_vs_f32
             ));
         }
         violations.extend(run.lifecycle_violations.iter().cloned());
@@ -819,6 +1035,13 @@ mod tests {
         let hits = vec![ranked("a", 0), ranked("b", 1)];
         let reference = vec![ranked("a", 0), ranked("c", 2)];
         assert_eq!(overlap_recall(&hits, &reference), 0.5);
+    }
+
+    #[test]
+    fn top_1_agreement_compares_the_first_document() {
+        assert_eq!(top_1_agreement(&[ranked("a", 0)], &[ranked("a", 1)]), 1.0);
+        assert_eq!(top_1_agreement(&[ranked("a", 0)], &[ranked("b", 1)]), 0.0);
+        assert_eq!(top_1_agreement(&[], &[]), 1.0);
     }
 
     #[test]

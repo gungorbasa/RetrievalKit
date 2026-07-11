@@ -320,6 +320,7 @@ def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
         limit=10,
         vector_candidates=1,
         keyword_candidates=1,
+        fusion="weighted",
         vector_weight=0.25,
         keyword_weight=0.75,
     )

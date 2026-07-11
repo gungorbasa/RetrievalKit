@@ -318,7 +318,9 @@ Do not implement product quantization or int4 in V1 unless benchmarks prove they
 
 #### F32 Encoding
 
-Use `F32` as the default.
+Use `F32` as the correctness and benchmark reference. Use
+`I8ScalarQuantized` as the production SDK default after the V1 MiniLM fixture
+measured 98.33% top-5 and 100% top-10 vector-only overlap against F32.
 
 Properties:
 
@@ -547,20 +549,18 @@ Hybrid search combines vector and BM25 results.
 V1 default fusion method:
 
 ```text
-weighted normalized score fusion
+reciprocal rank fusion
 ```
 
 Default:
 
 ```text
-vector_weight: 0.6
-keyword_weight: 0.4
 vector_candidates: 50
 keyword_candidates: 50
+rrf_k: 60
 ```
 
-Reciprocal rank fusion remains available as an explicit option with
-`rrf_k = 60`.
+Weighted normalized score fusion remains available as an explicit option.
 
 V1 hybrid query flow:
 
@@ -1342,11 +1342,11 @@ language: Rust core, Swift wrapper
 metric: cosine
 normalization: unit L2
 dimension: caller-defined, fixed per index
-vector encoding: F32 by default, F16/I8 opt-in
+vector encoding: I8ScalarQuantized by default, F32/F16 opt-in
 exact search: enabled
 BM25: enabled
-hybrid fusion: weighted normalized score
-hybrid RRF: available as an explicit option
+hybrid fusion: reciprocal rank fusion with rrf_k 60
+weighted normalized fusion: available as an explicit option
 HNSW: deferred until after small-index MVP
 metadata filters: simple typed filters
 storage: local files with mmap-friendly layouts
@@ -1361,8 +1361,7 @@ vector_candidates: 50
 keyword_candidates: 50
 rerank: exact_vector
 trace: false
-vector_weight: 0.6
-keyword_weight: 0.4
+rrf_k: 60
 ```
 
 Debug search config:

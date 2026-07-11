@@ -73,7 +73,7 @@ def hybrid_search_text(
     where: Filter | None = None,
     vector_candidates: int | None = None,
     keyword_candidates: int | None = None,
-    fusion: str = "weighted",
+    fusion: str = "rrf",
     vector_weight: float = 0.6,
     keyword_weight: float = 0.4,
     rrf_k: float = 60.0,

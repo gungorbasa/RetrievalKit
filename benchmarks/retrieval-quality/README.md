@@ -15,8 +15,10 @@ cargo run --release -p vectorkit-cli -- \
   --iterations 50
 ```
 
-The command exits nonzero when the default candidate pair fails a relevance,
-reference-overlap, encoding-recall, deletion, or replacement gate.
+The command reports hybrid candidate quality and BM25-free vector-only F32/I8
+agreement at top 5 and top 10. It exits nonzero when the default candidate pair
+or vector-only I8 results fail a relevance, reference-overlap, encoding-recall,
+deletion, or replacement gate.
 
 Regenerate embeddings after intentionally editing `source.json`:
 

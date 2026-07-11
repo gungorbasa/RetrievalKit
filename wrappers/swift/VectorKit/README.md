@@ -137,6 +137,12 @@ try await index.save(to: indexURL)
 let loadedIndex = try VectorIndex.load(from: indexURL)
 ```
 
+New indexes default to compact I8 scalar-quantized storage. Hybrid search
+defaults to 50 vector candidates, 50 keyword candidates, and reciprocal rank
+fusion with `rrfK = 60`, matching the checked-in quality benchmark. Pass
+`encoding: .f32` or explicit `HybridOptions` when a different tradeoff is
+required.
+
 New saves use a checksummed V3 manifest. Validate a stored index without
 retaining it for search:
 

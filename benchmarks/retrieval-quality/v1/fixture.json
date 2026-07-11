@@ -111024,6 +111024,7 @@
   },
   "quality_gates": {
     "min_i8_recall_vs_f32": 0.95,
+    "min_i8_vector_recall_vs_f32": 0.95,
     "min_mrr": 0.9,
     "min_ndcg_at_k": 0.9,
     "min_recall_vs_reference": 0.95

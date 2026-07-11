@@ -223,7 +223,7 @@ def embed(texts):
     return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
 
 
-index = Index(dimension=4, metric="cosine", encoding="i8")
+index = Index(dimension=4, metric="cosine")
 
 chunks = chunk_text(
     "Python wrapper stays thin. Rust performs shared ingestion and retrieval.",
@@ -285,7 +285,7 @@ provider, indexing, and hybrid text search:
 from vectorkit import Index
 from vectorkit.pipeline import Pipeline
 
-index = Index(dimension=384, encoding="i8")
+index = Index(dimension=384)
 pipeline = Pipeline(
     index,
     embed=embed,
@@ -337,18 +337,16 @@ hits = index.hybrid_search(
     query_embedding,
     limit=10,
     where={"project": "vectorkit"},
-    vector_candidates=10,
-    keyword_candidates=25,
-    fusion="weighted",
-    vector_weight=0.6,
-    keyword_weight=0.4,
 )
 ```
 
 `limit` is the final number of fused hits. `vector_candidates` and
 `keyword_candidates` control how many candidates each retrieval mode contributes
-before fusion. Use `fusion="rrf"` with `rrf_k=60.0` to use reciprocal rank
-fusion instead of weighted normalized score fusion.
+before fusion. The experiment-backed defaults are I8 storage, 50 vector
+candidates, 50 keyword candidates, and reciprocal rank fusion with `rrf_k=60`.
+Pass `encoding="f32"` for correctness-reference indexes. Pass
+`fusion="weighted"` with explicit weights to opt into weighted normalized score
+fusion.
 
 Inputs and search results are plain dictionaries, with public `TypedDict` shapes
 available for annotations:

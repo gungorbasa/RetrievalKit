@@ -12,7 +12,7 @@ def embed(texts: list[str]) -> list[list[float]]:
 
 
 def main() -> None:
-    index = Index(dimension=4, metric="cosine", encoding="i8")
+    index = Index(dimension=4, metric="cosine")
     index.add(
         documents=[
             {
@@ -35,7 +35,7 @@ def main() -> None:
         where={"project": "vectorkit"},
     )
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
-    assert hits[0]["trace"]["fusion"]["kind"] == "weighted_normalized"
+    assert hits[0]["trace"]["fusion"] == {"kind": "rrf", "rrf_k": 60.0}
 
 
 if __name__ == "__main__":

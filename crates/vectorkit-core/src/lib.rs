@@ -7,6 +7,8 @@ mod index;
 mod metadata;
 mod metadata_index;
 mod record_store;
+mod retrieval_database;
+mod retrieval_index;
 mod scoring;
 mod types;
 
@@ -21,6 +23,8 @@ pub use record_store::{
     ChunkIdentity, ChunkKey, CorpusId, FieldName, GenerationId, Record, RecordId, RecordStore,
     RecordType, RecordValue,
 };
+pub use retrieval_database::RetrievalDatabase;
+pub use retrieval_index::{RetrievalConfiguration, RetrievalIndex, RetrievalMode};
 #[doc(hidden)]
 pub use scoring::dot_product_i8 as diagnostic_dot_product_i8;
 pub use types::{

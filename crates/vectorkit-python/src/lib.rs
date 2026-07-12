@@ -327,7 +327,8 @@ fn py_error(error: CoreError) -> PyErr {
         CoreError::InvalidIdentity { .. }
         | CoreError::InvalidRecordValue { .. }
         | CoreError::InvalidCandidateScope { .. }
-        | CoreError::StaleGeneration { .. } => VectorKitError::new_err(error.to_string()),
+        | CoreError::StaleGeneration { .. }
+        | CoreError::RetrievalModeUnavailable { .. } => VectorKitError::new_err(error.to_string()),
         CoreError::InvalidDimension { .. } => DimensionMismatchError::new_err(error.to_string()),
         CoreError::InvalidRange { .. } => FilterError::new_err(error.to_string()),
         CoreError::Persistence { .. } => PersistenceError::new_err(error.to_string()),

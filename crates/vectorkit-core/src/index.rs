@@ -21,6 +21,7 @@ use crate::record_store::{
     ChunkIdentity, ChunkKey, CorpusId, FieldName, GenerationId, Record, RecordId, RecordStore,
     RecordType, RecordValue,
 };
+use crate::retrieval_index::{RetrievalConfiguration, RetrievalIndex};
 use crate::scoring::{self, EncodedVectorStore};
 use crate::types::{
     Chunk, ChunkId, ChunkInput, CompactionReport, Document, HybridFusion, HybridFusionTrace,
@@ -103,12 +104,7 @@ impl Drop for SaveLock {
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
     corpus: CorpusIndex,
-    dimension: usize,
-    metric: VectorMetric,
-    vector_encoding: VectorEncoding,
-    encoded_vectors: EncodedVectorStore,
-    metadata_filter_index: MetadataFilterIndex,
-    bm25: Bm25Index,
+    retrieval: RetrievalIndex,
 }
 
 impl ExactVectorIndex {
@@ -125,6 +121,17 @@ impl ExactVectorIndex {
     /// Creates an empty index in an explicit stable corpus namespace.
     pub fn try_with_config_in_corpus(config: IndexConfig, corpus_id: CorpusId) -> Result<Self> {
         Self::from_parts_in_corpus(config, Bm25Config::default(), corpus_id)
+    }
+
+    /// Creates an empty retrieval facade with an explicit capability mode.
+    pub fn try_with_retrieval_configuration_in_corpus(
+        configuration: RetrievalConfiguration,
+        corpus_id: CorpusId,
+    ) -> Result<Self> {
+        Ok(Self {
+            corpus: CorpusIndex::new(corpus_id),
+            retrieval: RetrievalIndex::new(configuration)?,
+        })
     }
 
     /// Creates an empty exact vector index with configured vector and BM25 settings.
@@ -174,30 +181,32 @@ impl ExactVectorIndex {
         bm25_config: Bm25Config,
         corpus_id: CorpusId,
     ) -> Result<Self> {
-        Ok(Self {
-            corpus: CorpusIndex::new(corpus_id),
-            dimension: config.dimension,
-            metric: config.metric,
-            vector_encoding: config.vector_encoding,
-            encoded_vectors: EncodedVectorStore::new(config.vector_encoding)?,
-            metadata_filter_index: MetadataFilterIndex::default(),
-            bm25: Bm25Index::new(bm25_config),
-        })
+        Self::try_with_retrieval_configuration_in_corpus(
+            RetrievalConfiguration::Hybrid {
+                vector: config,
+                bm25: bm25_config,
+            },
+            corpus_id,
+        )
     }
 
     /// Returns the required embedding dimension for indexed chunks and queries.
     pub fn dimension(&self) -> usize {
-        self.dimension
+        self.retrieval.dimension
     }
 
     /// Returns the vector metric used for scoring.
     pub fn metric(&self) -> VectorMetric {
-        self.metric
+        self.retrieval.metric
     }
 
     /// Returns the stored vector representation used by this index.
     pub fn vector_encoding(&self) -> VectorEncoding {
-        self.vector_encoding
+        self.retrieval.vector_encoding
+    }
+
+    pub fn retrieval(&self) -> &RetrievalIndex {
+        &self.retrieval
     }
 
     /// Returns the stable namespace this in-memory generation belongs to.
@@ -265,7 +274,7 @@ impl ExactVectorIndex {
     /// Returns an approximate payload byte breakdown for the currently loaded index.
     pub fn size_estimate(&self) -> IndexSizeEstimate {
         IndexSizeEstimate {
-            vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
+            vector_bytes: self.retrieval.encoded_vectors.estimated_payload_bytes(),
             chunk_record_bytes: self.corpus.chunks.len() * std::mem::size_of::<ChunkId>(),
             document_id_bytes: self
                 .corpus
@@ -290,8 +299,15 @@ impl ExactVectorIndex {
             chunk_offset_bytes: self.corpus.chunk_offsets.len()
                 * std::mem::size_of::<Option<usize>>()
                 + self.corpus.active_offsets.len() * std::mem::size_of::<usize>(),
-            bm25_bytes: self.bm25.estimated_payload_bytes(),
-            metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
+            bm25_bytes: self
+                .retrieval
+                .bm25
+                .as_ref()
+                .map_or(0, Bm25Index::estimated_payload_bytes),
+            metadata_filter_bytes: self
+                .retrieval
+                .metadata_filter_index
+                .estimated_payload_bytes(),
             record_store_bytes: self.corpus.record_store.estimated_payload_bytes(),
             chunk_identity_bytes: self
                 .corpus
@@ -350,7 +366,10 @@ impl ExactVectorIndex {
         let manifest_path = directory.join(MANIFEST_FILE);
         let manifest_tmp_path = directory.join(format!("manifest.{snapshot_id}.tmp"));
 
-        write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
+        write_file(
+            &vectors_path,
+            &self.retrieval.encoded_vectors.to_payload_bytes(),
+        )?;
         checkpoint(SaveCheckpoint::VectorsWritten)?;
         let chunk_payload = encode_chunks(&self.corpus.chunks)?;
         let chunk_uncompressed_bytes =
@@ -379,9 +398,14 @@ impl ExactVectorIndex {
             &compress_payload(&records_path, &record_payload, PERSISTENCE_COMPRESSION)?,
         )?;
         checkpoint(SaveCheckpoint::RecordsWritten)?;
+        let include_bm25 = options.include_bm25 && self.retrieval.has_bm25();
         let mut bm25_uncompressed_bytes = 0;
-        if options.include_bm25 {
-            let bm25_payload = self.bm25.to_persisted().to_payload_bytes()?;
+        if include_bm25 {
+            let bm25_payload = self
+                .retrieval
+                .require_bm25()?
+                .to_persisted()
+                .to_payload_bytes()?;
             bm25_uncompressed_bytes =
                 checked_usize_to_u64(bm25_payload.len(), "bm25 payload byte count")?;
             write_file(
@@ -407,27 +431,28 @@ impl ExactVectorIndex {
             created_with: CREATED_WITH.to_owned(),
             corpus_id: self.corpus.corpus_id.clone(),
             generation: self.corpus.generation,
-            dimension: self.dimension,
-            metric: self.metric,
+            dimension: self.retrieval.dimension,
+            metric: self.retrieval.metric,
             vector_count: self.corpus.chunks.len(),
             active_chunk_count: self.active_chunk_count(),
-            has_bm25: options.include_bm25,
+            retrieval_mode: self.retrieval.mode(),
+            has_bm25: include_bm25,
             has_records: true,
-            vector_encoding: self.vector_encoding,
-            vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
+            vector_encoding: self.retrieval.vector_encoding,
+            vector_bytes: self.retrieval.encoded_vectors.estimated_payload_bytes(),
             chunk_bytes: file_size(&chunks_path)?,
             chunk_uncompressed_bytes,
             chunk_compression: PERSISTENCE_COMPRESSION,
             records_bytes: file_size(&records_path)?,
             records_uncompressed_bytes,
             records_compression: PERSISTENCE_COMPRESSION,
-            bm25_bytes: if options.include_bm25 {
+            bm25_bytes: if include_bm25 {
                 file_size(&bm25_path)?
             } else {
                 0
             },
             bm25_uncompressed_bytes,
-            bm25_compression: if options.include_bm25 {
+            bm25_compression: if include_bm25 {
                 PERSISTENCE_COMPRESSION
             } else {
                 FileCompression::None
@@ -438,14 +463,14 @@ impl ExactVectorIndex {
                 vectors: sha256_file(&vectors_path)?,
                 chunks: sha256_file(&chunks_path)?,
                 records: Some(sha256_file(&records_path)?),
-                bm25: if options.include_bm25 {
+                bm25: if include_bm25 {
                     Some(sha256_file(&bm25_path)?)
                 } else {
                     None
                 },
                 tombstones: sha256_file(&tombstones_path)?,
             }),
-            normalization: match self.metric {
+            normalization: match self.retrieval.metric {
                 VectorMetric::Cosine => "unit_l2",
                 VectorMetric::DotProduct => "none",
             }
@@ -575,17 +600,26 @@ impl ExactVectorIndex {
             None
         };
 
-        let mut index = Self::from_parts_in_corpus(
-            IndexConfig {
-                dimension: manifest.dimension,
-                metric: manifest.metric,
-                vector_encoding: manifest.vector_encoding,
+        let vector = IndexConfig {
+            dimension: manifest.dimension,
+            metric: manifest.metric,
+            vector_encoding: manifest.vector_encoding,
+        };
+        let configuration = match manifest.retrieval_mode {
+            crate::retrieval_index::RetrievalMode::Semantic => {
+                RetrievalConfiguration::Semantic { vector }
+            }
+            crate::retrieval_index::RetrievalMode::Hybrid => RetrievalConfiguration::Hybrid {
+                vector,
+                bm25: Bm25Config::default(),
             },
-            Bm25Config::default(),
+        };
+        let mut index = Self::try_with_retrieval_configuration_in_corpus(
+            configuration,
             manifest.corpus_id.clone(),
         )?;
         index.corpus.generation = manifest.generation;
-        index.encoded_vectors = encoded_vectors;
+        index.retrieval.encoded_vectors = encoded_vectors;
         index.corpus.chunks = chunks;
         if let Some(persisted_records) = persisted_records {
             index.corpus.record_store = persisted_records.record_store;
@@ -613,7 +647,10 @@ impl ExactVectorIndex {
                 .collect();
         }
         if let Some(persisted_bm25) = persisted_bm25 {
-            index.bm25 = Bm25Index::from_persisted(Bm25Config::default(), persisted_bm25)?;
+            index.retrieval.bm25 = Some(Bm25Index::from_persisted(
+                Bm25Config::default(),
+                persisted_bm25,
+            )?);
         }
         index.rebuild_derived_state_from_loaded_chunks();
         index.validate_record_state()?;
@@ -672,8 +709,9 @@ impl ExactVectorIndex {
             .entry(chunk.document_id.clone())
             .and_modify(|version| *version = (*version).max(chunk.version))
             .or_insert(chunk.version);
-        self.bm25
-            .add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
+        if let Some(bm25) = &mut self.retrieval.bm25 {
+            bm25.add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
+        }
         self.register_chunk_offset(chunk.chunk_id, offset);
         self.push_embedding(&chunk.embedding);
         let stored_chunk = StoredChunk {
@@ -686,7 +724,8 @@ impl ExactVectorIndex {
         };
         if !stored_chunk.deleted {
             self.corpus.active_offsets.push(offset);
-            self.metadata_filter_index
+            self.retrieval
+                .metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
         }
         self.corpus.chunks.push(stored_chunk);
@@ -757,8 +796,9 @@ impl ExactVectorIndex {
                 });
             }
         }
-        self.encoded_vectors
-            .reserve_rows(chunk_inputs.len(), self.dimension);
+        self.retrieval
+            .encoded_vectors
+            .reserve_rows(chunk_inputs.len(), self.retrieval.dimension);
 
         let document_id = record.id.as_str().to_owned();
         let version = self
@@ -773,11 +813,15 @@ impl ExactVectorIndex {
         for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id {
                 if !chunk.deleted {
-                    self.metadata_filter_index.remove(offset, &chunk.metadata);
+                    self.retrieval
+                        .metadata_filter_index
+                        .remove(offset, &chunk.metadata);
                     deactivated_offsets.push(offset);
                 }
                 chunk.deleted = true;
-                self.bm25.deactivate_chunk(chunk.chunk_id);
+                if let Some(bm25) = &mut self.retrieval.bm25 {
+                    bm25.deactivate_chunk(chunk.chunk_id);
+                }
             }
         }
         self.remove_active_offsets(&deactivated_offsets);
@@ -788,7 +832,9 @@ impl ExactVectorIndex {
             let offset = self.corpus.chunks.len();
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
-            self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
+            if let Some(bm25) = &mut self.retrieval.bm25 {
+                bm25.add_chunk(chunk_id, &chunk_input.text, true);
+            }
             self.register_chunk_offset(chunk_id, offset);
             self.push_embedding(&chunk_input.embedding);
             let stored_chunk = StoredChunk {
@@ -805,7 +851,8 @@ impl ExactVectorIndex {
                 .insert(identity.clone(), chunk_id);
             self.corpus.chunk_identities.insert(chunk_id, identity);
             self.corpus.active_offsets.push(offset);
-            self.metadata_filter_index
+            self.retrieval
+                .metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
             self.corpus.chunks.push(stored_chunk);
         }
@@ -835,9 +882,13 @@ impl ExactVectorIndex {
         let mut deactivated_offsets = Vec::new();
         for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id && !chunk.deleted {
-                self.metadata_filter_index.remove(offset, &chunk.metadata);
+                self.retrieval
+                    .metadata_filter_index
+                    .remove(offset, &chunk.metadata);
                 chunk.deleted = true;
-                self.bm25.deactivate_chunk(chunk.chunk_id);
+                if let Some(bm25) = &mut self.retrieval.bm25 {
+                    bm25.deactivate_chunk(chunk.chunk_id);
+                }
                 deactivated_offsets.push(offset);
                 deleted_count += 1;
             }
@@ -874,8 +925,9 @@ impl ExactVectorIndex {
         let active_offsets = self.corpus.active_offsets.clone();
 
         let new_vectors = self
+            .retrieval
             .encoded_vectors
-            .select_rows(&active_offsets, self.dimension)?;
+            .select_rows(&active_offsets, self.retrieval.dimension)?;
         let new_chunks = active_offsets
             .iter()
             .map(|&offset| {
@@ -892,7 +944,11 @@ impl ExactVectorIndex {
 
         let mut new_chunk_offsets = Vec::new();
         let mut new_metadata_filter_index = MetadataFilterIndex::default();
-        let mut new_bm25 = Bm25Index::new(self.bm25.config().clone());
+        let mut new_bm25 = self
+            .retrieval
+            .bm25
+            .as_ref()
+            .map(|bm25| Bm25Index::new(bm25.config().clone()));
         for (offset, chunk) in new_chunks.iter().enumerate() {
             let chunk_id =
                 usize::try_from(chunk.chunk_id).map_err(|_| VectorKitError::InvalidFormat {
@@ -906,16 +962,18 @@ impl ExactVectorIndex {
             }
             new_chunk_offsets[chunk_id] = Some(offset);
             new_metadata_filter_index.insert(offset, &chunk.metadata);
-            new_bm25.add_chunk(chunk.chunk_id, &chunk.text, true);
+            if let Some(bm25) = &mut new_bm25 {
+                bm25.add_chunk(chunk.chunk_id, &chunk.text, true);
+            }
         }
         let new_active_offsets = (0..new_chunks.len()).collect::<Vec<_>>();
 
-        self.encoded_vectors = new_vectors;
+        self.retrieval.encoded_vectors = new_vectors;
         self.corpus.chunks = new_chunks;
         self.corpus.chunk_offsets = new_chunk_offsets;
         self.corpus.active_offsets = new_active_offsets;
-        self.metadata_filter_index = new_metadata_filter_index;
-        self.bm25 = new_bm25;
+        self.retrieval.metadata_filter_index = new_metadata_filter_index;
+        self.retrieval.bm25 = new_bm25;
         self.corpus.generation = self.corpus.generation.next();
 
         let chunks_after = self.corpus.chunks.len();
@@ -1020,7 +1078,11 @@ impl ExactVectorIndex {
         let encoded_query = self.encode_query_embedding(embedding)?;
 
         let candidate_offsets = filter
-            .map(|filter| self.metadata_filter_index.candidate_offsets(filter))
+            .map(|filter| {
+                self.retrieval
+                    .metadata_filter_index
+                    .candidate_offsets(filter)
+            })
             .transpose()?
             .flatten();
 
@@ -1056,7 +1118,8 @@ impl ExactVectorIndex {
         filter: Option<&Filter>,
         candidate_offsets: &Option<Vec<usize>>,
     ) -> Result<Option<Vec<SearchHit>>> {
-        let Some((values, scales)) = self.encoded_vectors.i8_scalar_quantized_parts() else {
+        let Some((values, scales)) = self.retrieval.encoded_vectors.i8_scalar_quantized_parts()
+        else {
             return Ok(None);
         };
         let Some((query_values, query_scale)) = encoded_query.i8_scalar_quantized_parts() else {
@@ -1111,10 +1174,10 @@ impl ExactVectorIndex {
         chunk_id: ChunkId,
         i8_parts: I8ScoringParts<'_>,
     ) {
-        let Some(start) = offset.checked_mul(self.dimension) else {
+        let Some(start) = offset.checked_mul(self.retrieval.dimension) else {
             return;
         };
-        let Some(end) = start.checked_add(self.dimension) else {
+        let Some(end) = start.checked_add(self.retrieval.dimension) else {
             return;
         };
         let Some(chunk_values) = i8_parts.values.get(start..end) else {
@@ -1166,9 +1229,10 @@ impl ExactVectorIndex {
         }
 
         let effective_scope = self.scope_intersect_filter(scope, filter)?;
-        let bm25_hits = self
-            .bm25
-            .search_top_k_in_scope(text, top_k, &effective_scope);
+        let bm25_hits =
+            self.retrieval
+                .require_bm25()?
+                .search_top_k_in_scope(text, top_k, &effective_scope);
         Ok(bm25_hits
             .into_iter()
             .filter_map(|hit| {
@@ -1197,7 +1261,11 @@ impl ExactVectorIndex {
         }
 
         let candidate_offsets = filter
-            .map(|filter| self.metadata_filter_index.candidate_offsets(filter))
+            .map(|filter| {
+                self.retrieval
+                    .metadata_filter_index
+                    .candidate_offsets(filter)
+            })
             .transpose()?
             .flatten();
         let allowed_chunk_ids = candidate_offsets
@@ -1211,13 +1279,13 @@ impl ExactVectorIndex {
             return Ok(Vec::new());
         }
 
+        let bm25 = self.retrieval.require_bm25()?;
         let bm25_hits = match (filter, allowed_chunk_ids.as_ref()) {
-            (None, _) => self.bm25.search_top_k(text, top_k),
+            (None, _) => bm25.search_top_k(text, top_k),
             (Some(_), Some(allowed_chunk_ids)) => {
-                self.bm25
-                    .search_top_k_in_chunks(text, top_k, allowed_chunk_ids)
+                bm25.search_top_k_in_chunks(text, top_k, allowed_chunk_ids)
             }
-            (Some(_), None) => self.bm25.search_all(text),
+            (Some(_), None) => bm25.search_all(text),
         };
 
         let mut hits = Vec::new();
@@ -1447,8 +1515,10 @@ impl ExactVectorIndex {
         offsets.sort_unstable();
 
         if let Some(filter) = filter {
-            if let Some(mut filter_offsets) =
-                self.metadata_filter_index.candidate_offsets(filter)?
+            if let Some(mut filter_offsets) = self
+                .retrieval
+                .metadata_filter_index
+                .candidate_offsets(filter)?
             {
                 filter_offsets.sort_unstable();
                 offsets = intersect_sorted_offsets(&offsets, &filter_offsets);
@@ -1483,11 +1553,11 @@ impl ExactVectorIndex {
     }
 
     fn validate_dimension(&self, actual: usize) -> Result<()> {
-        if actual == self.dimension {
+        if actual == self.retrieval.dimension {
             Ok(())
         } else {
             Err(VectorKitError::InvalidDimension {
-                expected: self.dimension,
+                expected: self.retrieval.dimension,
                 actual,
             })
         }
@@ -1510,33 +1580,37 @@ impl ExactVectorIndex {
     }
 
     fn push_embedding(&mut self, embedding: &[f32]) {
-        match self.metric {
-            VectorMetric::DotProduct => self.encoded_vectors.push(embedding),
+        match self.retrieval.metric {
+            VectorMetric::DotProduct => self.retrieval.encoded_vectors.push(embedding),
             VectorMetric::Cosine => {
                 let mut normalized = embedding.to_vec();
                 scoring::normalize(&mut normalized);
-                self.encoded_vectors.push(&normalized);
+                self.retrieval.encoded_vectors.push(&normalized);
             }
         }
     }
 
     fn encode_query_embedding(&self, embedding: &[f32]) -> Result<scoring::EncodedQuery> {
-        match self.metric {
-            VectorMetric::DotProduct => scoring::encode_query(self.vector_encoding, embedding),
+        match self.retrieval.metric {
+            VectorMetric::DotProduct => {
+                scoring::encode_query(self.retrieval.vector_encoding, embedding)
+            }
             VectorMetric::Cosine => {
                 let mut normalized = embedding.to_vec();
                 scoring::normalize(&mut normalized);
-                scoring::encode_query_owned(self.vector_encoding, normalized)
+                scoring::encode_query_owned(self.retrieval.vector_encoding, normalized)
             }
         }
     }
 
     fn rebuild_derived_state_from_loaded_chunks(&mut self) {
         self.corpus.rebuild_offsets_and_versions();
-        self.metadata_filter_index = MetadataFilterIndex::default();
+        self.retrieval.metadata_filter_index = MetadataFilterIndex::default();
         for offset in self.corpus.active_offsets.iter().copied() {
             let chunk = &self.corpus.chunks[offset];
-            self.metadata_filter_index.insert(offset, &chunk.metadata);
+            self.retrieval
+                .metadata_filter_index
+                .insert(offset, &chunk.metadata);
         }
     }
 
@@ -1563,10 +1637,12 @@ impl ExactVectorIndex {
             return Ok(());
         }
 
-        let Some(score) =
-            self.encoded_vectors
-                .score_at(self.metric, encoded_query, offset, self.dimension)
-        else {
+        let Some(score) = self.retrieval.encoded_vectors.score_at(
+            self.retrieval.metric,
+            encoded_query,
+            offset,
+            self.retrieval.dimension,
+        ) else {
             return Ok(());
         };
 
@@ -1613,6 +1689,8 @@ struct PersistedManifest {
     metric: VectorMetric,
     vector_count: usize,
     active_chunk_count: usize,
+    #[serde(default)]
+    retrieval_mode: crate::retrieval_index::RetrievalMode,
     has_bm25: bool,
     #[serde(default)]
     has_records: bool,
@@ -3098,14 +3176,17 @@ mod tests {
             .unwrap();
         index.corpus.active_offsets.push(999);
         let chunks_before = index.corpus.chunks.clone();
-        let vectors_before = index.encoded_vectors.to_payload_bytes();
+        let vectors_before = index.retrieval.encoded_vectors.to_payload_bytes();
         let active_offsets_before = index.corpus.active_offsets.clone();
 
         let error = index.compact().unwrap_err();
 
         assert!(error.to_string().contains("vector row 999 is unavailable"));
         assert_eq!(index.corpus.chunks, chunks_before);
-        assert_eq!(index.encoded_vectors.to_payload_bytes(), vectors_before);
+        assert_eq!(
+            index.retrieval.encoded_vectors.to_payload_bytes(),
+            vectors_before
+        );
         assert_eq!(index.corpus.active_offsets, active_offsets_before);
     }
 

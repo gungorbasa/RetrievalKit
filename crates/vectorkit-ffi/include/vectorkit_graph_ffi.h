@@ -22,9 +22,65 @@ uint32_t vectorkit_graph_ffi_abi_version(void);
 #define VK_GRAPH_STATUS_TIMED_OUT 108
 #define VK_GRAPH_STATUS_LOCK_UNAVAILABLE 109
 #define VK_GRAPH_STATUS_INTERNAL 110
+#define VK_GRAPH_STATUS_INVALID_EMBEDDING 111
+#define VK_GRAPH_STATUS_MISSING_EMBEDDING 112
+#define VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE 113
 
 typedef struct VkGraphBuilder VkGraphBuilder;
 typedef struct VkGraphIndex VkGraphIndex;
+typedef struct VkGraphDatabaseBuilder VkGraphDatabaseBuilder;
+typedef struct VkGraphDatabase VkGraphDatabase;
+typedef struct VkGraphRetrievalBuilder VkGraphRetrievalBuilder;
+typedef struct VkGraphRetrievalDatabase VkGraphRetrievalDatabase;
+
+// Graph-only builders accept schema and records, but no vector configuration
+// or embeddings.
+VkGraphDatabaseBuilder *vectorkit_graph_database_builder_new(
+    const char *corpus_id,
+    const char *schema_json,
+    VkStatus *status
+);
+bool vectorkit_graph_database_builder_upsert_record_json(
+    VkGraphDatabaseBuilder *builder,
+    const char *record_json,
+    VkStatus *status
+);
+VkGraphDatabase *vectorkit_graph_database_builder_build(
+    VkGraphDatabaseBuilder *builder,
+    VkStatus *status
+);
+void vectorkit_graph_database_builder_free(VkGraphDatabaseBuilder *builder);
+
+// retrieval_mode: 0 semantic, 1 hybrid.
+VkGraphRetrievalBuilder *vectorkit_graph_retrieval_builder_new(
+    uint32_t retrieval_mode,
+    size_t dimension,
+    uint32_t metric,
+    uint32_t encoding,
+    const char *corpus_id,
+    const char *schema_json,
+    VkStatus *status
+);
+bool vectorkit_graph_retrieval_builder_upsert_record_json(
+    VkGraphRetrievalBuilder *builder,
+    const char *record_json,
+    VkStatus *status
+);
+VkGraphRetrievalDatabase *vectorkit_graph_retrieval_builder_build(
+    VkGraphRetrievalBuilder *builder,
+    VkStatus *status
+);
+void vectorkit_graph_retrieval_builder_free(VkGraphRetrievalBuilder *builder);
+
+VkGraphDatabase *vectorkit_graph_database_load(const char *directory, VkStatus *status);
+bool vectorkit_graph_database_save(const VkGraphDatabase *database, const char *directory, VkStatus *status);
+bool vectorkit_graph_database_validate(const char *directory, VkStatus *status);
+void vectorkit_graph_database_free(VkGraphDatabase *database);
+
+VkGraphRetrievalDatabase *vectorkit_graph_retrieval_database_load(const char *directory, VkStatus *status);
+bool vectorkit_graph_retrieval_database_save(const VkGraphRetrievalDatabase *database, const char *directory, VkStatus *status);
+bool vectorkit_graph_retrieval_database_validate(const char *directory, VkStatus *status);
+void vectorkit_graph_retrieval_database_free(VkGraphRetrievalDatabase *database);
 
 VkGraphBuilder *vectorkit_graph_builder_new(
     size_t dimension,
@@ -89,6 +145,8 @@ typedef struct {
 typedef struct { size_t seed_count; size_t visited_states; size_t traversed_edges; size_t result_count; size_t diagnostics; uint32_t truncation_reason; } VkGraphTrace;
 
 VkGraphResult *vectorkit_graph_query(const VkGraphIndex *index, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
+VkGraphResult *vectorkit_graph_database_query(const VkGraphDatabase *database, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
+VkGraphResult *vectorkit_graph_retrieval_database_query(const VkGraphRetrievalDatabase *database, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
 size_t vectorkit_graph_result_count(const VkGraphResult *result);
 bool vectorkit_graph_result_match(const VkGraphResult *result, size_t index, VkGraphMatch *out_match, VkStatus *status);
 void vectorkit_graph_match_clear(VkGraphMatch *value);
@@ -105,6 +163,8 @@ void vectorkit_graph_scope_free(VkGraphScope *scope);
 bool vectorkit_graph_scope_search(const VkGraphIndex *index, const VkGraphScope *scope, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkSearchResultBuffer *out_results, VkStatus *status);
 bool vectorkit_graph_scope_keyword_search(const VkGraphIndex *index, const VkGraphScope *scope, const char *text, size_t top_k, const VkFilter *filter, VkKeywordResultBuffer *out_results, VkStatus *status);
 bool vectorkit_graph_scope_hybrid_search(const VkGraphIndex *index, const VkGraphScope *scope, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
+bool vectorkit_graph_retrieval_semantic_search(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkSearchResultBuffer *out_results, VkStatus *status);
+bool vectorkit_graph_retrieval_hybrid_search(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
 VkGraphCancellation *vectorkit_graph_cancellation_new(void);
 void vectorkit_graph_cancellation_cancel(const VkGraphCancellation *value);
 void vectorkit_graph_cancellation_free(VkGraphCancellation *value);

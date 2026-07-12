@@ -4,12 +4,14 @@ use std::slice;
 
 use serde::Deserialize;
 use vectorkit_core::{
-    CandidateScope, ChunkKey, CorpusId, ExactVectorIndex, HybridHit, HybridQuery, IndexConfig,
-    KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput, SearchHit, SearchQuery,
+    CandidateScope, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, ExactVectorIndex, HybridHit,
+    HybridQuery, IndexConfig, KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput,
+    RecordInput as CoreRecordInput, RetrievalConfiguration, RetrievalDatabase, SearchHit,
+    SearchQuery,
 };
 use vectorkit_graph::{
-    CancellationToken, Direction, GraphIndex, GraphQuery, GraphResult, GraphScalar, NodeId,
-    NodeSource, QueryLimits, Seed, Traverse,
+    CancellationToken, Direction, GraphDatabase, GraphIndex, GraphQuery, GraphResult,
+    GraphRetrievalDatabase, GraphScalar, NodeId, NodeSource, QueryLimits, Seed, Traverse,
 };
 use vectorkit_graph::{FieldPath, GraphSchema, NodeType, RelationshipType};
 
@@ -31,6 +33,9 @@ const VK_GRAPH_STATUS_CANCELLED: i32 = 107;
 const VK_GRAPH_STATUS_TIMED_OUT: i32 = 108;
 const VK_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
 const VK_GRAPH_STATUS_INTERNAL: i32 = 110;
+const VK_GRAPH_STATUS_INVALID_EMBEDDING: i32 = 111;
+const VK_GRAPH_STATUS_MISSING_EMBEDDING: i32 = 112;
+const VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE: i32 = 113;
 
 pub struct VkGraphBuilder {
     core: ExactVectorIndex,
@@ -38,6 +43,24 @@ pub struct VkGraphBuilder {
 
 pub struct VkGraphIndex {
     index: GraphIndex,
+}
+
+pub struct VkGraphDatabaseBuilder {
+    corpus: CorpusIndex,
+    schema: GraphSchema,
+}
+
+pub struct VkGraphDatabase {
+    database: GraphDatabase,
+}
+
+pub struct VkGraphRetrievalBuilder {
+    retrieval: RetrievalDatabase,
+    schema: GraphSchema,
+}
+
+pub struct VkGraphRetrievalDatabase {
+    database: GraphRetrievalDatabase,
 }
 
 pub struct VkGraphResult {
@@ -155,9 +178,417 @@ struct RecordChunk {
     metadata: Metadata,
 }
 
+#[derive(Deserialize)]
+struct GraphOnlyRecordBatch {
+    record: Record,
+    #[serde(default)]
+    projected_metadata: Metadata,
+    chunks: Vec<GraphOnlyRecordChunk>,
+}
+
+#[derive(Deserialize)]
+struct GraphOnlyRecordChunk {
+    key: ChunkKey,
+    text: String,
+    #[serde(default)]
+    metadata: Metadata,
+}
+
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    3
+    4
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_builder_new(
+    corpus_id: *const c_char,
+    schema_json: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkGraphDatabaseBuilder {
+    ffi_ptr(status, || {
+        let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
+        let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
+        Ok(Box::into_raw(Box::new(VkGraphDatabaseBuilder {
+            corpus: CorpusIndex::new(corpus_id),
+            schema,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_builder_upsert_record_json(
+    builder: *mut VkGraphDatabaseBuilder,
+    record_json: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let builder = unsafe { builder.as_mut() }
+            .ok_or_else(|| FfiError::invalid_argument("graph builder must not be null"))?;
+        let json = unsafe { read_c_string(record_json, "record_json") }?;
+        let batch: GraphOnlyRecordBatch = serde_json::from_str(&json)
+            .map_err(|error| FfiError::invalid_argument(format!("invalid record JSON: {error}")))?;
+        builder
+            .corpus
+            .upsert(CoreRecordInput {
+                record: batch.record,
+                metadata: batch.projected_metadata,
+                chunks: batch
+                    .chunks
+                    .into_iter()
+                    .map(|chunk| CorpusChunkInput {
+                        key: chunk.key,
+                        text: chunk.text,
+                        metadata: chunk.metadata,
+                    })
+                    .collect(),
+            })
+            .map_err(capability_core_error)?;
+        Ok(())
+    })
+}
+
+/// Consumes `builder` whether graph construction succeeds or fails.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_builder_build(
+    builder: *mut VkGraphDatabaseBuilder,
+    status: *mut VkStatus,
+) -> *mut VkGraphDatabase {
+    ffi_ptr(status, || {
+        if builder.is_null() {
+            return Err(FfiError::invalid_argument("graph builder must not be null"));
+        }
+        let builder = unsafe { Box::from_raw(builder) };
+        let database = GraphDatabase::build(builder.corpus, builder.schema)?;
+        Ok(Box::into_raw(Box::new(VkGraphDatabase { database })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_builder_free(
+    builder: *mut VkGraphDatabaseBuilder,
+) {
+    if !builder.is_null() {
+        drop(unsafe { Box::from_raw(builder) });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_new(
+    retrieval_mode: u32,
+    dimension: usize,
+    metric: u32,
+    encoding: u32,
+    corpus_id: *const c_char,
+    schema_json: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkGraphRetrievalBuilder {
+    ffi_ptr(status, || {
+        let vector = IndexConfig::new(dimension, parse_metric(metric)?)
+            .with_vector_encoding(parse_encoding_code(encoding)?);
+        let configuration = match retrieval_mode {
+            0 => RetrievalConfiguration::semantic(vector),
+            1 => RetrievalConfiguration::hybrid(vector),
+            _ => {
+                return Err(FfiError::invalid_argument(
+                    "retrieval_mode must be 0 (semantic) or 1 (hybrid)",
+                ))
+            }
+        };
+        let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
+        let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
+        let retrieval = RetrievalDatabase::new(configuration, corpus_id)?;
+        Ok(Box::into_raw(Box::new(VkGraphRetrievalBuilder {
+            retrieval,
+            schema,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_upsert_record_json(
+    builder: *mut VkGraphRetrievalBuilder,
+    record_json: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let builder = unsafe { builder.as_mut() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval builder must not be null")
+        })?;
+        let json = unsafe { read_c_string(record_json, "record_json") }?;
+        let batch: RecordBatch = serde_json::from_str(&json).map_err(|error| {
+            let code = if error.to_string().contains("missing field `embedding`") {
+                VK_GRAPH_STATUS_MISSING_EMBEDDING
+            } else {
+                super::VK_STATUS_INVALID_ARGUMENT
+            };
+            FfiError {
+                code,
+                message: format!("invalid retrieval record JSON: {error}"),
+            }
+        })?;
+        builder
+            .retrieval
+            .upsert_record(
+                batch.record,
+                batch.projected_metadata,
+                batch
+                    .chunks
+                    .into_iter()
+                    .map(|chunk| RecordChunkInput {
+                        key: chunk.key,
+                        text: chunk.text,
+                        embedding: chunk.embedding,
+                        metadata: chunk.metadata,
+                    })
+                    .collect(),
+            )
+            .map_err(capability_core_error)?;
+        Ok(())
+    })
+}
+
+/// Consumes `builder` whether graph construction succeeds or fails.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_build(
+    builder: *mut VkGraphRetrievalBuilder,
+    status: *mut VkStatus,
+) -> *mut VkGraphRetrievalDatabase {
+    ffi_ptr(status, || {
+        if builder.is_null() {
+            return Err(FfiError::invalid_argument(
+                "graph retrieval builder must not be null",
+            ));
+        }
+        let builder = unsafe { Box::from_raw(builder) };
+        let database = GraphRetrievalDatabase::build(builder.retrieval, builder.schema)?;
+        Ok(Box::into_raw(Box::new(VkGraphRetrievalDatabase {
+            database,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_free(
+    builder: *mut VkGraphRetrievalBuilder,
+) {
+    if !builder.is_null() {
+        drop(unsafe { Box::from_raw(builder) });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_load(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkGraphDatabase {
+    ffi_ptr(status, || {
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        let database = GraphDatabase::load_from_dir(Path::new(&path))?;
+        Ok(Box::into_raw(Box::new(VkGraphDatabase { database })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_save(
+    database: *const VkGraphDatabase,
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph database must not be null"))?;
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        database.database.save_to_dir(Path::new(&path))?;
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_validate(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        GraphDatabase::validate_dir(Path::new(&path))?;
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_free(database: *mut VkGraphDatabase) {
+    if !database.is_null() {
+        drop(unsafe { Box::from_raw(database) });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_load(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkGraphRetrievalDatabase {
+    ffi_ptr(status, || {
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        let database = GraphRetrievalDatabase::load_from_dir(Path::new(&path))?;
+        Ok(Box::into_raw(Box::new(VkGraphRetrievalDatabase {
+            database,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_save(
+    database: *const VkGraphRetrievalDatabase,
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        database.database.save_to_dir(Path::new(&path))?;
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_validate(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let path = unsafe { read_c_string(directory, "directory") }?;
+        GraphRetrievalDatabase::validate_dir(Path::new(&path))?;
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_free(
+    database: *mut VkGraphRetrievalDatabase,
+) {
+    if !database.is_null() {
+        drop(unsafe { Box::from_raw(database) });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_query(
+    database: *const VkGraphDatabase,
+    query: VkGraphQuery,
+    cancellation: *const VkGraphCancellation,
+    status: *mut VkStatus,
+) -> *mut VkGraphResult {
+    ffi_ptr(status, || {
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph database must not be null"))?;
+        let query = unsafe { decode_query(query) }?;
+        let cancellation = unsafe { cancellation.as_ref() }.map(|value| &value.token);
+        let result = database.database.graph_query(&query, cancellation)?;
+        Ok(Box::into_raw(Box::new(VkGraphResult { result })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_query(
+    database: *const VkGraphRetrievalDatabase,
+    query: VkGraphQuery,
+    cancellation: *const VkGraphCancellation,
+    status: *mut VkStatus,
+) -> *mut VkGraphResult {
+    ffi_ptr(status, || {
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let query = unsafe { decode_query(query) }?;
+        let cancellation = unsafe { cancellation.as_ref() }.map(|value| &value.token);
+        let result = database.database.graph_query(&query, cancellation)?;
+        Ok(Box::into_raw(Box::new(VkGraphResult { result })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_semantic_search(
+    database: *const VkGraphRetrievalDatabase,
+    within: *const VkGraphResult,
+    embedding: *const f32,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkSearchResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let mut query = SearchQuery::new(
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        );
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = if let Some(selection) = unsafe { within.as_ref() } {
+            database
+                .database
+                .semantic_search_in_selection(&query, &selection.result)?
+        } else {
+            database.database.semantic_search(&query)?
+        };
+        unsafe {
+            *out_results = capability_search_buffer(&database.database, hits);
+        }
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_hybrid_search(
+    database: *const VkGraphRetrievalDatabase,
+    within: *const VkGraphResult,
+    text: *const c_char,
+    embedding: *const f32,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        query.fusion = parse_hybrid_fusion(options)?;
+        let hits = if let Some(selection) = unsafe { within.as_ref() } {
+            database
+                .database
+                .hybrid_search_in_selection(&query, &selection.result)?
+        } else {
+            database.database.hybrid_search(&query)?
+        };
+        unsafe {
+            *out_results = capability_hybrid_buffer(&database.database, hits);
+        }
+        Ok(())
+    })
 }
 
 #[no_mangle]
@@ -783,6 +1214,91 @@ fn boxed_buffer<T>(values: Vec<T>) -> (*mut T, usize) {
     std::mem::forget(values);
     result
 }
+
+fn decode_schema(json: String) -> std::result::Result<GraphSchema, FfiError> {
+    serde_json::from_str(&json)
+        .map_err(|error| FfiError::invalid_argument(format!("invalid schema JSON: {error}")))
+}
+
+fn capability_core_error(error: vectorkit_core::VectorKitError) -> FfiError {
+    let code = match &error {
+        vectorkit_core::VectorKitError::InvalidIdentity { .. }
+        | vectorkit_core::VectorKitError::InvalidRecordValue { .. } => {
+            VK_GRAPH_STATUS_INVALID_IDENTITY
+        }
+        vectorkit_core::VectorKitError::InvalidDimension { .. } => {
+            VK_GRAPH_STATUS_INVALID_EMBEDDING
+        }
+        vectorkit_core::VectorKitError::RetrievalModeUnavailable { .. } => {
+            VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+        }
+        _ => super::VK_STATUS_CORE_ERROR,
+    };
+    FfiError {
+        code,
+        message: error.to_string(),
+    }
+}
+
+fn capability_search_buffer(
+    database: &GraphRetrievalDatabase,
+    hits: Vec<SearchHit>,
+) -> VkSearchResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| VkSearchHit {
+            chunk_id: hit.chunk_id,
+            document_id: string_to_owned_ptr(&hit.document_id),
+            text: string_to_owned_ptr(
+                database
+                    .corpus()
+                    .chunk(hit.chunk_id)
+                    .map_or("", |chunk| chunk.text.as_str()),
+            ),
+            score: hit.score,
+            vector_score: hit.trace.vector_score,
+            filter_matched: hit.trace.filter_matched,
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkSearchResultBuffer { hits, count }
+}
+
+fn capability_hybrid_buffer(
+    database: &GraphRetrievalDatabase,
+    hits: Vec<HybridHit>,
+) -> VkHybridResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| VkHybridHit {
+            chunk_id: hit.chunk_id,
+            document_id: string_to_owned_ptr(&hit.document_id),
+            text: string_to_owned_ptr(
+                database
+                    .corpus()
+                    .chunk(hit.chunk_id)
+                    .map_or("", |chunk| chunk.text.as_str()),
+            ),
+            score: hit.score,
+            has_vector_score: hit.vector_score.is_some(),
+            vector_score: hit.vector_score.unwrap_or_default(),
+            has_keyword_score: hit.keyword_score.is_some(),
+            keyword_score: hit.keyword_score.unwrap_or_default(),
+            has_vector_rank: hit.trace.vector_rank.is_some(),
+            vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+            has_keyword_rank: hit.trace.keyword_rank.is_some(),
+            keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+            has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+            normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+            has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+            normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+            matched_terms: string_array(hit.trace.matched_terms),
+            filter_matched: hit.trace.filter_matched,
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkHybridResultBuffer { hits, count }
+}
 fn graph_search_buffer(index: &VkGraphIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
     let hits = hits
         .into_iter()
@@ -861,6 +1377,16 @@ impl From<vectorkit_graph::GraphError> for FfiError {
             }
             vectorkit_graph::GraphError::Cancelled => VK_GRAPH_STATUS_CANCELLED,
             vectorkit_graph::GraphError::TimedOut { .. } => VK_GRAPH_STATUS_TIMED_OUT,
+            vectorkit_graph::GraphError::Core { message }
+                if message.contains("invalid vector dimension") =>
+            {
+                VK_GRAPH_STATUS_INVALID_EMBEDDING
+            }
+            vectorkit_graph::GraphError::Core { message }
+                if message.contains("retrieval mode 'hybrid' is unavailable") =>
+            {
+                VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+            }
             vectorkit_graph::GraphError::Core { .. } => VK_GRAPH_STATUS_INTERNAL,
         };
         Self {
@@ -968,6 +1494,133 @@ mod tests {
         for (error, expected) in cases {
             let error = FfiError::from(error);
             assert_eq!(error.code, expected);
+        }
+    }
+
+    #[test]
+    fn capability_builders_separate_graph_and_retrieval_inputs() {
+        let corpus = CString::new("capability-ffi").unwrap();
+        let schema = GraphSchema::new(vec![RecordNodeSchema {
+            record_type: RecordType::new("Item").unwrap(),
+            node_type: NodeType::new("Item").unwrap(),
+            queryable_fields: vec![],
+        }]);
+        let schema_json = CString::new(serde_json::to_vec(&schema).unwrap()).unwrap();
+        let record = Record {
+            id: RecordId::new("item-1").unwrap(),
+            record_type: RecordType::new("Item").unwrap(),
+            fields: BTreeMap::new(),
+            content: None,
+        };
+        let mut status = VkStatus {
+            code: 0,
+            message: std::ptr::null_mut(),
+        };
+
+        let graph_builder = unsafe {
+            vectorkit_graph_database_builder_new(corpus.as_ptr(), schema_json.as_ptr(), &mut status)
+        };
+        assert!(!graph_builder.is_null());
+        let graph_batch = CString::new(
+            serde_json::to_vec(&serde_json::json!({
+                "record": record,
+                "projected_metadata": {},
+                "chunks": [{"key": "body", "text": "graph-only", "metadata": {}}]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(unsafe {
+            vectorkit_graph_database_builder_upsert_record_json(
+                graph_builder,
+                graph_batch.as_ptr(),
+                &mut status,
+            )
+        });
+        let graph = unsafe { vectorkit_graph_database_builder_build(graph_builder, &mut status) };
+        assert!(!graph.is_null());
+        unsafe { vectorkit_graph_database_free(graph) };
+
+        let retrieval_builder = unsafe {
+            vectorkit_graph_retrieval_builder_new(
+                0,
+                2,
+                1,
+                0,
+                corpus.as_ptr(),
+                schema_json.as_ptr(),
+                &mut status,
+            )
+        };
+        assert!(!retrieval_builder.is_null());
+        let wrong_dimension = CString::new(
+            serde_json::to_vec(&serde_json::json!({
+                "record": record,
+                "projected_metadata": {},
+                "chunks": [{"key": "body", "text": "semantic", "embedding": [1.0], "metadata": {}}]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(!unsafe {
+            vectorkit_graph_retrieval_builder_upsert_record_json(
+                retrieval_builder,
+                wrong_dimension.as_ptr(),
+                &mut status,
+            )
+        });
+        assert_eq!(status.code, VK_GRAPH_STATUS_INVALID_EMBEDDING);
+
+        let valid = CString::new(
+            serde_json::to_vec(&serde_json::json!({
+                "record": record,
+                "projected_metadata": {},
+                "chunks": [{"key": "body", "text": "semantic", "embedding": [1.0, 0.0], "metadata": {}}]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(unsafe {
+            vectorkit_graph_retrieval_builder_upsert_record_json(
+                retrieval_builder,
+                valid.as_ptr(),
+                &mut status,
+            )
+        });
+        let database =
+            unsafe { vectorkit_graph_retrieval_builder_build(retrieval_builder, &mut status) };
+        assert!(!database.is_null());
+        let text = CString::new("semantic").unwrap();
+        let embedding = [1.0_f32, 0.0];
+        let mut results = VkHybridResultBuffer {
+            hits: std::ptr::null_mut(),
+            count: 0,
+        };
+        assert!(!unsafe {
+            vectorkit_graph_retrieval_hybrid_search(
+                database,
+                std::ptr::null(),
+                text.as_ptr(),
+                embedding.as_ptr(),
+                embedding.len(),
+                1,
+                std::ptr::null(),
+                VkHybridOptions {
+                    vector_top_k: 1,
+                    keyword_top_k: 1,
+                    fusion_type: 1,
+                    vector_weight: 0.0,
+                    keyword_weight: 0.0,
+                    rrf_k: 60.0,
+                },
+                &mut results,
+                &mut status,
+            )
+        });
+        assert_eq!(status.code, VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE);
+        unsafe {
+            vectorkit_graph_retrieval_database_free(database);
+            super::super::vectorkit_status_clear(&mut status);
         }
     }
 

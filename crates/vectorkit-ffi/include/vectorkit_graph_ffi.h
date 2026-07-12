@@ -60,12 +60,30 @@ typedef struct {
     VkGraphLimits limits;
 } VkGraphQuery;
 typedef struct { char *node_type; uint32_t source_type; char *record_id; char *chunk_key; size_t depth; size_t path_length; } VkGraphMatch;
+typedef struct { char *node_type; uint32_t source_type; char *record_id; char *chunk_key; } VkGraphOwnedNode;
+// Every pointer in this value is owned by the caller after a successful access.
+// Release the complete value with vectorkit_graph_path_edge_clear.
+typedef struct {
+    char *relationship_type;
+    VkGraphOwnedNode source;
+    VkGraphOwnedNode target;
+    uint32_t occurrence_ordinal;
+    uint32_t schema_rule_index;
+    char *source_record_id;
+    VkStringArray source_field_segments;
+    bool derived_inverse;
+    bool built_in;
+} VkGraphPathEdge;
 typedef struct { size_t seed_count; size_t visited_states; size_t traversed_edges; size_t result_count; size_t diagnostics; uint32_t truncation_reason; } VkGraphTrace;
 
 VkGraphResult *vectorkit_graph_query(const VkGraphIndex *index, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
 size_t vectorkit_graph_result_count(const VkGraphResult *result);
 bool vectorkit_graph_result_match(const VkGraphResult *result, size_t index, VkGraphMatch *out_match, VkStatus *status);
 void vectorkit_graph_match_clear(VkGraphMatch *value);
+// Materializes one edge from the canonical path of a previously materialized
+// match. The graph result must remain alive for this call only.
+bool vectorkit_graph_result_path_edge(const VkGraphResult *result, size_t match_index, size_t edge_index, VkGraphPathEdge *out_edge, VkStatus *status);
+void vectorkit_graph_path_edge_clear(VkGraphPathEdge *value);
 VkGraphTrace vectorkit_graph_result_trace(const VkGraphResult *result);
 void vectorkit_graph_result_free(VkGraphResult *result);
 VkGraphScope *vectorkit_graph_result_project(const VkGraphIndex *index, const VkGraphResult *result, VkStatus *status);

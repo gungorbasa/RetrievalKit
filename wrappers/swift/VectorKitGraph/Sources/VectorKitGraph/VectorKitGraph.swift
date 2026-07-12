@@ -134,7 +134,28 @@ public struct GraphQueryLimits: Equatable, Sendable {
     public var maxHops = 8, maxVisited = 100_000, maxResults = 10_000, maxWorkingBytes = 64 * 1024 * 1024
     public init(maxHops: Int = 8, maxVisited: Int = 100_000, maxResults: Int = 10_000, maxWorkingBytes: Int = 64 * 1024 * 1024) { self.maxHops = maxHops; self.maxVisited = maxVisited; self.maxResults = maxResults; self.maxWorkingBytes = maxWorkingBytes }
 }
-public struct GraphMatch: Equatable, Sendable { public let nodeID: GraphNodeID; public let depth, pathLength: Int }
+public enum GraphScalar: Equatable, Sendable {
+    case string(String), integer(Int64), boolean(Bool)
+}
+public struct GraphEdgeProvenance: Equatable, Sendable {
+    public let schemaRuleIndex: UInt32; public let sourceRecordID: String; public let sourceField: GraphFieldPath?
+    public let derivedInverse, builtIn: Bool
+    public init(schemaRuleIndex: UInt32, sourceRecordID: String, sourceField: GraphFieldPath?, derivedInverse: Bool, builtIn: Bool) {
+        self.schemaRuleIndex = schemaRuleIndex; self.sourceRecordID = sourceRecordID; self.sourceField = sourceField; self.derivedInverse = derivedInverse; self.builtIn = builtIn
+    }
+}
+public struct GraphPathEdge: Equatable, Sendable {
+    public let relationship: String; public let source, target: GraphNodeID; public let occurrenceOrdinal: UInt32
+    public let provenance: GraphEdgeProvenance
+    public init(relationship: String, source: GraphNodeID, target: GraphNodeID, occurrenceOrdinal: UInt32, provenance: GraphEdgeProvenance) {
+        self.relationship = relationship; self.source = source; self.target = target; self.occurrenceOrdinal = occurrenceOrdinal; self.provenance = provenance
+    }
+}
+public struct GraphMatch: Equatable, Sendable {
+    public let nodeID: GraphNodeID; public let depth: Int; public let path: [GraphPathEdge]
+    public var pathLength: Int { path.count }
+    public init(nodeID: GraphNodeID, depth: Int, path: [GraphPathEdge] = []) { self.nodeID = nodeID; self.depth = depth; self.path = path }
+}
 public struct GraphQueryTrace: Equatable, Sendable { public let seedCount, visitedStates, traversedEdges, resultCount, diagnostics: Int; public let truncationReason: UInt32 }
 private final class NativeGraphExecution: @unchecked Sendable {
     let result, scope: UInt
@@ -215,27 +236,67 @@ public actor GraphIndex {
         for (index, value) in nativeSeeds.enumerated() { seedPointer.advanced(by: index).initialize(to: value) }
         for (index, value) in nativeSteps.enumerated() { stepPointer.advanced(by: index).initialize(to: value) }
         defer { seedPointer.deinitialize(count: nativeSeeds.count); seedPointer.deallocate(); stepPointer.deinitialize(count: nativeSteps.count); stepPointer.deallocate() }
-                let query = VkGraphQuery(seed_type: 0, node_ids: nativeSeeds.isEmpty ? nil : seedPointer, node_id_count: nativeSeeds.count, seed_node_type: nil, field_segments: nil, field_segment_count: 0, values: nil, value_count: 0, steps: nativeSteps.isEmpty ? nil : stepPointer, step_count: nativeSteps.count, limits: VkGraphLimits(max_hops: limits.maxHops, max_visited: limits.maxVisited, max_results: limits.maxResults, max_working_bytes: limits.maxWorkingBytes))
-                var status = VkStatus(code: 0, message: nil)
-                guard let result = vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, cancellation?.pointer, &status) else {
-                    defer { vectorkit_status_clear(&status) }
-                    throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "unknown graph error")
-                }
-                vectorkit_status_clear(&status)
-                guard let scope = vectorkit_graph_result_project(OpaquePointer(bitPattern: handle), result, &status) else {
-                    defer { vectorkit_status_clear(&status); vectorkit_graph_result_free(result) }
-                    throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "graph projection failed")
-                }
-                let execution = NativeGraphExecution(result: result, scope: scope)
-                var matches: [GraphMatch] = []
-                for index in 0..<vectorkit_graph_result_count(result) {
-                    var value = VkGraphMatch(node_type: nil, source_type: 0, record_id: nil, chunk_key: nil, depth: 0, path_length: 0)
-                    try Native.bool { status in vectorkit_graph_result_match(result, index, &value, status) }
-                    defer { vectorkit_graph_match_clear(&value) }
-                    matches.append(GraphMatch(nodeID: GraphNodeID(nodeType: String(cString: value.node_type), recordID: String(cString: value.record_id), chunkKey: value.chunk_key.map { String(cString: $0) }), depth: value.depth, pathLength: value.path_length))
-                }
-                let trace = vectorkit_graph_result_trace(result)
-                return GraphQueryResult(matches: matches, trace: GraphQueryTrace(seedCount: trace.seed_count, visitedStates: trace.visited_states, traversedEdges: trace.traversed_edges, resultCount: trace.result_count, diagnostics: trace.diagnostics, truncationReason: trace.truncation_reason), native: execution)
+        let query = VkGraphQuery(seed_type: 0, node_ids: nativeSeeds.isEmpty ? nil : seedPointer, node_id_count: nativeSeeds.count, seed_node_type: nil, field_segments: nil, field_segment_count: 0, values: nil, value_count: 0, steps: nativeSteps.isEmpty ? nil : stepPointer, step_count: nativeSteps.count, limits: nativeLimits(limits))
+        return try execute(query, cancellation: cancellation)
+    }
+
+    public func query(nodeType: String, field: GraphFieldPath, equals values: [GraphScalar], traversing steps: [GraphTraversal] = [], limits: GraphQueryLimits = .init(), cancellation: GraphCancellationToken? = nil) throws -> GraphQueryResult {
+        let arena = GraphCStringArena()
+        let nativeFields = field.segments.map(arena.copy)
+        let nativeValues = values.map { value in
+            switch value {
+            case .string(let string): VkGraphScalar(value_type: 0, string_value: arena.copy(string), integer_value: 0, bool_value: false)
+            case .integer(let integer): VkGraphScalar(value_type: 1, string_value: nil, integer_value: integer, bool_value: false)
+            case .boolean(let boolean): VkGraphScalar(value_type: 2, string_value: nil, integer_value: 0, bool_value: boolean)
+            }
+        }
+        let nativeSteps = steps.map { step in VkGraphStep(relationship: arena.copy(step.relationship), direction: step.direction == .outgoing ? 0 : 1, min_hops: step.minHops, max_hops: step.maxHops) }
+        let fieldPointer = UnsafeMutablePointer<UnsafePointer<CChar>?>.allocate(capacity: max(1, nativeFields.count))
+        let valuePointer = UnsafeMutablePointer<VkGraphScalar>.allocate(capacity: max(1, nativeValues.count))
+        let stepPointer = UnsafeMutablePointer<VkGraphStep>.allocate(capacity: max(1, nativeSteps.count))
+        for (index, value) in nativeFields.enumerated() { fieldPointer.advanced(by: index).initialize(to: value) }
+        for (index, value) in nativeValues.enumerated() { valuePointer.advanced(by: index).initialize(to: value) }
+        for (index, value) in nativeSteps.enumerated() { stepPointer.advanced(by: index).initialize(to: value) }
+        defer {
+            fieldPointer.deinitialize(count: nativeFields.count); fieldPointer.deallocate()
+            valuePointer.deinitialize(count: nativeValues.count); valuePointer.deallocate()
+            stepPointer.deinitialize(count: nativeSteps.count); stepPointer.deallocate()
+        }
+        let query = VkGraphQuery(seed_type: 1, node_ids: nil, node_id_count: 0, seed_node_type: arena.copy(nodeType), field_segments: nativeFields.isEmpty ? nil : fieldPointer, field_segment_count: nativeFields.count, values: nativeValues.isEmpty ? nil : valuePointer, value_count: nativeValues.count, steps: nativeSteps.isEmpty ? nil : stepPointer, step_count: nativeSteps.count, limits: nativeLimits(limits))
+        return try execute(query, cancellation: cancellation)
+    }
+
+    private func execute(_ query: VkGraphQuery, cancellation: GraphCancellationToken?) throws -> GraphQueryResult {
+        var status = VkStatus(code: 0, message: nil)
+        guard let result = vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, cancellation?.pointer, &status) else {
+            defer { vectorkit_status_clear(&status) }
+            throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "unknown graph error")
+        }
+        vectorkit_status_clear(&status)
+        guard let scope = vectorkit_graph_result_project(OpaquePointer(bitPattern: handle), result, &status) else {
+            defer { vectorkit_status_clear(&status); vectorkit_graph_result_free(result) }
+            throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "graph projection failed")
+        }
+        let execution = NativeGraphExecution(result: result, scope: scope)
+        var matches: [GraphMatch] = []
+        for index in 0..<vectorkit_graph_result_count(result) {
+            var value = VkGraphMatch(node_type: nil, source_type: 0, record_id: nil, chunk_key: nil, depth: 0, path_length: 0)
+            try Native.bool { status in vectorkit_graph_result_match(result, index, &value, status) }
+            let nodeID = graphNodeID(nodeType: value.node_type, recordID: value.record_id, chunkKey: value.chunk_key)
+            let depth = value.depth; let pathLength = value.path_length
+            vectorkit_graph_match_clear(&value)
+            var path: [GraphPathEdge] = []
+            for edgeIndex in 0..<pathLength {
+                var edge = emptyPathEdge()
+                try Native.bool { status in vectorkit_graph_result_path_edge(result, index, edgeIndex, &edge, status) }
+                let sourceField = edge.source_field_segments.count == 0 ? nil : GraphFieldPath((0..<edge.source_field_segments.count).map { String(cString: edge.source_field_segments.values[$0]!) })
+                path.append(GraphPathEdge(relationship: String(cString: edge.relationship_type), source: graphNodeID(edge.source), target: graphNodeID(edge.target), occurrenceOrdinal: edge.occurrence_ordinal, provenance: GraphEdgeProvenance(schemaRuleIndex: edge.schema_rule_index, sourceRecordID: String(cString: edge.source_record_id), sourceField: sourceField, derivedInverse: edge.derived_inverse, builtIn: edge.built_in)))
+                vectorkit_graph_path_edge_clear(&edge)
+            }
+            matches.append(GraphMatch(nodeID: nodeID, depth: depth, path: path))
+        }
+        let trace = vectorkit_graph_result_trace(result)
+        return GraphQueryResult(matches: matches, trace: GraphQueryTrace(seedCount: trace.seed_count, visitedStates: trace.visited_states, traversedEdges: trace.traversed_edges, resultCount: trace.result_count, diagnostics: trace.diagnostics, truncationReason: trace.truncation_reason), native: execution)
     }
 
     public func search(_ embedding: [Float], topK: Int, in result: GraphQueryResult) throws -> [GraphSearchHit] {
@@ -263,4 +324,24 @@ public actor GraphIndex {
         defer { vectorkit_hybrid_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; let terms = (0..<hit.matched_terms.count).map { String(cString: hit.matched_terms.values[$0]!) }; return GraphHybridHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, vectorScore: hit.has_vector_score ? hit.vector_score : nil, keywordScore: hit.has_keyword_score ? hit.keyword_score : nil, matchedTerms: terms) }
     }
+}
+
+private func nativeLimits(_ limits: GraphQueryLimits) -> VkGraphLimits {
+    VkGraphLimits(max_hops: limits.maxHops, max_visited: limits.maxVisited, max_results: limits.maxResults, max_working_bytes: limits.maxWorkingBytes)
+}
+
+private func graphNodeID(nodeType: UnsafeMutablePointer<CChar>?, recordID: UnsafeMutablePointer<CChar>?, chunkKey: UnsafeMutablePointer<CChar>?) -> GraphNodeID {
+    GraphNodeID(nodeType: String(cString: nodeType!), recordID: String(cString: recordID!), chunkKey: chunkKey.map { String(cString: $0) })
+}
+
+private func graphNodeID(_ value: VkGraphOwnedNode) -> GraphNodeID {
+    graphNodeID(nodeType: value.node_type, recordID: value.record_id, chunkKey: value.chunk_key)
+}
+
+private func emptyOwnedNode() -> VkGraphOwnedNode {
+    VkGraphOwnedNode(node_type: nil, source_type: 0, record_id: nil, chunk_key: nil)
+}
+
+private func emptyPathEdge() -> VkGraphPathEdge {
+    VkGraphPathEdge(relationship_type: nil, source: emptyOwnedNode(), target: emptyOwnedNode(), occurrence_ordinal: 0, schema_rule_index: 0, source_record_id: nil, source_field_segments: VkStringArray(values: nil, count: 0), derived_inverse: false, built_in: false)
 }

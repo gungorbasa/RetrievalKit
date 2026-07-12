@@ -97,6 +97,25 @@ pub struct VkGraphMatch {
     pub path_length: usize,
 }
 #[repr(C)]
+pub struct VkGraphOwnedNode {
+    pub node_type: *mut c_char,
+    pub source_type: u32,
+    pub record_id: *mut c_char,
+    pub chunk_key: *mut c_char,
+}
+#[repr(C)]
+pub struct VkGraphPathEdge {
+    pub relationship_type: *mut c_char,
+    pub source: VkGraphOwnedNode,
+    pub target: VkGraphOwnedNode,
+    pub occurrence_ordinal: u32,
+    pub schema_rule_index: u32,
+    pub source_record_id: *mut c_char,
+    pub source_field_segments: super::VkStringArray,
+    pub derived_inverse: bool,
+    pub built_in: bool,
+}
+#[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct VkGraphTrace {
     pub seed_count: usize,
@@ -126,7 +145,7 @@ struct RecordChunk {
 
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    1
+    2
 }
 
 #[no_mangle]
@@ -278,6 +297,9 @@ pub unsafe extern "C" fn vectorkit_graph_result_match(
     status: *mut VkStatus,
 ) -> bool {
     ffi_bool(status, || {
+        if out_match.is_null() {
+            return Err(FfiError::invalid_argument("out_match must not be null"));
+        }
         let result = unsafe { result.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
         let matched = result
@@ -297,9 +319,6 @@ pub unsafe extern "C" fn vectorkit_graph_result_match(
                 super::string_to_owned_ptr(identity.chunk_key.as_str()),
             ),
         };
-        if out_match.is_null() {
-            return Err(FfiError::invalid_argument("out_match must not be null"));
-        }
         unsafe {
             *out_match = VkGraphMatch {
                 node_type: super::string_to_owned_ptr(matched.node_id.node_type.as_str()),
@@ -312,6 +331,75 @@ pub unsafe extern "C" fn vectorkit_graph_result_match(
         };
         Ok(())
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_result_path_edge(
+    result: *const VkGraphResult,
+    match_index: usize,
+    edge_index: usize,
+    out_edge: *mut VkGraphPathEdge,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_edge.is_null() {
+            return Err(FfiError::invalid_argument("out_edge must not be null"));
+        }
+        let result = unsafe { result.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
+        let edge = result
+            .result
+            .matches
+            .get(match_index)
+            .ok_or_else(|| FfiError::invalid_argument("graph match index is out of bounds"))?
+            .path
+            .get(edge_index)
+            .ok_or_else(|| FfiError::invalid_argument("graph path edge index is out of bounds"))?;
+        let source_field_segments =
+            edge.provenance
+                .source_field
+                .as_ref()
+                .map_or_else(Vec::new, |field| {
+                    field
+                        .segments()
+                        .iter()
+                        .map(|segment| segment.as_str().to_owned())
+                        .collect()
+                });
+        unsafe {
+            *out_edge = VkGraphPathEdge {
+                relationship_type: string_to_owned_ptr(edge.edge_id.relationship_type.as_str()),
+                source: owned_node(&edge.edge_id.source),
+                target: owned_node(&edge.edge_id.target),
+                occurrence_ordinal: edge.edge_id.occurrence_ordinal,
+                schema_rule_index: edge.provenance.schema_rule_index,
+                source_record_id: string_to_owned_ptr(edge.provenance.source_record_id.as_str()),
+                source_field_segments: string_array(source_field_segments),
+                derived_inverse: edge.provenance.derived_inverse,
+                built_in: edge.provenance.built_in,
+            };
+        }
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_path_edge_clear(value: *mut VkGraphPathEdge) {
+    if let Some(value) = unsafe { value.as_mut() } {
+        unsafe {
+            super::vectorkit_string_free(value.relationship_type);
+            owned_node_clear(&mut value.source);
+            owned_node_clear(&mut value.target);
+            super::vectorkit_string_free(value.source_record_id);
+            super::string_array_free(value.source_field_segments);
+        }
+        value.relationship_type = std::ptr::null_mut();
+        value.source_record_id = std::ptr::null_mut();
+        value.source_field_segments = super::VkStringArray {
+            values: std::ptr::null_mut(),
+            count: 0,
+        };
+    }
 }
 
 #[no_mangle]
@@ -594,6 +682,34 @@ unsafe fn decode_query(value: VkGraphQuery) -> Result<GraphQuery, FfiError> {
     })
 }
 
+fn owned_node(node: &NodeId) -> VkGraphOwnedNode {
+    let (source_type, record_id, chunk_key) = match &node.source {
+        NodeSource::Record(id) => (0, string_to_owned_ptr(id.as_str()), std::ptr::null_mut()),
+        NodeSource::Chunk(identity) => (
+            1,
+            string_to_owned_ptr(identity.record_id.as_str()),
+            string_to_owned_ptr(identity.chunk_key.as_str()),
+        ),
+    };
+    VkGraphOwnedNode {
+        node_type: string_to_owned_ptr(node.node_type.as_str()),
+        source_type,
+        record_id,
+        chunk_key,
+    }
+}
+
+unsafe fn owned_node_clear(node: &mut VkGraphOwnedNode) {
+    unsafe {
+        super::vectorkit_string_free(node.node_type);
+        super::vectorkit_string_free(node.record_id);
+        super::vectorkit_string_free(node.chunk_key);
+    }
+    node.node_type = std::ptr::null_mut();
+    node.record_id = std::ptr::null_mut();
+    node.chunk_key = std::ptr::null_mut();
+}
+
 unsafe fn decode_node(value: VkGraphNodeRef) -> Result<NodeId, FfiError> {
     let node_type = NodeType::new(unsafe { read_c_string(value.node_type, "node_type") }?)
         .map_err(FfiError::from)?;
@@ -728,7 +844,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use vectorkit_core::{FieldName, RecordId, RecordType, RecordValue};
-    use vectorkit_graph::{GraphSchema, NodeType, RecordNodeSchema};
+    use vectorkit_graph::{
+        ChunkNodeSchema, GraphSchema, NodeType, RecordNodeSchema, RelationshipType,
+    };
 
     use super::*;
 
@@ -769,8 +887,13 @@ mod tests {
         let schema = GraphSchema::new(vec![RecordNodeSchema {
             record_type: RecordType::new("Item").unwrap(),
             node_type: NodeType::new("Item").unwrap(),
-            queryable_fields: vec![],
-        }]);
+            queryable_fields: vec![FieldPath::single(FieldName::new("name").unwrap())],
+        }])
+        .with_chunk_nodes(ChunkNodeSchema {
+            node_type: NodeType::new("Chunk").unwrap(),
+            owns_relationship: RelationshipType::new("owns").unwrap(),
+            inverse_relationship: Some(RelationshipType::new("owned_by").unwrap()),
+        });
         let schema = CString::new(serde_json::to_vec(&schema).unwrap()).unwrap();
         let index =
             unsafe { vectorkit_graph_builder_build_json(builder, schema.as_ptr(), &mut status) };
@@ -867,6 +990,94 @@ mod tests {
             super::super::vectorkit_keyword_results_free(keyword);
             vectorkit_graph_scope_free(scope)
         };
+
+        let name = CString::new("name").unwrap();
+        let fields = [name.as_ptr()];
+        let generic_item = CString::new("Generic item").unwrap();
+        let values = [VkGraphScalar {
+            value_type: 0,
+            string_value: generic_item.as_ptr(),
+            integer_value: 0,
+            bool_value: false,
+        }];
+        let equality_query = VkGraphQuery {
+            seed_type: 1,
+            node_ids: std::ptr::null(),
+            node_id_count: 0,
+            seed_node_type: node_type.as_ptr(),
+            field_segments: fields.as_ptr(),
+            field_segment_count: fields.len(),
+            values: values.as_ptr(),
+            value_count: values.len(),
+            ..query
+        };
+        let equality_result =
+            unsafe { vectorkit_graph_query(index, equality_query, std::ptr::null(), &mut status) };
+        assert!(!equality_result.is_null());
+        assert_eq!(unsafe { vectorkit_graph_result_count(equality_result) }, 1);
+        unsafe { vectorkit_graph_result_free(equality_result) };
+
+        let owns = CString::new("owns").unwrap();
+        let steps = [VkGraphStep {
+            relationship: owns.as_ptr(),
+            direction: 0,
+            min_hops: 1,
+            max_hops: 1,
+        }];
+        let traversal_query = VkGraphQuery {
+            steps: steps.as_ptr(),
+            step_count: steps.len(),
+            ..query
+        };
+        let traversal_result =
+            unsafe { vectorkit_graph_query(index, traversal_query, std::ptr::null(), &mut status) };
+        assert!(!traversal_result.is_null());
+        assert_eq!(unsafe { vectorkit_graph_result_count(traversal_result) }, 1);
+        let mut edge = VkGraphPathEdge {
+            relationship_type: std::ptr::null_mut(),
+            source: VkGraphOwnedNode {
+                node_type: std::ptr::null_mut(),
+                source_type: 0,
+                record_id: std::ptr::null_mut(),
+                chunk_key: std::ptr::null_mut(),
+            },
+            target: VkGraphOwnedNode {
+                node_type: std::ptr::null_mut(),
+                source_type: 0,
+                record_id: std::ptr::null_mut(),
+                chunk_key: std::ptr::null_mut(),
+            },
+            occurrence_ordinal: 0,
+            schema_rule_index: 0,
+            source_record_id: std::ptr::null_mut(),
+            source_field_segments: super::super::VkStringArray {
+                values: std::ptr::null_mut(),
+                count: 0,
+            },
+            derived_inverse: false,
+            built_in: false,
+        };
+        assert!(unsafe {
+            vectorkit_graph_result_path_edge(traversal_result, 0, 0, &mut edge, &mut status)
+        });
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr(edge.relationship_type) }.to_bytes(),
+            b"owns"
+        );
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr(edge.source.record_id) }.to_bytes(),
+            b"item-1"
+        );
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr(edge.target.chunk_key) }.to_bytes(),
+            b"body"
+        );
+        assert!(edge.built_in);
+        assert_eq!(edge.source_field_segments.count, 0);
+        unsafe {
+            vectorkit_graph_path_edge_clear(&mut edge);
+            vectorkit_graph_result_free(traversal_result);
+        }
         unsafe {
             vectorkit_graph_match_clear(&mut matched);
             vectorkit_graph_result_free(result)

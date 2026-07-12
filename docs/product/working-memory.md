@@ -98,7 +98,14 @@ implemented, or superseded by the product spec.
 - M4.3b now retains each native graph result with its generation-bound projected
   candidate scope and exposes scoped exact, BM25, and hybrid ranking in Swift.
   Typed C ABI tests and Swift integration tests prove all three rankers return
-  only the graph-selected record. Equality seeds and path provenance remain.
+  only the graph-selected record.
+- M4.3c exposes typed Swift equality seeds for queryable string, integer, and
+  boolean fields. Graph matches now materialize every canonical path edge with
+  typed source/target IDs and relationship occurrence, schema-rule,
+  source-record, source-field, inverse, and built-in provenance. Synthetic Swift
+  integration coverage exercises forward and inverse traversal, equality seed
+  scalar mappings, cancellation, and composed scoped ranking. The graph
+  aggregate ABI version is now 2.
 
 ## Current Size, RAM, and Speed Goal
 

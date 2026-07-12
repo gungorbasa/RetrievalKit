@@ -4,6 +4,29 @@ Optional schema-driven local graph retrieval for Swift. This package links the
 aggregate `VectorKitGraphFFI` artifact. Install it instead of the base
 `VectorKit` package; never link both native artifacts into one application.
 
+## Quickstart
+
+Build the local aggregate artifact, then run the included generic example:
+
+```bash
+scripts/build-xcframework.sh --macos-only --graph
+swift run --package-path wrappers/swift/VectorKitGraph VectorKitGraphQuickstart
+```
+
+Expected output:
+
+```text
+matches=graph-retrieval
+hybrid=graph-retrieval
+projection=1/1
+reloaded=graph-retrieval
+```
+
+The example uses fixed two-dimensional vectors so it needs no embedding model,
+network access, or customer data. It builds a typed schema, ingests canonical
+records once, traverses a relationship, applies a metadata-filtered scoped
+hybrid search, saves the composite database, and reopens its persisted schema.
+
 `GraphIndexBuilder` accepts domain-neutral records and consumes itself when
 `build(schema:)` creates the sole graph owner. Schema and record JSON are
 cold-path transport validated in Rust. `GraphIndex.query` uses typed native

@@ -85,3 +85,4 @@ jobs:
         run: |
           swift test --package-path wrappers/swift/VectorKit
           swift test --package-path wrappers/swift/VectorKitGraph
+          swift run --package-path wrappers/swift/VectorKitGraph VectorKitGraphQuickstart

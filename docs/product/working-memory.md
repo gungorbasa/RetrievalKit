@@ -138,6 +138,12 @@ implemented, or superseded by the product spec.
   integer values that cannot safely cross C `size_t`; Rust remains the sole
   semantic validator. Tests cover normal and max-results-truncated queries,
   projection cardinality, and negative dimension/hop/top-k/candidate inputs.
+- M4.9 adds the `VectorKitGraphQuickstart` executable to the separate graph
+  Swift package. Its deterministic generic two-record fixture demonstrates
+  schema creation, canonical ingestion, property-seeded traversal,
+  metadata-filtered scoped hybrid ranking, composite save, and schema-owning
+  reopen with no model, network, or customer data. CI runs it and verifies the
+  expected `graph-retrieval` result and `1/1` projection.
 
 ## Current Size, RAM, and Speed Goal
 

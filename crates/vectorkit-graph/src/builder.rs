@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use vectorkit_core::{ExactVectorIndex, Record, RecordId, RecordValue};
+use vectorkit_core::{CorpusIndex, Record, RecordId, RecordValue};
 
 use crate::error::{GraphError, Result};
 use crate::schema::{
@@ -27,7 +27,7 @@ pub struct GraphBuildStats {
 }
 
 pub(crate) fn build_graph(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &GraphSchema,
 ) -> Result<(GraphStorage, GraphBuildStats)> {
     let validated = schema.validate_internal()?;
@@ -137,7 +137,7 @@ pub(crate) fn build_graph(
 }
 
 fn build_chunk_projections(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &ValidatedSchema<'_>,
 ) -> Result<BTreeMap<NodeId, Vec<vectorkit_core::ChunkId>>> {
     let mut projections = BTreeMap::<NodeId, Vec<vectorkit_core::ChunkId>>::new();
@@ -174,7 +174,7 @@ fn build_chunk_projections(
     Ok(projections)
 }
 
-fn build_nodes(core: &ExactVectorIndex, schema: &ValidatedSchema<'_>) -> Result<Vec<NodeId>> {
+fn build_nodes(core: &CorpusIndex, schema: &ValidatedSchema<'_>) -> Result<Vec<NodeId>> {
     let mut nodes = Vec::new();
     for (_, record) in core.record_store().iter() {
         let mapping = schema
@@ -200,7 +200,7 @@ fn build_nodes(core: &ExactVectorIndex, schema: &ValidatedSchema<'_>) -> Result<
 }
 
 fn build_reference_edges(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &ValidatedSchema<'_>,
     nodes: &BTreeMap<NodeId, NodeOrdinal>,
     edges: &mut Vec<UnresolvedEdge>,
@@ -328,7 +328,7 @@ fn build_reference_edges(
 }
 
 fn build_chunk_edges(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &ValidatedSchema<'_>,
     nodes: &BTreeMap<NodeId, NodeOrdinal>,
     edges: &mut Vec<UnresolvedEdge>,
@@ -442,7 +442,7 @@ fn extract_references(
 }
 
 fn build_property_index(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &ValidatedSchema<'_>,
     nodes: &BTreeMap<NodeId, NodeOrdinal>,
 ) -> Result<BTreeMap<(crate::schema::NodeType, FieldPath, GraphScalar), Vec<NodeOrdinal>>> {

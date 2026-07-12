@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use vectorkit_core::{
-    ChunkId, ChunkIdentity, ChunkKey, CorpusId, ExactVectorIndex, FieldName, GenerationId, RecordId,
+    ChunkId, ChunkIdentity, ChunkKey, CorpusId, CorpusIndex, FieldName, GenerationId, RecordId,
 };
 
 use crate::builder::GraphBuildStats;
@@ -41,7 +41,7 @@ pub(crate) fn encode_snapshot(
 }
 
 pub(crate) fn decode_snapshot(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     payload: &GraphSnapshotPayload,
 ) -> Result<(GraphSchema, GraphStorage, GraphBuildStats)> {
     let schema = GraphSchema::from_canonical_bytes(&payload.schema_bytes)?;
@@ -339,7 +339,7 @@ fn decode_graph(bytes: &[u8]) -> Result<DecodedGraph> {
 }
 
 fn validate_storage(
-    core: &ExactVectorIndex,
+    core: &CorpusIndex,
     schema: &GraphSchema,
     storage: &GraphStorage,
 ) -> Result<()> {

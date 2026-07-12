@@ -5,15 +5,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
-use vectorkit_core::{CorpusId, ExactVectorIndex, GenerationId};
+use vectorkit_core::{CorpusId, CorpusIndex, ExactVectorIndex, GenerationId};
 
 use crate::error::{GraphError, Result};
-use crate::{GraphIndex, GraphSnapshotPayload, SchemaHash};
+use crate::{
+    GraphDatabase, GraphEngine, GraphIndex, GraphRetrievalDatabase, GraphSnapshotPayload,
+    SchemaHash,
+};
 
 const FORMAT_VERSION: u32 = 1;
+const CAPABILITY_FORMAT_VERSION: u32 = 2;
 const MANIFEST_FILE: &str = "manifest.json";
 const SNAPSHOTS_DIRECTORY: &str = ".snapshots";
 const CORE_DIRECTORY: &str = "core";
+const CORPUS_DIRECTORY: &str = "corpus";
+const CORPUS_FILE: &str = "corpus.bin";
+const GRAPH_DIRECTORY: &str = "graph";
+const RETRIEVAL_DIRECTORY: &str = "retrieval";
 const SCHEMA_FILE: &str = "schema.json";
 const GRAPH_FILE: &str = "graph.bin";
 const WRITER_LOCK_FILE: &str = ".writer.lock";
@@ -66,6 +74,7 @@ impl Drop for DatabaseLock {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GraphDatabaseFileSizes {
+    pub corpus_bytes: u64,
     pub schema_bytes: u64,
     pub graph_bytes: u64,
 }
@@ -98,6 +107,41 @@ struct Checksums {
     algorithm: String,
     schema: String,
     graph: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GraphOnlyManifest {
+    format_version: u32,
+    capability: String,
+    snapshot_id: String,
+    corpus_id: CorpusId,
+    generation: GenerationId,
+    schema_hash: SchemaHash,
+    corpus_bytes: u64,
+    schema_bytes: u64,
+    graph_bytes: u64,
+    checksums: GraphOnlyChecksums,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GraphOnlyChecksums {
+    algorithm: String,
+    corpus: String,
+    schema: String,
+    graph: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GraphRetrievalManifest {
+    format_version: u32,
+    capability: String,
+    snapshot_id: String,
+    corpus_id: CorpusId,
+    generation: GenerationId,
+    schema_hash: SchemaHash,
+    schema_bytes: u64,
+    graph_bytes: u64,
+    checksums: Checksums,
 }
 
 pub(crate) fn save(index: &GraphIndex, directory: &Path) -> Result<GraphDatabaseFileSizes> {
@@ -164,6 +208,7 @@ fn stage_and_publish(
     checkpoint(SaveCheckpoint::GraphWritten)?;
 
     let sizes = GraphDatabaseFileSizes {
+        corpus_bytes: 0,
         schema_bytes: byte_len(&payload.schema_bytes, "schema")?,
         graph_bytes: byte_len(&payload.graph_bytes, "graph")?,
     };
@@ -202,6 +247,420 @@ fn stage_and_publish(
     sync_directory(directory)?;
     cleanup_unreferenced_snapshots(snapshots, &snapshot_id);
     Ok(sizes)
+}
+
+pub(crate) fn save_graph_database(
+    database: &GraphDatabase,
+    directory: &Path,
+) -> Result<GraphDatabaseFileSizes> {
+    fs::create_dir_all(directory)
+        .map_err(|error| io_error("create graph database directory", directory, error))?;
+    let _writer_lock = DatabaseLock::try_acquire_writer(directory)?;
+    let snapshots = directory.join(SNAPSHOTS_DIRECTORY);
+    fs::create_dir_all(&snapshots)
+        .map_err(|error| io_error("create graph snapshots directory", &snapshots, error))?;
+    recover_graph_only_snapshots(directory, &snapshots)?;
+    cleanup_temporary_manifests(directory);
+
+    let snapshot_id = next_snapshot_id(database.corpus.generation())?;
+    let staging = snapshots.join(format!(".staging-{snapshot_id}"));
+    let published = snapshots.join(&snapshot_id);
+    fs::create_dir(&staging)
+        .map_err(|error| io_error("create staged graph snapshot", &staging, error))?;
+    write_synced(&staging.join(GENERATION_LEASE_FILE), &[])?;
+
+    let result = (|| {
+        let corpus_directory = staging.join(CORPUS_DIRECTORY);
+        let graph_directory = staging.join(GRAPH_DIRECTORY);
+        fs::create_dir(&corpus_directory).map_err(|error| {
+            io_error("create corpus payload directory", &corpus_directory, error)
+        })?;
+        fs::create_dir(&graph_directory)
+            .map_err(|error| io_error("create graph payload directory", &graph_directory, error))?;
+
+        let corpus_bytes = database.corpus.snapshot_bytes()?;
+        let payload = database.graph.snapshot_payload(&database.corpus)?;
+        write_synced(&corpus_directory.join(CORPUS_FILE), &corpus_bytes)?;
+        write_synced(&graph_directory.join(SCHEMA_FILE), &payload.schema_bytes)?;
+        write_synced(&graph_directory.join(GRAPH_FILE), &payload.graph_bytes)?;
+
+        let sizes = GraphDatabaseFileSizes {
+            corpus_bytes: byte_len(&corpus_bytes, "corpus")?,
+            schema_bytes: byte_len(&payload.schema_bytes, "schema")?,
+            graph_bytes: byte_len(&payload.graph_bytes, "graph")?,
+        };
+        let manifest = GraphOnlyManifest {
+            format_version: CAPABILITY_FORMAT_VERSION,
+            capability: "graph".to_owned(),
+            snapshot_id: snapshot_id.clone(),
+            corpus_id: database.corpus.corpus_id().clone(),
+            generation: database.corpus.generation(),
+            schema_hash: payload.schema_hash,
+            corpus_bytes: sizes.corpus_bytes,
+            schema_bytes: sizes.schema_bytes,
+            graph_bytes: sizes.graph_bytes,
+            checksums: GraphOnlyChecksums {
+                algorithm: "blake3".to_owned(),
+                corpus: checksum(&corpus_bytes),
+                schema: checksum(&payload.schema_bytes),
+                graph: checksum(&payload.graph_bytes),
+            },
+        };
+        validate_graph_only_manifest(&manifest)?;
+        load_graph_only_generation(&staging, &manifest)?;
+        sync_directory(&corpus_directory)?;
+        sync_directory(&graph_directory)?;
+        sync_directory(&staging)?;
+        fs::rename(&staging, &published)
+            .map_err(|error| io_error("publish graph snapshot", &published, error))?;
+        sync_directory(&snapshots)?;
+
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest).map_err(|error| {
+            invalid_snapshot(format!("could not encode graph manifest: {error}"))
+        })?;
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let temporary_manifest = directory.join(format!("manifest.{snapshot_id}.tmp"));
+        write_synced(&temporary_manifest, &manifest_bytes)?;
+        fs::rename(&temporary_manifest, &manifest_path)
+            .map_err(|error| io_error("activate graph manifest", &manifest_path, error))?;
+        sync_directory(directory)?;
+        cleanup_unreferenced_snapshots(&snapshots, &snapshot_id);
+        Ok(sizes)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+pub(crate) fn load_graph_database(directory: &Path) -> Result<GraphDatabase> {
+    let open_lock = DatabaseLock::acquire_shared(directory)?;
+    let manifest = read_graph_only_manifest(directory)?;
+    let generation = directory
+        .join(SNAPSHOTS_DIRECTORY)
+        .join(&manifest.snapshot_id);
+    let lease = acquire_generation_lease(&generation)?;
+    drop(open_lock);
+    let mut database = load_graph_only_generation(&generation, &manifest)?;
+    database._generation_lease = Some(lease);
+    Ok(database)
+}
+
+pub(crate) fn validate_graph_database(directory: &Path) -> Result<()> {
+    load_graph_database(directory).map(|_| ())
+}
+
+fn read_graph_only_manifest(directory: &Path) -> Result<GraphOnlyManifest> {
+    let path = directory.join(MANIFEST_FILE);
+    let bytes = fs::read(&path).map_err(|error| io_error("read graph manifest", &path, error))?;
+    let manifest = serde_json::from_slice(&bytes)
+        .map_err(|error| invalid_snapshot(format!("could not decode graph manifest: {error}")))?;
+    validate_graph_only_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn validate_graph_only_manifest(manifest: &GraphOnlyManifest) -> Result<()> {
+    if manifest.format_version != CAPABILITY_FORMAT_VERSION || manifest.capability != "graph" {
+        return Err(GraphError::IncompatibleVersion {
+            message: format!(
+                "unsupported graph database capability format version {} ({})",
+                manifest.format_version, manifest.capability
+            ),
+        });
+    }
+    if !safe_snapshot_id(&manifest.snapshot_id) {
+        return Err(invalid_snapshot(
+            "manifest snapshot ID is not a safe path component",
+        ));
+    }
+    if manifest.checksums.algorithm != "blake3" {
+        return Err(invalid_snapshot(
+            "manifest checksum algorithm must be blake3",
+        ));
+    }
+    for (label, value) in [
+        ("corpus", manifest.checksums.corpus.as_str()),
+        ("schema", manifest.checksums.schema.as_str()),
+        ("graph", manifest.checksums.graph.as_str()),
+    ] {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(invalid_snapshot(format!(
+                "manifest {label} checksum must be 64 lowercase hexadecimal characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn load_graph_only_generation(
+    directory: &Path,
+    manifest: &GraphOnlyManifest,
+) -> Result<GraphDatabase> {
+    let corpus_path = directory.join(CORPUS_DIRECTORY).join(CORPUS_FILE);
+    let graph_directory = directory.join(GRAPH_DIRECTORY);
+    let schema_path = graph_directory.join(SCHEMA_FILE);
+    let graph_path = graph_directory.join(GRAPH_FILE);
+    let corpus_bytes = read_exact_payload(&corpus_path, manifest.corpus_bytes, "corpus")?;
+    let schema_bytes = read_exact_payload(&schema_path, manifest.schema_bytes, "schema")?;
+    let graph_bytes = read_exact_payload(&graph_path, manifest.graph_bytes, "graph")?;
+    verify_checksum("corpus", &corpus_bytes, &manifest.checksums.corpus)?;
+    verify_checksum("schema", &schema_bytes, &manifest.checksums.schema)?;
+    verify_checksum("graph", &graph_bytes, &manifest.checksums.graph)?;
+
+    let corpus = CorpusIndex::from_snapshot_bytes(&corpus_bytes)?;
+    if corpus.corpus_id() != &manifest.corpus_id || corpus.generation() != manifest.generation {
+        return Err(invalid_snapshot(
+            "corpus identity or generation does not match the graph manifest",
+        ));
+    }
+    let payload = GraphSnapshotPayload {
+        schema_bytes,
+        graph_bytes,
+        schema_hash: manifest.schema_hash,
+    };
+    let graph = GraphEngine::from_snapshot_payload(&corpus, &payload)?;
+    Ok(GraphDatabase {
+        corpus,
+        graph,
+        _generation_lease: None,
+    })
+}
+
+fn recover_graph_only_snapshots(directory: &Path, snapshots: &Path) -> Result<()> {
+    let manifest_path = directory.join(MANIFEST_FILE);
+    let active = if manifest_path.exists() {
+        Some(read_graph_only_manifest(directory)?.snapshot_id)
+    } else {
+        None
+    };
+    let entries = fs::read_dir(snapshots)
+        .map_err(|error| io_error("list graph snapshots", snapshots, error))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| io_error("read graph snapshot entry", snapshots, error))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(".staging-") {
+            let _ = fs::remove_dir_all(entry.path());
+        } else if active.as_deref() != Some(name.as_ref()) {
+            try_remove_unleased_generation(&entry.path());
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn save_graph_retrieval_database(
+    database: &GraphRetrievalDatabase,
+    directory: &Path,
+) -> Result<GraphDatabaseFileSizes> {
+    fs::create_dir_all(directory).map_err(|error| {
+        io_error(
+            "create graph retrieval database directory",
+            directory,
+            error,
+        )
+    })?;
+    let _writer_lock = DatabaseLock::try_acquire_writer(directory)?;
+    let snapshots = directory.join(SNAPSHOTS_DIRECTORY);
+    fs::create_dir_all(&snapshots)
+        .map_err(|error| io_error("create graph snapshots directory", &snapshots, error))?;
+    recover_graph_retrieval_snapshots(directory, &snapshots)?;
+    cleanup_temporary_manifests(directory);
+
+    let snapshot_id = next_snapshot_id(database.corpus().generation())?;
+    let staging = snapshots.join(format!(".staging-{snapshot_id}"));
+    let published = snapshots.join(&snapshot_id);
+    fs::create_dir(&staging)
+        .map_err(|error| io_error("create staged graph snapshot", &staging, error))?;
+    write_synced(&staging.join(GENERATION_LEASE_FILE), &[])?;
+
+    let result = (|| {
+        let retrieval_directory = staging.join(RETRIEVAL_DIRECTORY);
+        let graph_directory = staging.join(GRAPH_DIRECTORY);
+        database.retrieval.save_to_dir(&retrieval_directory)?;
+        fs::create_dir(&graph_directory)
+            .map_err(|error| io_error("create graph payload directory", &graph_directory, error))?;
+        let payload = database.graph.snapshot_payload(database.corpus())?;
+        write_synced(&graph_directory.join(SCHEMA_FILE), &payload.schema_bytes)?;
+        write_synced(&graph_directory.join(GRAPH_FILE), &payload.graph_bytes)?;
+
+        let sizes = GraphDatabaseFileSizes {
+            corpus_bytes: 0,
+            schema_bytes: byte_len(&payload.schema_bytes, "schema")?,
+            graph_bytes: byte_len(&payload.graph_bytes, "graph")?,
+        };
+        let manifest = GraphRetrievalManifest {
+            format_version: CAPABILITY_FORMAT_VERSION,
+            capability: "graph_retrieval".to_owned(),
+            snapshot_id: snapshot_id.clone(),
+            corpus_id: database.corpus().corpus_id().clone(),
+            generation: database.corpus().generation(),
+            schema_hash: payload.schema_hash,
+            schema_bytes: sizes.schema_bytes,
+            graph_bytes: sizes.graph_bytes,
+            checksums: Checksums {
+                algorithm: "blake3".to_owned(),
+                schema: checksum(&payload.schema_bytes),
+                graph: checksum(&payload.graph_bytes),
+            },
+        };
+        validate_graph_retrieval_manifest(&manifest)?;
+        load_graph_retrieval_generation(&staging, &manifest)?;
+        sync_directory(&retrieval_directory)?;
+        sync_directory(&graph_directory)?;
+        sync_directory(&staging)?;
+        fs::rename(&staging, &published)
+            .map_err(|error| io_error("publish graph snapshot", &published, error))?;
+        sync_directory(&snapshots)?;
+
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest).map_err(|error| {
+            invalid_snapshot(format!("could not encode graph manifest: {error}"))
+        })?;
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let temporary_manifest = directory.join(format!("manifest.{snapshot_id}.tmp"));
+        write_synced(&temporary_manifest, &manifest_bytes)?;
+        fs::rename(&temporary_manifest, &manifest_path)
+            .map_err(|error| io_error("activate graph manifest", &manifest_path, error))?;
+        sync_directory(directory)?;
+        cleanup_unreferenced_snapshots(&snapshots, &snapshot_id);
+        Ok(sizes)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+pub(crate) fn load_graph_retrieval_database(directory: &Path) -> Result<GraphRetrievalDatabase> {
+    let open_lock = DatabaseLock::acquire_shared(directory)?;
+    let manifest = read_graph_retrieval_manifest(directory)?;
+    let generation = directory
+        .join(SNAPSHOTS_DIRECTORY)
+        .join(&manifest.snapshot_id);
+    let lease = acquire_generation_lease(&generation)?;
+    drop(open_lock);
+    let mut database = load_graph_retrieval_generation(&generation, &manifest)?;
+    database._generation_lease = Some(lease);
+    Ok(database)
+}
+
+pub(crate) fn validate_graph_retrieval_database(directory: &Path) -> Result<()> {
+    load_graph_retrieval_database(directory).map(|_| ())
+}
+
+fn read_graph_retrieval_manifest(directory: &Path) -> Result<GraphRetrievalManifest> {
+    let path = directory.join(MANIFEST_FILE);
+    let bytes = fs::read(&path).map_err(|error| io_error("read graph manifest", &path, error))?;
+    let manifest = serde_json::from_slice(&bytes)
+        .map_err(|error| invalid_snapshot(format!("could not decode graph manifest: {error}")))?;
+    validate_graph_retrieval_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn validate_graph_retrieval_manifest(manifest: &GraphRetrievalManifest) -> Result<()> {
+    if manifest.format_version != CAPABILITY_FORMAT_VERSION
+        || manifest.capability != "graph_retrieval"
+    {
+        return Err(GraphError::IncompatibleVersion {
+            message: format!(
+                "unsupported graph retrieval capability format version {} ({})",
+                manifest.format_version, manifest.capability
+            ),
+        });
+    }
+    if !safe_snapshot_id(&manifest.snapshot_id) {
+        return Err(invalid_snapshot(
+            "manifest snapshot ID is not a safe path component",
+        ));
+    }
+    if manifest.checksums.algorithm != "blake3" {
+        return Err(invalid_snapshot(
+            "manifest checksum algorithm must be blake3",
+        ));
+    }
+    for (label, value) in [
+        ("schema", manifest.checksums.schema.as_str()),
+        ("graph", manifest.checksums.graph.as_str()),
+    ] {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(invalid_snapshot(format!(
+                "manifest {label} checksum must be 64 lowercase hexadecimal characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn load_graph_retrieval_generation(
+    directory: &Path,
+    manifest: &GraphRetrievalManifest,
+) -> Result<GraphRetrievalDatabase> {
+    let retrieval =
+        vectorkit_core::RetrievalDatabase::load_from_dir(directory.join(RETRIEVAL_DIRECTORY))?;
+    if retrieval.corpus().corpus_id() != &manifest.corpus_id
+        || retrieval.corpus().generation() != manifest.generation
+    {
+        return Err(invalid_snapshot(
+            "retrieval corpus identity or generation does not match the graph manifest",
+        ));
+    }
+    let graph_directory = directory.join(GRAPH_DIRECTORY);
+    let schema_bytes = read_exact_payload(
+        &graph_directory.join(SCHEMA_FILE),
+        manifest.schema_bytes,
+        "schema",
+    )?;
+    let graph_bytes = read_exact_payload(
+        &graph_directory.join(GRAPH_FILE),
+        manifest.graph_bytes,
+        "graph",
+    )?;
+    verify_checksum("schema", &schema_bytes, &manifest.checksums.schema)?;
+    verify_checksum("graph", &graph_bytes, &manifest.checksums.graph)?;
+    let graph = GraphEngine::from_snapshot_payload(
+        retrieval.corpus(),
+        &GraphSnapshotPayload {
+            schema_bytes,
+            graph_bytes,
+            schema_hash: manifest.schema_hash,
+        },
+    )?;
+    Ok(GraphRetrievalDatabase {
+        retrieval,
+        graph,
+        _generation_lease: None,
+    })
+}
+
+fn recover_graph_retrieval_snapshots(directory: &Path, snapshots: &Path) -> Result<()> {
+    let manifest_path = directory.join(MANIFEST_FILE);
+    let active = if manifest_path.exists() {
+        Some(read_graph_retrieval_manifest(directory)?.snapshot_id)
+    } else {
+        None
+    };
+    let entries = fs::read_dir(snapshots)
+        .map_err(|error| io_error("list graph snapshots", snapshots, error))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| io_error("read graph snapshot entry", snapshots, error))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(".staging-") {
+            let _ = fs::remove_dir_all(entry.path());
+        } else if active.as_deref() != Some(name.as_ref()) {
+            try_remove_unleased_generation(&entry.path());
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn load(directory: &Path) -> Result<GraphIndex> {

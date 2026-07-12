@@ -1,9 +1,40 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::candidate_scope::CandidateScope;
 use crate::error::{Result, VectorKitError};
-use crate::record_store::{ChunkIdentity, CorpusId, GenerationId, Record, RecordId, RecordStore};
+use crate::metadata::Metadata;
+use crate::record_store::{
+    ChunkIdentity, ChunkKey, CorpusId, GenerationId, Record, RecordId, RecordStore,
+};
 use crate::types::{ChunkId, StoredChunk};
+
+/// Capability-neutral retrievable chunk supplied with a canonical record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CorpusChunkInput {
+    pub key: ChunkKey,
+    pub text: String,
+    pub metadata: Metadata,
+}
+
+/// One canonical record and its capability-neutral retrievable chunks.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordInput {
+    pub record: Record,
+    pub metadata: Metadata,
+    pub chunks: Vec<CorpusChunkInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedCorpus {
+    corpus_id: CorpusId,
+    generation: GenerationId,
+    record_store: RecordStore,
+    chunk_identities: Vec<(ChunkIdentity, ChunkId)>,
+    chunks: Vec<StoredChunk>,
+    next_chunk_id: ChunkId,
+}
 
 /// Canonical graph-neutral corpus state shared by derived query capabilities.
 ///
@@ -158,6 +189,133 @@ impl CorpusIndex {
         self.candidate_scope(chunk_ids)
     }
 
+    /// Adds or atomically replaces one canonical record without constructing
+    /// retrieval state. This is the graph-only ingestion path.
+    pub fn upsert(&mut self, input: RecordInput) -> Result<Vec<ChunkId>> {
+        input.record.validate()?;
+        let mut keys = BTreeSet::new();
+        for chunk in &input.chunks {
+            if !keys.insert(chunk.key.clone()) {
+                return Err(VectorKitError::InvalidIdentity {
+                    kind: "ChunkKey",
+                    value: chunk.key.as_str().to_owned(),
+                    message: "must be unique within one record generation".to_owned(),
+                });
+            }
+        }
+
+        let record_id = input.record.id.clone();
+        let document_id = record_id.as_str().to_owned();
+        let version = self.record_versions.get(&document_id).copied().unwrap_or(0) + 1;
+        let mut deactivated_offsets = Vec::new();
+        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
+            if chunk.document_id == document_id && !chunk.deleted {
+                chunk.deleted = true;
+                deactivated_offsets.push(offset);
+            }
+        }
+        self.remove_active_offsets(&deactivated_offsets);
+        self.remove_chunk_identities_for_record(&record_id);
+
+        let mut chunk_ids = Vec::with_capacity(input.chunks.len());
+        for chunk in input.chunks {
+            let offset = self.chunks.len();
+            let chunk_id = self.allocate_chunk_id();
+            let identity = ChunkIdentity::new(record_id.clone(), chunk.key);
+            let stored_chunk = StoredChunk {
+                chunk_id,
+                document_id: document_id.clone(),
+                text: chunk.text,
+                metadata: merge_metadata(&input.metadata, chunk.metadata),
+                deleted: false,
+                version,
+            };
+            self.register_chunk_offset(chunk_id, offset);
+            self.chunk_ids_by_identity
+                .insert(identity.clone(), chunk_id);
+            self.chunk_identities.insert(chunk_id, identity);
+            self.active_offsets.push(offset);
+            self.chunks.push(stored_chunk);
+            chunk_ids.push(chunk_id);
+        }
+
+        self.record_versions.insert(document_id, version);
+        self.record_store.upsert(input.record)?;
+        self.generation = self.generation.next();
+        Ok(chunk_ids)
+    }
+
+    pub fn delete_record(&mut self, record_id: &RecordId) -> usize {
+        let mut deleted = 0;
+        let mut offsets = Vec::new();
+        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
+            if chunk.document_id == record_id.as_str() && !chunk.deleted {
+                chunk.deleted = true;
+                offsets.push(offset);
+                deleted += 1;
+            }
+        }
+        self.remove_active_offsets(&offsets);
+        let removed_record = self.record_store.delete(record_id);
+        self.remove_chunk_identities_for_record(record_id);
+        if deleted > 0 || removed_record.is_some() {
+            self.generation = self.generation.next();
+        }
+        deleted
+    }
+
+    /// Encodes the canonical corpus without retrieval or graph payloads.
+    pub fn snapshot_bytes(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        serde_json::to_vec(&PersistedCorpus {
+            corpus_id: self.corpus_id.clone(),
+            generation: self.generation,
+            record_store: self.record_store.clone(),
+            chunk_identities: self
+                .chunk_ids_by_identity
+                .iter()
+                .map(|(identity, chunk_id)| (identity.clone(), *chunk_id))
+                .collect(),
+            chunks: self.chunks.clone(),
+            next_chunk_id: self.next_chunk_id,
+        })
+        .map_err(|error| VectorKitError::InvalidFormat {
+            message: format!("could not encode canonical corpus snapshot: {error}"),
+        })
+    }
+
+    /// Restores and validates a capability-neutral corpus snapshot.
+    pub fn from_snapshot_bytes(bytes: &[u8]) -> Result<Self> {
+        let persisted: PersistedCorpus =
+            serde_json::from_slice(bytes).map_err(|error| VectorKitError::InvalidFormat {
+                message: format!("could not decode canonical corpus snapshot: {error}"),
+            })?;
+        let mut corpus = Self::new(persisted.corpus_id);
+        corpus.generation = persisted.generation;
+        corpus.record_store = persisted.record_store;
+        corpus.chunks = persisted.chunks;
+        corpus.next_chunk_id = persisted.next_chunk_id;
+        for (identity, chunk_id) in persisted.chunk_identities {
+            if corpus
+                .chunk_ids_by_identity
+                .insert(identity.clone(), chunk_id)
+                .is_some()
+            {
+                return Err(VectorKitError::InvalidFormat {
+                    message: format!(
+                        "canonical corpus repeats chunk identity {}/{}",
+                        identity.record_id.as_str(),
+                        identity.chunk_key.as_str()
+                    ),
+                });
+            }
+            corpus.chunk_identities.insert(chunk_id, identity);
+        }
+        corpus.rebuild_offsets_and_versions();
+        corpus.validate()?;
+        Ok(corpus)
+    }
+
     pub(crate) fn validate_candidate_scope(&self, scope: &CandidateScope) -> Result<()> {
         if scope.corpus_id() == &self.corpus_id && scope.generation() == self.generation {
             return Ok(());
@@ -283,6 +441,12 @@ impl CorpusIndex {
     }
 }
 
+fn merge_metadata(inherited: &Metadata, chunk: Metadata) -> Metadata {
+    let mut metadata = inherited.clone();
+    metadata.extend(chunk);
+    metadata
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +488,32 @@ mod tests {
             corpus.validate_candidate_scope(&scope),
             Err(VectorKitError::StaleGeneration { .. })
         ));
+    }
+
+    #[test]
+    fn graph_only_ingestion_and_snapshot_need_no_embeddings() {
+        let mut corpus = CorpusIndex::new(CorpusId::new("graph-only").unwrap());
+        let chunk_ids = corpus
+            .upsert(RecordInput {
+                record: Record {
+                    id: RecordId::new("rust").unwrap(),
+                    record_type: RecordType::new("Topic").unwrap(),
+                    fields: BTreeMap::new(),
+                    content: None,
+                },
+                metadata: BTreeMap::new(),
+                chunks: vec![CorpusChunkInput {
+                    key: ChunkKey::new("summary").unwrap(),
+                    text: "native retrieval".to_owned(),
+                    metadata: BTreeMap::new(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(chunk_ids, vec![0]);
+
+        let loaded = CorpusIndex::from_snapshot_bytes(&corpus.snapshot_bytes().unwrap()).unwrap();
+        assert_eq!(loaded.record_store(), corpus.record_store());
+        assert_eq!(loaded.chunk(0), corpus.chunk(0));
+        assert_eq!(loaded.generation(), corpus.generation());
     }
 }

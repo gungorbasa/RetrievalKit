@@ -19,6 +19,10 @@ pub struct RetrievalDatabase {
 }
 
 impl RetrievalDatabase {
+    pub fn from_compatibility_index(index: ExactVectorIndex) -> Self {
+        Self { index }
+    }
+
     pub fn new(configuration: RetrievalConfiguration, corpus_id: CorpusId) -> Result<Self> {
         Ok(Self {
             index: ExactVectorIndex::try_with_retrieval_configuration_in_corpus(

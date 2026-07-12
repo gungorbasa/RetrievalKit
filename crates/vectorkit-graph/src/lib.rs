@@ -9,8 +9,8 @@ mod storage;
 use std::collections::BTreeSet;
 
 use vectorkit_core::{
-    CandidateScope, ChunkId, ExactVectorIndex, HybridHit, HybridQuery, KeywordHit, KeywordQuery,
-    SearchHit, SearchQuery,
+    CandidateScope, ChunkId, CorpusIndex, ExactVectorIndex, HybridHit, HybridQuery, KeywordHit,
+    KeywordQuery, RetrievalDatabase, SearchHit, SearchQuery,
 };
 
 pub use builder::GraphBuildStats;
@@ -34,12 +34,34 @@ use builder::build_graph;
 use query::execute;
 use storage::GraphStorage;
 
-#[derive(Debug)]
-pub struct GraphIndex {
-    core: ExactVectorIndex,
+/// Schema-driven graph state derived from one canonical corpus generation.
+#[derive(Debug, Clone)]
+pub struct GraphEngine {
     schema: GraphSchema,
     storage: GraphStorage,
     build_stats: GraphBuildStats,
+}
+
+#[derive(Debug)]
+pub struct GraphIndex {
+    core: ExactVectorIndex,
+    graph: GraphEngine,
+    _generation_lease: Option<persistence::GenerationLease>,
+}
+
+/// A graph-only database. It contains no vector, BM25, or retrieval payload.
+#[derive(Debug)]
+pub struct GraphDatabase {
+    corpus: CorpusIndex,
+    graph: GraphEngine,
+    _generation_lease: Option<persistence::GenerationLease>,
+}
+
+/// One canonical corpus with both graph and retrieval derived capabilities.
+#[derive(Debug)]
+pub struct GraphRetrievalDatabase {
+    retrieval: RetrievalDatabase,
+    graph: GraphEngine,
     _generation_lease: Option<persistence::GenerationLease>,
 }
 
@@ -55,16 +77,108 @@ pub struct ProjectedScope {
     pub trace: ProjectionTrace,
 }
 
-impl GraphIndex {
-    /// Consumes the core index so graph-enabled callers have one mutable owner.
-    pub fn build(core: ExactVectorIndex, schema: GraphSchema) -> Result<Self> {
+impl GraphEngine {
+    pub fn build(corpus: &CorpusIndex, schema: GraphSchema) -> Result<Self> {
         let schema = schema.canonicalized()?;
-        let (storage, build_stats) = build_graph(&core, &schema)?;
+        let (storage, build_stats) = build_graph(corpus, &schema)?;
         Ok(Self {
-            core,
             schema,
             storage,
             build_stats,
+        })
+    }
+
+    pub fn from_snapshot_payload(
+        corpus: &CorpusIndex,
+        payload: &GraphSnapshotPayload,
+    ) -> Result<Self> {
+        let (schema, storage, build_stats) = snapshot::decode_snapshot(corpus, payload)?;
+        Ok(Self {
+            schema,
+            storage,
+            build_stats,
+        })
+    }
+
+    pub fn snapshot_payload(&self, corpus: &CorpusIndex) -> Result<GraphSnapshotPayload> {
+        snapshot::encode_snapshot(
+            &self.storage,
+            &self.schema,
+            corpus.corpus_id(),
+            corpus.generation(),
+        )
+    }
+
+    pub fn schema(&self) -> &GraphSchema {
+        &self.schema
+    }
+
+    pub fn build_stats(&self) -> GraphBuildStats {
+        self.build_stats
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.storage.nodes.len()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.storage.edges.len()
+    }
+
+    pub fn query(
+        &self,
+        corpus: &CorpusIndex,
+        query: &GraphQuery,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<GraphResult> {
+        execute(
+            &self.storage,
+            corpus.corpus_id().clone(),
+            corpus.generation(),
+            query,
+            cancellation,
+        )
+    }
+
+    pub fn project_candidates(
+        &self,
+        corpus: &CorpusIndex,
+        result: &GraphResult,
+    ) -> Result<ProjectedScope> {
+        if result.corpus_id != *corpus.corpus_id() || result.generation != corpus.generation() {
+            return Err(GraphError::StaleGeneration {
+                message: format!(
+                    "stale graph result belongs to corpus '{}' generation {}, active is '{}' generation {}",
+                    result.corpus_id.as_str(),
+                    result.generation.get(),
+                    corpus.corpus_id().as_str(),
+                    corpus.generation().get()
+                ),
+            });
+        }
+
+        let mut chunk_ids = BTreeSet::<ChunkId>::new();
+        for matched in &result.matches {
+            if let Some(projected) = self.storage.chunk_projections.get(&matched.node_id) {
+                chunk_ids.extend(projected);
+            }
+        }
+        let trace = ProjectionTrace {
+            source_nodes: result.matches.len(),
+            resolved_chunks: chunk_ids.len(),
+        };
+        let scope = corpus.candidate_scope(chunk_ids)?;
+        Ok(ProjectedScope { scope, trace })
+    }
+}
+
+impl GraphIndex {
+    /// Consumes the core index so graph-enabled callers have one mutable owner.
+    pub fn build(core: ExactVectorIndex, schema: GraphSchema) -> Result<Self> {
+        let graph = GraphEngine::build(core.corpus(), schema)?;
+        Ok(Self {
+            core,
+            graph,
             _generation_lease: None,
         })
     }
@@ -73,12 +187,7 @@ impl GraphIndex {
     /// touching the filesystem. Atomic bundle persistence is layered on this
     /// payload by the package persistence API.
     pub fn snapshot_payload(&self) -> Result<GraphSnapshotPayload> {
-        snapshot::encode_snapshot(
-            &self.storage,
-            &self.schema,
-            self.core.corpus_id(),
-            self.core.generation(),
-        )
+        self.graph.snapshot_payload(self.core.corpus())
     }
 
     /// Restores a graph snapshot against its canonical core generation.
@@ -88,12 +197,10 @@ impl GraphIndex {
         core: ExactVectorIndex,
         payload: &GraphSnapshotPayload,
     ) -> Result<Self> {
-        let (schema, storage, build_stats) = snapshot::decode_snapshot(&core, payload)?;
+        let graph = GraphEngine::from_snapshot_payload(core.corpus(), payload)?;
         Ok(Self {
             core,
-            schema,
-            storage,
-            build_stats,
+            graph,
             _generation_lease: None,
         })
     }
@@ -117,19 +224,19 @@ impl GraphIndex {
     }
 
     pub fn schema(&self) -> &GraphSchema {
-        &self.schema
+        self.graph.schema()
     }
 
     pub fn build_stats(&self) -> GraphBuildStats {
-        self.build_stats
+        self.graph.build_stats()
     }
 
     pub fn node_count(&self) -> usize {
-        self.storage.nodes.len()
+        self.graph.node_count()
     }
 
     pub fn edge_count(&self) -> usize {
-        self.storage.edges.len()
+        self.graph.edge_count()
     }
 
     pub fn chunk_text(&self, chunk_id: ChunkId) -> Option<&str> {
@@ -153,41 +260,11 @@ impl GraphIndex {
         query: &GraphQuery,
         cancellation: Option<&CancellationToken>,
     ) -> Result<GraphResult> {
-        execute(
-            &self.storage,
-            self.core.corpus_id().clone(),
-            self.core.generation(),
-            query,
-            cancellation,
-        )
+        self.graph.query(self.core.corpus(), query, cancellation)
     }
 
     pub fn project_candidates(&self, result: &GraphResult) -> Result<ProjectedScope> {
-        if result.corpus_id != *self.core.corpus_id() || result.generation != self.core.generation()
-        {
-            return Err(GraphError::StaleGeneration {
-                message: format!(
-                    "stale graph result belongs to corpus '{}' generation {}, active is '{}' generation {}",
-                    result.corpus_id.as_str(),
-                    result.generation.get(),
-                    self.core.corpus_id().as_str(),
-                    self.core.generation().get()
-                ),
-            });
-        }
-
-        let mut chunk_ids = BTreeSet::<ChunkId>::new();
-        for matched in &result.matches {
-            if let Some(projected) = self.storage.chunk_projections.get(&matched.node_id) {
-                chunk_ids.extend(projected);
-            }
-        }
-        let trace = ProjectionTrace {
-            source_nodes: result.matches.len(),
-            resolved_chunks: chunk_ids.len(),
-        };
-        let scope = self.core.candidate_scope(chunk_ids)?;
-        Ok(ProjectedScope { scope, trace })
+        self.graph.project_candidates(self.core.corpus(), result)
     }
 
     pub fn search_in_candidates(
@@ -218,5 +295,141 @@ impl GraphIndex {
         self.core
             .hybrid_search_in_candidates(query, scope)
             .map_err(GraphError::from)
+    }
+}
+
+impl GraphDatabase {
+    pub fn build(corpus: CorpusIndex, schema: GraphSchema) -> Result<Self> {
+        let graph = GraphEngine::build(&corpus, schema)?;
+        Ok(Self {
+            corpus,
+            graph,
+            _generation_lease: None,
+        })
+    }
+
+    pub fn corpus(&self) -> &CorpusIndex {
+        &self.corpus
+    }
+
+    pub fn graph(&self) -> &GraphEngine {
+        &self.graph
+    }
+
+    pub fn chunk_text(&self, chunk_id: ChunkId) -> Option<&str> {
+        self.corpus.chunk(chunk_id).map(|chunk| chunk.text.as_str())
+    }
+
+    pub fn graph_query(
+        &self,
+        query: &GraphQuery,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<GraphResult> {
+        self.graph.query(&self.corpus, query, cancellation)
+    }
+
+    pub fn project_candidates(&self, result: &GraphResult) -> Result<ProjectedScope> {
+        self.graph.project_candidates(&self.corpus, result)
+    }
+
+    pub fn save_to_dir(
+        &self,
+        directory: impl AsRef<std::path::Path>,
+    ) -> Result<GraphDatabaseFileSizes> {
+        persistence::save_graph_database(self, directory.as_ref())
+    }
+
+    pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
+        persistence::load_graph_database(directory.as_ref())
+    }
+
+    pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
+        persistence::validate_graph_database(directory.as_ref())
+    }
+}
+
+impl GraphRetrievalDatabase {
+    pub fn build(retrieval: RetrievalDatabase, schema: GraphSchema) -> Result<Self> {
+        let graph = GraphEngine::build(retrieval.corpus(), schema)?;
+        Ok(Self {
+            retrieval,
+            graph,
+            _generation_lease: None,
+        })
+    }
+
+    pub fn corpus(&self) -> &CorpusIndex {
+        self.retrieval.corpus()
+    }
+
+    pub fn graph(&self) -> &GraphEngine {
+        &self.graph
+    }
+
+    pub fn retrieval(&self) -> &RetrievalDatabase {
+        &self.retrieval
+    }
+
+    pub fn graph_query(
+        &self,
+        query: &GraphQuery,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<GraphResult> {
+        self.graph
+            .query(self.retrieval.corpus(), query, cancellation)
+    }
+
+    pub fn project_candidates(&self, result: &GraphResult) -> Result<ProjectedScope> {
+        self.graph
+            .project_candidates(self.retrieval.corpus(), result)
+    }
+
+    pub fn semantic_search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
+        self.retrieval
+            .semantic_search(query)
+            .map_err(GraphError::from)
+    }
+
+    pub fn hybrid_search(&self, query: &HybridQuery) -> Result<Vec<HybridHit>> {
+        self.retrieval
+            .hybrid_search(query)
+            .map_err(GraphError::from)
+    }
+
+    pub fn semantic_search_in_selection(
+        &self,
+        query: &SearchQuery,
+        selection: &GraphResult,
+    ) -> Result<Vec<SearchHit>> {
+        let projected = self.project_candidates(selection)?;
+        self.retrieval
+            .semantic_search_in_candidates(query, &projected.scope)
+            .map_err(GraphError::from)
+    }
+
+    pub fn hybrid_search_in_selection(
+        &self,
+        query: &HybridQuery,
+        selection: &GraphResult,
+    ) -> Result<Vec<HybridHit>> {
+        let projected = self.project_candidates(selection)?;
+        self.retrieval
+            .hybrid_search_in_candidates(query, &projected.scope)
+            .map_err(GraphError::from)
+    }
+
+    pub fn save_to_dir(
+        &self,
+        directory: impl AsRef<std::path::Path>,
+    ) -> Result<GraphDatabaseFileSizes> {
+        persistence::save_graph_retrieval_database(self, directory.as_ref())
+    }
+
+    pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
+        persistence::load_graph_retrieval_database(directory.as_ref())
+    }
+
+    pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
+        persistence::validate_graph_retrieval_database(directory.as_ref())
     }
 }

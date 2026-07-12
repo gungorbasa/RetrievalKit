@@ -14,7 +14,7 @@ mod types;
 
 pub use bm25::Bm25Config;
 pub use candidate_scope::CandidateScope;
-pub use corpus_index::CorpusIndex;
+pub use corpus_index::{CorpusChunkInput, CorpusIndex, RecordInput};
 pub use error::{Result, VectorKitError};
 pub use filter::Filter;
 pub use index::ExactVectorIndex;

@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::bm25::{Bm25Config, Bm25Index, PersistedBm25Index};
 use crate::candidate_scope::CandidateScope;
+use crate::corpus_index::CorpusIndex;
 use crate::error::{Result, VectorKitError};
 use crate::filter::Filter;
 use crate::metadata::{estimated_metadata_payload_bytes, Metadata, MetadataValue};
@@ -101,21 +102,12 @@ impl Drop for SaveLock {
 
 #[derive(Debug, Clone)]
 pub struct ExactVectorIndex {
-    corpus_id: CorpusId,
-    generation: GenerationId,
-    record_store: RecordStore,
-    chunk_ids_by_identity: BTreeMap<ChunkIdentity, ChunkId>,
-    chunk_identities: BTreeMap<ChunkId, ChunkIdentity>,
+    corpus: CorpusIndex,
     dimension: usize,
     metric: VectorMetric,
     vector_encoding: VectorEncoding,
-    chunks: Vec<StoredChunk>,
     encoded_vectors: EncodedVectorStore,
-    chunk_offsets: Vec<Option<usize>>,
-    active_offsets: Vec<usize>,
     metadata_filter_index: MetadataFilterIndex,
-    next_chunk_id: ChunkId,
-    document_versions: BTreeMap<String, u64>,
     bm25: Bm25Index,
 }
 
@@ -183,21 +175,12 @@ impl ExactVectorIndex {
         corpus_id: CorpusId,
     ) -> Result<Self> {
         Ok(Self {
-            record_store: RecordStore::new(corpus_id.clone()),
-            corpus_id,
-            generation: GenerationId::INITIAL,
-            chunk_ids_by_identity: BTreeMap::new(),
-            chunk_identities: BTreeMap::new(),
+            corpus: CorpusIndex::new(corpus_id),
             dimension: config.dimension,
             metric: config.metric,
             vector_encoding: config.vector_encoding,
-            chunks: Vec::new(),
             encoded_vectors: EncodedVectorStore::new(config.vector_encoding)?,
-            chunk_offsets: Vec::new(),
-            active_offsets: Vec::new(),
             metadata_filter_index: MetadataFilterIndex::default(),
-            next_chunk_id: 0,
-            document_versions: BTreeMap::new(),
             bm25: Bm25Index::new(bm25_config),
         })
     }
@@ -219,87 +202,99 @@ impl ExactVectorIndex {
 
     /// Returns the stable namespace this in-memory generation belongs to.
     pub fn corpus_id(&self) -> &CorpusId {
-        &self.corpus_id
+        self.corpus.corpus_id()
     }
 
     /// Returns the generation used to validate external candidate scopes.
     pub fn generation(&self) -> GenerationId {
-        self.generation
+        self.corpus.generation()
+    }
+
+    /// Returns the canonical graph-neutral corpus behind this retrieval facade.
+    pub fn corpus(&self) -> &CorpusIndex {
+        &self.corpus
     }
 
     /// Returns the canonical graph-neutral records behind derived retrieval data.
     pub fn record_store(&self) -> &RecordStore {
-        &self.record_store
+        self.corpus.record_store()
     }
 
     pub fn record(&self, record_id: &RecordId) -> Option<&Record> {
-        self.record_store.get(record_id)
+        self.corpus.record(record_id)
     }
 
     pub fn hydrate_records<'a>(&'a self, record_ids: &[RecordId]) -> Vec<Option<&'a Record>> {
-        self.record_store.hydrate(record_ids)
+        self.corpus.hydrate_records(record_ids)
     }
 
     /// Resolves a stable external chunk identity in the active generation.
     pub fn chunk_id_for_identity(&self, identity: &ChunkIdentity) -> Option<ChunkId> {
-        self.chunk_ids_by_identity.get(identity).copied()
+        self.corpus.chunk_id_for_identity(identity)
     }
 
     pub fn chunk_identity(&self, chunk_id: ChunkId) -> Option<&ChunkIdentity> {
-        self.chunk_identities.get(&chunk_id)
+        self.corpus.chunk_identity(chunk_id)
     }
 
     /// Iterates active external/internal chunk mappings in stable identity order.
     pub fn chunk_identities(&self) -> impl Iterator<Item = (&ChunkIdentity, ChunkId)> {
-        self.chunk_ids_by_identity
-            .iter()
-            .map(|(identity, chunk_id)| (identity, *chunk_id))
+        self.corpus.chunk_identities()
     }
 
     /// Returns the total number of stored chunks, including tombstoned chunks.
     pub fn len(&self) -> usize {
-        self.chunks.len()
+        self.corpus.len()
     }
 
     /// Returns true when no chunks have been stored.
     pub fn is_empty(&self) -> bool {
-        self.chunks.is_empty()
+        self.corpus.is_empty()
     }
 
     /// Returns the number of chunks currently eligible for search results.
     pub fn active_chunk_count(&self) -> usize {
-        self.active_offsets.len()
+        self.corpus.active_chunk_count()
     }
 
     /// Returns the number of stored chunks currently marked deleted.
     pub fn tombstoned_chunk_count(&self) -> usize {
-        self.chunks.iter().filter(|chunk| chunk.deleted).count()
+        self.corpus.tombstoned_chunk_count()
     }
 
     /// Returns an approximate payload byte breakdown for the currently loaded index.
     pub fn size_estimate(&self) -> IndexSizeEstimate {
         IndexSizeEstimate {
             vector_bytes: self.encoded_vectors.estimated_payload_bytes(),
-            chunk_record_bytes: self.chunks.len() * std::mem::size_of::<ChunkId>(),
+            chunk_record_bytes: self.corpus.chunks.len() * std::mem::size_of::<ChunkId>(),
             document_id_bytes: self
+                .corpus
                 .chunks
                 .iter()
                 .map(|chunk| chunk.document_id.len())
                 .sum(),
-            text_bytes: self.chunks.iter().map(|chunk| chunk.text.len()).sum(),
+            text_bytes: self
+                .corpus
+                .chunks
+                .iter()
+                .map(|chunk| chunk.text.len())
+                .sum(),
             metadata_bytes: self
+                .corpus
                 .chunks
                 .iter()
                 .map(|chunk| estimated_metadata_payload_bytes(&chunk.metadata))
                 .sum(),
-            tombstone_bytes: self.chunks.len() * std::mem::size_of::<bool>(),
-            version_bytes: self.chunks.len() * std::mem::size_of::<u64>(),
-            chunk_offset_bytes: self.chunk_offsets.len() * std::mem::size_of::<Option<usize>>()
-                + self.active_offsets.len() * std::mem::size_of::<usize>(),
+            tombstone_bytes: self.corpus.chunks.len() * std::mem::size_of::<bool>(),
+            version_bytes: self.corpus.chunks.len() * std::mem::size_of::<u64>(),
+            chunk_offset_bytes: self.corpus.chunk_offsets.len()
+                * std::mem::size_of::<Option<usize>>()
+                + self.corpus.active_offsets.len() * std::mem::size_of::<usize>(),
             bm25_bytes: self.bm25.estimated_payload_bytes(),
             metadata_filter_bytes: self.metadata_filter_index.estimated_payload_bytes(),
-            record_store_bytes: self.record_store.estimated_payload_bytes(),
+            record_store_bytes: self.corpus.record_store.estimated_payload_bytes(),
             chunk_identity_bytes: self
+                .corpus
                 .chunk_ids_by_identity
                 .keys()
                 .map(|identity| {
@@ -357,7 +352,7 @@ impl ExactVectorIndex {
 
         write_file(&vectors_path, &self.encoded_vectors.to_payload_bytes())?;
         checkpoint(SaveCheckpoint::VectorsWritten)?;
-        let chunk_payload = encode_chunks(&self.chunks)?;
+        let chunk_payload = encode_chunks(&self.corpus.chunks)?;
         let chunk_uncompressed_bytes =
             checked_usize_to_u64(chunk_payload.len(), "chunk payload byte count")?;
         write_file(
@@ -366,8 +361,9 @@ impl ExactVectorIndex {
         )?;
         checkpoint(SaveCheckpoint::ChunksWritten)?;
         let record_payload = serde_json::to_vec(&PersistedRecordState {
-            record_store: self.record_store.clone(),
+            record_store: self.corpus.record_store.clone(),
             chunk_identities: self
+                .corpus
                 .chunk_ids_by_identity
                 .iter()
                 .map(|(identity, chunk_id)| (identity.clone(), *chunk_id))
@@ -397,6 +393,7 @@ impl ExactVectorIndex {
         write_file(
             &tombstones_path,
             &self
+                .corpus
                 .chunks
                 .iter()
                 .map(|chunk| u8::from(chunk.deleted))
@@ -408,11 +405,11 @@ impl ExactVectorIndex {
             format_version: FORMAT_VERSION,
             snapshot_id: Some(snapshot_id.clone()),
             created_with: CREATED_WITH.to_owned(),
-            corpus_id: self.corpus_id.clone(),
-            generation: self.generation,
+            corpus_id: self.corpus.corpus_id.clone(),
+            generation: self.corpus.generation,
             dimension: self.dimension,
             metric: self.metric,
-            vector_count: self.chunks.len(),
+            vector_count: self.corpus.chunks.len(),
             active_chunk_count: self.active_chunk_count(),
             has_bm25: options.include_bm25,
             has_records: true,
@@ -587,13 +584,14 @@ impl ExactVectorIndex {
             Bm25Config::default(),
             manifest.corpus_id.clone(),
         )?;
-        index.generation = manifest.generation;
+        index.corpus.generation = manifest.generation;
         index.encoded_vectors = encoded_vectors;
-        index.chunks = chunks;
+        index.corpus.chunks = chunks;
         if let Some(persisted_records) = persisted_records {
-            index.record_store = persisted_records.record_store;
+            index.corpus.record_store = persisted_records.record_store;
             for (identity, chunk_id) in persisted_records.chunk_identities {
                 if index
+                    .corpus
                     .chunk_ids_by_identity
                     .insert(identity.clone(), chunk_id)
                     .is_some()
@@ -607,7 +605,8 @@ impl ExactVectorIndex {
                     });
                 }
             }
-            index.chunk_identities = index
+            index.corpus.chunk_identities = index
+                .corpus
                 .chunk_ids_by_identity
                 .iter()
                 .map(|(identity, chunk_id)| (*chunk_id, identity.clone()))
@@ -663,9 +662,13 @@ impl ExactVectorIndex {
     /// remains useful for tests and future persistence-loading paths.
     pub fn add_chunk(&mut self, chunk: Chunk) -> Result<()> {
         self.validate_dimension(chunk.embedding.len())?;
-        let offset = self.chunks.len();
-        self.next_chunk_id = self.next_chunk_id.max(chunk.chunk_id.saturating_add(1));
-        self.document_versions
+        let offset = self.corpus.chunks.len();
+        self.corpus.next_chunk_id = self
+            .corpus
+            .next_chunk_id
+            .max(chunk.chunk_id.saturating_add(1));
+        self.corpus
+            .record_versions
             .entry(chunk.document_id.clone())
             .and_modify(|version| *version = (*version).max(chunk.version))
             .or_insert(chunk.version);
@@ -682,12 +685,12 @@ impl ExactVectorIndex {
             version: chunk.version,
         };
         if !stored_chunk.deleted {
-            self.active_offsets.push(offset);
+            self.corpus.active_offsets.push(offset);
             self.metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
         }
-        self.chunks.push(stored_chunk);
-        self.generation = self.generation.next();
+        self.corpus.chunks.push(stored_chunk);
+        self.corpus.generation = self.corpus.generation.next();
         Ok(())
     }
 
@@ -759,14 +762,15 @@ impl ExactVectorIndex {
 
         let document_id = record.id.as_str().to_owned();
         let version = self
-            .document_versions
+            .corpus
+            .record_versions
             .get(&document_id)
             .copied()
             .unwrap_or(0)
             + 1;
 
         let mut deactivated_offsets = Vec::new();
-        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
+        for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id {
                 if !chunk.deleted {
                     self.metadata_filter_index.remove(offset, &chunk.metadata);
@@ -781,7 +785,7 @@ impl ExactVectorIndex {
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
         for chunk_input in chunk_inputs {
-            let offset = self.chunks.len();
+            let offset = self.corpus.chunks.len();
             let chunk_id = self.allocate_chunk_id();
             chunk_ids.push(chunk_id);
             self.bm25.add_chunk(chunk_id, &chunk_input.text, true);
@@ -796,18 +800,19 @@ impl ExactVectorIndex {
                 version,
             };
             let identity = ChunkIdentity::new(record.id.clone(), chunk_input.key);
-            self.chunk_ids_by_identity
+            self.corpus
+                .chunk_ids_by_identity
                 .insert(identity.clone(), chunk_id);
-            self.chunk_identities.insert(chunk_id, identity);
-            self.active_offsets.push(offset);
+            self.corpus.chunk_identities.insert(chunk_id, identity);
+            self.corpus.active_offsets.push(offset);
             self.metadata_filter_index
                 .insert(offset, &stored_chunk.metadata);
-            self.chunks.push(stored_chunk);
+            self.corpus.chunks.push(stored_chunk);
         }
 
-        self.document_versions.insert(document_id, version);
-        self.record_store.upsert(record)?;
-        self.generation = self.generation.next();
+        self.corpus.record_versions.insert(document_id, version);
+        self.corpus.record_store.upsert(record)?;
+        self.corpus.generation = self.corpus.generation.next();
 
         Ok(chunk_ids)
     }
@@ -828,7 +833,7 @@ impl ExactVectorIndex {
     fn delete_record_by_id(&mut self, document_id: &str, record_id: Option<&RecordId>) -> usize {
         let mut deleted_count = 0;
         let mut deactivated_offsets = Vec::new();
-        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
+        for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
             if chunk.document_id == document_id && !chunk.deleted {
                 self.metadata_filter_index.remove(offset, &chunk.metadata);
                 chunk.deleted = true;
@@ -838,12 +843,12 @@ impl ExactVectorIndex {
             }
         }
         self.remove_active_offsets(&deactivated_offsets);
-        let removed_record = record_id.and_then(|id| self.record_store.delete(id));
+        let removed_record = record_id.and_then(|id| self.corpus.record_store.delete(id));
         if let Some(record_id) = record_id {
             self.remove_chunk_identities_for_record(record_id);
         }
         if deleted_count > 0 || removed_record.is_some() {
-            self.generation = self.generation.next();
+            self.corpus.generation = self.corpus.generation.next();
         }
         deleted_count
     }
@@ -854,7 +859,7 @@ impl ExactVectorIndex {
     /// Deleted chunk IDs stop resolving through `chunk` and are never reused.
     /// Replacement structures are fully built before the index is mutated.
     pub fn compact(&mut self) -> Result<CompactionReport> {
-        let chunks_before = self.chunks.len();
+        let chunks_before = self.corpus.chunks.len();
         let estimated_bytes_before = self.size_estimate().total_bytes();
         if self.tombstoned_chunk_count() == 0 {
             return Ok(CompactionReport {
@@ -866,7 +871,7 @@ impl ExactVectorIndex {
                 estimated_bytes_reclaimed: 0,
             });
         }
-        let active_offsets = self.active_offsets.clone();
+        let active_offsets = self.corpus.active_offsets.clone();
 
         let new_vectors = self
             .encoded_vectors
@@ -874,7 +879,7 @@ impl ExactVectorIndex {
         let new_chunks = active_offsets
             .iter()
             .map(|&offset| {
-                self.chunks
+                self.corpus.chunks
                     .get(offset)
                     .cloned()
                     .ok_or_else(|| VectorKitError::InvalidFormat {
@@ -906,14 +911,14 @@ impl ExactVectorIndex {
         let new_active_offsets = (0..new_chunks.len()).collect::<Vec<_>>();
 
         self.encoded_vectors = new_vectors;
-        self.chunks = new_chunks;
-        self.chunk_offsets = new_chunk_offsets;
-        self.active_offsets = new_active_offsets;
+        self.corpus.chunks = new_chunks;
+        self.corpus.chunk_offsets = new_chunk_offsets;
+        self.corpus.active_offsets = new_active_offsets;
         self.metadata_filter_index = new_metadata_filter_index;
         self.bm25 = new_bm25;
-        self.generation = self.generation.next();
+        self.corpus.generation = self.corpus.generation.next();
 
-        let chunks_after = self.chunks.len();
+        let chunks_after = self.corpus.chunks.len();
         let estimated_bytes_after = self.size_estimate().total_bytes();
         Ok(CompactionReport {
             chunks_before,
@@ -927,11 +932,7 @@ impl ExactVectorIndex {
 
     /// Returns a stored chunk by its internal ID.
     pub fn chunk(&self, chunk_id: ChunkId) -> Option<&StoredChunk> {
-        let offset = self
-            .chunk_offsets
-            .get(usize::try_from(chunk_id).ok()?)?
-            .as_ref()?;
-        self.chunks.get(*offset)
+        self.corpus.chunk(chunk_id)
     }
 
     /// Hydrates active chunks in one call while preserving input order.
@@ -939,10 +940,7 @@ impl ExactVectorIndex {
     /// Missing, deleted, and superseded IDs produce `None`. Duplicate input IDs
     /// produce duplicate references in the corresponding positions.
     pub fn hydrate_chunks<'a>(&'a self, chunk_ids: &[ChunkId]) -> Vec<Option<&'a StoredChunk>> {
-        chunk_ids
-            .iter()
-            .map(|chunk_id| self.chunk(*chunk_id).filter(|chunk| !chunk.deleted))
-            .collect()
+        self.corpus.hydrate_chunks(chunk_ids)
     }
 
     /// Validates and binds unranked internal IDs to the active corpus generation.
@@ -950,29 +948,7 @@ impl ExactVectorIndex {
         &self,
         chunk_ids: impl IntoIterator<Item = ChunkId>,
     ) -> Result<CandidateScope> {
-        let mut chunk_ids = chunk_ids.into_iter().collect::<Vec<_>>();
-        chunk_ids.sort_unstable();
-        chunk_ids.dedup();
-        for chunk_id in &chunk_ids {
-            let Some(chunk) = self.chunk(*chunk_id) else {
-                return Err(VectorKitError::InvalidCandidateScope {
-                    chunk_id: *chunk_id,
-                    message: "the ID is unavailable in this generation".to_owned(),
-                });
-            };
-            if chunk.deleted {
-                return Err(VectorKitError::InvalidCandidateScope {
-                    chunk_id: *chunk_id,
-                    message: "the ID is deleted or superseded in this generation".to_owned(),
-                });
-            }
-        }
-        Ok(CandidateScope::from_sorted_ids(
-            self.corpus_id.clone(),
-            self.generation,
-            chunk_ids,
-            self.chunk_offsets.len(),
-        ))
+        self.corpus.candidate_scope(chunk_ids)
     }
 
     /// Resolves stable external identities and binds them to this generation.
@@ -980,23 +956,7 @@ impl ExactVectorIndex {
         &self,
         identities: impl IntoIterator<Item = ChunkIdentity>,
     ) -> Result<CandidateScope> {
-        let chunk_ids = identities
-            .into_iter()
-            .map(|identity| {
-                self.chunk_id_for_identity(&identity).ok_or_else(|| {
-                    VectorKitError::InvalidIdentity {
-                        kind: "ChunkIdentity",
-                        value: format!(
-                            "{}/{}",
-                            identity.record_id.as_str(),
-                            identity.chunk_key.as_str()
-                        ),
-                        message: "is unavailable in the active generation".to_owned(),
-                    }
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        self.candidate_scope(chunk_ids)
+        self.corpus.candidate_scope_for_identities(identities)
     }
 
     /// Performs exact vector search over active chunks.
@@ -1078,7 +1038,7 @@ impl ExactVectorIndex {
                 }
             }
             None => {
-                for offset in self.active_offsets.iter().copied() {
+                for offset in self.corpus.active_offsets.iter().copied() {
                     self.score_search_candidate(offset, filter, &encoded_query, &mut candidates)?;
                 }
             }
@@ -1112,12 +1072,12 @@ impl ExactVectorIndex {
         let mut candidates = ScoredCandidateTopK::new(top_k);
         let offsets = candidate_offsets
             .as_deref()
-            .unwrap_or(self.active_offsets.as_slice());
+            .unwrap_or(self.corpus.active_offsets.as_slice());
 
         match filter {
             Some(filter) => {
                 for offset in offsets.iter().copied() {
-                    let Some(chunk) = self.chunks.get(offset) else {
+                    let Some(chunk) = self.corpus.chunks.get(offset) else {
                         continue;
                     };
 
@@ -1130,7 +1090,7 @@ impl ExactVectorIndex {
             }
             None => {
                 for offset in offsets.iter().copied() {
-                    let Some(chunk) = self.chunks.get(offset) else {
+                    let Some(chunk) = self.corpus.chunks.get(offset) else {
                         continue;
                     };
                     debug_assert!(!chunk.deleted);
@@ -1292,7 +1252,7 @@ impl ExactVectorIndex {
     fn active_chunk_ids_for_offsets(&self, offsets: &[usize]) -> HashSet<ChunkId> {
         let mut chunk_ids = HashSet::with_capacity(offsets.len());
         for offset in offsets {
-            let Some(chunk) = self.chunks.get(*offset) else {
+            let Some(chunk) = self.corpus.chunks.get(*offset) else {
                 continue;
             };
             if !chunk.deleted {
@@ -1452,15 +1412,7 @@ impl ExactVectorIndex {
     }
 
     fn validate_candidate_scope(&self, scope: &CandidateScope) -> Result<()> {
-        if scope.corpus_id() == &self.corpus_id && scope.generation() == self.generation {
-            return Ok(());
-        }
-        Err(VectorKitError::StaleGeneration {
-            expected_corpus: self.corpus_id.as_str().to_owned(),
-            expected_generation: self.generation.get(),
-            actual_corpus: scope.corpus_id().as_str().to_owned(),
-            actual_generation: scope.generation().get(),
-        })
+        self.corpus.validate_candidate_scope(scope)
     }
 
     fn scoped_offsets(
@@ -1469,11 +1421,13 @@ impl ExactVectorIndex {
         filter: Option<&Filter>,
     ) -> Result<Vec<usize>> {
         let mut offsets = if scope.is_dense() {
-            self.active_offsets
+            self.corpus
+                .active_offsets
                 .iter()
                 .copied()
                 .filter(|offset| {
-                    self.chunks
+                    self.corpus
+                        .chunks
                         .get(*offset)
                         .is_some_and(|chunk| scope.contains(chunk.chunk_id))
                 })
@@ -1482,7 +1436,8 @@ impl ExactVectorIndex {
             scope
                 .ids()
                 .filter_map(|chunk_id| {
-                    self.chunk_offsets
+                    self.corpus
+                        .chunk_offsets
                         .get(usize::try_from(chunk_id).ok()?)?
                         .as_ref()
                         .copied()
@@ -1520,10 +1475,10 @@ impl ExactVectorIndex {
             }
         }
         Ok(CandidateScope::from_sorted_ids(
-            self.corpus_id.clone(),
-            self.generation,
+            self.corpus.corpus_id.clone(),
+            self.corpus.generation,
             ids,
-            self.chunk_offsets.len(),
+            self.corpus.chunk_offsets.len(),
         ))
     }
 
@@ -1539,36 +1494,19 @@ impl ExactVectorIndex {
     }
 
     fn allocate_chunk_id(&mut self) -> ChunkId {
-        let chunk_id = self.next_chunk_id;
-        self.next_chunk_id = self.next_chunk_id.saturating_add(1);
-        chunk_id
+        self.corpus.allocate_chunk_id()
     }
 
     fn register_chunk_offset(&mut self, chunk_id: ChunkId, offset: usize) {
-        let Some(chunk_id) = usize::try_from(chunk_id).ok() else {
-            return;
-        };
-
-        if self.chunk_offsets.len() <= chunk_id {
-            self.chunk_offsets.resize(chunk_id + 1, None);
-        }
-        self.chunk_offsets[chunk_id] = Some(offset);
+        self.corpus.register_chunk_offset(chunk_id, offset);
     }
 
     fn remove_active_offsets(&mut self, offsets: &[usize]) {
-        if offsets.is_empty() {
-            return;
-        }
-
-        self.active_offsets
-            .retain(|active_offset| !offsets.contains(active_offset));
+        self.corpus.remove_active_offsets(offsets);
     }
 
     fn remove_chunk_identities_for_record(&mut self, record_id: &RecordId) {
-        self.chunk_ids_by_identity
-            .retain(|identity, _| &identity.record_id != record_id);
-        self.chunk_identities
-            .retain(|_, identity| &identity.record_id != record_id);
+        self.corpus.remove_chunk_identities_for_record(record_id);
     }
 
     fn push_embedding(&mut self, embedding: &[f32]) {
@@ -1594,86 +1532,16 @@ impl ExactVectorIndex {
     }
 
     fn rebuild_derived_state_from_loaded_chunks(&mut self) {
-        self.chunk_offsets.clear();
-        self.active_offsets.clear();
+        self.corpus.rebuild_offsets_and_versions();
         self.metadata_filter_index = MetadataFilterIndex::default();
-        self.document_versions.clear();
-        self.next_chunk_id = 0;
-
-        for offset in 0..self.chunks.len() {
-            let chunk_id = self.chunks[offset].chunk_id;
-            self.next_chunk_id = self.next_chunk_id.max(chunk_id.saturating_add(1));
-            self.register_chunk_offset(chunk_id, offset);
-
-            let chunk = &self.chunks[offset];
-            self.document_versions
-                .entry(chunk.document_id.clone())
-                .and_modify(|version| *version = (*version).max(chunk.version))
-                .or_insert(chunk.version);
-            if !chunk.deleted {
-                self.active_offsets.push(offset);
-                self.metadata_filter_index.insert(offset, &chunk.metadata);
-            }
+        for offset in self.corpus.active_offsets.iter().copied() {
+            let chunk = &self.corpus.chunks[offset];
+            self.metadata_filter_index.insert(offset, &chunk.metadata);
         }
     }
 
     fn validate_record_state(&self) -> Result<()> {
-        if self.record_store.corpus_id() != &self.corpus_id {
-            return Err(VectorKitError::InvalidFormat {
-                message: "canonical record corpus does not match the index corpus".to_owned(),
-            });
-        }
-        self.record_store.validate()?;
-        let mut seen_chunk_ids = BTreeSet::new();
-        for (identity, chunk_id) in &self.chunk_ids_by_identity {
-            if !seen_chunk_ids.insert(*chunk_id) {
-                return Err(VectorKitError::InvalidFormat {
-                    message: format!(
-                        "multiple external chunk identities resolve to internal chunk ID {chunk_id}"
-                    ),
-                });
-            }
-            if self.record_store.get(&identity.record_id).is_none() {
-                return Err(VectorKitError::InvalidFormat {
-                    message: format!(
-                        "chunk identity {}/{} references a missing canonical record",
-                        identity.record_id.as_str(),
-                        identity.chunk_key.as_str()
-                    ),
-                });
-            }
-            let Some(chunk) = self.chunk(*chunk_id) else {
-                return Err(VectorKitError::InvalidFormat {
-                    message: format!(
-                        "chunk identity {}/{} references unavailable internal chunk ID {chunk_id}",
-                        identity.record_id.as_str(),
-                        identity.chunk_key.as_str()
-                    ),
-                });
-            };
-            if chunk.deleted || chunk.document_id != identity.record_id.as_str() {
-                return Err(VectorKitError::InvalidFormat {
-                    message: format!(
-                        "chunk identity {}/{} does not resolve to its active canonical record",
-                        identity.record_id.as_str(),
-                        identity.chunk_key.as_str()
-                    ),
-                });
-            }
-            if self.chunk_identities.get(chunk_id) != Some(identity) {
-                return Err(VectorKitError::InvalidFormat {
-                    message: format!(
-                        "reverse identity mapping is missing for internal chunk ID {chunk_id}"
-                    ),
-                });
-            }
-        }
-        if self.chunk_identities.len() != self.chunk_ids_by_identity.len() {
-            return Err(VectorKitError::InvalidFormat {
-                message: "forward and reverse chunk identity mapping sizes differ".to_owned(),
-            });
-        }
-        Ok(())
+        self.corpus.validate()
     }
 
     fn score_search_candidate(
@@ -1683,7 +1551,7 @@ impl ExactVectorIndex {
         encoded_query: &scoring::EncodedQuery,
         hits: &mut ScoredCandidateTopK,
     ) -> Result<()> {
-        let Some(chunk) = self.chunks.get(offset) else {
+        let Some(chunk) = self.corpus.chunks.get(offset) else {
             return Ok(());
         };
 
@@ -1715,7 +1583,7 @@ impl ExactVectorIndex {
         candidates
             .iter()
             .filter_map(|candidate| {
-                let chunk = self.chunks.get(candidate.offset)?;
+                let chunk = self.corpus.chunks.get(candidate.offset)?;
                 Some(SearchHit {
                     chunk_id: candidate.chunk_id,
                     document_id: chunk.document_id.clone(),
@@ -3228,17 +3096,17 @@ mod tests {
                 vec![chunk_input("active", vec![0.0, 1.0])],
             )
             .unwrap();
-        index.active_offsets.push(999);
-        let chunks_before = index.chunks.clone();
+        index.corpus.active_offsets.push(999);
+        let chunks_before = index.corpus.chunks.clone();
         let vectors_before = index.encoded_vectors.to_payload_bytes();
-        let active_offsets_before = index.active_offsets.clone();
+        let active_offsets_before = index.corpus.active_offsets.clone();
 
         let error = index.compact().unwrap_err();
 
         assert!(error.to_string().contains("vector row 999 is unavailable"));
-        assert_eq!(index.chunks, chunks_before);
+        assert_eq!(index.corpus.chunks, chunks_before);
         assert_eq!(index.encoded_vectors.to_payload_bytes(), vectors_before);
-        assert_eq!(index.active_offsets, active_offsets_before);
+        assert_eq!(index.corpus.active_offsets, active_offsets_before);
     }
 
     #[test]
@@ -5021,7 +4889,7 @@ mod tests {
         assert_eq!(old_chunk_ids, vec![0]);
         assert_eq!(new_chunk_ids, vec![1]);
         assert!(index.chunk(0).unwrap().deleted);
-        assert_eq!(index.active_offsets, vec![1]);
+        assert_eq!(index.corpus.active_offsets, vec![1]);
         assert_eq!(index.chunk(1).unwrap().version, 2);
 
         let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
@@ -5045,7 +4913,7 @@ mod tests {
         assert!(new_chunk_ids.is_empty());
         assert_eq!(index.len(), 1);
         assert_eq!(index.active_chunk_count(), 0);
-        assert!(index.active_offsets.is_empty());
+        assert!(index.corpus.active_offsets.is_empty());
         assert!(index.chunk(0).unwrap().deleted);
         assert!(hits.is_empty());
     }
@@ -5067,7 +4935,7 @@ mod tests {
         let hits = index.search(&SearchQuery::new(vec![1.0, 0.0], 10)).unwrap();
 
         assert_eq!(deleted_count, 2);
-        assert!(index.active_offsets.is_empty());
+        assert!(index.corpus.active_offsets.is_empty());
         assert!(hits.is_empty());
     }
 

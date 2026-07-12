@@ -1,5 +1,6 @@
 mod bm25;
 mod candidate_scope;
+mod corpus_index;
 mod error;
 mod filter;
 mod index;
@@ -11,6 +12,7 @@ mod types;
 
 pub use bm25::Bm25Config;
 pub use candidate_scope::CandidateScope;
+pub use corpus_index::CorpusIndex;
 pub use error::{Result, VectorKitError};
 pub use filter::Filter;
 pub use index::ExactVectorIndex;

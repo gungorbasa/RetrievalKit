@@ -133,6 +133,11 @@ implemented, or superseded by the product spec.
   candidate scope. Composite save and index close remain exclusive, and a
   waiting writer blocks later readers. Deterministic gate tests prove concurrent
   reader admission, writer exclusion, and writer preference.
+- M4.8 exposes typed query truncation reasons and candidate projection counts
+  (`sourceNodes`, `resolvedChunks`) in Swift. The wrapper rejects only negative
+  integer values that cannot safely cross C `size_t`; Rust remains the sole
+  semantic validator. Tests cover normal and max-results-truncated queries,
+  projection cardinality, and negative dimension/hop/top-k/candidate inputs.
 
 ## Current Size, RAM, and Speed Goal
 

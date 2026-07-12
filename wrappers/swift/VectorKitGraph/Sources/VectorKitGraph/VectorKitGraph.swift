@@ -221,7 +221,9 @@ public struct GraphMatch: Equatable, Sendable {
     public var pathLength: Int { path.count }
     public init(nodeID: GraphNodeID, depth: Int, path: [GraphPathEdge] = []) { self.nodeID = nodeID; self.depth = depth; self.path = path }
 }
-public struct GraphQueryTrace: Equatable, Sendable { public let seedCount, visitedStates, traversedEdges, resultCount, diagnostics: Int; public let truncationReason: UInt32 }
+public enum GraphTruncationReason: UInt32, Equatable, Sendable { case maxHops = 1, maxVisited = 2, maxResults = 3, maxWorkingBytes = 4 }
+public struct GraphQueryTrace: Equatable, Sendable { public let seedCount, visitedStates, traversedEdges, resultCount, diagnostics: Int; public let truncationReason: GraphTruncationReason? }
+public struct GraphProjectionTrace: Equatable, Sendable { public let sourceNodes, resolvedChunks: Int }
 private final class NativeGraphExecution: @unchecked Sendable {
     private let condition = NSCondition(); private var result, scope: UInt?; private var activeUses = 0; private var closed = false
     init(result: OpaquePointer, scope: OpaquePointer) { self.result = UInt(bitPattern: result); self.scope = UInt(bitPattern: scope) }
@@ -242,12 +244,12 @@ private final class NativeGraphExecution: @unchecked Sendable {
     }
 }
 public final class GraphQueryResult: @unchecked Sendable {
-    public let matches: [GraphMatch]; public let trace: GraphQueryTrace
+    public let matches: [GraphMatch]; public let trace: GraphQueryTrace; public let projection: GraphProjectionTrace
     fileprivate let native: NativeGraphExecution
-    fileprivate init(matches: [GraphMatch], trace: GraphQueryTrace, native: NativeGraphExecution) { self.matches = matches; self.trace = trace; self.native = native }
+    fileprivate init(matches: [GraphMatch], trace: GraphQueryTrace, projection: GraphProjectionTrace, native: NativeGraphExecution) { self.matches = matches; self.trace = trace; self.projection = projection; self.native = native }
     public func close() { native.close() }
 }
-extension GraphQueryResult: Equatable { public static func == (left: GraphQueryResult, right: GraphQueryResult) -> Bool { left.matches == right.matches && left.trace == right.trace } }
+extension GraphQueryResult: Equatable { public static func == (left: GraphQueryResult, right: GraphQueryResult) -> Bool { left.matches == right.matches && left.trace == right.trace && left.projection == right.projection } }
 public struct GraphSearchHit: Equatable, Sendable { public let chunkID: UInt64; public let recordID, text: String; public let score, vectorScore: Float; public let filterMatched: Bool }
 public struct GraphKeywordHit: Equatable, Sendable { public let chunkID: UInt64; public let recordID, text: String; public let score: Float; public let matchedTerms: [String] }
 public struct GraphHybridTrace: Equatable, Sendable { public let vectorRank, keywordRank: Int?; public let normalizedVectorScore, normalizedKeywordScore: Float?; public let matchedTerms: [String]; public let filterMatched: Bool }
@@ -417,6 +419,7 @@ private final class NativeGraphIndexOwner: @unchecked Sendable {
 public actor GraphIndexBuilder {
     private var handle: UInt?; private var closed = false
     public init(dimension: Int, corpusID: String, metric: GraphMetric = .cosine, encoding: GraphVectorEncoding = .f32) throws {
+        try requireNonnegative(dimension, name: "embedding dimension")
         handle = UInt(bitPattern: try Native.pointer { status in corpusID.withCString { vectorkit_graph_builder_new(dimension, metric.ffi, encoding.ffi, $0, status) } })
     }
     deinit { if let handle { vectorkit_graph_builder_free(OpaquePointer(bitPattern: handle)) } }
@@ -478,6 +481,7 @@ public actor GraphIndex {
     }
 
     private nonisolated static func performNodeQuery(handle: UInt, seeds: [GraphNodeID], steps: [GraphTraversal], limits: GraphQueryLimits, cancellation: GraphCancellationToken?) throws -> GraphQueryResult {
+        try validateQuerySizes(steps: steps, limits: limits)
         let arena = GraphCStringArena()
         let nativeSeeds = seeds.map { seed in VkGraphNodeRef(node_type: arena.copy(seed.nodeType), source_type: seed.chunkKey == nil ? 0 : 1, record_id: arena.copy(seed.recordID), chunk_key: seed.chunkKey.map(arena.copy)) }
         let nativeSteps = steps.map { step in VkGraphStep(relationship: arena.copy(step.relationship), direction: step.direction == .outgoing ? 0 : 1, min_hops: step.minHops, max_hops: step.maxHops) }
@@ -491,6 +495,7 @@ public actor GraphIndex {
     }
 
     private nonisolated static func performEqualityQuery(handle: UInt, nodeType: String, field: GraphFieldPath, values: [GraphScalar], steps: [GraphTraversal], limits: GraphQueryLimits, cancellation: GraphCancellationToken?) throws -> GraphQueryResult {
+        try validateQuerySizes(steps: steps, limits: limits)
         let arena = GraphCStringArena()
         let nativeFields = field.segments.map(arena.copy)
         let nativeValues = values.map { value in
@@ -532,6 +537,7 @@ public actor GraphIndex {
             defer { vectorkit_status_clear(&status); vectorkit_graph_result_free(result) }
             throw Native.error(status, fallback: "graph projection failed")
         }
+        let projection = GraphProjectionTrace(sourceNodes: vectorkit_graph_scope_source_nodes(scope), resolvedChunks: vectorkit_graph_scope_resolved_chunks(scope))
         let execution = NativeGraphExecution(result: result, scope: scope)
         var matches: [GraphMatch] = []
         for index in 0..<vectorkit_graph_result_count(result) {
@@ -551,10 +557,11 @@ public actor GraphIndex {
             matches.append(GraphMatch(nodeID: nodeID, depth: depth, path: path))
         }
         let trace = vectorkit_graph_result_trace(result)
-        return GraphQueryResult(matches: matches, trace: GraphQueryTrace(seedCount: trace.seed_count, visitedStates: trace.visited_states, traversedEdges: trace.traversed_edges, resultCount: trace.result_count, diagnostics: trace.diagnostics, truncationReason: trace.truncation_reason), native: execution)
+        return GraphQueryResult(matches: matches, trace: GraphQueryTrace(seedCount: trace.seed_count, visitedStates: trace.visited_states, traversedEdges: trace.traversed_edges, resultCount: trace.result_count, diagnostics: trace.diagnostics, truncationReason: GraphTruncationReason(rawValue: trace.truncation_reason)), projection: projection, native: execution)
     }
 
     private nonisolated static func performSearch(handle: UInt, embedding: [Float], topK: Int, result: GraphQueryResult, filter: GraphFilter?) throws -> [GraphSearchHit] {
+        try requireNonnegative(topK, name: "topK")
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         let nativeFilter = try filter?.makeFFI()
         var output = VkSearchResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
@@ -565,6 +572,7 @@ public actor GraphIndex {
     }
 
     private nonisolated static func performKeywordSearch(handle: UInt, text: String, topK: Int, result: GraphQueryResult, filter: GraphFilter?) throws -> [GraphKeywordHit] {
+        try requireNonnegative(topK, name: "topK")
         let nativeFilter = try filter?.makeFFI()
         var output = VkKeywordResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
         let arena = GraphCStringArena()
@@ -575,6 +583,7 @@ public actor GraphIndex {
     }
 
     private nonisolated static func performHybridSearch(handle: UInt, text: String, embedding: [Float], topK: Int, result: GraphQueryResult, filter: GraphFilter?, options: GraphHybridOptions) throws -> [GraphHybridHit] {
+        try requireNonnegative(topK, name: "topK"); try requireNonnegative(options.vectorTopK, name: "vectorTopK"); try requireNonnegative(options.keywordTopK, name: "keywordTopK")
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         let nativeFilter = try filter?.makeFFI()
         let arena = GraphCStringArena(); var output = VkHybridResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
@@ -587,6 +596,16 @@ public actor GraphIndex {
 
 private func nativeLimits(_ limits: GraphQueryLimits) -> VkGraphLimits {
     VkGraphLimits(max_hops: limits.maxHops, max_visited: limits.maxVisited, max_results: limits.maxResults, max_working_bytes: limits.maxWorkingBytes)
+}
+
+private func requireNonnegative(_ value: Int, name: String) throws {
+    guard value >= 0 else { throw VectorKitGraphError.invalidIdentity("\(name) must not be negative") }
+}
+
+private func validateQuerySizes(steps: [GraphTraversal], limits: GraphQueryLimits) throws {
+    try requireNonnegative(limits.maxHops, name: "maxHops"); try requireNonnegative(limits.maxVisited, name: "maxVisited")
+    try requireNonnegative(limits.maxResults, name: "maxResults"); try requireNonnegative(limits.maxWorkingBytes, name: "maxWorkingBytes")
+    for step in steps { try requireNonnegative(step.minHops, name: "minHops"); try requireNonnegative(step.maxHops, name: "maxHops") }
 }
 
 private func graphNodeID(nodeType: UnsafeMutablePointer<CChar>?, recordID: UnsafeMutablePointer<CChar>?, chunkKey: UnsafeMutablePointer<CChar>?) -> GraphNodeID {

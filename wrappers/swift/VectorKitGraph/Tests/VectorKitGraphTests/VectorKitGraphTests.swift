@@ -12,6 +12,8 @@ final class VectorKitGraphTests: XCTestCase {
         let result = try await graph.query(nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha")])
         XCTAssertEqual(result.matches, [GraphMatch(nodeID: GraphNodeID(nodeType: "Item", recordID: "alpha"), depth: 0)])
         XCTAssertEqual(result.trace.resultCount, 1)
+        XCTAssertNil(result.trace.truncationReason)
+        XCTAssertEqual(result.projection, GraphProjectionTrace(sourceNodes: 1, resolvedChunks: 1))
         let integerResult = try await graph.query(nodeType: "Item", field: GraphFieldPath("priority"), equals: [.integer(7)])
         let booleanResult = try await graph.query(nodeType: "Item", field: GraphFieldPath("active"), equals: [.boolean(true)])
         XCTAssertEqual(integerResult.matches.map(\.nodeID), [GraphNodeID(nodeType: "Item", recordID: "alpha")])
@@ -24,6 +26,9 @@ final class VectorKitGraphTests: XCTestCase {
         XCTAssertEqual(hybrid.map(\.recordID), ["alpha"])
 
         let both = try await graph.query(nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha"), .string("Beta")])
+        XCTAssertEqual(both.projection, GraphProjectionTrace(sourceNodes: 2, resolvedChunks: 2))
+        let truncated = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "alpha"), GraphNodeID(nodeType: "Item", recordID: "beta")], limits: GraphQueryLimits(maxResults: 1))
+        XCTAssertEqual(truncated.trace.truncationReason, .maxResults)
         let betaFilter = GraphFilter.all([.equals("tenant", .string("b")), .range("rank", lower: .integer(2), upper: .integer(2))])
         let filteredExact = try await graph.search([1, 0], topK: 10, in: both, filter: betaFilter)
         let filteredKeyword = try await graph.keywordSearch("searchable", topK: 10, in: both, filter: betaFilter)
@@ -85,6 +90,8 @@ final class VectorKitGraphTests: XCTestCase {
     }
 
     func testTypedBuildAndPersistenceErrors() async throws {
+        do { _ = try GraphIndexBuilder(dimension: -1, corpusID: "negative"); XCTFail("expected negative dimension rejection") }
+        catch let error as VectorKitGraphError { guard case .invalidIdentity = error else { return XCTFail("expected invalid identity, got \(error)") } }
         let invalidSchemaBuilder = try GraphIndexBuilder(dimension: 2, corpusID: "invalid-schema")
         do { _ = try await invalidSchemaBuilder.build(schema: GraphSchema(recordNodes: [])); XCTFail("expected invalid schema") }
         catch let error as VectorKitGraphError { guard case .invalidSchema = error else { return XCTFail("expected typed invalid schema, got \(error)") } }
@@ -112,6 +119,12 @@ final class VectorKitGraphTests: XCTestCase {
         try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "item", recordType: "Item"), chunks: [GraphChunk(key: "body", text: "lifecycle item", embedding: [1, 0])]))
         let graph = try await builder.build(schema: GraphSchema(recordNodes: [GraphRecordNodeSchema(recordType: "Item", nodeType: "Item")]))
         let result = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")])
+        do { _ = try await graph.search([1, 0], topK: -1, in: result); XCTFail("expected negative topK rejection") }
+        catch let error as VectorKitGraphError { guard case .invalidIdentity = error else { return XCTFail("expected invalid identity, got \(error)") } }
+        do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")], traversing: [GraphTraversal(relationship: "owns", minHops: -1)]); XCTFail("expected negative hop rejection") }
+        catch let error as VectorKitGraphError { guard case .invalidIdentity = error else { return XCTFail("expected invalid identity, got \(error)") } }
+        do { _ = try await graph.hybridSearch(text: "item", embedding: [1, 0], topK: 1, in: result, options: GraphHybridOptions(vectorTopK: -1)); XCTFail("expected negative candidate rejection") }
+        catch let error as VectorKitGraphError { guard case .invalidIdentity = error else { return XCTFail("expected invalid identity, got \(error)") } }
         result.close(); result.close()
         do { _ = try await graph.search([1, 0], topK: 1, in: result); XCTFail("expected closed result") }
         catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }

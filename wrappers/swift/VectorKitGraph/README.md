@@ -28,6 +28,11 @@ read leases and runs native work in detached tasks, so independent reads can
 execute concurrently instead of blocking the Swift actor. Composite saves and
 explicit index closure use writer-preferring exclusive leases; once either is
 waiting, later reads cannot starve it.
+Query results expose typed truncation reasons plus projection diagnostics for
+source-node and resolved-chunk counts. Swift rejects negative dimensions,
+hop/limit values, top-k values, and hybrid candidate counts before converting
+them to unsigned C sizes; Rust remains authoritative for all semantic schema,
+query, filter, and ranking validation.
 Each `GraphQueryResult` retains its native generation-bound candidate scope and
 can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
 chunk IDs or changing the graph-free ranking implementations. All three scoped

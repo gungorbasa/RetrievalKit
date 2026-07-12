@@ -35,7 +35,7 @@ const VK_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
 const VK_GRAPH_STATUS_INTERNAL: i32 = 110;
 const VK_GRAPH_STATUS_INVALID_DIMENSION: i32 = 111;
 const VK_GRAPH_STATUS_MISSING_EMBEDDING: i32 = 112;
-const VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE: i32 = 113;
+const VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 113;
 
 pub struct VkGraphBuilder {
     core: ExactVectorIndex,
@@ -196,7 +196,7 @@ struct GraphOnlyRecordChunk {
 
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    4
+    5
 }
 
 #[no_mangle]
@@ -274,7 +274,7 @@ pub unsafe extern "C" fn vectorkit_graph_database_builder_free(
 
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_new(
-    retrieval_mode: u32,
+    enable_hybrid: bool,
     dimension: usize,
     metric: u32,
     encoding: u32,
@@ -285,14 +285,10 @@ pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_new(
     ffi_ptr(status, || {
         let vector = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding_code(encoding)?);
-        let configuration = match retrieval_mode {
-            0 => RetrievalConfiguration::semantic(vector),
-            1 => RetrievalConfiguration::hybrid(vector),
-            _ => {
-                return Err(FfiError::invalid_argument(
-                    "retrieval_mode must be 0 (semantic) or 1 (hybrid)",
-                ))
-            }
+        let configuration = if enable_hybrid {
+            RetrievalConfiguration::semantic(vector).with_hybrid()
+        } else {
+            RetrievalConfiguration::semantic(vector)
         };
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
@@ -1229,8 +1225,8 @@ fn capability_core_error(error: vectorkit_core::VectorKitError) -> FfiError {
         vectorkit_core::VectorKitError::InvalidDimension { .. } => {
             VK_GRAPH_STATUS_INVALID_DIMENSION
         }
-        vectorkit_core::VectorKitError::RetrievalModeUnavailable { .. } => {
-            VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+        vectorkit_core::VectorKitError::RetrievalCapabilityUnavailable { .. } => {
+            VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
         }
         _ => super::VK_STATUS_CORE_ERROR,
     };
@@ -1383,9 +1379,9 @@ impl From<vectorkit_graph::GraphError> for FfiError {
                 VK_GRAPH_STATUS_INVALID_DIMENSION
             }
             vectorkit_graph::GraphError::Core { message }
-                if message.contains("retrieval mode 'hybrid' is unavailable") =>
+                if message.contains("hybrid retrieval is unavailable") =>
             {
-                VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+                VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
             }
             vectorkit_graph::GraphError::Core { .. } => VK_GRAPH_STATUS_INTERNAL,
         };
@@ -1543,7 +1539,7 @@ mod tests {
 
         let retrieval_builder = unsafe {
             vectorkit_graph_retrieval_builder_new(
-                0,
+                false,
                 2,
                 1,
                 0,
@@ -1617,7 +1613,10 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE);
+        assert_eq!(
+            status.code,
+            VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
+        );
         unsafe {
             vectorkit_graph_retrieval_database_free(database);
             super::super::vectorkit_status_clear(&mut status);

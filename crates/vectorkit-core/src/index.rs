@@ -182,10 +182,9 @@ impl ExactVectorIndex {
         corpus_id: CorpusId,
     ) -> Result<Self> {
         Self::try_with_retrieval_configuration_in_corpus(
-            RetrievalConfiguration::Hybrid {
-                vector: config,
-                bm25: bm25_config,
-            },
+            RetrievalConfiguration::semantic(config).with_hybrid_configuration(
+                crate::retrieval_index::HybridRetrievalConfiguration { bm25: bm25_config },
+            ),
             corpus_id,
         )
     }
@@ -607,12 +606,11 @@ impl ExactVectorIndex {
         };
         let configuration = match manifest.retrieval_mode {
             crate::retrieval_index::RetrievalMode::Semantic => {
-                RetrievalConfiguration::Semantic { vector }
+                RetrievalConfiguration::semantic(vector)
             }
-            crate::retrieval_index::RetrievalMode::Hybrid => RetrievalConfiguration::Hybrid {
-                vector,
-                bm25: Bm25Config::default(),
-            },
+            crate::retrieval_index::RetrievalMode::Hybrid => {
+                RetrievalConfiguration::semantic(vector).with_hybrid()
+            }
         };
         let mut index = Self::try_with_retrieval_configuration_in_corpus(
             configuration,

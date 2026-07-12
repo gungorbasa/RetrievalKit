@@ -45,6 +45,13 @@ implemented, or superseded by the product spec.
   -0.57%, internal BM25 -0.05%, and hybrid +0.41%, passing the +3% gate. See
   `docs/product/reports/capability-separated-qualification-report.md`.
 
+- Retrieval configuration now models semantic vector search as the required
+  base and `.hybrid` as an explicit optional extra. Omitting extras persists no
+  BM25 state; enabling `.hybrid` keeps semantic queries available and adds
+  hybrid queries on the same database. The graph aggregate ABI is version 5.
+  Three interleaved before/after benchmark pairs measured exact -1.21%, BM25
+  -2.61%, and hybrid +0.35%, passing the +3% p95 gate.
+
 - M0 product authorization and the customer fixture contract/template are in
   place. The template deliberately contains no invented customer data.
 - M1 implements canonical `RecordStore` values/identities, persisted corpus and

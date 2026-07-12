@@ -180,14 +180,15 @@ mod tests {
         );
         assert!(matches!(
             database.hybrid_search(&HybridQuery::new("native", vec![1.0, 0.0], 1)),
-            Err(VectorKitError::RetrievalModeUnavailable { .. })
+            Err(VectorKitError::RetrievalCapabilityUnavailable { .. })
         ));
     }
 
     #[test]
     fn hybrid_database_supports_semantic_and_hybrid_queries() {
         let mut database = RetrievalDatabase::new(
-            RetrievalConfiguration::hybrid(IndexConfig::new(2, VectorMetric::DotProduct)),
+            RetrievalConfiguration::semantic(IndexConfig::new(2, VectorMetric::DotProduct))
+                .with_hybrid(),
             CorpusId::new("hybrid").unwrap(),
         )
         .unwrap();

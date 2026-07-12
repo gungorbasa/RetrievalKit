@@ -271,7 +271,7 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
   /// A retrieval-capable upsert omitted an embedding.
   case missingEmbedding(String)
   /// The requested query requires hybrid retrieval.
-  case retrievalModeUnavailable(String)
+  case retrievalCapabilityUnavailable(String)
   /// Unknown FFI status code.
   case unknown(code: Int32, message: String)
 
@@ -281,7 +281,7 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     case .invalidArgument(let message), .core(let message), .panic(let message),
       .corruptIndex(let message), .invalidDimension(let message),
       .invalidIdentity(let message), .missingEmbedding(let message),
-      .retrievalModeUnavailable(let message):
+      .retrievalCapabilityUnavailable(let message):
       message
     case .unknown(let code, let message):
       "VectorKit error \(code): \(message)"
@@ -296,7 +296,7 @@ public enum VectorKitError: Error, Equatable, CustomStringConvertible, Sendable 
     case 3: return .panic(message)
     case 4: return .corruptIndex(message)
     case 5: return .invalidDimension(message)
-    case 6: return .retrievalModeUnavailable(message)
+    case 6: return .retrievalCapabilityUnavailable(message)
     case 7: return .invalidIdentity(message)
     case 8: return .missingEmbedding(message)
     default: return .unknown(code: status.code, message: message)
@@ -821,26 +821,23 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
   }
 }
 
-public enum RetrievalConfiguration: Equatable, Sendable {
-  case semantic(vector: VectorIndexConfiguration)
-  case hybrid(vector: VectorIndexConfiguration, ranking: HybridOptions = .default)
-  fileprivate var mode: UInt32 {
-    switch self {
-    case .semantic: 0
-    case .hybrid: 1
-    }
+public enum RetrievalExtra: Hashable, Sendable {
+  case hybrid
+}
+
+public struct RetrievalConfiguration: Equatable, Sendable {
+  public var semantic: VectorIndexConfiguration
+  public var extras: Set<RetrievalExtra>
+
+  public init(
+    semantic: VectorIndexConfiguration,
+    extras: Set<RetrievalExtra> = []
+  ) {
+    self.semantic = semantic
+    self.extras = extras
   }
-  fileprivate var vector: VectorIndexConfiguration {
-    switch self {
-    case .semantic(let value), .hybrid(let value, _): value
-    }
-  }
-  fileprivate var ranking: HybridOptions {
-    switch self {
-    case .semantic: .default
-    case .hybrid(_, let value): value
-    }
-  }
+
+  fileprivate var enablesHybrid: Bool { extras.contains(.hybrid) }
 }
 
 private struct NativeRetrievalChunk: Encodable {
@@ -933,11 +930,12 @@ public actor RetrievalDatabase {
   public actor Builder {
     private var handle: UInt?
     public init(corpusID: CorpusID, retrieval: RetrievalConfiguration) throws {
-      let vector = retrieval.vector
+      let vector = retrieval.semantic
       let pointer = try FFI.withStatusPointer { status in
         corpusID.rawValue.withCString { corpus in
           vectorkit_retrieval_builder_new(
-            retrieval.mode, vector.dimension, vector.metric.ffiValue, vector.encoding.ffiValue,
+            retrieval.enablesHybrid, vector.dimension, vector.metric.ffiValue,
+            vector.encoding.ffiValue,
             corpus, status)
         }
       }

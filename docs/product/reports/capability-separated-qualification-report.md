@@ -85,3 +85,21 @@ All seven implementation gates passed. The capability-separated Rust, FFI, and
 Swift architecture is qualified for continued development. Customer-specific
 fixtures remain deferred evidence and are not required by the generic schema
 or package implementation.
+
+## Semantic Base Follow-up
+
+The public retrieval configuration was subsequently simplified to require
+semantic vectors and accept `.hybrid` through a bounded `extras` set. The Rust
+configuration and FFI now express the same semantic-base/optional-hybrid model;
+the graph aggregate ABI is version 5.
+
+The graph-free harness was compiled from baseline commit `3508f11` and the
+follow-up worktree, then run in three AB/BA interleaved pairs with the same
+fixture and sampling protocol described above. Median p95 remained inside the
+gate:
+
+| Mode | Baseline | Semantic-base configuration | Delta | +3% gate |
+| --- | ---: | ---: | ---: | ---: |
+| Exact | 907 us | 896 us | -1.21% | pass |
+| Internal BM25 | 2,223 us | 2,165 us | -2.61% | pass |
+| Hybrid | 3,146 us | 3,157 us | +0.35% | pass |

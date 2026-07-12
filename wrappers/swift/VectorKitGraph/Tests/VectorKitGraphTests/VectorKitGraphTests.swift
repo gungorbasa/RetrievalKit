@@ -505,7 +505,10 @@ final class VectorKitGraphTests: XCTestCase {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "knowledge",
       graph: capabilitySchema(),
-      retrieval: .hybrid(vector: .init(dimension: 2, encoding: .f32))
+      retrieval: .init(
+        semantic: .init(dimension: 2, encoding: .f32),
+        extras: [.hybrid]
+      )
     )
     try await builder.upsert(
       capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),
@@ -555,7 +558,7 @@ final class VectorKitGraphTests: XCTestCase {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "semantic-graph",
       graph: capabilitySchema(),
-      retrieval: .semantic(vector: .init(dimension: 2, encoding: .f32))
+      retrieval: .init(semantic: .init(dimension: 2, encoding: .f32))
     )
     try await builder.upsert(
       capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),
@@ -569,7 +572,7 @@ final class VectorKitGraphTests: XCTestCase {
         embedding: [1, 0]
       )
       XCTFail("semantic mode must reject hybrid queries")
-    } catch VectorKitGraphError.retrievalModeUnavailable(let message) {
+    } catch VectorKitGraphError.retrievalCapabilityUnavailable(let message) {
       XCTAssertTrue(message.contains("hybrid"))
     }
   }
@@ -592,7 +595,10 @@ final class VectorKitGraphTests: XCTestCase {
     let combinedBuilder = try GraphRetrievalDatabase.Builder(
       corpusID: "target-corpus",
       graph: capabilitySchema(),
-      retrieval: .hybrid(vector: .init(dimension: 2, encoding: .f32))
+      retrieval: .init(
+        semantic: .init(dimension: 2, encoding: .f32),
+        extras: [.hybrid]
+      )
     )
     try await combinedBuilder.upsert(
       capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),

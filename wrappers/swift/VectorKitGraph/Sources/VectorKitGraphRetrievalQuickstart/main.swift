@@ -13,8 +13,9 @@ struct VectorKitGraphRetrievalQuickstart {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "knowledge",
       graph: schema,
-      retrieval: .hybrid(
-        vector: .init(dimension: 2, encoding: .f32)
+      retrieval: .init(
+        semantic: .init(dimension: 2, encoding: .f32),
+        extras: [.hybrid]
       )
     )
     try await builder.upsert(

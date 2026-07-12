@@ -109,11 +109,12 @@ GraphDatabase          = CorpusIndex + GraphEngine
 GraphRetrievalDatabase = CorpusIndex + GraphEngine + RetrievalIndex
 ```
 
-Retrieval configuration is either semantic or hybrid. Semantic mode builds
-exact-vector state only. Hybrid mode builds exact-vector and BM25 state and
-supports both semantic and hybrid queries. BM25 remains directly benchmarked
-and tested in Rust, but keyword-only search is not a standalone high-level
-Swift product mode. Graph-only builders accept neither vector configuration nor
+Retrieval configuration always starts with semantic exact-vector search.
+Callers may add the bounded `.hybrid` extra, which builds BM25 state and enables
+hybrid queries while preserving semantic queries on the same database. Omitting
+the extra persists vectors without BM25. BM25 remains directly benchmarked and
+tested in Rust, but keyword-only search is not a standalone high-level Swift
+product mode. Graph-only builders accept neither vector configuration nor
 embeddings. Combined graph selections become opaque generation-bound candidate
 scopes consumed by the retrieval capability.
 

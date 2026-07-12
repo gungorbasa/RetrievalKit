@@ -5,8 +5,9 @@ struct VectorKitRetrievalQuickstart {
   static func main() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "knowledge",
-      retrieval: .hybrid(
-        vector: .init(dimension: 2, encoding: .f32)
+      retrieval: .init(
+        semantic: .init(dimension: 2, encoding: .f32),
+        extras: [.hybrid]
       )
     )
     try await builder.upsert(

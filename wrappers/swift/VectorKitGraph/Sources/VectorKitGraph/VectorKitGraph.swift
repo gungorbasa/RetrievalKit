@@ -399,7 +399,7 @@ public enum VectorKitGraphError: Error, Equatable, Sendable {
   case lockUnavailable(String)
   case invalidDimension(String)
   case missingEmbedding(String)
-  case retrievalModeUnavailable(String)
+  case retrievalCapabilityUnavailable(String)
   case internalError(String)
   case consumedBuilder
 }
@@ -411,7 +411,7 @@ extension VectorKitGraphError: LocalizedError {
       .incompatibleVersion(let message), .graphUnavailable(let message),
       .corruptSnapshot(let message), .queryLimitExceeded(let message), .cancelled(let message),
       .timedOut(let message), .lockUnavailable(let message), .invalidDimension(let message),
-      .missingEmbedding(let message), .retrievalModeUnavailable(let message),
+      .missingEmbedding(let message), .retrievalCapabilityUnavailable(let message),
       .internalError(let message):
       message
     case .consumedBuilder: "graph builder has already been consumed by build(schema:)"
@@ -673,7 +673,8 @@ private enum Native {
     case VK_GRAPH_STATUS_LOCK_UNAVAILABLE: return .lockUnavailable(message)
     case VK_GRAPH_STATUS_INVALID_DIMENSION: return .invalidDimension(message)
     case VK_GRAPH_STATUS_MISSING_EMBEDDING: return .missingEmbedding(message)
-    case VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE: return .retrievalModeUnavailable(message)
+    case VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE:
+      return .retrievalCapabilityUnavailable(message)
     case VK_GRAPH_STATUS_INTERNAL, VK_STATUS_CORE_ERROR: return .internalError(message)
     default: return .internalError(message)
     }
@@ -1348,20 +1349,23 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
     self.encoding = encoding
   }
 }
-public enum RetrievalConfiguration: Equatable, Sendable {
-  case semantic(vector: VectorIndexConfiguration)
-  case hybrid(vector: VectorIndexConfiguration, ranking: GraphHybridOptions = .default)
-  fileprivate var mode: UInt32 {
-    switch self {
-    case .semantic: 0
-    case .hybrid: 1
-    }
+public enum RetrievalExtra: Hashable, Sendable {
+  case hybrid
+}
+
+public struct RetrievalConfiguration: Equatable, Sendable {
+  public var semantic: VectorIndexConfiguration
+  public var extras: Set<RetrievalExtra>
+
+  public init(
+    semantic: VectorIndexConfiguration,
+    extras: Set<RetrievalExtra> = []
+  ) {
+    self.semantic = semantic
+    self.extras = extras
   }
-  fileprivate var vector: VectorIndexConfiguration {
-    switch self {
-    case .semantic(let value), .hybrid(let value, _): value
-    }
-  }
+
+  fileprivate var enablesHybrid: Bool { extras.contains(.hybrid) }
 }
 
 private struct CapabilityGraphBatch: Encodable {
@@ -1776,13 +1780,14 @@ public actor GraphRetrievalDatabase {
       throws
     {
       let json = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
-      let vector = retrieval.vector
+      let vector = retrieval.semantic
       handle = UInt(
         bitPattern: try Native.pointer { status in
           corpusID.rawValue.withCString { corpus in
             json.withCString {
               vectorkit_graph_retrieval_builder_new(
-                retrieval.mode, vector.dimension, vector.metric.ffi, vector.encoding.ffi, corpus,
+                retrieval.enablesHybrid, vector.dimension, vector.metric.ffi, vector.encoding.ffi,
+                corpus,
                 $0, status)
             }
           }

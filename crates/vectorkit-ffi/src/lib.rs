@@ -29,7 +29,7 @@ const VK_STATUS_CORE_ERROR: i32 = 2;
 const VK_STATUS_PANIC: i32 = 3;
 const VK_STATUS_CORRUPT_INDEX: i32 = 4;
 const VK_STATUS_INVALID_DIMENSION: i32 = 5;
-const VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE: i32 = 6;
+const VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 6;
 const VK_STATUS_INVALID_IDENTITY: i32 = 7;
 const VK_STATUS_MISSING_EMBEDDING: i32 = 8;
 
@@ -263,7 +263,7 @@ pub unsafe extern "C" fn vectorkit_status_clear(status: *mut VkStatus) {
 /// String and status pointers must be valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_retrieval_builder_new(
-    retrieval_mode: u32,
+    enable_hybrid: bool,
     dimension: usize,
     metric: u32,
     encoding: u32,
@@ -273,14 +273,10 @@ pub unsafe extern "C" fn vectorkit_retrieval_builder_new(
     ffi_ptr(status, || {
         let vector = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding_code(encoding)?);
-        let configuration = match retrieval_mode {
-            0 => RetrievalConfiguration::semantic(vector),
-            1 => RetrievalConfiguration::hybrid(vector),
-            _ => {
-                return Err(FfiError::invalid_argument(
-                    "retrieval_mode must be 0 (semantic) or 1 (hybrid)",
-                ))
-            }
+        let configuration = if enable_hybrid {
+            RetrievalConfiguration::semantic(vector).with_hybrid()
+        } else {
+            RetrievalConfiguration::semantic(vector)
         };
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let database = RetrievalDatabase::new(configuration, corpus_id)?;
@@ -1181,8 +1177,8 @@ impl FfiError {
         let code = match &error {
             vectorkit_core::VectorKitError::CorruptIndex { .. } => VK_STATUS_CORRUPT_INDEX,
             vectorkit_core::VectorKitError::InvalidDimension { .. } => VK_STATUS_INVALID_DIMENSION,
-            vectorkit_core::VectorKitError::RetrievalModeUnavailable { .. } => {
-                VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+            vectorkit_core::VectorKitError::RetrievalCapabilityUnavailable { .. } => {
+                VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
             }
             vectorkit_core::VectorKitError::InvalidIdentity { .. }
             | vectorkit_core::VectorKitError::InvalidRecordValue { .. } => {

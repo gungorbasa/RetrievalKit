@@ -52,8 +52,9 @@ import VectorKit
 
 let builder = try RetrievalDatabase.Builder(
     corpusID: "knowledge",
-    retrieval: .hybrid(
-        vector: .init(dimension: 384)
+    retrieval: .init(
+        semantic: .init(dimension: 384),
+        extras: [.hybrid]
     )
 )
 try await builder.upsert(input, embeddings: ["summary": embedding])
@@ -70,10 +71,10 @@ let hybrid = try await database.retrieval.hybridSearch(
 )
 ```
 
-Choose `.semantic` to persist vectors only. Choose `.hybrid` to add the internal
-BM25 component and enable `hybridSearch`. There is no high-level keyword-only
-database mode. The `retrieval` actor handle is available only on retrieval
-products.
+Omit `extras` to persist semantic vectors only. Add `.hybrid` to build the
+internal BM25 component and enable `hybridSearch` alongside `semanticSearch`.
+There is no high-level keyword-only database mode. The `retrieval` actor handle
+is available only on retrieval products.
 
 Run the focused example with:
 

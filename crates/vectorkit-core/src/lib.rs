@@ -24,7 +24,9 @@ pub use record_store::{
     RecordType, RecordValue,
 };
 pub use retrieval_database::RetrievalDatabase;
-pub use retrieval_index::{RetrievalConfiguration, RetrievalIndex, RetrievalMode};
+pub use retrieval_index::{
+    HybridRetrievalConfiguration, RetrievalConfiguration, RetrievalIndex, RetrievalMode,
+};
 #[doc(hidden)]
 pub use scoring::dot_product_i8 as diagnostic_dot_product_i8;
 pub use types::{

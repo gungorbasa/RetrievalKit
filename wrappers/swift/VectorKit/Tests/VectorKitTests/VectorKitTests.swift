@@ -398,7 +398,7 @@ final class VectorKitTests: XCTestCase {
   func testSemanticRetrievalDatabaseRejectsHybridAndPersistsNoBM25() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "semantic-only",
-      retrieval: .semantic(vector: .init(dimension: 2, encoding: .f32))
+      retrieval: .init(semantic: .init(dimension: 2, encoding: .f32))
     )
     try await builder.upsert(
       RecordInput(
@@ -417,7 +417,7 @@ final class VectorKitTests: XCTestCase {
         embedding: [1, 0]
       )
       XCTFail("semantic mode must not expose BM25-backed search at runtime")
-    } catch VectorKitError.retrievalModeUnavailable(let message) {
+    } catch VectorKitError.retrievalCapabilityUnavailable(let message) {
       XCTAssertTrue(message.contains("hybrid"))
     }
 
@@ -436,7 +436,10 @@ final class VectorKitTests: XCTestCase {
   func testHybridRetrievalDatabaseRequiresEveryEmbedding() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "hybrid",
-      retrieval: .hybrid(vector: .init(dimension: 2, encoding: .f32))
+      retrieval: .init(
+        semantic: .init(dimension: 2, encoding: .f32),
+        extras: [.hybrid]
+      )
     )
     let input = RecordInput(
       record: Record(id: "rust", type: "Topic"),

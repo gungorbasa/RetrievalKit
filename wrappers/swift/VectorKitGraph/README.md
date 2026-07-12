@@ -33,8 +33,9 @@ selection can scope retrieval without copying records or exposing internal IDs:
 let builder = try GraphRetrievalDatabase.Builder(
     corpusID: "knowledge",
     graph: graphSchema,
-    retrieval: .hybrid(
-        vector: .init(dimension: 384)
+    retrieval: .init(
+        semantic: .init(dimension: 384),
+        extras: [.hybrid]
     )
 )
 try await builder.upsert(input, embeddings: ["summary": embedding])

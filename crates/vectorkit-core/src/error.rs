@@ -32,9 +32,8 @@ pub enum VectorKitError {
     UnsupportedVectorEncoding {
         encoding: String,
     },
-    RetrievalModeUnavailable {
-        required: &'static str,
-        actual: &'static str,
+    RetrievalCapabilityUnavailable {
+        capability: &'static str,
     },
     Persistence {
         operation: String,
@@ -85,9 +84,9 @@ impl Display for VectorKitError {
             Self::UnsupportedVectorEncoding { encoding } => {
                 write!(f, "unsupported vector encoding '{encoding}'")
             }
-            Self::RetrievalModeUnavailable { required, actual } => write!(
+            Self::RetrievalCapabilityUnavailable { capability } => write!(
                 f,
-                "retrieval mode '{required}' is unavailable because this database was built as '{actual}'; rebuild it with hybrid retrieval enabled"
+                "{capability} retrieval is unavailable because this database was built without the {capability} extra; rebuild it with `.hybrid` in retrieval extras"
             ),
             Self::Persistence {
                 operation,

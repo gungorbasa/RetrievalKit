@@ -15,7 +15,7 @@ CorpusIndex
 
 RetrievalIndex
   exact vectors
-  BM25 only in hybrid mode
+  BM25 only with the hybrid extra
   filtering and existing scoring loops
 
 GraphEngine
@@ -39,12 +39,13 @@ and validated against that corpus.
 
 - `GraphDatabase` accepts a graph schema and capability-neutral records. It
   never accepts dimensions, vector metrics, encodings, or embeddings.
-- `RetrievalDatabase` accepts `.semantic` or `.hybrid` retrieval configuration
-  and embeddings keyed by stable chunk key.
-- `GraphRetrievalDatabase` accepts both configurations and is the only owner
-  that composes a `GraphSelection` with semantic or hybrid retrieval.
-- BM25 is built only for hybrid mode. It remains directly tested and
-  benchmarkable in Rust, but has no standalone high-level Swift database mode.
+- `RetrievalDatabase` requires semantic vector configuration and embeddings
+  keyed by stable chunk key. Callers can add the `.hybrid` extra.
+- `GraphRetrievalDatabase` accepts the same semantic base and optional hybrid
+  extra and is the only owner that composes a `GraphSelection` with retrieval.
+- BM25 is built only when the hybrid extra is enabled. It remains directly
+  tested and benchmarkable in Rust, but has no standalone high-level Swift
+  database mode.
 - Capability selection occurs when the builder is created. It is not inferred
   from data or attached to a completed database.
 
@@ -110,10 +111,11 @@ candidate projection, and persistence remain Rust logic.
 ## Error Contract
 
 Public typed errors include invalid identity, duplicate chunk key, missing or
-unexpected embedding, invalid embedding dimension, unavailable retrieval mode,
-stale selection, consumed/closed handle, schema validation, and persistence
-corruption. Every mapped message names the problem, relevant identity or
-expected value, and correction. Dimension mismatch is never an internal error.
+unexpected embedding, invalid embedding dimension, unavailable retrieval
+capability, stale selection, consumed/closed handle, schema validation, and
+persistence corruption. Every mapped message names the problem, relevant
+identity or expected value, and correction. Dimension mismatch is never an
+internal error.
 
 ## Benchmark Protocol
 
@@ -128,7 +130,7 @@ Each candidate p95 must remain within 3% of the pre-refactor baseline.
 
 1. Contract and benchmark protocol.
 2. Canonical `CorpusIndex` extraction.
-3. `RetrievalIndex` and retrieval modes.
+3. `RetrievalIndex` with semantic base and optional hybrid state.
 4. `GraphEngine`, database owners, and capability persistence.
 5. Capability-specific FFI and errors.
 6. Swift products, examples, and tests.

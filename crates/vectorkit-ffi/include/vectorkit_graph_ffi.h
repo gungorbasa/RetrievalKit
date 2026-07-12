@@ -24,7 +24,7 @@ uint32_t vectorkit_graph_ffi_abi_version(void);
 #define VK_GRAPH_STATUS_INTERNAL 110
 #define VK_GRAPH_STATUS_INVALID_DIMENSION 111
 #define VK_GRAPH_STATUS_MISSING_EMBEDDING 112
-#define VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE 113
+#define VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE 113
 
 typedef struct VkGraphBuilder VkGraphBuilder;
 typedef struct VkGraphIndex VkGraphIndex;
@@ -51,9 +51,8 @@ VkGraphDatabase *vectorkit_graph_database_builder_build(
 );
 void vectorkit_graph_database_builder_free(VkGraphDatabaseBuilder *builder);
 
-// retrieval_mode: 0 semantic, 1 hybrid.
 VkGraphRetrievalBuilder *vectorkit_graph_retrieval_builder_new(
-    uint32_t retrieval_mode,
+    bool enable_hybrid,
     size_t dimension,
     uint32_t metric,
     uint32_t encoding,

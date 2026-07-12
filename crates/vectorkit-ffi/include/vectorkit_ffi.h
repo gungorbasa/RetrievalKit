@@ -157,7 +157,7 @@ typedef struct VkHybridOptions {
 } VkHybridOptions;
 
 #define VK_STATUS_INVALID_DIMENSION 5
-#define VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE 6
+#define VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE 6
 #define VK_STATUS_INVALID_IDENTITY 7
 #define VK_STATUS_MISSING_EMBEDDING 8
 
@@ -166,9 +166,8 @@ typedef struct VkRetrievalDatabase VkRetrievalDatabase;
 
 void vectorkit_status_clear(VkStatus *status);
 
-// retrieval_mode: 0 semantic, 1 hybrid.
 VkRetrievalBuilder *vectorkit_retrieval_builder_new(
-    uint32_t retrieval_mode,
+    bool enable_hybrid,
     size_t dimension,
     uint32_t metric,
     uint32_t encoding,

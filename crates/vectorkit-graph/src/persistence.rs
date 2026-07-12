@@ -230,10 +230,12 @@ fn read_manifest(directory: &Path) -> Result<Manifest> {
 
 fn validate_manifest(manifest: &Manifest) -> Result<()> {
     if manifest.format_version != FORMAT_VERSION {
-        return Err(invalid_snapshot(format!(
-            "unsupported graph database format version {}",
-            manifest.format_version
-        )));
+        return Err(GraphError::IncompatibleVersion {
+            message: format!(
+                "unsupported graph database format version {}",
+                manifest.format_version
+            ),
+        });
     }
     if !safe_snapshot_id(&manifest.snapshot_id) {
         return Err(invalid_snapshot(

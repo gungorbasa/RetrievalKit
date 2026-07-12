@@ -165,7 +165,7 @@ impl GraphIndex {
     pub fn project_candidates(&self, result: &GraphResult) -> Result<ProjectedScope> {
         if result.corpus_id != *self.core.corpus_id() || result.generation != self.core.generation()
         {
-            return Err(GraphError::Core {
+            return Err(GraphError::StaleGeneration {
                 message: format!(
                     "stale graph result belongs to corpus '{}' generation {}, active is '{}' generation {}",
                     result.corpus_id.as_str(),

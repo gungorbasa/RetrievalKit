@@ -12,6 +12,11 @@ bounded traversal steps, limits, result matches, traces, and an atomic
 `GraphCancellationToken`; query hot paths do not parse JSON. Every match
 materializes its canonical path, including relationship endpoints and schema,
 source-field, inverse-edge, and built-in-edge provenance.
+Rust graph failures cross the ABI as stable graph-specific status codes. Swift
+maps them to `VectorKitGraphError` cases for invalid schema/identity, stale
+generation, incompatible version, unavailable graph data, corrupt snapshots,
+query limits, cancellation, timeout, lock contention, and internal failures;
+Swift does not re-run graph validation to classify errors.
 Each `GraphQueryResult` retains its native generation-bound candidate scope and
 can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
 chunk IDs or changing the graph-free ranking implementations.

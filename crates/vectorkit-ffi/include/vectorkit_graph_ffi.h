@@ -11,6 +11,18 @@ extern "C" {
 // VectorKitGraphFFI, which also contains every base VectorKit FFI symbol.
 uint32_t vectorkit_graph_ffi_abi_version(void);
 
+#define VK_GRAPH_STATUS_INVALID_SCHEMA 100
+#define VK_GRAPH_STATUS_INVALID_IDENTITY 101
+#define VK_GRAPH_STATUS_STALE_GENERATION 102
+#define VK_GRAPH_STATUS_INCOMPATIBLE_VERSION 103
+#define VK_GRAPH_STATUS_GRAPH_UNAVAILABLE 104
+#define VK_GRAPH_STATUS_CORRUPT_SNAPSHOT 105
+#define VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED 106
+#define VK_GRAPH_STATUS_CANCELLED 107
+#define VK_GRAPH_STATUS_TIMED_OUT 108
+#define VK_GRAPH_STATUS_LOCK_UNAVAILABLE 109
+#define VK_GRAPH_STATUS_INTERNAL 110
+
 typedef struct VkGraphBuilder VkGraphBuilder;
 typedef struct VkGraphIndex VkGraphIndex;
 

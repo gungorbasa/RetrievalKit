@@ -394,13 +394,13 @@ fn validate_query(query: &GraphQuery) -> Result<()> {
         || query.limits.max_visited == 0
         || query.limits.max_working_bytes == 0
     {
-        return Err(GraphError::InvalidQuery {
+        return Err(GraphError::QueryLimitExceeded {
             message: "visited, result, and working-byte limits must be positive".to_owned(),
         });
     }
     for step in &query.steps {
         if step.min_hops > step.max_hops || step.max_hops > HARD_MAX_HOPS {
-            return Err(GraphError::InvalidQuery {
+            return Err(GraphError::QueryLimitExceeded {
                 message: format!(
                     "relationship '{}' has invalid hop bounds {}..{}",
                     step.relationship.as_str(),

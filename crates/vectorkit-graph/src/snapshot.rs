@@ -165,9 +165,9 @@ fn decode_graph(bytes: &[u8]) -> Result<DecodedGraph> {
     }
     let version = reader.read_u32("graph format version")?;
     if version != GRAPH_FORMAT_VERSION {
-        return Err(invalid_snapshot(format!(
-            "unsupported graph format version {version}"
-        )));
+        return Err(GraphError::IncompatibleVersion {
+            message: format!("unsupported graph format version {version}"),
+        });
     }
     let corpus_id = CorpusId::new(reader.read_string("corpus ID", 128)?)
         .map_err(|error| invalid_snapshot(error.to_string()))?;

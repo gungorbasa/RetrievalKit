@@ -20,6 +20,18 @@ use super::{
     VkSearchHit, VkSearchResultBuffer, VkStatus,
 };
 
+const VK_GRAPH_STATUS_INVALID_SCHEMA: i32 = 100;
+const VK_GRAPH_STATUS_INVALID_IDENTITY: i32 = 101;
+const VK_GRAPH_STATUS_STALE_GENERATION: i32 = 102;
+const VK_GRAPH_STATUS_INCOMPATIBLE_VERSION: i32 = 103;
+const VK_GRAPH_STATUS_GRAPH_UNAVAILABLE: i32 = 104;
+const VK_GRAPH_STATUS_CORRUPT_SNAPSHOT: i32 = 105;
+const VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: i32 = 106;
+const VK_GRAPH_STATUS_CANCELLED: i32 = 107;
+const VK_GRAPH_STATUS_TIMED_OUT: i32 = 108;
+const VK_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
+const VK_GRAPH_STATUS_INTERNAL: i32 = 110;
+
 pub struct VkGraphBuilder {
     core: ExactVectorIndex,
 }
@@ -145,7 +157,7 @@ struct RecordChunk {
 
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    2
+    3
 }
 
 #[no_mangle]
@@ -830,8 +842,29 @@ fn graph_hybrid_buffer(index: &VkGraphIndex, hits: Vec<HybridHit>) -> VkHybridRe
 
 impl From<vectorkit_graph::GraphError> for FfiError {
     fn from(error: vectorkit_graph::GraphError) -> Self {
+        let code = match &error {
+            vectorkit_graph::GraphError::InvalidSchema { .. } => VK_GRAPH_STATUS_INVALID_SCHEMA,
+            vectorkit_graph::GraphError::InvalidRecord { .. }
+            | vectorkit_graph::GraphError::InvalidQuery { .. }
+            | vectorkit_graph::GraphError::MissingTarget { .. } => VK_GRAPH_STATUS_INVALID_IDENTITY,
+            vectorkit_graph::GraphError::InvalidSnapshot { .. } => VK_GRAPH_STATUS_CORRUPT_SNAPSHOT,
+            vectorkit_graph::GraphError::StaleGeneration { .. } => VK_GRAPH_STATUS_STALE_GENERATION,
+            vectorkit_graph::GraphError::IncompatibleVersion { .. } => {
+                VK_GRAPH_STATUS_INCOMPATIBLE_VERSION
+            }
+            vectorkit_graph::GraphError::GraphUnavailable { .. } => {
+                VK_GRAPH_STATUS_GRAPH_UNAVAILABLE
+            }
+            vectorkit_graph::GraphError::WriterBusy { .. } => VK_GRAPH_STATUS_LOCK_UNAVAILABLE,
+            vectorkit_graph::GraphError::QueryLimitExceeded { .. } => {
+                VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED
+            }
+            vectorkit_graph::GraphError::Cancelled => VK_GRAPH_STATUS_CANCELLED,
+            vectorkit_graph::GraphError::TimedOut { .. } => VK_GRAPH_STATUS_TIMED_OUT,
+            vectorkit_graph::GraphError::Core { .. } => VK_GRAPH_STATUS_INTERNAL,
+        };
         Self {
-            code: super::VK_STATUS_CORE_ERROR,
+            code,
             message: error.to_string(),
         }
     }
@@ -849,6 +882,94 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn graph_errors_map_to_the_stable_public_status_taxonomy() {
+        use vectorkit_graph::GraphError;
+
+        let cases = [
+            (
+                GraphError::InvalidSchema {
+                    message: "schema".to_owned(),
+                },
+                VK_GRAPH_STATUS_INVALID_SCHEMA,
+            ),
+            (
+                GraphError::InvalidRecord {
+                    record_id: "record".to_owned(),
+                    message: "record".to_owned(),
+                },
+                VK_GRAPH_STATUS_INVALID_IDENTITY,
+            ),
+            (
+                GraphError::InvalidQuery {
+                    message: "query".to_owned(),
+                },
+                VK_GRAPH_STATUS_INVALID_IDENTITY,
+            ),
+            (
+                GraphError::InvalidSnapshot {
+                    message: "snapshot".to_owned(),
+                },
+                VK_GRAPH_STATUS_CORRUPT_SNAPSHOT,
+            ),
+            (
+                GraphError::StaleGeneration {
+                    message: "stale".to_owned(),
+                },
+                VK_GRAPH_STATUS_STALE_GENERATION,
+            ),
+            (
+                GraphError::IncompatibleVersion {
+                    message: "version".to_owned(),
+                },
+                VK_GRAPH_STATUS_INCOMPATIBLE_VERSION,
+            ),
+            (
+                GraphError::GraphUnavailable {
+                    message: "unavailable".to_owned(),
+                },
+                VK_GRAPH_STATUS_GRAPH_UNAVAILABLE,
+            ),
+            (
+                GraphError::WriterBusy {
+                    path: "database".to_owned(),
+                },
+                VK_GRAPH_STATUS_LOCK_UNAVAILABLE,
+            ),
+            (
+                GraphError::MissingTarget {
+                    relationship: "related_to".to_owned(),
+                    source_record_id: "source".to_owned(),
+                    target_record_id: "target".to_owned(),
+                },
+                VK_GRAPH_STATUS_INVALID_IDENTITY,
+            ),
+            (
+                GraphError::QueryLimitExceeded {
+                    message: "limit".to_owned(),
+                },
+                VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED,
+            ),
+            (GraphError::Cancelled, VK_GRAPH_STATUS_CANCELLED),
+            (
+                GraphError::TimedOut {
+                    message: "deadline".to_owned(),
+                },
+                VK_GRAPH_STATUS_TIMED_OUT,
+            ),
+            (
+                GraphError::Core {
+                    message: "core".to_owned(),
+                },
+                VK_GRAPH_STATUS_INTERNAL,
+            ),
+        ];
+        for (error, expected) in cases {
+            let error = FfiError::from(error);
+            assert_eq!(error.code, expected);
+        }
+    }
 
     #[test]
     fn builder_finalization_and_composite_persistence_round_trip() {
@@ -1088,6 +1209,7 @@ mod tests {
         assert!(
             unsafe { vectorkit_graph_query(index, query, cancellation, &mut status) }.is_null()
         );
+        assert_eq!(status.code, VK_GRAPH_STATUS_CANCELLED);
         unsafe {
             vectorkit_graph_cancellation_free(cancellation);
             super::super::vectorkit_status_clear(&mut status)

@@ -16,6 +16,15 @@ pub enum GraphError {
     InvalidSnapshot {
         message: String,
     },
+    StaleGeneration {
+        message: String,
+    },
+    IncompatibleVersion {
+        message: String,
+    },
+    GraphUnavailable {
+        message: String,
+    },
     WriterBusy {
         path: String,
     },
@@ -28,6 +37,9 @@ pub enum GraphError {
         message: String,
     },
     Cancelled,
+    TimedOut {
+        message: String,
+    },
     Core {
         message: String,
     },
@@ -42,6 +54,11 @@ impl Display for GraphError {
             }
             Self::InvalidQuery { message } => write!(f, "invalid graph query: {message}"),
             Self::InvalidSnapshot { message } => write!(f, "invalid graph snapshot: {message}"),
+            Self::StaleGeneration { message } => write!(f, "stale graph generation: {message}"),
+            Self::IncompatibleVersion { message } => {
+                write!(f, "incompatible graph version: {message}")
+            }
+            Self::GraphUnavailable { message } => write!(f, "graph unavailable: {message}"),
             Self::WriterBusy { path } => {
                 write!(f, "graph database writer is already active for '{path}'")
             }
@@ -57,6 +74,7 @@ impl Display for GraphError {
                 write!(f, "graph query limit exceeds the engine safety cap: {message}")
             }
             Self::Cancelled => write!(f, "graph query was cancelled"),
+            Self::TimedOut { message } => write!(f, "graph operation timed out: {message}"),
             Self::Core { message } => write!(f, "VectorKit core operation failed: {message}"),
         }
     }

@@ -105,7 +105,13 @@ implemented, or superseded by the product spec.
   source-record, source-field, inverse, and built-in provenance. Synthetic Swift
   integration coverage exercises forward and inverse traversal, equality seed
   scalar mappings, cancellation, and composed scoped ranking. The graph
-  aggregate ABI version is now 2.
+  aggregate ABI version was 2 for this path-materialization contract.
+- M4.4 transports the settled cross-wrapper graph error taxonomy through stable
+  native status codes and maps it to `VectorKitGraphError` without wrapper-side
+  validation. Swift integration tests cover invalid schema/identity, query-limit
+  rejection, cancellation, corrupt/missing persistence, internal core failures,
+  and builder consumption after both successful and failed finalization. The
+  graph aggregate ABI version is now 3.
 
 ## Current Size, RAM, and Speed Goal
 

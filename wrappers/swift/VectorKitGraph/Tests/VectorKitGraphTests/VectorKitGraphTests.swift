@@ -34,12 +34,27 @@ final class VectorKitGraphTests: XCTestCase {
 
         let cancellation = GraphCancellationToken(); cancellation.cancel()
         do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "alpha")], cancellation: cancellation); XCTFail("expected cancellation") }
-        catch { XCTAssertNotNil(error as? VectorKitGraphError) }
+        catch let error as VectorKitGraphError { guard case .cancelled = error else { return XCTFail("expected typed cancellation, got \(error)") } }
+
+        do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "alpha")], limits: GraphQueryLimits(maxResults: 0)); XCTFail("expected invalid query") }
+        catch let error as VectorKitGraphError { guard case .queryLimitExceeded = error else { return XCTFail("expected typed query limit, got \(error)") } }
+
+        do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "alpha")], limits: GraphQueryLimits(maxHops: 65)); XCTFail("expected query limit error") }
+        catch let error as VectorKitGraphError { guard case .queryLimitExceeded = error else { return XCTFail("expected typed query limit, got \(error)") } }
+
+        do { _ = try await graph.search([1], topK: 1, in: result); XCTFail("expected core dimension error") }
+        catch let error as VectorKitGraphError { guard case .internalError = error else { return XCTFail("expected typed internal error, got \(error)") } }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("vectorkit-graph-swift-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: url) }
         try await graph.save(to: url)
         try GraphIndex.validate(at: url)
         _ = try GraphIndex.load(from: url)
+        let manifestURL = url.appendingPathComponent("manifest.json")
+        var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as! [String: Any]
+        manifest["format_version"] = 999
+        try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL)
+        do { _ = try GraphIndex.load(from: url); XCTFail("expected incompatible version") }
+        catch let error as VectorKitGraphError { guard case .incompatibleVersion = error else { return XCTFail("expected typed incompatible version, got \(error)") } }
     }
 
     func testBuilderIsConsumedAfterFinalization() async throws {
@@ -47,5 +62,23 @@ final class VectorKitGraphTests: XCTestCase {
         _ = try await builder.build(schema: GraphSchema(recordNodes: [GraphRecordNodeSchema(recordType: "Item", nodeType: "Item")]))
         do { _ = try await builder.build(schema: GraphSchema(recordNodes: [])); XCTFail("expected consumed builder") }
         catch { XCTAssertEqual(error as? VectorKitGraphError, .consumedBuilder) }
+    }
+
+    func testTypedBuildAndPersistenceErrors() async throws {
+        let invalidSchemaBuilder = try GraphIndexBuilder(dimension: 2, corpusID: "invalid-schema")
+        do { _ = try await invalidSchemaBuilder.build(schema: GraphSchema(recordNodes: [])); XCTFail("expected invalid schema") }
+        catch let error as VectorKitGraphError { guard case .invalidSchema = error else { return XCTFail("expected typed invalid schema, got \(error)") } }
+        do { _ = try await invalidSchemaBuilder.build(schema: GraphSchema(recordNodes: [])); XCTFail("expected consumed builder") }
+        catch { XCTAssertEqual(error as? VectorKitGraphError, .consumedBuilder) }
+
+        let missingTargetBuilder = try GraphIndexBuilder(dimension: 2, corpusID: "missing-target")
+        try await missingTargetBuilder.upsert(GraphRecordBatch(record: GraphRecord(id: "source", recordType: "Item", fields: ["related_id": .string("missing")]), chunks: []))
+        let relationship = GraphRelationshipSchema(relationshipType: "related_to", sourceNodeType: "Item", targetNodeType: "Item", sourceField: GraphFieldPath("related_id"), cardinality: .one)
+        do { _ = try await missingTargetBuilder.build(schema: GraphSchema(recordNodes: [GraphRecordNodeSchema(recordType: "Item", nodeType: "Item")], relationships: [relationship])); XCTFail("expected missing target") }
+        catch let error as VectorKitGraphError { guard case .invalidIdentity = error else { return XCTFail("expected typed invalid identity, got \(error)") } }
+
+        let missingDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("vectorkit-graph-missing-\(UUID().uuidString)")
+        do { _ = try GraphIndex.load(from: missingDirectory); XCTFail("expected invalid snapshot") }
+        catch let error as VectorKitGraphError { guard case .corruptSnapshot = error else { return XCTFail("expected typed corrupt snapshot, got \(error)") } }
     }
 }

@@ -119,7 +119,29 @@ public struct GraphSchema: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case version, recordNodes = "record_nodes", relationships, chunkNodes = "chunk_nodes" }
 }
 
-public enum VectorKitGraphError: Error, Equatable { case native(code: Int32, message: String), consumedBuilder }
+public enum VectorKitGraphError: Error, Equatable {
+    case invalidSchema(String)
+    case invalidIdentity(String)
+    case staleGeneration(String)
+    case incompatibleVersion(String)
+    case graphUnavailable(String)
+    case corruptSnapshot(String)
+    case queryLimitExceeded(String)
+    case cancelled(String)
+    case timedOut(String)
+    case lockUnavailable(String)
+    case internalError(String)
+    case consumedBuilder
+}
+
+extension VectorKitGraphError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidSchema(let message), .invalidIdentity(let message), .staleGeneration(let message), .incompatibleVersion(let message), .graphUnavailable(let message), .corruptSnapshot(let message), .queryLimitExceeded(let message), .cancelled(let message), .timedOut(let message), .lockUnavailable(let message), .internalError(let message): message
+        case .consumedBuilder: "graph builder has already been consumed by build(schema:)"
+        }
+    }
+}
 
 public struct GraphNodeID: Equatable, Hashable, Sendable {
     public var nodeType: String; public var recordID: String; public var chunkKey: String?
@@ -189,14 +211,32 @@ private final class GraphCStringArena {
 }
 
 private enum Native {
+    static func error(_ status: VkStatus, fallback: String) -> VectorKitGraphError {
+        let message = status.message.map { String(cString: $0) } ?? fallback
+        switch status.code {
+        case VK_STATUS_INVALID_ARGUMENT: return .internalError(message)
+        case VK_GRAPH_STATUS_INVALID_SCHEMA: return .invalidSchema(message)
+        case VK_GRAPH_STATUS_INVALID_IDENTITY: return .invalidIdentity(message)
+        case VK_GRAPH_STATUS_STALE_GENERATION: return .staleGeneration(message)
+        case VK_GRAPH_STATUS_INCOMPATIBLE_VERSION: return .incompatibleVersion(message)
+        case VK_GRAPH_STATUS_GRAPH_UNAVAILABLE: return .graphUnavailable(message)
+        case VK_GRAPH_STATUS_CORRUPT_SNAPSHOT, VK_STATUS_CORRUPT_INDEX: return .corruptSnapshot(message)
+        case VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: return .queryLimitExceeded(message)
+        case VK_GRAPH_STATUS_CANCELLED: return .cancelled(message)
+        case VK_GRAPH_STATUS_TIMED_OUT: return .timedOut(message)
+        case VK_GRAPH_STATUS_LOCK_UNAVAILABLE: return .lockUnavailable(message)
+        case VK_GRAPH_STATUS_INTERNAL, VK_STATUS_CORE_ERROR: return .internalError(message)
+        default: return .internalError(message)
+        }
+    }
     static func pointer(_ body: (UnsafeMutablePointer<VkStatus>) -> OpaquePointer?) throws -> OpaquePointer {
         var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
-        guard let result = body(&status) else { throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "unknown graph error") }
+        guard let result = body(&status) else { throw error(status, fallback: "unknown graph error") }
         return result
     }
     static func bool(_ body: (UnsafeMutablePointer<VkStatus>) -> Bool) throws {
         var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
-        guard body(&status) else { throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "unknown graph error") }
+        guard body(&status) else { throw error(status, fallback: "unknown graph error") }
     }
 }
 
@@ -270,12 +310,12 @@ public actor GraphIndex {
         var status = VkStatus(code: 0, message: nil)
         guard let result = vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, cancellation?.pointer, &status) else {
             defer { vectorkit_status_clear(&status) }
-            throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "unknown graph error")
+            throw Native.error(status, fallback: "unknown graph error")
         }
         vectorkit_status_clear(&status)
         guard let scope = vectorkit_graph_result_project(OpaquePointer(bitPattern: handle), result, &status) else {
             defer { vectorkit_status_clear(&status); vectorkit_graph_result_free(result) }
-            throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "graph projection failed")
+            throw Native.error(status, fallback: "graph projection failed")
         }
         let execution = NativeGraphExecution(result: result, scope: scope)
         var matches: [GraphMatch] = []
@@ -302,7 +342,7 @@ public actor GraphIndex {
     public func search(_ embedding: [Float], topK: Int, in result: GraphQueryResult) throws -> [GraphSearchHit] {
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         var output = VkSearchResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
-        guard vectorkit_graph_scope_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), embedding.isEmpty ? nil : pointer, embedding.count, topK, nil, &output, &status) else { throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "scoped search failed") }
+        guard vectorkit_graph_scope_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), embedding.isEmpty ? nil : pointer, embedding.count, topK, nil, &output, &status) else { throw Native.error(status, fallback: "scoped search failed") }
         defer { vectorkit_search_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; return GraphSearchHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score) }
     }
@@ -311,7 +351,7 @@ public actor GraphIndex {
         var output = VkKeywordResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
         let arena = GraphCStringArena()
         let ok = vectorkit_graph_scope_keyword_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), arena.copy(text), topK, nil, &output, &status)
-        guard ok else { throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "scoped keyword search failed") }
+        guard ok else { throw Native.error(status, fallback: "scoped keyword search failed") }
         defer { vectorkit_keyword_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; let terms = (0..<hit.matched_terms.count).map { String(cString: hit.matched_terms.values[$0]!) }; return GraphKeywordHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, matchedTerms: terms) }
     }
@@ -320,7 +360,7 @@ public actor GraphIndex {
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         let arena = GraphCStringArena(); var output = VkHybridResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
         let options = VkHybridOptions(vector_top_k: 50, keyword_top_k: 50, fusion_type: 1, vector_weight: 0.5, keyword_weight: 0.5, rrf_k: 60)
-        guard vectorkit_graph_scope_hybrid_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), arena.copy(text), embedding.isEmpty ? nil : pointer, embedding.count, topK, nil, options, &output, &status) else { throw VectorKitGraphError.native(code: status.code, message: status.message.map { String(cString: $0) } ?? "scoped hybrid search failed") }
+        guard vectorkit_graph_scope_hybrid_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), arena.copy(text), embedding.isEmpty ? nil : pointer, embedding.count, topK, nil, options, &output, &status) else { throw Native.error(status, fallback: "scoped hybrid search failed") }
         defer { vectorkit_hybrid_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; let terms = (0..<hit.matched_terms.count).map { String(cString: hit.matched_terms.values[$0]!) }; return GraphHybridHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, vectorScore: hit.has_vector_score ? hit.vector_score : nil, keywordScore: hit.has_keyword_score ? hit.keyword_score : nil, matchedTerms: terms) }
     }

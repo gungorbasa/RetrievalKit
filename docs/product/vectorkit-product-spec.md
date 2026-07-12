@@ -66,7 +66,7 @@ V1 must include:
 - Swift wrapper.
 - Local persistent index.
 - Exact vector search.
-- BM25 keyword search.
+- BM25 lexical scoring as the internal lexical component of hybrid search.
 - Hybrid ranking.
 - Metadata filtering.
 - Add/update/delete document operations.
@@ -93,13 +93,29 @@ V1 does not include:
 ## Optional Local Graph Roadmap
 
 VectorKit may add graph retrieval as a separate, optional, fully local package.
-This roadmap is additive to the graph-free product: `vectorkit-core` remains
-graph-neutral and continues to own the canonical records plus exact vector,
-BM25, hybrid, filtering, persistence, and hydration behavior. Applications that
-need graph retrieval use one composite `GraphIndex` mutable owner from the
-optional package. Applications that do not install it must not link graph code,
-open graph files, initialize graph state, or route ordinary queries through
-graph-aware dispatch.
+This roadmap is additive to the graph-free product. `vectorkit-core` remains
+graph-neutral. A canonical `CorpusIndex` owns records, chunks, stable identity
+maps, generations, lifecycle, and hydration. `RetrievalIndex` and the optional
+`GraphEngine` are rebuildable derived capabilities over that corpus; neither is
+an independent payload owner. Applications that do not install graph support
+must not link graph code, open graph files, initialize graph state, or route
+ordinary queries through graph-aware dispatch.
+
+The supported database products are fixed during builder creation:
+
+```text
+RetrievalDatabase      = CorpusIndex + RetrievalIndex
+GraphDatabase          = CorpusIndex + GraphEngine
+GraphRetrievalDatabase = CorpusIndex + GraphEngine + RetrievalIndex
+```
+
+Retrieval configuration is either semantic or hybrid. Semantic mode builds
+exact-vector state only. Hybrid mode builds exact-vector and BM25 state and
+supports both semantic and hybrid queries. BM25 remains directly benchmarked
+and tested in Rust, but keyword-only search is not a standalone high-level
+Swift product mode. Graph-only builders accept neither vector configuration nor
+embeddings. Combined graph selections become opaque generation-bound candidate
+scopes consumed by the retrieval capability.
 
 "Store once" means one canonical source record and payload owner, not one
 physical representation. Chunks, vector arrays, BM25 postings, flattened
@@ -146,31 +162,36 @@ graph-enabled database. Python and Swift builders marshal the same typed schema
 IR; they do not implement schema validation or maintain synchronized JSON
 sidecars. JSON export may exist for inspection or one-time migration only.
 
-M3 composite persistence uses one graph manifest to activate one immutable
-core/graph generation:
+M3 composite persistence uses one manifest to activate one immutable
+capability generation:
 
 ```text
 graph_database/
   manifest.json
   .snapshots/
     <safe-generation-id>/
-      core/                 # complete vectorkit-core database
-      schema.json           # canonical schema bytes
-      graph.bin             # versioned graph snapshot payload
+      corpus/               # canonical records/chunks/identity generation
+      retrieval/            # present only when retrieval is enabled
+      graph/                # present only when graph is enabled
+      schema.json           # present only when graph is enabled
 ```
 
-Saving writes the core database and graph payloads into a staging generation,
-checks payload sizes and BLAKE3 checksums, reopens the core, validates the graph
-against that exact corpus/generation, syncs the staged files and directories,
-renames the generation into place, and atomically replaces `manifest.json`.
+Saving writes the corpus and enabled derived payloads into a staging generation,
+checks payload sizes and BLAKE3 checksums, reopens the corpus, validates every
+derived payload against that exact corpus/generation, syncs the staged files
+and directories, renames the generation into place, and atomically replaces
+`manifest.json`.
 Only that manifest selects an active generation. A failure before manifest
 replacement leaves the previously active generation queryable. Read-only
 validation follows the complete load path and does not clean staging or old
 generations. An OS-released exclusive database lock serializes writers. Loaders
 briefly hold a shared database lock while selecting and leasing the active
 generation, then retain a shared per-generation lease for the lifetime of the
-loaded `GraphIndex`. Locked-save recovery removes abandoned staging and
+loaded database. Locked-save recovery removes abandoned staging and
 unreferenced generations only when no reader lease is present.
+
+The detailed ownership, Swift API, error, qualification, and commit contract is
+defined in `docs/product/capability-separated-architecture.md`.
 
 M4 Swift packaging uses an aggregate native artifact. `vectorkit-ffi` keeps its
 graph dependency behind an off-by-default Cargo feature. Base users link the

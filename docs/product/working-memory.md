@@ -6,10 +6,9 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
-- Work through tasks one by one.
-- Explain the next task and wait for approval before implementing it.
-- After approval, implement only that task, run checks, commit, push, then
-  present the next task.
+- Implement the approved capability-separated architecture autonomously.
+- Finish each numbered architecture step with checks and a clean commit before
+  starting the next step.
 - Prefer mature fast crates for performance-sensitive work when they clearly
   help. Avoid dependencies for simple local logic.
 
@@ -17,7 +16,8 @@ implemented, or superseded by the product spec.
 
 - VectorKit is local-first retrieval for mobile/desktop, with iOS/macOS as the
   first wrapper target.
-- V1 remains exact vector search, BM25 keyword search, hybrid ranking,
+- V1 public retrieval remains semantic exact-vector search and hybrid ranking;
+  BM25 remains hybrid's internal lexical component,
   filtering, persistence, and Swift integration. An optional fully local graph
   package is now authorized behind gated M0-M5 milestones; graph-free core hot
   paths and artifacts remain graph-neutral.
@@ -27,6 +27,13 @@ implemented, or superseded by the product spec.
   network calls, avoidable allocation, and broad string lookups.
 
 ## Optional Graph Roadmap Status
+
+- The capability-separated architecture is approved. `CorpusIndex` becomes the
+  canonical owner; `RetrievalIndex` and `GraphEngine` are derived components.
+  Swift will expose `RetrievalDatabase`, `GraphDatabase`, and
+  `GraphRetrievalDatabase`, with embeddings accepted only by
+  retrieval-capable builders. See
+  `docs/product/capability-separated-architecture.md`.
 
 - M0 product authorization and the customer fixture contract/template are in
   place. The template deliberately contains no invented customer data.

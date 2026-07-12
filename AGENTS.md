@@ -22,7 +22,9 @@ The current V1 direction is:
 
 - Small local indexes: fewer than 50K chunks.
 - Primary retrieval engine: exact vector search.
-- Retrieval modes: exact vector search, BM25 keyword search, and hybrid ranking.
+- Public retrieval modes: semantic exact-vector search and hybrid ranking.
+  BM25 remains the measured lexical component of hybrid ranking, not a
+  standalone high-level product capability.
 - Core priorities: correctness, speed, filtering, persistence, and Swift/iOS integration.
 
 Do not add HNSW, ANN indexing, server mode, sync, dashboards, or distributed database features unless the product spec is updated first. HNSW research exists in `docs/research/`, but it is deferred until exact/hybrid retrieval is polished and benchmarked.
@@ -36,6 +38,10 @@ Use `docs/product/vectorkit-product-spec.md` as the implementation source of tru
 - Keep public APIs small, stable, and easy to explain.
 - Apply SOLID principles pragmatically. Do not add abstractions that do not reduce real complexity.
 - Keep domain boundaries clear: retrieval, storage, filtering, ranking, persistence, and language bindings should not be tangled together.
+- Keep the canonical corpus independent from optional derived capabilities.
+  `CorpusIndex` owns records, chunks, stable identities, and generations;
+  retrieval and graph indexes build on that state without becoming payload
+  owners.
 - Avoid speculative features. Build what V1 needs and leave clear extension points where future wrappers or engines are likely.
 - Favor deterministic behavior for indexing, searching, ranking, and tests.
 - Expose enough trace/debug data to explain retrieval results.

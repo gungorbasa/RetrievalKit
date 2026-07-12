@@ -9,7 +9,8 @@ retrieval engines.
 Completed:
 
 - Exact vector search with F32, F16, BF16, and I8 storage.
-- BM25 keyword search and weighted/RRF hybrid ranking.
+- Semantic exact-vector search and weighted/RRF hybrid ranking, with BM25 kept
+  as hybrid's directly tested lexical component.
 - Typed metadata filters and retrieval traces.
 - Rust text chunking with Swift and Python wrappers.
 - Token-aware pipeline orchestration and custom chunkers.

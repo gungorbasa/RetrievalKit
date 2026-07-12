@@ -75,16 +75,16 @@ build_with_deployment_target() {
   case "$platform" in
     macos)
       MACOSX_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     ios)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     ios-simulator)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
       IPHONESIMULATOR_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" "${CARGO_FEATURE_ARGS[@]}"
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     *)
       echo "unsupported platform for $rust_target: $platform" >&2

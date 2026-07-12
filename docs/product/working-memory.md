@@ -152,6 +152,13 @@ implemented, or superseded by the product spec.
   this exact contract. `scripts/verify-swift-graph-wrapper.sh` proves base symbol
   neutrality, aggregate core+graph symbols, separate package linkage, tests,
   and exact quickstart output; manual CI runs the script after full Apple builds.
+- M4 Swift qualification is complete. Full macOS, iOS device, and iOS simulator
+  XCFramework builds pass for both base and aggregate artifacts, including
+  symbol-neutrality and separate-linkage verification. The clean build exposed
+  and fixed a Bash 3 empty-feature-array failure in the base build script. See
+  `docs/product/reports/graph-m4-swift-qualification-report.md`. The next code
+  milestone is the optional Python graph wrapper consuming the V1 fixture
+  unchanged; customer validation remains deferred.
 
 ## Current Size, RAM, and Speed Goal
 

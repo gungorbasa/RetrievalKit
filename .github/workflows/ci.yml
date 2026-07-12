@@ -81,8 +81,5 @@ jobs:
           scripts/build-xcframework.sh
           scripts/build-xcframework.sh --graph
 
-      - name: Run Swift package tests
-        run: |
-          swift test --package-path wrappers/swift/VectorKit
-          swift test --package-path wrappers/swift/VectorKitGraph
-          swift run --package-path wrappers/swift/VectorKitGraph VectorKitGraphQuickstart
+      - name: Verify Swift base and graph packages
+        run: scripts/verify-swift-graph-wrapper.sh --skip-build

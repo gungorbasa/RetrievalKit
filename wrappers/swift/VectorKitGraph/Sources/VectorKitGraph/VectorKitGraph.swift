@@ -9,7 +9,7 @@ public enum GraphVectorEncoding: Sendable { case f32, f16, i8ScalarQuantized
     var ffi: UInt32 { switch self { case .f32: 0; case .f16: 1; case .i8ScalarQuantized: 3 } }
 }
 
-public enum GraphValue: Equatable, Sendable, Encodable {
+public enum GraphValue: Equatable, Sendable, Codable {
     case null, bool(Bool), int(Int64), double(Double), string(String)
     case list([GraphValue]), map([String: GraphValue])
 
@@ -24,9 +24,20 @@ public enum GraphValue: Equatable, Sendable, Encodable {
         case .map(let v): try tagged("Map", v, encoder)
         }
     }
+    public init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(), let tag = try? single.decode(String.self), tag == "Null" { self = .null; return }
+        let container = try decoder.container(keyedBy: DynamicKey.self)
+        if let key = DynamicKey(stringValue: "Bool"), container.contains(key) { self = .bool(try container.decode(Bool.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "I64"), container.contains(key) { self = .int(try container.decode(Int64.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "F64"), container.contains(key) { self = .double(try container.decode(Double.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "String"), container.contains(key) { self = .string(try container.decode(String.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "List"), container.contains(key) { self = .list(try container.decode([GraphValue].self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "Map"), container.contains(key) { self = .map(try container.decode([String: GraphValue].self, forKey: key)); return }
+        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unsupported graph value tag"))
+    }
 }
 
-public enum GraphMetadataValue: Equatable, Sendable, Encodable {
+public enum GraphMetadataValue: Equatable, Sendable, Codable {
     case string(String), integer(Int64), double(Double), boolean(Bool), timestampMillis(Int64)
     public func encode(to encoder: Encoder) throws {
         switch self {
@@ -36,6 +47,15 @@ public enum GraphMetadataValue: Equatable, Sendable, Encodable {
         case .boolean(let v): try tagged("Boolean", v, encoder)
         case .timestampMillis(let v): try tagged("TimestampMillis", v, encoder)
         }
+    }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DynamicKey.self)
+        if let key = DynamicKey(stringValue: "String"), container.contains(key) { self = .string(try container.decode(String.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "Integer"), container.contains(key) { self = .integer(try container.decode(Int64.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "Float"), container.contains(key) { self = .double(try container.decode(Double.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "Boolean"), container.contains(key) { self = .boolean(try container.decode(Bool.self, forKey: key)); return }
+        if let key = DynamicKey(stringValue: "TimestampMillis"), container.contains(key) { self = .timestampMillis(try container.decode(Int64.self, forKey: key)); return }
+        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unsupported graph metadata tag"))
     }
     fileprivate func ffiValue(arena: GraphCStringArena) -> VkMetadataValue {
         switch self {
@@ -94,7 +114,7 @@ private func tagged<T: Encodable>(_ key: String, _ value: T, _ encoder: Encoder)
     try container.encode(value, forKey: DynamicKey(stringValue: key)!)
 }
 
-public struct GraphRecord: Equatable, Sendable, Encodable {
+public struct GraphRecord: Equatable, Sendable, Codable {
     public var id: String; public var recordType: String
     public var fields: [String: GraphValue]; public var content: String?
     public init(id: String, recordType: String, fields: [String: GraphValue] = [:], content: String? = nil) {
@@ -103,7 +123,7 @@ public struct GraphRecord: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case id, recordType = "record_type", fields, content }
 }
 
-public struct GraphChunk: Equatable, Sendable, Encodable {
+public struct GraphChunk: Equatable, Sendable, Codable {
     public var key: String; public var text: String; public var embedding: [Float]
     public var metadata: [String: GraphMetadataValue]
     public init(key: String, text: String, embedding: [Float], metadata: [String: GraphMetadataValue] = [:]) {
@@ -111,7 +131,7 @@ public struct GraphChunk: Equatable, Sendable, Encodable {
     }
 }
 
-public struct GraphRecordBatch: Equatable, Sendable, Encodable {
+public struct GraphRecordBatch: Equatable, Sendable, Codable {
     public var record: GraphRecord; public var projectedMetadata: [String: GraphMetadataValue]; public var chunks: [GraphChunk]
     public init(record: GraphRecord, projectedMetadata: [String: GraphMetadataValue] = [:], chunks: [GraphChunk]) {
         self.record = record; self.projectedMetadata = projectedMetadata; self.chunks = chunks
@@ -119,18 +139,19 @@ public struct GraphRecordBatch: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case record, projectedMetadata = "projected_metadata", chunks }
 }
 
-public struct GraphFieldPath: Equatable, Hashable, Sendable, Encodable {
+public struct GraphFieldPath: Equatable, Hashable, Sendable, Codable {
     public var segments: [String]
     public init(_ segments: [String]) { self.segments = segments }
     public init(_ field: String) { segments = [field] }
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(segments) }
+    public init(from decoder: Decoder) throws { let c = try decoder.singleValueContainer(); segments = try c.decode([String].self) }
 }
 
-public enum GraphCardinality: String, Sendable, Encodable { case one = "One", optionalOne = "OptionalOne", many = "Many" }
-public enum GraphMissingTargetPolicy: String, Sendable, Encodable { case error = "Error", omitEdge = "OmitEdge" }
-public enum GraphDuplicatePolicy: String, Sendable, Encodable { case error = "Error", deduplicate = "Deduplicate" }
+public enum GraphCardinality: String, Sendable, Codable { case one = "One", optionalOne = "OptionalOne", many = "Many" }
+public enum GraphMissingTargetPolicy: String, Sendable, Codable { case error = "Error", omitEdge = "OmitEdge" }
+public enum GraphDuplicatePolicy: String, Sendable, Codable { case error = "Error", deduplicate = "Deduplicate" }
 
-public struct GraphRecordNodeSchema: Equatable, Sendable, Encodable {
+public struct GraphRecordNodeSchema: Equatable, Sendable, Codable {
     public var recordType: String; public var nodeType: String; public var queryableFields: [GraphFieldPath]
     public init(recordType: String, nodeType: String, queryableFields: [GraphFieldPath] = []) {
         self.recordType = recordType; self.nodeType = nodeType; self.queryableFields = queryableFields
@@ -138,7 +159,7 @@ public struct GraphRecordNodeSchema: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case recordType = "record_type", nodeType = "node_type", queryableFields = "queryable_fields" }
 }
 
-public struct GraphRelationshipSchema: Equatable, Sendable, Encodable {
+public struct GraphRelationshipSchema: Equatable, Sendable, Codable {
     public var relationshipType, sourceNodeType, targetNodeType: String
     public var sourceField: GraphFieldPath; public var cardinality: GraphCardinality
     public var missingTarget: GraphMissingTargetPolicy; public var duplicateReferences: GraphDuplicatePolicy
@@ -149,13 +170,13 @@ public struct GraphRelationshipSchema: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case relationshipType = "relationship_type", sourceNodeType = "source_node_type", targetNodeType = "target_node_type", sourceField = "source_field", cardinality, missingTarget = "missing_target", duplicateReferences = "duplicate_references", allowSelfEdge = "allow_self_edge", inverseRelationship = "inverse_relationship" }
 }
 
-public struct GraphChunkNodeSchema: Equatable, Sendable, Encodable {
+public struct GraphChunkNodeSchema: Equatable, Sendable, Codable {
     public var nodeType, ownsRelationship: String; public var inverseRelationship: String?
     public init(nodeType: String, ownsRelationship: String, inverseRelationship: String? = nil) { self.nodeType = nodeType; self.ownsRelationship = ownsRelationship; self.inverseRelationship = inverseRelationship }
     enum CodingKeys: String, CodingKey { case nodeType = "node_type", ownsRelationship = "owns_relationship", inverseRelationship = "inverse_relationship" }
 }
 
-public struct GraphSchema: Equatable, Sendable, Encodable {
+public struct GraphSchema: Equatable, Sendable, Codable {
     public var version: UInt32 = 1; public var recordNodes: [GraphRecordNodeSchema]
     public var relationships: [GraphRelationshipSchema]; public var chunkNodes: GraphChunkNodeSchema?
     public init(recordNodes: [GraphRecordNodeSchema], relationships: [GraphRelationshipSchema] = [], chunkNodes: GraphChunkNodeSchema? = nil) { self.recordNodes = recordNodes; self.relationships = relationships; self.chunkNodes = chunkNodes }

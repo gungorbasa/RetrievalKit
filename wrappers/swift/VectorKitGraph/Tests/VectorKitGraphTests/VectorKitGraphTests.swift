@@ -176,6 +176,41 @@ final class VectorKitGraphTests: XCTestCase {
         await reader.value; await writer.value; await laterReader.value
         let finalEvents = await events.values(); XCTAssertEqual(finalEvents, ["reader-start", "reader-end", "writer", "later-reader"])
     }
+
+    func testSwiftMatchesGenericCrossWrapperFixture() async throws {
+        let fixture = try JSONDecoder().decode(GraphConformanceFixture.self, from: Data(contentsOf: graphConformanceFixtureURL()))
+        XCTAssertEqual(fixture.schemaVersion, 1); XCTAssertEqual(fixture.fixtureID, "generic-topics-v1")
+        let builder = try GraphIndexBuilder(dimension: fixture.dimension, corpusID: fixture.corpusID, metric: .dotProduct)
+        for record in fixture.records { try await builder.upsert(record) }
+        let graph = try await builder.build(schema: fixture.schema)
+
+        let equality = fixture.expectations.equality
+        let equalityResult = try await graph.query(nodeType: equality.nodeType, field: equality.field, equals: [.string(equality.value)])
+        XCTAssertEqual(equalityResult.matches.map(\.nodeID.recordID), equality.nodeIDs)
+        XCTAssertEqual(equalityResult.projection.sourceNodes, equality.sourceNodes)
+        XCTAssertEqual(equalityResult.projection.resolvedChunks, equality.resolvedChunks)
+
+        let traversal = fixture.expectations.traversal
+        let traversalResult = try await graph.query(from: [GraphNodeID(nodeType: "Topic", recordID: traversal.seedRecordID)], traversing: [GraphTraversal(relationship: traversal.relationship, minHops: traversal.minHops, maxHops: traversal.maxHops)])
+        XCTAssertEqual(traversalResult.matches.map(\.nodeID.recordID), traversal.nodeIDs)
+        XCTAssertEqual(traversalResult.matches.map { $0.path.map(\.relationship) }, traversal.paths)
+        XCTAssertEqual(traversalResult.projection.sourceNodes, traversal.sourceNodes)
+        XCTAssertEqual(traversalResult.projection.resolvedChunks, traversal.resolvedChunks)
+
+        let filtered = fixture.expectations.filteredExact
+        let all = try await graph.query(nodeType: "Topic", field: GraphFieldPath("title"), equals: filtered.seedTitles.map(GraphScalar.string))
+        let exact = try await graph.search(filtered.embedding, topK: 10, in: all, filter: .equals(filtered.filterField, .string(filtered.filterValue)))
+        XCTAssertEqual(exact.map(\.recordID), filtered.recordIDs)
+        let keyword = try await graph.keywordSearch(fixture.expectations.keyword.text, topK: 10, in: all)
+        XCTAssertEqual(keyword.map(\.recordID), fixture.expectations.keyword.recordIDs)
+        await graph.close()
+    }
+
+    private func graphConformanceFixtureURL() -> URL {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<6 { root.deleteLastPathComponent() }
+        return root.appendingPathComponent("benchmarks/graph-conformance/v1/fixture.json")
+    }
 }
 
 private actor GraphTestLatch {
@@ -188,4 +223,36 @@ private actor GraphEventRecorder {
     private var events: [String] = []
     func append(_ event: String) { events.append(event) }
     func values() -> [String] { events }
+}
+
+private struct GraphConformanceFixture: Decodable {
+    let schemaVersion: Int; let fixtureID: String; let dimension: Int; let corpusID: String
+    let records: [GraphRecordBatch]; let schema: GraphSchema; let expectations: GraphFixtureExpectations
+    enum CodingKeys: String, CodingKey { case schemaVersion = "schema_version", fixtureID = "fixture_id", dimension, corpusID = "corpus_id", records, schema, expectations }
+}
+
+private struct GraphFixtureExpectations: Decodable {
+    let equality: GraphEqualityExpectation; let traversal: GraphTraversalExpectation
+    let filteredExact: GraphFilteredExactExpectation; let keyword: GraphKeywordExpectation
+    enum CodingKeys: String, CodingKey { case equality, traversal, filteredExact = "filtered_exact", keyword }
+}
+
+private struct GraphEqualityExpectation: Decodable {
+    let nodeType: String; let field: GraphFieldPath; let value: String; let nodeIDs: [String]; let sourceNodes, resolvedChunks: Int
+    enum CodingKeys: String, CodingKey { case nodeType = "node_type", field, value, nodeIDs = "node_ids", sourceNodes = "source_nodes", resolvedChunks = "resolved_chunks" }
+}
+
+private struct GraphTraversalExpectation: Decodable {
+    let seedRecordID, relationship: String; let minHops, maxHops: Int; let nodeIDs: [String]; let paths: [[String]]; let sourceNodes, resolvedChunks: Int
+    enum CodingKeys: String, CodingKey { case seedRecordID = "seed_record_id", relationship, minHops = "min_hops", maxHops = "max_hops", nodeIDs = "node_ids", paths, sourceNodes = "source_nodes", resolvedChunks = "resolved_chunks" }
+}
+
+private struct GraphFilteredExactExpectation: Decodable {
+    let seedTitles: [String]; let embedding: [Float]; let filterField, filterValue: String; let recordIDs: [String]
+    enum CodingKeys: String, CodingKey { case seedTitles = "seed_titles", embedding, filterField = "filter_field", filterValue = "filter_value", recordIDs = "record_ids" }
+}
+
+private struct GraphKeywordExpectation: Decodable {
+    let text: String; let recordIDs: [String]
+    enum CodingKeys: String, CodingKey { case text, recordIDs = "record_ids" }
 }

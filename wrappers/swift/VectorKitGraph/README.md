@@ -27,6 +27,16 @@ network access, or customer data. It builds a typed schema, ingests canonical
 records once, traverses a relationship, applies a metadata-filtered scoped
 hybrid search, saves the composite database, and reopens its persisted schema.
 
+Run `scripts/verify-swift-graph-wrapper.sh` for the complete local verification.
+It builds base and graph artifacts, proves the base exports no graph ABI while
+the graph aggregate exports one core plus graph, tests each Swift package in a
+separate process, and checks the exact quickstart output.
+
+Rust and Swift also consume the same canonical fixture at
+`benchmarks/graph-conformance/v1/fixture.json`. It fixes expected node IDs,
+paths, projection counts, filtered exact ordering, and keyword results. Future
+wrappers must pass that V1 fixture unchanged.
+
 `GraphIndexBuilder` accepts domain-neutral records and consumes itself when
 `build(schema:)` creates the sole graph owner. Schema and record JSON are
 cold-path transport validated in Rust. `GraphIndex.query` uses typed native

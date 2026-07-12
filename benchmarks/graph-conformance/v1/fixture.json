@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "fixture_id": "generic-topics-v1",
+  "dimension": 2,
+  "corpus_id": "graph-conformance-v1",
+  "records": [
+    {
+      "record": {
+        "id": "alpha",
+        "record_type": "Topic",
+        "fields": {
+          "title": { "String": "Alpha" },
+          "related_id": { "String": "beta" }
+        },
+        "content": null
+      },
+      "projected_metadata": {
+        "tenant": { "String": "red" },
+        "rank": { "Integer": 1 }
+      },
+      "chunks": [
+        {
+          "key": "summary",
+          "text": "alpha local search",
+          "embedding": [1.0, 0.0],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "beta",
+        "record_type": "Topic",
+        "fields": {
+          "title": { "String": "Beta" },
+          "related_id": { "String": "gamma" }
+        },
+        "content": null
+      },
+      "projected_metadata": {
+        "tenant": { "String": "blue" },
+        "rank": { "Integer": 2 }
+      },
+      "chunks": [
+        {
+          "key": "summary",
+          "text": "beta graph foundations",
+          "embedding": [0.6, 0.8],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "gamma",
+        "record_type": "Topic",
+        "fields": {
+          "title": { "String": "Gamma" }
+        },
+        "content": null
+      },
+      "projected_metadata": {
+        "tenant": { "String": "blue" },
+        "rank": { "Integer": 3 }
+      },
+      "chunks": [
+        {
+          "key": "summary",
+          "text": "gamma retrieval result",
+          "embedding": [0.0, 1.0],
+          "metadata": {}
+        }
+      ]
+    }
+  ],
+  "schema": {
+    "version": 1,
+    "record_nodes": [
+      {
+        "record_type": "Topic",
+        "node_type": "Topic",
+        "queryable_fields": [["title"]]
+      }
+    ],
+    "relationships": [
+      {
+        "relationship_type": "related_to",
+        "source_node_type": "Topic",
+        "target_node_type": "Topic",
+        "source_field": ["related_id"],
+        "cardinality": "OptionalOne",
+        "missing_target": "Error",
+        "duplicate_references": "Error",
+        "allow_self_edge": false,
+        "inverse_relationship": "related_from"
+      }
+    ],
+    "chunk_nodes": null
+  },
+  "expectations": {
+    "equality": {
+      "node_type": "Topic",
+      "field": ["title"],
+      "value": "Beta",
+      "node_ids": ["beta"],
+      "source_nodes": 1,
+      "resolved_chunks": 1
+    },
+    "traversal": {
+      "seed_record_id": "alpha",
+      "relationship": "related_to",
+      "min_hops": 1,
+      "max_hops": 2,
+      "node_ids": ["beta", "gamma"],
+      "paths": [
+        ["related_to"],
+        ["related_to", "related_to"]
+      ],
+      "source_nodes": 2,
+      "resolved_chunks": 2
+    },
+    "filtered_exact": {
+      "seed_titles": ["Alpha", "Beta", "Gamma"],
+      "embedding": [1.0, 0.0],
+      "filter_field": "tenant",
+      "filter_value": "blue",
+      "record_ids": ["beta", "gamma"]
+    },
+    "keyword": {
+      "text": "retrieval",
+      "record_ids": ["gamma"]
+    }
+  }
+}

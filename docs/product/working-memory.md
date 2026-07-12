@@ -144,6 +144,14 @@ implemented, or superseded by the product spec.
   metadata-filtered scoped hybrid ranking, composite save, and schema-owning
   reopen with no model, network, or customer data. CI runs it and verifies the
   expected `graph-retrieval` result and `1/1` projection.
+- M4.10 adds `benchmarks/graph-conformance/v1/fixture.json`, a synthetic
+  canonical-schema/record fixture consumed unchanged by Rust and Swift tests.
+  Both implementations assert the same equality seed, bounded path sequence,
+  projection counts, filtered exact ordering, and keyword result. Swift graph
+  transport types are now `Codable`, enabling the future Python wrapper to use
+  this exact contract. `scripts/verify-swift-graph-wrapper.sh` proves base symbol
+  neutrality, aggregate core+graph symbols, separate package linkage, tests,
+  and exact quickstart output; manual CI runs the script after full Apple builds.
 
 ## Current Size, RAM, and Speed Goal
 

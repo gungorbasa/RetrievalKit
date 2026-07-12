@@ -112,6 +112,14 @@ implemented, or superseded by the product spec.
   rejection, cancellation, corrupt/missing persistence, internal core failures,
   and builder consumption after both successful and failed finalization. The
   graph aggregate ABI version is now 3.
+- M4.5 adds Swift graph-scoped metadata filter parity (`equals`, `notEquals`,
+  `exists`, inclusive ranges, in-values, all, and any) for exact, BM25, and
+  hybrid retrieval. Hybrid calls now expose candidate limits plus RRF and
+  weighted normalized-score fusion; exact and hybrid hits materialize native
+  filter decisions, and hybrid hits include complete ranking traces. Synthetic integration coverage
+  proves graph scope and metadata filters intersect before ranking and that
+  changing fusion weights changes the winning record without Swift-side
+  ranking logic.
 
 ## Current Size, RAM, and Speed Goal
 

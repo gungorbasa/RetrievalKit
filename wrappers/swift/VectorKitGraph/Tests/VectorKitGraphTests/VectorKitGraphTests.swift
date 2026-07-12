@@ -5,8 +5,8 @@ import XCTest
 final class VectorKitGraphTests: XCTestCase {
     func testGenericSchemaBuildAndPersistence() async throws {
         let builder = try GraphIndexBuilder(dimension: 2, corpusID: "swift-generic")
-        try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "alpha", recordType: "Item", fields: ["name": .string("Alpha"), "priority": .int(7), "active": .bool(true), "related_id": .string("beta")]), chunks: [GraphChunk(key: "body", text: "searchable alpha", embedding: [1, 0])]))
-        try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "beta", recordType: "Item", fields: ["name": .string("Beta")]), chunks: [GraphChunk(key: "body", text: "searchable beta", embedding: [0, 1])]))
+        try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "alpha", recordType: "Item", fields: ["name": .string("Alpha"), "priority": .int(7), "active": .bool(true), "related_id": .string("beta")]), projectedMetadata: ["tenant": .string("a"), "rank": .integer(1)], chunks: [GraphChunk(key: "body", text: "searchable alpha", embedding: [1, 0])]))
+        try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "beta", recordType: "Item", fields: ["name": .string("Beta")]), projectedMetadata: ["tenant": .string("b"), "rank": .integer(2)], chunks: [GraphChunk(key: "body", text: "searchable beta", embedding: [0, 1])]))
         let relationship = GraphRelationshipSchema(relationshipType: "related_to", sourceNodeType: "Item", targetNodeType: "Item", sourceField: GraphFieldPath("related_id"), cardinality: .optionalOne, inverseRelationship: "related_from")
         let graph = try await builder.build(schema: GraphSchema(recordNodes: [GraphRecordNodeSchema(recordType: "Item", nodeType: "Item", queryableFields: [GraphFieldPath("name"), GraphFieldPath("priority"), GraphFieldPath("active")])], relationships: [relationship]))
         let result = try await graph.query(nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha")])
@@ -22,6 +22,26 @@ final class VectorKitGraphTests: XCTestCase {
         XCTAssertEqual(exact.map(\.recordID), ["alpha"])
         XCTAssertEqual(keyword.map(\.recordID), ["alpha"])
         XCTAssertEqual(hybrid.map(\.recordID), ["alpha"])
+
+        let both = try await graph.query(nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha"), .string("Beta")])
+        let betaFilter = GraphFilter.all([.equals("tenant", .string("b")), .range("rank", lower: .integer(2), upper: .integer(2))])
+        let filteredExact = try await graph.search([1, 0], topK: 10, in: both, filter: betaFilter)
+        let filteredKeyword = try await graph.keywordSearch("searchable", topK: 10, in: both, filter: betaFilter)
+        let filteredHybrid = try await graph.hybridSearch(text: "searchable", embedding: [1, 0], topK: 10, in: both, filter: betaFilter)
+        XCTAssertEqual(filteredExact.map(\.recordID), ["beta"])
+        XCTAssertEqual(filteredKeyword.map(\.recordID), ["beta"])
+        XCTAssertEqual(filteredHybrid.map(\.recordID), ["beta"])
+        XCTAssertTrue(filteredExact[0].filterMatched)
+        XCTAssertTrue(filteredHybrid[0].trace.filterMatched)
+
+        let vectorOnly = GraphHybridOptions(vectorTopK: 2, keywordTopK: 2, fusion: .weightedNormalizedScore(vectorWeight: 1, keywordWeight: 0))
+        let keywordOnly = GraphHybridOptions(vectorTopK: 2, keywordTopK: 2, fusion: .weightedNormalizedScore(vectorWeight: 0, keywordWeight: 1))
+        let vectorPreferred = try await graph.hybridSearch(text: "beta", embedding: [1, 0], topK: 2, in: both, options: vectorOnly)
+        let keywordPreferred = try await graph.hybridSearch(text: "beta", embedding: [1, 0], topK: 2, in: both, options: keywordOnly)
+        XCTAssertEqual(vectorPreferred.first?.recordID, "alpha")
+        XCTAssertEqual(keywordPreferred.first?.recordID, "beta")
+        XCTAssertNotNil(vectorPreferred.first?.trace.normalizedVectorScore)
+        XCTAssertNotNil(keywordPreferred.first?.trace.normalizedKeywordScore)
 
         let traversed = try await graph.query(nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha")], traversing: [GraphTraversal(relationship: "related_to")])
         XCTAssertEqual(traversed.matches.count, 1)

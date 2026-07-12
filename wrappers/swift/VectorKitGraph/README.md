@@ -19,4 +19,8 @@ query limits, cancellation, timeout, lock contention, and internal failures;
 Swift does not re-run graph validation to classify errors.
 Each `GraphQueryResult` retains its native generation-bound candidate scope and
 can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
-chunk IDs or changing the graph-free ranking implementations.
+chunk IDs or changing the graph-free ranking implementations. All three scoped
+rankers accept composable `GraphFilter` metadata predicates. Hybrid retrieval
+also accepts candidate limits and RRF or weighted normalized-score fusion
+through `GraphHybridOptions`; results expose the native ranks, normalized
+scores, matched terms, and filter decision.

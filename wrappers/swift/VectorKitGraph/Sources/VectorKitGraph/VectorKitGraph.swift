@@ -162,7 +162,7 @@ public struct GraphSchema: Equatable, Sendable, Encodable {
     enum CodingKeys: String, CodingKey { case version, recordNodes = "record_nodes", relationships, chunkNodes = "chunk_nodes" }
 }
 
-public enum VectorKitGraphError: Error, Equatable {
+public enum VectorKitGraphError: Error, Equatable, Sendable {
     case invalidSchema(String)
     case invalidIdentity(String)
     case staleGeneration(String)
@@ -223,26 +223,53 @@ public struct GraphMatch: Equatable, Sendable {
 }
 public struct GraphQueryTrace: Equatable, Sendable { public let seedCount, visitedStates, traversedEdges, resultCount, diagnostics: Int; public let truncationReason: UInt32 }
 private final class NativeGraphExecution: @unchecked Sendable {
-    let result, scope: UInt
+    private let lock = NSLock(); private var result, scope: UInt?
     init(result: OpaquePointer, scope: OpaquePointer) { self.result = UInt(bitPattern: result); self.scope = UInt(bitPattern: scope) }
-    deinit { vectorkit_graph_scope_free(OpaquePointer(bitPattern: scope)); vectorkit_graph_result_free(OpaquePointer(bitPattern: result)) }
+    deinit { close() }
+    func close() {
+        lock.lock(); defer { lock.unlock() }
+        if let scope { vectorkit_graph_scope_free(OpaquePointer(bitPattern: scope)); self.scope = nil }
+        if let result { vectorkit_graph_result_free(OpaquePointer(bitPattern: result)); self.result = nil }
+    }
+    func withScope<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
+        lock.lock(); defer { lock.unlock() }
+        guard let scope, let pointer = OpaquePointer(bitPattern: scope) else { throw VectorKitGraphError.graphUnavailable("graph query result is closed") }
+        return try body(pointer)
+    }
 }
-public struct GraphQueryResult: Sendable {
+public final class GraphQueryResult: @unchecked Sendable {
     public let matches: [GraphMatch]; public let trace: GraphQueryTrace
     fileprivate let native: NativeGraphExecution
+    fileprivate init(matches: [GraphMatch], trace: GraphQueryTrace, native: NativeGraphExecution) { self.matches = matches; self.trace = trace; self.native = native }
+    public func close() { native.close() }
 }
-extension GraphQueryResult: Equatable { public static func == (left: Self, right: Self) -> Bool { left.matches == right.matches && left.trace == right.trace } }
+extension GraphQueryResult: Equatable { public static func == (left: GraphQueryResult, right: GraphQueryResult) -> Bool { left.matches == right.matches && left.trace == right.trace } }
 public struct GraphSearchHit: Equatable, Sendable { public let chunkID: UInt64; public let recordID, text: String; public let score, vectorScore: Float; public let filterMatched: Bool }
 public struct GraphKeywordHit: Equatable, Sendable { public let chunkID: UInt64; public let recordID, text: String; public let score: Float; public let matchedTerms: [String] }
 public struct GraphHybridTrace: Equatable, Sendable { public let vectorRank, keywordRank: Int?; public let normalizedVectorScore, normalizedKeywordScore: Float?; public let matchedTerms: [String]; public let filterMatched: Bool }
 public struct GraphHybridHit: Equatable, Sendable { public let chunkID: UInt64; public let recordID, text: String; public let score: Float; public let vectorScore, keywordScore: Float?; public let trace: GraphHybridTrace; public var matchedTerms: [String] { trace.matchedTerms } }
 
 public final class GraphCancellationToken: @unchecked Sendable {
-    private let handle: UInt = UInt(bitPattern: vectorkit_graph_cancellation_new())
+    private let condition = NSCondition(); private var handle: UInt? = UInt(bitPattern: vectorkit_graph_cancellation_new()); private var activeUses = 0; private var closed = false
     public init() {}
-    deinit { vectorkit_graph_cancellation_free(OpaquePointer(bitPattern: handle)) }
-    public func cancel() { vectorkit_graph_cancellation_cancel(OpaquePointer(bitPattern: handle)) }
-    fileprivate var pointer: OpaquePointer? { OpaquePointer(bitPattern: handle) }
+    deinit { close() }
+    public func cancel() {
+        condition.lock(); defer { condition.unlock() }
+        if let handle { vectorkit_graph_cancellation_cancel(OpaquePointer(bitPattern: handle)) }
+    }
+    public func close() {
+        condition.lock(); closed = true
+        while activeUses > 0 { condition.wait() }
+        let owned = handle; handle = nil; condition.unlock()
+        if let owned { vectorkit_graph_cancellation_free(OpaquePointer(bitPattern: owned)) }
+    }
+    fileprivate func withPointer<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
+        condition.lock()
+        guard !closed, let handle, let pointer = OpaquePointer(bitPattern: handle) else { condition.unlock(); throw VectorKitGraphError.graphUnavailable("graph cancellation token is closed") }
+        activeUses += 1; condition.unlock()
+        defer { condition.lock(); activeUses -= 1; condition.broadcast(); condition.unlock() }
+        return try body(pointer)
+    }
 }
 
 private final class GraphCStringArena {
@@ -341,17 +368,20 @@ private extension GraphFilter {
 }
 
 public actor GraphIndexBuilder {
-    private var handle: UInt?
+    private var handle: UInt?; private var closed = false
     public init(dimension: Int, corpusID: String, metric: GraphMetric = .cosine, encoding: GraphVectorEncoding = .f32) throws {
         handle = UInt(bitPattern: try Native.pointer { status in corpusID.withCString { vectorkit_graph_builder_new(dimension, metric.ffi, encoding.ffi, $0, status) } })
     }
     deinit { if let handle { vectorkit_graph_builder_free(OpaquePointer(bitPattern: handle)) } }
+    public func close() { if let handle { vectorkit_graph_builder_free(OpaquePointer(bitPattern: handle)); self.handle = nil }; closed = true }
     public func upsert(_ batch: GraphRecordBatch) throws {
+        if closed { throw VectorKitGraphError.graphUnavailable("graph builder is closed") }
         guard let handle else { throw VectorKitGraphError.consumedBuilder }
         let data = try JSONEncoder().encode(batch); let json = String(decoding: data, as: UTF8.self)
         try Native.bool { status in json.withCString { vectorkit_graph_builder_upsert_record_json(OpaquePointer(bitPattern: handle), $0, status) } }
     }
     public func build(schema: GraphSchema) throws -> GraphIndex {
+        if closed { throw VectorKitGraphError.graphUnavailable("graph builder is closed") }
         guard let owned = handle else { throw VectorKitGraphError.consumedBuilder }; handle = nil
         let data = try JSONEncoder().encode(schema); let json = String(decoding: data, as: UTF8.self)
         let graph = try Native.pointer { status in json.withCString { vectorkit_graph_builder_build_json(OpaquePointer(bitPattern: owned), $0, status) } }
@@ -360,14 +390,17 @@ public actor GraphIndexBuilder {
 }
 
 public actor GraphIndex {
-    private let handle: UInt
+    private var handle: UInt?
     fileprivate init(handle: UInt) { self.handle = handle }
-    deinit { vectorkit_graph_index_free(OpaquePointer(bitPattern: handle)) }
-    public func save(to directory: URL) throws { try Native.bool { status in directory.path.withCString { vectorkit_graph_index_save(OpaquePointer(bitPattern: handle), $0, status) } } }
+    deinit { if let handle { vectorkit_graph_index_free(OpaquePointer(bitPattern: handle)) } }
+    public func close() { if let handle { vectorkit_graph_index_free(OpaquePointer(bitPattern: handle)); self.handle = nil } }
+    private func requireHandle() throws -> UInt { guard let handle else { throw VectorKitGraphError.graphUnavailable("graph index is closed") }; return handle }
+    public func save(to directory: URL) throws { let handle = try requireHandle(); try Native.bool { status in directory.path.withCString { vectorkit_graph_index_save(OpaquePointer(bitPattern: handle), $0, status) } } }
     public static func load(from directory: URL) throws -> GraphIndex { GraphIndex(handle: UInt(bitPattern: try Native.pointer { status in directory.path.withCString { vectorkit_graph_index_load($0, status) } })) }
     public static func validate(at directory: URL) throws { try Native.bool { status in directory.path.withCString { vectorkit_graph_index_validate($0, status) } } }
 
     public func query(from seeds: [GraphNodeID], traversing steps: [GraphTraversal] = [], limits: GraphQueryLimits = .init(), cancellation: GraphCancellationToken? = nil) throws -> GraphQueryResult {
+        _ = try requireHandle()
         let arena = GraphCStringArena()
         let nativeSeeds = seeds.map { seed in VkGraphNodeRef(node_type: arena.copy(seed.nodeType), source_type: seed.chunkKey == nil ? 0 : 1, record_id: arena.copy(seed.recordID), chunk_key: seed.chunkKey.map(arena.copy)) }
         let nativeSteps = steps.map { step in VkGraphStep(relationship: arena.copy(step.relationship), direction: step.direction == .outgoing ? 0 : 1, min_hops: step.minHops, max_hops: step.maxHops) }
@@ -381,6 +414,7 @@ public actor GraphIndex {
     }
 
     public func query(nodeType: String, field: GraphFieldPath, equals values: [GraphScalar], traversing steps: [GraphTraversal] = [], limits: GraphQueryLimits = .init(), cancellation: GraphCancellationToken? = nil) throws -> GraphQueryResult {
+        _ = try requireHandle()
         let arena = GraphCStringArena()
         let nativeFields = field.segments.map(arena.copy)
         let nativeValues = values.map { value in
@@ -407,8 +441,14 @@ public actor GraphIndex {
     }
 
     private func execute(_ query: VkGraphQuery, cancellation: GraphCancellationToken?) throws -> GraphQueryResult {
+        let handle = try requireHandle()
         var status = VkStatus(code: 0, message: nil)
-        guard let result = vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, cancellation?.pointer, &status) else {
+        let result: OpaquePointer? = if let cancellation {
+            try cancellation.withPointer { pointer in vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, pointer, &status) }
+        } else {
+            vectorkit_graph_query(OpaquePointer(bitPattern: handle), query, nil, &status)
+        }
+        guard let result else {
             defer { vectorkit_status_clear(&status) }
             throw Native.error(status, fallback: "unknown graph error")
         }
@@ -440,29 +480,34 @@ public actor GraphIndex {
     }
 
     public func search(_ embedding: [Float], topK: Int, in result: GraphQueryResult, filter: GraphFilter? = nil) throws -> [GraphSearchHit] {
+        let handle = try requireHandle()
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         let nativeFilter = try filter?.makeFFI()
         var output = VkSearchResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
-        guard vectorkit_graph_scope_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer, &output, &status) else { throw Native.error(status, fallback: "scoped search failed") }
+        let succeeded = try result.native.withScope { scope in vectorkit_graph_scope_search(OpaquePointer(bitPattern: handle), scope, embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer, &output, &status) }
+        guard succeeded else { throw Native.error(status, fallback: "scoped search failed") }
         defer { vectorkit_search_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; return GraphSearchHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, vectorScore: hit.vector_score, filterMatched: hit.filter_matched) }
     }
 
     public func keywordSearch(_ text: String, topK: Int, in result: GraphQueryResult, filter: GraphFilter? = nil) throws -> [GraphKeywordHit] {
+        let handle = try requireHandle()
         let nativeFilter = try filter?.makeFFI()
         var output = VkKeywordResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
         let arena = GraphCStringArena()
-        let ok = vectorkit_graph_scope_keyword_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), arena.copy(text), topK, nativeFilter?.pointer, &output, &status)
+        let ok = try result.native.withScope { scope in vectorkit_graph_scope_keyword_search(OpaquePointer(bitPattern: handle), scope, arena.copy(text), topK, nativeFilter?.pointer, &output, &status) }
         guard ok else { throw Native.error(status, fallback: "scoped keyword search failed") }
         defer { vectorkit_keyword_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; let terms = (0..<hit.matched_terms.count).map { String(cString: hit.matched_terms.values[$0]!) }; return GraphKeywordHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, matchedTerms: terms) }
     }
 
     public func hybridSearch(text: String, embedding: [Float], topK: Int, in result: GraphQueryResult, filter: GraphFilter? = nil, options: GraphHybridOptions = .default) throws -> [GraphHybridHit] {
+        let handle = try requireHandle()
         let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count)); for (index, value) in embedding.enumerated() { pointer.advanced(by: index).initialize(to: value) }; defer { pointer.deinitialize(count: embedding.count); pointer.deallocate() }
         let nativeFilter = try filter?.makeFFI()
         let arena = GraphCStringArena(); var output = VkHybridResultBuffer(hits: nil, count: 0); var status = VkStatus(code: 0, message: nil); defer { vectorkit_status_clear(&status) }
-        guard vectorkit_graph_scope_hybrid_search(OpaquePointer(bitPattern: handle), OpaquePointer(bitPattern: result.native.scope), arena.copy(text), embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer, options.ffiValue, &output, &status) else { throw Native.error(status, fallback: "scoped hybrid search failed") }
+        let succeeded = try result.native.withScope { scope in vectorkit_graph_scope_hybrid_search(OpaquePointer(bitPattern: handle), scope, arena.copy(text), embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer, options.ffiValue, &output, &status) }
+        guard succeeded else { throw Native.error(status, fallback: "scoped hybrid search failed") }
         defer { vectorkit_hybrid_results_free(output) }
         return (0..<output.count).map { index in let hit = output.hits[index]; let terms = (0..<hit.matched_terms.count).map { String(cString: hit.matched_terms.values[$0]!) }; let trace = GraphHybridTrace(vectorRank: hit.has_vector_rank ? hit.vector_rank : nil, keywordRank: hit.has_keyword_rank ? hit.keyword_rank : nil, normalizedVectorScore: hit.has_normalized_vector_score ? hit.normalized_vector_score : nil, normalizedKeywordScore: hit.has_normalized_keyword_score ? hit.normalized_keyword_score : nil, matchedTerms: terms, filterMatched: hit.filter_matched); return GraphHybridHit(chunkID: hit.chunk_id, recordID: String(cString: hit.document_id), text: String(cString: hit.text), score: hit.score, vectorScore: hit.has_vector_score ? hit.vector_score : nil, keywordScore: hit.has_keyword_score ? hit.keyword_score : nil, trace: trace) }
     }

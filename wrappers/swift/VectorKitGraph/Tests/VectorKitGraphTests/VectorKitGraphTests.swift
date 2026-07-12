@@ -101,4 +101,41 @@ final class VectorKitGraphTests: XCTestCase {
         do { _ = try GraphIndex.load(from: missingDirectory); XCTFail("expected invalid snapshot") }
         catch let error as VectorKitGraphError { guard case .corruptSnapshot = error else { return XCTFail("expected typed corrupt snapshot, got \(error)") } }
     }
+
+    func testExplicitCloseIsIdempotentAndRejectsUseAfterClose() async throws {
+        let closedBuilder = try GraphIndexBuilder(dimension: 2, corpusID: "closed-builder")
+        await closedBuilder.close(); await closedBuilder.close()
+        do { try await closedBuilder.upsert(GraphRecordBatch(record: GraphRecord(id: "item", recordType: "Item"), chunks: [])); XCTFail("expected closed builder") }
+        catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }
+
+        let builder = try GraphIndexBuilder(dimension: 2, corpusID: "lifecycle")
+        try await builder.upsert(GraphRecordBatch(record: GraphRecord(id: "item", recordType: "Item"), chunks: [GraphChunk(key: "body", text: "lifecycle item", embedding: [1, 0])]))
+        let graph = try await builder.build(schema: GraphSchema(recordNodes: [GraphRecordNodeSchema(recordType: "Item", nodeType: "Item")]))
+        let result = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")])
+        result.close(); result.close()
+        do { _ = try await graph.search([1, 0], topK: 1, in: result); XCTFail("expected closed result") }
+        catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }
+
+        let cancellation = GraphCancellationToken(); cancellation.close(); cancellation.close()
+        do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")], cancellation: cancellation); XCTFail("expected closed cancellation token") }
+        catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }
+
+        let stressResult = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")])
+        let safeOutcomes = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+            for _ in 0..<32 {
+                group.addTask {
+                    do { _ = try await graph.search([1, 0], topK: 1, in: stressResult); return true }
+                    catch let error as VectorKitGraphError { if case .graphUnavailable = error { return true }; return false }
+                    catch { return false }
+                }
+            }
+            group.addTask { stressResult.close(); return true }
+            var values: [Bool] = []; for await value in group { values.append(value) }; return values
+        }
+        XCTAssertEqual(safeOutcomes.count, 33); XCTAssertTrue(safeOutcomes.allSatisfy { $0 })
+
+        await graph.close(); await graph.close()
+        do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")]); XCTFail("expected closed index") }
+        catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }
+    }
 }

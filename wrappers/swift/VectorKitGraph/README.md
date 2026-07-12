@@ -17,6 +17,12 @@ maps them to `VectorKitGraphError` cases for invalid schema/identity, stale
 generation, incompatible version, unavailable graph data, corrupt snapshots,
 query limits, cancellation, timeout, lock contention, and internal failures;
 Swift does not re-run graph validation to classify errors.
+Builder, index, query-result/scope, and cancellation-token owners provide
+idempotent `close()` methods for deterministic native resource release; `deinit`
+remains a fallback. Closed resources reject further work with
+`VectorKitGraphError.graphUnavailable`. Result and cancellation-token closure
+is synchronized against active native calls so concurrent closure cannot free a
+handle still in use.
 Each `GraphQueryResult` retains its native generation-bound candidate scope and
 can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
 chunk IDs or changing the graph-free ranking implementations. All three scoped

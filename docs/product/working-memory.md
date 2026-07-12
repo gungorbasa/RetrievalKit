@@ -120,6 +120,13 @@ implemented, or superseded by the product spec.
   proves graph scope and metadata filters intersect before ranking and that
   changing fusion weights changes the winning record without Swift-side
   ranking logic.
+- M4.6 adds idempotent explicit closure for Swift graph builders, indexes,
+  query-result/scope owners, and cancellation tokens, with `deinit` retained as
+  fallback cleanup. Use-after-close maps to `graphUnavailable`. Result closure
+  serializes against active scoped ranking calls; token closure waits for active
+  native queries while still permitting concurrent `cancel()` to reach Rust.
+  Swift stress coverage races 32 scoped searches with result closure and accepts
+  only completed searches or typed closed-resource rejection.
 
 ## Current Size, RAM, and Speed Goal
 

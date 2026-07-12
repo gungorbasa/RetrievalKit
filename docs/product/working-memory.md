@@ -6,9 +6,10 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
-- Implement the approved capability-separated architecture autonomously.
-- Finish each numbered architecture step with checks and a clean commit before
-  starting the next step.
+- The approved capability-separated Rust/FFI/Swift architecture is implemented
+  and locally qualified through all seven clean commit gates.
+- Keep customer-specific fixtures deferred; the graph package remains generic
+  and schema-driven.
 - Prefer mature fast crates for performance-sensitive work when they clearly
   help. Avoid dependencies for simple local logic.
 
@@ -34,6 +35,15 @@ implemented, or superseded by the product spec.
   `GraphRetrievalDatabase`, with embeddings accepted only by
   retrieval-capable builders. See
   `docs/product/capability-separated-architecture.md`.
+
+- Capability separation is complete. Rust now owns canonical `CorpusIndex`,
+  derived `RetrievalIndex`, and graph-only `GraphEngine` components. Swift
+  exposes `RetrievalDatabase`, `GraphDatabase`, and
+  `GraphRetrievalDatabase`; graph-only APIs accept no vector settings or
+  embeddings, and graph selections release automatically. Five interleaved
+  pre-refactor/current benchmark pairs measured median p95 deltas of exact
+  -0.57%, internal BM25 -0.05%, and hybrid +0.41%, passing the +3% gate. See
+  `docs/product/reports/capability-separated-qualification-report.md`.
 
 - M0 product authorization and the customer fixture contract/template are in
   place. The template deliberately contains no invented customer data.
@@ -159,7 +169,8 @@ implemented, or superseded by the product spec.
   this exact contract. `scripts/verify-swift-graph-wrapper.sh` proves base symbol
   neutrality, aggregate core+graph symbols, separate package linkage, tests,
   and exact quickstart output; manual CI runs the script after full Apple builds.
-- M4 Swift qualification is complete. Full macOS, iOS device, and iOS simulator
+- The earlier M4 Swift qualification is complete. Full macOS, iOS device, and
+  iOS simulator
   XCFramework builds pass for both base and aggregate artifacts, including
   symbol-neutrality and separate-linkage verification. The clean build exposed
   and fixed a Bash 3 empty-feature-array failure in the base build script. See

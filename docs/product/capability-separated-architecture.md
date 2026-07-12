@@ -76,8 +76,7 @@ the enabled derived payloads:
 .snapshots/<generation>/
   corpus/
   retrieval/   # optional
-  graph/       # optional
-  schema.json  # graph only
+  graph/       # optional; contains schema.json and graph.bin
 ```
 
 The manifest records the database capability variant, retrieval mode, format

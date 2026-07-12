@@ -1,7 +1,7 @@
 import VectorKitGraph
 
 @main
-struct VectorKitGraphQuickstart {
+struct VectorKitGraphRetrievalQuickstart {
   static func main() async throws {
     let schema = GraphSchema(recordNodes: [
       GraphRecordNodeSchema(
@@ -10,9 +10,12 @@ struct VectorKitGraphQuickstart {
         queryableFields: ["title"]
       )
     ])
-    let builder = try GraphDatabase.Builder(
+    let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "knowledge",
-      schema: schema
+      graph: schema,
+      retrieval: .hybrid(
+        vector: .init(dimension: 2, encoding: .f32)
+      )
     )
     try await builder.upsert(
       RecordInput(
@@ -24,7 +27,8 @@ struct VectorKitGraphQuickstart {
         chunks: [
           Chunk(key: "summary", text: "Rust provides native retrieval.")
         ]
-      )
+      ),
+      embeddings: ["summary": [1, 0]]
     )
     let database = try await builder.build()
     let selection = try await database.graph.query(
@@ -32,6 +36,11 @@ struct VectorKitGraphQuickstart {
       field: "title",
       equals: .string("Rust")
     )
-    print("graph=\(selection.matches.map(\.nodeID.recordID).joined(separator: ","))")
+    let hits = try await database.retrieval.hybridSearch(
+      text: "native retrieval",
+      embedding: [1, 0],
+      within: selection
+    )
+    print("combined=\(hits.map(\.recordID).joined(separator: ","))")
   }
 }

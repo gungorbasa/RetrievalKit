@@ -156,7 +156,55 @@ typedef struct VkHybridOptions {
   float rrf_k;
 } VkHybridOptions;
 
+#define VK_STATUS_INVALID_DIMENSION 5
+#define VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE 6
+#define VK_STATUS_INVALID_IDENTITY 7
+#define VK_STATUS_MISSING_EMBEDDING 8
+
+typedef struct VkRetrievalBuilder VkRetrievalBuilder;
+typedef struct VkRetrievalDatabase VkRetrievalDatabase;
+
 void vectorkit_status_clear(VkStatus *status);
+
+// retrieval_mode: 0 semantic, 1 hybrid.
+VkRetrievalBuilder *vectorkit_retrieval_builder_new(
+    uint32_t retrieval_mode,
+    size_t dimension,
+    uint32_t metric,
+    uint32_t encoding,
+    const char *corpus_id,
+    VkStatus *status);
+bool vectorkit_retrieval_builder_upsert_record_json(
+    VkRetrievalBuilder *builder,
+    const char *record_json,
+    VkStatus *status);
+VkRetrievalDatabase *vectorkit_retrieval_builder_build(
+    VkRetrievalBuilder *builder,
+    VkStatus *status);
+void vectorkit_retrieval_builder_free(VkRetrievalBuilder *builder);
+
+VkRetrievalDatabase *vectorkit_retrieval_database_load(const char *directory, VkStatus *status);
+bool vectorkit_retrieval_database_save(const VkRetrievalDatabase *database, const char *directory, VkStatus *status);
+bool vectorkit_retrieval_database_validate(const char *directory, VkStatus *status);
+void vectorkit_retrieval_database_free(VkRetrievalDatabase *database);
+bool vectorkit_retrieval_semantic_search(
+    const VkRetrievalDatabase *database,
+    const float *embedding,
+    size_t embedding_len,
+    size_t top_k,
+    const VkFilter *filter,
+    VkSearchResultBuffer *out_results,
+    VkStatus *status);
+bool vectorkit_retrieval_hybrid_search(
+    const VkRetrievalDatabase *database,
+    const char *text,
+    const float *embedding,
+    size_t embedding_len,
+    size_t top_k,
+    const VkFilter *filter,
+    VkHybridOptions options,
+    VkHybridResultBuffer *out_results,
+    VkStatus *status);
 
 /*
  * Threading contract for one VkIndex handle:

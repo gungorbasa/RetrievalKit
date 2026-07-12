@@ -10,8 +10,10 @@ let package = Package(
     ],
     products: [
         .library(name: "VectorKit", targets: ["VectorKit"]),
-        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"])
+        .library(name: "VectorKitIngest", targets: ["VectorKitIngest"]),
+        .executable(name: "VectorKitRetrievalQuickstart", targets: ["VectorKitRetrievalQuickstart"])
     ],
+    dependencies: [.package(path: "../VectorKitShared")],
     targets: [
         .binaryTarget(
             name: "VectorKitFFI",
@@ -19,11 +21,18 @@ let package = Package(
         ),
         .target(
             name: "VectorKit",
-            dependencies: ["VectorKitFFI"]
+            dependencies: [
+                "VectorKitFFI",
+                .product(name: "VectorKitShared", package: "VectorKitShared")
+            ]
         ),
         .target(
             name: "VectorKitIngest",
             dependencies: ["VectorKitFFI"]
+        ),
+        .executableTarget(
+            name: "VectorKitRetrievalQuickstart",
+            dependencies: ["VectorKit"]
         ),
         .testTarget(
             name: "VectorKitTests",

@@ -4,10 +4,12 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
 
+use serde::Deserialize;
 use vectorkit_core::{
-    ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridFusion, HybridHit,
-    HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery, Metadata,
-    MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex, Filter,
+    HybridFusion, HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit,
+    KeywordQuery, Metadata, MetadataValue, Record, RecordChunkInput, RetrievalConfiguration,
+    RetrievalDatabase, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
@@ -26,6 +28,10 @@ const VK_STATUS_INVALID_ARGUMENT: i32 = 1;
 const VK_STATUS_CORE_ERROR: i32 = 2;
 const VK_STATUS_PANIC: i32 = 3;
 const VK_STATUS_CORRUPT_INDEX: i32 = 4;
+const VK_STATUS_INVALID_DIMENSION: i32 = 5;
+const VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE: i32 = 6;
+const VK_STATUS_INVALID_IDENTITY: i32 = 7;
+const VK_STATUS_MISSING_EMBEDDING: i32 = 8;
 
 const VK_METRIC_COSINE: u32 = 0;
 const VK_METRIC_DOT_PRODUCT: u32 = 1;
@@ -204,6 +210,31 @@ pub struct VkIndex {
     index: ExactVectorIndex,
 }
 
+pub struct VkRetrievalBuilder {
+    database: RetrievalDatabase,
+}
+
+pub struct VkRetrievalDatabase {
+    database: RetrievalDatabase,
+}
+
+#[derive(Deserialize)]
+struct RetrievalRecordBatch {
+    record: Record,
+    #[serde(default)]
+    projected_metadata: Metadata,
+    chunks: Vec<RetrievalRecordChunk>,
+}
+
+#[derive(Deserialize)]
+struct RetrievalRecordChunk {
+    key: ChunkKey,
+    text: String,
+    embedding: Vec<f32>,
+    #[serde(default)]
+    metadata: Metadata,
+}
+
 pub struct VkFilter {
     filter: Filter,
 }
@@ -226,6 +257,226 @@ pub unsafe extern "C" fn vectorkit_status_clear(status: *mut VkStatus) {
     }
     status.code = VK_STATUS_OK;
     status.message = ptr::null_mut();
+}
+
+/// # Safety
+/// String and status pointers must be valid for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_builder_new(
+    retrieval_mode: u32,
+    dimension: usize,
+    metric: u32,
+    encoding: u32,
+    corpus_id: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkRetrievalBuilder {
+    ffi_ptr(status, || {
+        let vector = IndexConfig::new(dimension, parse_metric(metric)?)
+            .with_vector_encoding(parse_encoding_code(encoding)?);
+        let configuration = match retrieval_mode {
+            0 => RetrievalConfiguration::semantic(vector),
+            1 => RetrievalConfiguration::hybrid(vector),
+            _ => {
+                return Err(FfiError::invalid_argument(
+                    "retrieval_mode must be 0 (semantic) or 1 (hybrid)",
+                ))
+            }
+        };
+        let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
+        let database = RetrievalDatabase::new(configuration, corpus_id)?;
+        Ok(Box::into_raw(Box::new(VkRetrievalBuilder { database })))
+    })
+}
+
+/// # Safety
+/// The builder must be live and `record_json` must be valid UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_builder_upsert_record_json(
+    builder: *mut VkRetrievalBuilder,
+    record_json: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let builder = unsafe { builder.as_mut() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval builder must not be null"))?;
+        let json = unsafe { read_c_string(record_json, "record_json") }?;
+        let batch: RetrievalRecordBatch = serde_json::from_str(&json).map_err(|error| {
+            let code = if error.to_string().contains("missing field `embedding`") {
+                VK_STATUS_MISSING_EMBEDDING
+            } else {
+                VK_STATUS_INVALID_ARGUMENT
+            };
+            FfiError {
+                code,
+                message: format!("invalid retrieval record JSON: {error}"),
+            }
+        })?;
+        builder.database.upsert_record(
+            batch.record,
+            batch.projected_metadata,
+            batch
+                .chunks
+                .into_iter()
+                .map(|chunk| RecordChunkInput {
+                    key: chunk.key,
+                    text: chunk.text,
+                    embedding: chunk.embedding,
+                    metadata: chunk.metadata,
+                })
+                .collect(),
+        )?;
+        Ok(())
+    })
+}
+
+/// # Safety
+/// The builder must be live and is consumed by this call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_builder_build(
+    builder: *mut VkRetrievalBuilder,
+    status: *mut VkStatus,
+) -> *mut VkRetrievalDatabase {
+    ffi_ptr(status, || {
+        if builder.is_null() {
+            return Err(FfiError::invalid_argument(
+                "retrieval builder must not be null",
+            ));
+        }
+        let builder = unsafe { Box::from_raw(builder) };
+        Ok(Box::into_raw(Box::new(VkRetrievalDatabase {
+            database: builder.database,
+        })))
+    })
+}
+
+/// # Safety
+/// The pointer must be null or a live builder not used elsewhere.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_builder_free(builder: *mut VkRetrievalBuilder) {
+    if !builder.is_null() {
+        drop(unsafe { Box::from_raw(builder) });
+    }
+}
+
+/// # Safety
+/// The directory and status pointers must be valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_database_load(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> *mut VkRetrievalDatabase {
+    ffi_ptr(status, || {
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        let database = RetrievalDatabase::load_from_dir(directory)?;
+        Ok(Box::into_raw(Box::new(VkRetrievalDatabase { database })))
+    })
+}
+
+/// # Safety
+/// The database must be live and string/status pointers valid.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_database_save(
+    database: *const VkRetrievalDatabase,
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        database.database.save_to_dir(directory)?;
+        Ok(())
+    })
+}
+
+/// # Safety
+/// The directory and status pointers must be valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_database_validate(
+    directory: *const c_char,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let directory = unsafe { read_c_string(directory, "directory") }?;
+        RetrievalDatabase::validate_dir(directory)?;
+        Ok(())
+    })
+}
+
+/// # Safety
+/// The pointer must be null or a live database not used elsewhere.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_database_free(database: *mut VkRetrievalDatabase) {
+    if !database.is_null() {
+        drop(unsafe { Box::from_raw(database) });
+    }
+}
+
+/// # Safety
+/// All input and output pointers must remain valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_semantic_search(
+    database: *const VkRetrievalDatabase,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkSearchResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
+        let mut query = SearchQuery::new(
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        );
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = database.database.semantic_search(&query)?;
+        unsafe { *out_results = retrieval_search_result_buffer(&database.database, hits) };
+        Ok(())
+    })
+}
+
+/// # Safety
+/// All input and output pointers must remain valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_retrieval_hybrid_search(
+    database: *const VkRetrievalDatabase,
+    text: *const c_char,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        query.fusion = parse_hybrid_fusion(options)?;
+        let hits = database.database.hybrid_search(&query)?;
+        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits) };
+        Ok(())
+    })
 }
 
 /// Creates a new local exact/hybrid index.
@@ -927,10 +1178,17 @@ impl FfiError {
     }
 
     fn core(error: vectorkit_core::VectorKitError) -> Self {
-        let code = if matches!(error, vectorkit_core::VectorKitError::CorruptIndex { .. }) {
-            VK_STATUS_CORRUPT_INDEX
-        } else {
-            VK_STATUS_CORE_ERROR
+        let code = match &error {
+            vectorkit_core::VectorKitError::CorruptIndex { .. } => VK_STATUS_CORRUPT_INDEX,
+            vectorkit_core::VectorKitError::InvalidDimension { .. } => VK_STATUS_INVALID_DIMENSION,
+            vectorkit_core::VectorKitError::RetrievalModeUnavailable { .. } => {
+                VK_STATUS_RETRIEVAL_MODE_UNAVAILABLE
+            }
+            vectorkit_core::VectorKitError::InvalidIdentity { .. }
+            | vectorkit_core::VectorKitError::InvalidRecordValue { .. } => {
+                VK_STATUS_INVALID_IDENTITY
+            }
+            _ => VK_STATUS_CORE_ERROR,
         };
         Self {
             code,
@@ -1209,6 +1467,35 @@ fn search_result_buffer(index: &VkIndex, hits: Vec<SearchHit>) -> VkSearchResult
     buffer
 }
 
+fn retrieval_search_result_buffer(
+    database: &RetrievalDatabase,
+    hits: Vec<SearchHit>,
+) -> VkSearchResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = database
+                .chunk(hit.chunk_id)
+                .map_or("", |chunk| chunk.text.as_str());
+            VkSearchHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                vector_score: hit.trace.vector_score,
+                filter_matched: hit.trace.filter_matched,
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkSearchResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
 fn keyword_result_buffer(index: &VkIndex, hits: Vec<KeywordHit>) -> VkKeywordResultBuffer {
     let mut hits = hits
         .into_iter()
@@ -1245,6 +1532,47 @@ fn hybrid_result_buffer(index: &VkIndex, hits: Vec<HybridHit>) -> VkHybridResult
                 .chunk(hit.chunk_id)
                 .map(|chunk| chunk.text.as_str())
                 .unwrap_or("");
+            VkHybridHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                has_vector_score: hit.vector_score.is_some(),
+                vector_score: hit.vector_score.unwrap_or_default(),
+                has_keyword_score: hit.keyword_score.is_some(),
+                keyword_score: hit.keyword_score.unwrap_or_default(),
+                has_vector_rank: hit.trace.vector_rank.is_some(),
+                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+                has_keyword_rank: hit.trace.keyword_rank.is_some(),
+                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+                matched_terms: string_array(hit.trace.matched_terms),
+                filter_matched: hit.trace.filter_matched,
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkHybridResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
+fn retrieval_hybrid_result_buffer(
+    database: &RetrievalDatabase,
+    hits: Vec<HybridHit>,
+) -> VkHybridResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = database
+                .chunk(hit.chunk_id)
+                .map_or("", |chunk| chunk.text.as_str());
             VkHybridHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
@@ -1691,7 +2019,7 @@ mod tests {
         };
 
         assert!(!searched);
-        assert_eq!(status.code, VK_STATUS_CORE_ERROR);
+        assert_eq!(status.code, VK_STATUS_INVALID_DIMENSION);
         let message = unsafe { CStr::from_ptr(status.message) }
             .to_str()
             .unwrap()

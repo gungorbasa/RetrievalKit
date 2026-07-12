@@ -38,15 +38,25 @@ nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_vectorkit_graph_ffi_abi_version' >
   exit 1
 }
 
+swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKitShared"
 swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKit"
 swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKitGraph"
 
-EXPECTED=$'matches=graph-retrieval\nhybrid=graph-retrieval\nprojection=1/1\nreloaded=graph-retrieval'
-ACTUAL="$(swift run --package-path "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphQuickstart)"
-if [[ "$ACTUAL" != "$EXPECTED" ]]; then
-  echo "quickstart output mismatch" >&2
-  diff -u <(printf '%s\n' "$EXPECTED") <(printf '%s\n' "$ACTUAL") >&2 || true
-  exit 1
-fi
-printf '%s\n' "$ACTUAL"
+check_quickstart() {
+  local package_path="$1"
+  local executable="$2"
+  local expected="$3"
+  local actual
+  actual="$(swift run --package-path "$package_path" "$executable")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "$executable output mismatch" >&2
+    diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >&2 || true
+    exit 1
+  fi
+  printf '%s\n' "$actual"
+}
+
+check_quickstart "$ROOT_DIR/wrappers/swift/VectorKit" VectorKitRetrievalQuickstart 'retrieval=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphQuickstart 'graph=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphRetrievalQuickstart 'combined=rust'
 echo "Swift base/graph linkage and conformance verification passed"

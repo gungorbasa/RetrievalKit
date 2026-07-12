@@ -33,7 +33,7 @@ const VK_GRAPH_STATUS_CANCELLED: i32 = 107;
 const VK_GRAPH_STATUS_TIMED_OUT: i32 = 108;
 const VK_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
 const VK_GRAPH_STATUS_INTERNAL: i32 = 110;
-const VK_GRAPH_STATUS_INVALID_EMBEDDING: i32 = 111;
+const VK_GRAPH_STATUS_INVALID_DIMENSION: i32 = 111;
 const VK_GRAPH_STATUS_MISSING_EMBEDDING: i32 = 112;
 const VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE: i32 = 113;
 
@@ -1227,7 +1227,7 @@ fn capability_core_error(error: vectorkit_core::VectorKitError) -> FfiError {
             VK_GRAPH_STATUS_INVALID_IDENTITY
         }
         vectorkit_core::VectorKitError::InvalidDimension { .. } => {
-            VK_GRAPH_STATUS_INVALID_EMBEDDING
+            VK_GRAPH_STATUS_INVALID_DIMENSION
         }
         vectorkit_core::VectorKitError::RetrievalModeUnavailable { .. } => {
             VK_GRAPH_STATUS_RETRIEVAL_MODE_UNAVAILABLE
@@ -1380,7 +1380,7 @@ impl From<vectorkit_graph::GraphError> for FfiError {
             vectorkit_graph::GraphError::Core { message }
                 if message.contains("invalid vector dimension") =>
             {
-                VK_GRAPH_STATUS_INVALID_EMBEDDING
+                VK_GRAPH_STATUS_INVALID_DIMENSION
             }
             vectorkit_graph::GraphError::Core { message }
                 if message.contains("retrieval mode 'hybrid' is unavailable") =>
@@ -1569,7 +1569,7 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, VK_GRAPH_STATUS_INVALID_EMBEDDING);
+        assert_eq!(status.code, VK_GRAPH_STATUS_INVALID_DIMENSION);
 
         let valid = CString::new(
             serde_json::to_vec(&serde_json::json!({

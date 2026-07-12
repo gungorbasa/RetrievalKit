@@ -41,7 +41,51 @@ target/apple/VectorKitFFI.xcframework
 `target/debug/libvectorkit_ffi.a`, but release validation should use the
 default `Package.swift` and the XCFramework.
 
-## Usage
+## Retrieval Database
+
+Use `RetrievalDatabase` when an application needs semantic or hybrid retrieval
+without graph traversal. The canonical `RecordInput` contains no embeddings;
+embeddings are supplied only to the retrieval-capable builder.
+
+```swift
+import VectorKit
+
+let builder = try RetrievalDatabase.Builder(
+    corpusID: "knowledge",
+    retrieval: .hybrid(
+        vector: .init(dimension: 384)
+    )
+)
+try await builder.upsert(input, embeddings: ["summary": embedding])
+let database = try await builder.build()
+
+let semantic = try await database.retrieval.semanticSearch(
+    embedding: queryEmbedding,
+    topK: 10
+)
+let hybrid = try await database.retrieval.hybridSearch(
+    text: "native retrieval",
+    embedding: queryEmbedding,
+    topK: 10
+)
+```
+
+Choose `.semantic` to persist vectors only. Choose `.hybrid` to add the internal
+BM25 component and enable `hybridSearch`. There is no high-level keyword-only
+database mode. The `retrieval` actor handle is available only on retrieval
+products.
+
+Run the focused example with:
+
+```bash
+swift run --package-path wrappers/swift/VectorKit VectorKitRetrievalQuickstart
+```
+
+## Compatibility API
+
+`VectorIndex` remains temporarily available for existing examples and migration.
+New code should use `RetrievalDatabase` so its enabled capability is explicit at
+the call site.
 
 ```swift
 import VectorKit
@@ -78,7 +122,7 @@ for result in results {
 
 ## Current API Surface
 
-- Create/load/save `VectorIndex`.
+- Create/load/save `RetrievalDatabase` and the compatibility `VectorIndex`.
 - Upsert and delete documents.
 - Separate `VectorKitIngest` product with shared Rust-backed fixed and
   sentence-aware text chunking.

@@ -7,11 +7,17 @@ let package = Package(
     products: [
         .library(name: "VectorKitGraph", targets: ["VectorKitGraph"]),
         .executable(name: "VectorKitGraphQuickstart", targets: ["VectorKitGraphQuickstart"]),
+        .executable(name: "VectorKitGraphRetrievalQuickstart", targets: ["VectorKitGraphRetrievalQuickstart"]),
     ],
+    dependencies: [.package(path: "../VectorKitShared")],
     targets: [
         .binaryTarget(name: "VectorKitGraphFFI", path: "../../../target/apple/VectorKitGraphFFI.xcframework"),
-        .target(name: "VectorKitGraph", dependencies: ["VectorKitGraphFFI"]),
+        .target(name: "VectorKitGraph", dependencies: [
+            "VectorKitGraphFFI",
+            .product(name: "VectorKitShared", package: "VectorKitShared"),
+        ]),
         .executableTarget(name: "VectorKitGraphQuickstart", dependencies: ["VectorKitGraph"]),
+        .executableTarget(name: "VectorKitGraphRetrievalQuickstart", dependencies: ["VectorKitGraph"]),
         .testTarget(name: "VectorKitGraphTests", dependencies: ["VectorKitGraph"]),
     ],
     swiftLanguageModes: [.v6]

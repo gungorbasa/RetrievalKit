@@ -127,6 +127,12 @@ implemented, or superseded by the product spec.
   native queries while still permitting concurrent `cancel()` to reach Rust.
   Swift stress coverage races 32 scoped searches with result closure and accepts
   only completed searches or typed closed-resource rejection.
+- M4.7 moves Swift graph queries and scoped exact/BM25/hybrid ranking into
+  detached native tasks admitted by a writer-preferring read/write gate.
+  Immutable reads may overlap, including multiple rankers using one retained
+  candidate scope. Composite save and index close remain exclusive, and a
+  waiting writer blocks later readers. Deterministic gate tests prove concurrent
+  reader admission, writer exclusion, and writer preference.
 
 ## Current Size, RAM, and Speed Goal
 

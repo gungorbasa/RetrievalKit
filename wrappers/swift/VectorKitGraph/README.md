@@ -23,6 +23,11 @@ remains a fallback. Closed resources reject further work with
 `VectorKitGraphError.graphUnavailable`. Result and cancellation-token closure
 is synchronized against active native calls so concurrent closure cannot free a
 handle still in use.
+`GraphIndex` admits immutable graph queries and scoped rankers through shared
+read leases and runs native work in detached tasks, so independent reads can
+execute concurrently instead of blocking the Swift actor. Composite saves and
+explicit index closure use writer-preferring exclusive leases; once either is
+waiting, later reads cannot starve it.
 Each `GraphQueryResult` retains its native generation-bound candidate scope and
 can feed `search`, `keywordSearch`, or `hybridSearch` without exporting internal
 chunk IDs or changing the graph-free ranking implementations. All three scoped

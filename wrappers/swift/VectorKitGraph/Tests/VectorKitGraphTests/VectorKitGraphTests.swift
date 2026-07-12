@@ -138,4 +138,41 @@ final class VectorKitGraphTests: XCTestCase {
         do { _ = try await graph.query(from: [GraphNodeID(nodeType: "Item", recordID: "item")]); XCTFail("expected closed index") }
         catch let error as VectorKitGraphError { guard case .graphUnavailable = error else { return XCTFail("expected graph unavailable, got \(error)") } }
     }
+
+    func testGraphReadWriteGateRunsReadsConcurrently() async throws {
+        let gate = GraphReadWriteGate(); let release = GraphTestLatch()
+        let started = expectation(description: "both graph readers started"); started.expectedFulfillmentCount = 2
+        async let first: Int = gate.withRead { started.fulfill(); await release.wait(); return 1 }
+        async let second: Int = gate.withRead { started.fulfill(); await release.wait(); return 2 }
+        await fulfillment(of: [started], timeout: 1); await release.open()
+        let values = await [first, second]; XCTAssertEqual(values, [1, 2])
+    }
+
+    func testGraphReadWriteGatePrefersExclusiveWork() async throws {
+        let gate = GraphReadWriteGate(); let release = GraphTestLatch(); let events = GraphEventRecorder()
+        let readerStarted = expectation(description: "reader started"); let writerAttempted = expectation(description: "writer attempted")
+        let writerStarted = expectation(description: "writer started"); let laterReaderAttempted = expectation(description: "later reader attempted"); let laterReaderStarted = expectation(description: "later reader started")
+        let reader = Task { await gate.withRead { await events.append("reader-start"); readerStarted.fulfill(); await release.wait(); await events.append("reader-end") } }
+        await fulfillment(of: [readerStarted], timeout: 1)
+        let writer = Task { writerAttempted.fulfill(); await gate.withWrite { await events.append("writer"); writerStarted.fulfill() } }
+        await fulfillment(of: [writerAttempted], timeout: 1)
+        let laterReader = Task { laterReaderAttempted.fulfill(); await gate.withRead { await events.append("later-reader"); laterReaderStarted.fulfill() } }
+        await fulfillment(of: [laterReaderAttempted], timeout: 1); try await Task.sleep(for: .milliseconds(25))
+        let blockedEvents = await events.values(); XCTAssertEqual(blockedEvents, ["reader-start"])
+        await release.open(); await fulfillment(of: [writerStarted, laterReaderStarted], timeout: 1)
+        await reader.value; await writer.value; await laterReader.value
+        let finalEvents = await events.values(); XCTAssertEqual(finalEvents, ["reader-start", "reader-end", "writer", "later-reader"])
+    }
+}
+
+private actor GraphTestLatch {
+    private var isOpen = false; private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async { guard !isOpen else { return }; await withCheckedContinuation { waiters.append($0) } }
+    func open() { isOpen = true; let pending = waiters; waiters.removeAll(); pending.forEach { $0.resume() } }
+}
+
+private actor GraphEventRecorder {
+    private var events: [String] = []
+    func append(_ event: String) { events.append(event) }
+    func values() -> [String] { events }
 }

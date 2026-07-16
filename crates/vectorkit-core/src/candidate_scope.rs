@@ -11,7 +11,7 @@ enum CandidateMembership {
 
 /// Validated, unranked chunk membership for one corpus generation.
 ///
-/// Construction is owned by `ExactVectorIndex`, which rejects unavailable or
+/// Construction is owned by `CorpusIndex`, which rejects unavailable or
 /// inactive IDs. The internal sparse/bitset choice is deliberately not public
 /// ABI and may be tuned by benchmarks.
 #[derive(Debug, Clone, PartialEq, Eq)]

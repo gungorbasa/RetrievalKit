@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::candidate_scope::CandidateScope;
 use crate::error::{Result, VectorKitError};
+use crate::filter::Filter;
 use crate::metadata::Metadata;
 use crate::record_store::{
     ChunkIdentity, ChunkKey, CorpusId, GenerationId, Record, RecordId, RecordStore,
@@ -189,6 +190,63 @@ impl CorpusIndex {
         self.candidate_scope(chunk_ids)
     }
 
+    /// Applies a metadata filter while preserving this scope's corpus and generation.
+    ///
+    /// The scope is validated even when `filter` is `None`. Every retained
+    /// member is active in the canonical corpus at this generation.
+    pub fn filter_candidate_scope(
+        &self,
+        scope: &CandidateScope,
+        filter: Option<&Filter>,
+    ) -> Result<CandidateScope> {
+        self.validate_candidate_scope(scope)?;
+        let Some(filter) = filter else {
+            return Ok(scope.clone());
+        };
+
+        let mut chunk_ids = Vec::with_capacity(scope.len());
+        for chunk_id in scope.ids() {
+            let chunk = self.validate_candidate_scope_member(chunk_id)?;
+            if filter.matches(&chunk.metadata)? {
+                chunk_ids.push(chunk_id);
+            }
+        }
+        Ok(CandidateScope::from_sorted_ids(
+            self.corpus_id.clone(),
+            self.generation,
+            chunk_ids,
+            self.chunk_offsets.len(),
+        ))
+    }
+
+    /// Materializes stable external identities in lexical identity order.
+    pub fn candidate_scope_identities(&self, scope: &CandidateScope) -> Result<Vec<ChunkIdentity>> {
+        self.validate_candidate_scope(scope)?;
+        let mut identities = Vec::with_capacity(scope.len());
+        for chunk_id in scope.ids() {
+            let chunk = self.validate_candidate_scope_member(chunk_id)?;
+            let Some(identity) = self.chunk_identities.get(&chunk_id) else {
+                return Err(VectorKitError::InvalidCandidateScope {
+                    chunk_id,
+                    message: "the stable external identity is unavailable".to_owned(),
+                });
+            };
+            if chunk.document_id != identity.record_id.as_str()
+                || self.chunk_ids_by_identity.get(identity) != Some(&chunk_id)
+                || self.record_store.get(&identity.record_id).is_none()
+            {
+                return Err(VectorKitError::InvalidCandidateScope {
+                    chunk_id,
+                    message: "the stable external identity is inconsistent".to_owned(),
+                });
+            }
+            identities.push(identity.clone());
+        }
+        identities.sort();
+        identities.dedup();
+        Ok(identities)
+    }
+
     /// Adds or atomically replaces one canonical record without constructing
     /// retrieval state. This is the graph-only ingestion path.
     pub fn upsert(&mut self, input: RecordInput) -> Result<Vec<ChunkId>> {
@@ -328,6 +386,22 @@ impl CorpusIndex {
         })
     }
 
+    fn validate_candidate_scope_member(&self, chunk_id: ChunkId) -> Result<&StoredChunk> {
+        let Some(chunk) = self.chunk(chunk_id) else {
+            return Err(VectorKitError::InvalidCandidateScope {
+                chunk_id,
+                message: "the ID is unavailable in this generation".to_owned(),
+            });
+        };
+        if chunk.deleted {
+            return Err(VectorKitError::InvalidCandidateScope {
+                chunk_id,
+                message: "the ID is deleted or superseded in this generation".to_owned(),
+            });
+        }
+        Ok(chunk)
+    }
+
     pub(crate) fn allocate_chunk_id(&mut self) -> ChunkId {
         let chunk_id = self.next_chunk_id;
         self.next_chunk_id = self.next_chunk_id.saturating_add(1);
@@ -450,7 +524,29 @@ fn merge_metadata(inherited: &Metadata, chunk: Metadata) -> Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filter::Filter;
+    use crate::metadata::MetadataValue;
     use crate::record_store::{ChunkKey, RecordType};
+
+    fn record_input(record_id: &str, chunks: &[(&str, Metadata)]) -> RecordInput {
+        RecordInput {
+            record: Record {
+                id: RecordId::new(record_id).unwrap(),
+                record_type: RecordType::new("Topic").unwrap(),
+                fields: BTreeMap::new(),
+                content: None,
+            },
+            metadata: BTreeMap::new(),
+            chunks: chunks
+                .iter()
+                .map(|(key, metadata)| CorpusChunkInput {
+                    key: ChunkKey::new(*key).unwrap(),
+                    text: format!("{record_id}-{key}"),
+                    metadata: metadata.clone(),
+                })
+                .collect(),
+        }
+    }
 
     #[test]
     fn candidate_scopes_are_bound_to_the_canonical_generation() {
@@ -515,5 +611,135 @@ mod tests {
         assert_eq!(loaded.record_store(), corpus.record_store());
         assert_eq!(loaded.chunk(0), corpus.chunk(0));
         assert_eq!(loaded.generation(), corpus.generation());
+    }
+
+    #[test]
+    fn corpus_filters_candidate_scopes_with_every_filter_shape() {
+        let mut corpus = CorpusIndex::new(CorpusId::new("filters").unwrap());
+        let first = BTreeMap::from([
+            ("team".to_owned(), MetadataValue::from("mobile")),
+            ("rank".to_owned(), MetadataValue::from(1_i64)),
+            ("active".to_owned(), MetadataValue::from(true)),
+        ]);
+        let second = BTreeMap::from([
+            ("team".to_owned(), MetadataValue::from("platform")),
+            ("rank".to_owned(), MetadataValue::from(2_i64)),
+        ]);
+        let third = BTreeMap::from([
+            ("team".to_owned(), MetadataValue::from("mobile")),
+            ("rank".to_owned(), MetadataValue::from(3_i64)),
+        ]);
+        corpus
+            .upsert(record_input(
+                "record",
+                &[("z", first), ("a", second), ("m", third)],
+            ))
+            .unwrap();
+        let scope = corpus.candidate_scope([2, 0, 1, 1]).unwrap();
+
+        let cases = [
+            (Filter::eq("team", "mobile"), 2),
+            (Filter::ne("team", "mobile"), 1),
+            (Filter::in_values("rank", [1_i64, 3]), 2),
+            (Filter::between("rank", 2_i64, 3_i64), 2),
+            (Filter::exists("active"), 1),
+            (
+                Filter::all([Filter::eq("team", "mobile"), Filter::gte("rank", 2_i64)]),
+                1,
+            ),
+            (
+                Filter::any([Filter::eq("team", "platform"), Filter::eq("rank", 3_i64)]),
+                2,
+            ),
+        ];
+        for (filter, expected) in cases {
+            assert_eq!(
+                corpus
+                    .filter_candidate_scope(&scope, Some(&filter))
+                    .unwrap()
+                    .len(),
+                expected
+            );
+        }
+
+        assert_eq!(corpus.filter_candidate_scope(&scope, None).unwrap(), scope);
+        assert!(corpus
+            .filter_candidate_scope(
+                &corpus.candidate_scope([]).unwrap(),
+                Some(&Filter::exists("x"))
+            )
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn candidate_identity_materialization_is_deduplicated_and_lexical() {
+        let mut corpus = CorpusIndex::new(CorpusId::new("identities").unwrap());
+        corpus
+            .upsert(record_input(
+                "z-record",
+                &[("z", BTreeMap::new()), ("a", BTreeMap::new())],
+            ))
+            .unwrap();
+        corpus
+            .upsert(record_input("a-record", &[("m", BTreeMap::new())]))
+            .unwrap();
+        let scope = corpus.candidate_scope([0, 2, 1, 2]).unwrap();
+
+        let identities = corpus.candidate_scope_identities(&scope).unwrap();
+        let values = identities
+            .iter()
+            .map(|identity| {
+                format!(
+                    "{}/{}",
+                    identity.record_id.as_str(),
+                    identity.chunk_key.as_str()
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(values, ["a-record/m", "z-record/a", "z-record/z"]);
+    }
+
+    #[test]
+    fn candidate_scope_operations_validate_generation_members_and_representations() {
+        let mut corpus = CorpusIndex::new(CorpusId::new("scope-validation").unwrap());
+        for index in 0..70 {
+            corpus
+                .upsert(record_input(
+                    &format!("record-{index:02}"),
+                    &[("body", BTreeMap::new())],
+                ))
+                .unwrap();
+        }
+        let dense = corpus.candidate_scope(0..70).unwrap();
+        let sparse = corpus.candidate_scope([69]).unwrap();
+        assert!(dense.is_dense());
+        assert!(!sparse.is_dense());
+        assert_eq!(corpus.filter_candidate_scope(&dense, None).unwrap(), dense);
+        assert_eq!(corpus.candidate_scope_identities(&sparse).unwrap().len(), 1);
+
+        let other = CorpusIndex::new(CorpusId::new("other").unwrap());
+        assert!(matches!(
+            other.filter_candidate_scope(&dense, None),
+            Err(VectorKitError::StaleGeneration { .. })
+        ));
+
+        corpus.chunks[69].deleted = true;
+        assert!(matches!(
+            corpus.candidate_scope_identities(&sparse),
+            Err(VectorKitError::InvalidCandidateScope { chunk_id: 69, .. })
+        ));
+        corpus.chunks[69].deleted = false;
+        corpus.chunk_identities.remove(&69);
+        assert!(matches!(
+            corpus.candidate_scope_identities(&sparse),
+            Err(VectorKitError::InvalidCandidateScope { chunk_id: 69, .. })
+        ));
+
+        corpus.generation = corpus.generation.next();
+        assert!(matches!(
+            corpus.filter_candidate_scope(&dense, Some(&Filter::exists("x"))),
+            Err(VectorKitError::StaleGeneration { .. })
+        ));
     }
 }

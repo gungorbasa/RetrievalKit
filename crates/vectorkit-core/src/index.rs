@@ -1012,6 +1012,20 @@ impl ExactVectorIndex {
         self.corpus.candidate_scope_for_identities(identities)
     }
 
+    /// Applies a metadata filter using the canonical corpus-owned scope rules.
+    pub fn filter_candidate_scope(
+        &self,
+        scope: &CandidateScope,
+        filter: Option<&Filter>,
+    ) -> Result<CandidateScope> {
+        self.corpus.filter_candidate_scope(scope, filter)
+    }
+
+    /// Materializes stable identities using the canonical corpus-owned mapping.
+    pub fn candidate_scope_identities(&self, scope: &CandidateScope) -> Result<Vec<ChunkIdentity>> {
+        self.corpus.candidate_scope_identities(scope)
+    }
+
     /// Performs exact vector search over active chunks.
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
         self.search_vector_candidates(&query.embedding, query.top_k, query.filter.as_ref())
@@ -1223,7 +1237,7 @@ impl ExactVectorIndex {
             return Ok(Vec::new());
         }
 
-        let effective_scope = self.scope_intersect_filter(scope, filter)?;
+        let effective_scope = self.corpus.filter_candidate_scope(scope, filter)?;
         let bm25_hits =
             self.retrieval
                 .require_bm25()?
@@ -1520,31 +1534,6 @@ impl ExactVectorIndex {
             }
         }
         Ok(offsets)
-    }
-
-    fn scope_intersect_filter(
-        &self,
-        scope: &CandidateScope,
-        filter: Option<&Filter>,
-    ) -> Result<CandidateScope> {
-        let Some(filter) = filter else {
-            return Ok(scope.clone());
-        };
-        let mut ids = Vec::with_capacity(scope.len());
-        for chunk_id in scope.ids() {
-            let Some(chunk) = self.chunk(chunk_id) else {
-                continue;
-            };
-            if !chunk.deleted && filter.matches(&chunk.metadata)? {
-                ids.push(chunk_id);
-            }
-        }
-        Ok(CandidateScope::from_sorted_ids(
-            self.corpus.corpus_id.clone(),
-            self.corpus.generation,
-            ids,
-            self.corpus.chunk_offsets.len(),
-        ))
     }
 
     fn validate_dimension(&self, actual: usize) -> Result<()> {

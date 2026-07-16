@@ -63,6 +63,43 @@ V2 inherits the V1 source and adds competing documents, ambiguous queries,
 graded relevance judgments, and a direct relevance-recall gate. V1 remains
 checked in as the original baseline.
 
+## V3 graph-retrieval conformance foundation
+
+`v3/` is a small, fully synthetic, checked-in collection for the first Phase 1
+graph-evaluation foundation. It implements the normative A-J population model
+with separate explicit, topic-derived, and team-derived lanes. Its canonical
+records exercise multi-chunk document projection and metadata override rules;
+its judgments include grade-zero rows and alternative evidence sets; and its
+queries cover resolver success, no-match, ambiguity, expected paths, global
+exclusion, and derived-lane exclusion. Corpus and retrieval-query embeddings
+are deterministic three-dimensional F32 source vectors.
+
+Validate the collection and emit foundation-only artifacts:
+
+```bash
+cargo run -p vectorkit-cli -- \
+  bench quality-v3 \
+  --collection benchmarks/retrieval-quality/v3 \
+  --foundation-artifacts target/v3-conformance-foundation \
+  --verify-rerun
+```
+
+Independently reconstruct and check every canonical byte stream, collection
+digest, population, run identity, logical-run hash, and generation fingerprint
+without calling Rust:
+
+```bash
+python3 scripts/quality/validate_v3_conformance.py \
+  --collection benchmarks/retrieval-quality/v3 \
+  --foundation-artifacts target/v3-conformance-foundation
+```
+
+The Python command accepts `--write-fixture` only for intentional regeneration
+from the frozen synthetic source model. Review the resulting collection diff
+before committing it. Foundation artifacts contain validated inputs and hash
+preimages only; Phase 1.1 does not fabricate A-G selections, rankings, metrics,
+or timings.
+
 Generation uses the local converted
 `sentence-transformers/all-MiniLM-L6-v2` Core ML model. Review relevance
 judgments independently from search output. Do not make the expected results

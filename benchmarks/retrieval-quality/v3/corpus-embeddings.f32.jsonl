@@ -1,0 +1,8 @@
+{"chunk_key":"details","record_id":"alpha","values":[1,0,0]}
+{"chunk_key":"summary","record_id":"alpha","values":[0.5,0.5,0]}
+{"chunk_key":"summary","record_id":"beta","values":[0,1,0]}
+{"chunk_key":"summary","record_id":"gamma","values":[0,0.5,0.5]}
+{"chunk_key":"summary","record_id":"mobile","values":[0,0,1]}
+{"chunk_key":"summary","record_id":"phone","values":[-0.5,0.5,0]}
+{"chunk_key":"summary","record_id":"shared-east","values":[-1,0,0]}
+{"chunk_key":"summary","record_id":"shared-west","values":[-0.5,-0.5,0]}

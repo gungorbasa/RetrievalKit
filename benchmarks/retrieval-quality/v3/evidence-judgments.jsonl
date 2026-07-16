@@ -1,0 +1,4 @@
+{"evidence_sets":[["alpha","beta"],["alpha","gamma"]],"query_id":"qc"}
+{"evidence_sets":[["alpha","gamma"],["alpha","phone"]],"query_id":"qd"}
+{"evidence_sets":[["beta","gamma"]],"query_id":"qe"}
+{"evidence_sets":[["alpha","gamma"],["gamma","phone"]],"query_id":"qh"}

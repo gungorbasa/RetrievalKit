@@ -1,0 +1,3 @@
+{"details":"No frozen topic alias matches the normalized query.","lane":"topic","phase":"pre_freeze","query_id":"qf","reason":"derived_seed_no_match","source":"synthetic-adapter"}
+{"details":"The longest Shared alias maps to two distinct topic nodes.","lane":"topic","phase":"pre_freeze","query_id":"qg","reason":"derived_seed_ambiguous","source":"synthetic-adapter"}
+{"details":"Normative case J has no relevant documents.","lane":"global","phase":"pre_freeze","query_id":"qj","reason":"no_relevant_documents","source":"synthetic-adapter"}

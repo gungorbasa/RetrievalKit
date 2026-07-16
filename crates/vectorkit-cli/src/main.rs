@@ -47,8 +47,17 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "quality" => {
             run_quality_bench(rest)
         }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "quality-v3" => {
+            run_quality_v3(rest)
+        }
         _ => Err(CliError::usage()),
     }
+}
+
+fn run_quality_v3(args: &[String]) -> Result<(), CliError> {
+    let json = quality::v3::run_cli(args).map_err(CliError::InvalidArgument)?;
+    println!("{json}");
+    Ok(())
 }
 
 fn run_quality_bench(args: &[String]) -> Result<(), CliError> {

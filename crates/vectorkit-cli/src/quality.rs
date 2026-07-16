@@ -11,6 +11,12 @@ use vectorkit_core::{
 };
 
 mod artifacts;
+pub(crate) mod v3;
+mod v3_canonical;
+mod v3_population;
+mod v3_runs;
+mod v3_schema;
+mod v3_validation;
 
 pub(crate) struct QualityOutcome {
     pub(crate) json: String,

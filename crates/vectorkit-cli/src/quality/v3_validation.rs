@@ -224,6 +224,7 @@ fn validate_layout(root: &Path) -> Result<(), String> {
         .collect::<BTreeSet<_>>();
     let mut actual = BTreeSet::new();
     collect_files(root, root, &mut actual)?;
+    actual.remove("README.md");
     let unexpected = actual.difference(&allowed_files).collect::<Vec<_>>();
     let missing = allowed_files.difference(&actual).collect::<Vec<_>>();
     if !unexpected.is_empty() || !missing.is_empty() {

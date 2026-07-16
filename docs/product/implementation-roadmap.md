@@ -31,9 +31,11 @@ production APIs and wrappers. The implementation-ready Phase 0 contract is
 and selected iPhone 14 Pro Max with iOS 26 or later as the conservative device.
 Its third focused revision passed two fresh isolated implementation-author
 reviews on 2026-07-16, closing the benchmark roadmap's Phase 0. Graph-aware
-evaluation-artifact Phase 1 is now active, beginning with the checked-in V3
-conformance fixture and evaluation-only validators. This is separate from the
-completed core V1 “Phase 1: Corruption Detection” below.
+evaluation-artifact Phase 1 is active. Its checked-in V3 conformance fixture,
+whole-corpus A-C retrieval, and graph-only D selection qualification are
+complete; graph-scoped retrieval E-G and the final publication artifact remain
+open. This is separate from the completed core V1 “Phase 1: Corruption
+Detection” below.
 
 ## Priority Summary
 

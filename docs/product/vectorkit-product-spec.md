@@ -118,6 +118,11 @@ loaded. Keyword-only search remains an internal benchmark surface rather than a
 standalone high-level product mode. Graph-only builders accept neither vector
 configuration nor embeddings. Combined graph selections become opaque
 generation-bound candidate scopes consumed by the retrieval capability.
+Graph-only and combined databases may also materialize a selection as stable,
+lexically ordered `(RecordId, ChunkKey)` identities, optionally intersected by
+the owning corpus's production metadata filter. The corpus must reject stale or
+cross-corpus scopes before filtering or materialization; internal candidate IDs
+and sparse/dense membership remain private.
 
 "Store once" means one canonical source record and payload owner, not one
 physical representation. Chunks, vector arrays, BM25 postings, flattened

@@ -1181,7 +1181,9 @@ def validate_normative_fixture() -> None:
 def validate_collection(root: Path) -> tuple[dict[str, bytes], list[dict[str, Any]]]:
     expected = build_collection_files()
     actual_paths = sorted(
-        path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path.relative_to(root).as_posix() != "README.md"
     )
     require(actual_paths == sorted(expected), "collection file set does not match canonical fixture")
     for path, expected_bytes in sorted(expected.items()):

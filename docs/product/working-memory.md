@@ -26,13 +26,18 @@ implemented, or superseded by the product spec.
   and portability rules without a blocker. Benchmark roadmap Phase 0 is
   complete and graph-aware evaluation-artifact Phase 1 is active. Phase 1.1
   froze the checked-in V3 conformance fixture, schema, populations, 15-run
-  matrix, canonical serialization, and byte-rerun validators. Phase 1.2a now
+  matrix, canonical serialization, and byte-rerun validators. Phase 1.2a
   qualifies production-backed whole-corpus A-C (F32 semantic, I8 semantic, and
   I8 weighted hybrid), exhaustive document projection, metrics, save/load
   equivalence, byte-identical partial artifacts, and independent Python
-  rankings/TREC/metrics. No production API or wrapper changed. Keep Phase 1
-  active: graph selection and graph-scoped D-G are next, and no full V3
-  manifest or graph-retrieval claim is complete.
+  rankings/TREC/metrics. Phase 1.2b Run D now qualifies explicit/topic/team
+  graph selection through production `GraphDatabase`, corpus-owned candidate
+  filtering and stable identity materialization, Rust/FFI/Swift projection
+  parity, save/validate/load equality, stale-selection rejection, byte-stable
+  partial artifacts, and exact independent Python agreement for 7 selections
+  and 14 paths. Keep Phase 1 active: graph-scoped E-G and the A-C external
+  publication validator remain open, so no full V3 manifest or graph-retrieval
+  claim is complete.
 
 ## Active Product Constraints
 
@@ -54,8 +59,8 @@ implemented, or superseded by the product spec.
   retrieval-capable database builds semantic and BM25 state, and high-level
   hybrid calls blend them directly with query-time `alpha` (`1` vector-only,
   `0` BM25-only). Compact snapshots may omit persisted BM25 and rebuild it from
-  canonical chunk text on load. The graph aggregate ABI is version 6 after the
-  builder signature change.
+  canonical chunk text on load. The graph aggregate ABI is version 7 after
+  typed graph candidate projection.
 
 - The capability-separated architecture is approved. `CorpusIndex` becomes the
   canonical owner; `RetrievalIndex` and `GraphEngine` are derived components.
@@ -76,7 +81,7 @@ implemented, or superseded by the product spec.
 - Retrieval configuration now always builds exact-vector and BM25 state.
   Hybrid blending is selected directly per query with `alpha`; compact
   persistence may omit BM25 bytes and rebuild them from canonical chunk text
-  on load. The graph aggregate ABI is version 6.
+  on load. The graph aggregate ABI is version 7.
   Three interleaved before/after benchmark pairs measured exact -1.21%, BM25
   -2.61%, and hybrid +0.35%, passing the +3% p95 gate.
 

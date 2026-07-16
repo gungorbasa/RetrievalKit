@@ -381,14 +381,22 @@ Exit gate:
 
 ### Phase 1: Add Graph-Aware Evaluation Artifacts
 
-Status: active from 2026-07-16. Phase 1.1 conformance and Phase 1.2a
-production-backed whole-corpus A-C retrieval qualification are complete. Graph
-selection and graph-scoped D-G execution remain the next Phase 1 work; the full
-A-G artifact and Phase 1 exit gate are not complete.
+Status: active from 2026-07-16. Phase 1.1 conformance, Phase 1.2a
+production-backed whole-corpus A-C retrieval, and Phase 1.2b production graph
+selection D are complete. Graph-scoped retrieval E-G is the next Phase 1 work;
+the full A-G artifact and Phase 1 exit gate are not complete. Phase 2 remains
+inactive.
 
 First implementation task (complete): add the checked-in V3 conformance fixture
 and its schema, population-hash, canonical-serialization, and byte-rerun
 validators in evaluation-only tooling.
+
+Second implementation slice (complete): execute all three frozen D seed lanes
+through `GraphDatabase`, project/filter stable candidate identities, prove graph
+persistence equivalence and stale-selection rejection, emit deterministic
+partial artifacts, and obtain exact agreement from an independent Python graph
+oracle. See
+`docs/product/reports/graph-retrieval-phase-1-graph-selection-report.md`.
 
 Extend evaluation-only tooling; do not add benchmark concerns to production
 Rust APIs or wrappers.

@@ -583,6 +583,33 @@ pub(super) fn emit_qualification(
     Ok(results)
 }
 
+pub(super) fn verify_qualification_deterministic_rerun(
+    validated: &ValidatedCollection,
+) -> Result<(), String> {
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve repository root: {error}"))?;
+    let target = repository.join("target/benchmarks/v3");
+    fs::create_dir_all(&target).map_err(|error| {
+        format!(
+            "failed to create Phase 1.2a rerun root '{}': {error}",
+            target.display()
+        )
+    })?;
+    let first = TemporaryDirectory::new_in(&target, "phase-1.2a-rerun-a")?;
+    let second = TemporaryDirectory::new_in(&target, "phase-1.2a-rerun-b")?;
+    let first_output = first.path.join("qualification");
+    let second_output = second.path.join("qualification");
+    emit_qualification(validated, &first_output)?;
+    emit_qualification(validated, &second_output)?;
+    super::v3::compare_directories_with_label(
+        &first_output,
+        &second_output,
+        "Phase 1.2a qualification",
+    )
+}
+
 fn trec(run: &RunExecution, evaluation_depth: usize) -> Vec<u8> {
     let mut output = String::new();
     for query in &run.queries {
@@ -750,13 +777,16 @@ struct TemporaryDirectory {
 
 impl TemporaryDirectory {
     fn new(prefix: &str) -> Result<Self, String> {
+        Self::new_in(&std::env::temp_dir(), prefix)
+    }
+
+    fn new_in(parent: &Path, prefix: &str) -> Result<Self, String> {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
             .as_nanos();
         let counter = TEMPORARY_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path =
-            std::env::temp_dir().join(format!("{prefix}-{}-{nonce}-{counter}", std::process::id()));
+        let path = parent.join(format!("{prefix}-{}-{nonce}-{counter}", std::process::id()));
         fs::create_dir(&path).map_err(|error| {
             format!(
                 "failed to create persistence directory '{}': {error}",
@@ -893,6 +923,12 @@ mod tests {
         assert_eq!(marker["partial"], true);
         assert_eq!(marker["publication_ready"], false);
         assert_eq!(fs::read_dir(output.join("runs")).unwrap().count(), 3);
+    }
+
+    #[test]
+    fn phase_1_2a_qualification_rerun_is_byte_identical() {
+        let validated = validate(&fixture_root()).unwrap();
+        verify_qualification_deterministic_rerun(&validated).unwrap();
     }
 
     fn test_hit(record_id: &str, chunk_key: &str, native_rank: usize) -> ChunkHit {

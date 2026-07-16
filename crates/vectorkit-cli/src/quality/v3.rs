@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use super::v3_canonical::{
     canonical_json, canonical_json_line, first_difference, sha256, write_canonical_json,
 };
-use super::v3_execution::emit_qualification;
+use super::v3_execution::{emit_qualification, verify_qualification_deterministic_rerun};
 use super::v3_population::population_hash;
 use super::v3_runs::{bm25_policy, normalization_policy, quantization_policy, RunIdentity};
 use super::v3_validation::{validate, ValidatedCollection};
@@ -65,6 +65,9 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     }
     if verify_rerun {
         verify_deterministic_rerun(&collection)?;
+        if phase_1_2a_executed {
+            verify_qualification_deterministic_rerun(&validated)?;
+        }
     }
     let result = json!({
         "collection_id":validated.collection.collection_id,
@@ -426,13 +429,21 @@ fn collect_artifact_files(
 }
 
 fn compare_directories(first: &Path, second: &Path) -> Result<(), String> {
+    compare_directories_with_label(first, second, "foundation")
+}
+
+pub(super) fn compare_directories_with_label(
+    first: &Path,
+    second: &Path,
+    label: &str,
+) -> Result<(), String> {
     let mut first_files = BTreeMap::new();
     collect_paths(first, first, &mut first_files)?;
     let mut second_files = BTreeMap::new();
     collect_paths(second, second, &mut second_files)?;
     if first_files.keys().collect::<Vec<_>>() != second_files.keys().collect::<Vec<_>>() {
         return Err(format!(
-            "foundation rerun file sets differ: first {:?}, second {:?}",
+            "{label} rerun file sets differ: first {:?}, second {:?}",
             first_files.keys().collect::<Vec<_>>(),
             second_files.keys().collect::<Vec<_>>()
         ));
@@ -441,7 +452,7 @@ fn compare_directories(first: &Path, second: &Path) -> Result<(), String> {
         let second_bytes = &second_files[&path];
         if first_bytes != *second_bytes {
             return Err(format!(
-                "foundation rerun first differing file '{}' at byte offset {}",
+                "{label} rerun first differing file '{}' at byte offset {}",
                 path,
                 first_difference(&first_bytes, second_bytes)
             ));

@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use super::v3_canonical::{
     canonical_json, canonical_json_line, first_difference, sha256, write_canonical_json,
 };
+use super::v3_execution::emit_qualification;
 use super::v3_population::population_hash;
 use super::v3_runs::{bm25_policy, normalization_policy, quantization_policy, RunIdentity};
 use super::v3_validation::{validate, ValidatedCollection};
@@ -18,6 +19,7 @@ static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     let mut collection = None;
     let mut artifacts = None;
+    let mut qualification_artifacts = None;
     let mut verify_rerun = false;
     let mut offset = 0;
     while offset < args.len() {
@@ -35,6 +37,13 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
                 })?));
                 offset += 2;
             }
+            "--qualification-artifacts" => {
+                qualification_artifacts =
+                    Some(PathBuf::from(args.get(offset + 1).ok_or_else(|| {
+                        "missing value for '--qualification-artifacts'".to_owned()
+                    })?));
+                offset += 2;
+            }
             "--verify-rerun" => {
                 verify_rerun = true;
                 offset += 1;
@@ -43,11 +52,16 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         }
     }
     let collection = collection.ok_or_else(|| {
-        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--verify-rerun]".to_owned()
+        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--qualification-artifacts <target/benchmarks/v3/directory>] [--verify-rerun]".to_owned()
     })?;
     let validated = validate(&collection)?;
     if let Some(path) = artifacts {
         emit_foundation(&validated, &path)?;
+    }
+    let phase_1_2a_executed = qualification_artifacts.is_some();
+    if let Some(path) = qualification_artifacts {
+        let path = qualification_output_path(&path)?;
+        emit_qualification(&validated, &path)?;
     }
     if verify_rerun {
         verify_deterministic_rerun(&collection)?;
@@ -55,16 +69,68 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     let result = json!({
         "collection_id":validated.collection.collection_id,
         "collection_version":validated.collection.collection_version,
-        "foundation_only":true,
+        "foundation_only":!phase_1_2a_executed,
         "normative_fixture_bytes":2135,
         "normative_fixture_sha256":"4d7b920b8ae591f0c05cd41abbc36c50210bbf23e6bfa0e09b4eebbffdea4f46",
         "query_population_sha256":population_hash(&validated.populations.q),
+        "phase_1_2a_executed":phase_1_2a_executed,
+        "phase_1_2a_partial":phase_1_2a_executed,
         "rerun_verified":verify_rerun,
         "run_count":validated.runs.len(),
         "status":"valid"
     });
     serde_json::to_string_pretty(&result)
         .map_err(|error| format!("failed to serialize V3 validation result: {error}"))
+}
+
+fn qualification_output_path(requested: &Path) -> Result<PathBuf, String> {
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve repository root: {error}"))?;
+    let allowed = repository.join("target/benchmarks/v3");
+    fs::create_dir_all(&allowed).map_err(|error| {
+        format!(
+            "failed to create Phase 1.2a target root '{}': {error}",
+            allowed.display()
+        )
+    })?;
+    let allowed = allowed
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve Phase 1.2a target root: {error}"))?;
+    let absolute = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("failed to resolve current directory: {error}"))?
+            .join(requested)
+    };
+    let name = absolute.file_name().ok_or_else(|| {
+        format!(
+            "Phase 1.2a qualification path '{}' must name a directory",
+            requested.display()
+        )
+    })?;
+    let parent = absolute.parent().ok_or_else(|| {
+        format!(
+            "Phase 1.2a qualification path '{}' has no parent",
+            requested.display()
+        )
+    })?;
+    let parent = parent.canonicalize().map_err(|error| {
+        format!(
+            "Phase 1.2a qualification parent '{}' must already resolve beneath target/benchmarks/v3: {error}",
+            parent.display()
+        )
+    })?;
+    if parent != allowed {
+        return Err(format!(
+            "Phase 1.2a qualification artifacts must be a direct child of '{}', actual '{}'",
+            allowed.display(),
+            absolute.display()
+        ));
+    }
+    Ok(allowed.join(name))
 }
 
 pub(super) fn emit_foundation(

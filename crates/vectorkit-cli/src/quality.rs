@@ -13,7 +13,7 @@ use vectorkit_core::{
 mod artifacts;
 pub(crate) mod v3;
 mod v3_canonical;
-#[cfg_attr(not(test), allow(dead_code))]
+mod v3_execution;
 mod v3_ingestion;
 mod v3_population;
 mod v3_runs;

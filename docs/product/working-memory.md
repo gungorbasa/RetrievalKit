@@ -24,10 +24,15 @@ implemented, or superseded by the product spec.
   implementation-author reviews on 2026-07-16: both reproduced the exact A-J
   fixture, population hashes, 15-run matrix, artifact/hash schemas, arithmetic,
   and portability rules without a blocker. Benchmark roadmap Phase 0 is
-  complete and graph-aware evaluation-artifact Phase 1 is active. Start with a
-  checked-in V3 conformance fixture plus schema, population-hash,
-  canonical-serialization, and byte-rerun validators in evaluation-only
-  tooling; do not change production APIs or wrappers.
+  complete and graph-aware evaluation-artifact Phase 1 is active. Phase 1.1
+  froze the checked-in V3 conformance fixture, schema, populations, 15-run
+  matrix, canonical serialization, and byte-rerun validators. Phase 1.2a now
+  qualifies production-backed whole-corpus A-C (F32 semantic, I8 semantic, and
+  I8 weighted hybrid), exhaustive document projection, metrics, save/load
+  equivalence, byte-identical partial artifacts, and independent Python
+  rankings/TREC/metrics. No production API or wrapper changed. Keep Phase 1
+  active: graph selection and graph-scoped D-G are next, and no full V3
+  manifest or graph-retrieval claim is complete.
 
 ## Active Product Constraints
 

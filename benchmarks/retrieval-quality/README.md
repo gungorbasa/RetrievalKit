@@ -100,6 +100,31 @@ before committing it. Foundation artifacts contain validated inputs and hash
 preimages only; Phase 1.1 does not fabricate A-G selections, rankings, metrics,
 or timings.
 
+Phase 1.2a qualifies the production-backed whole-corpus A-C baselines without
+executing graph runs D-G. Emit a fresh partial qualification under the only
+supported durable output root and prove two emissions are byte-identical:
+
+```bash
+cargo run -p vectorkit-cli -- \
+  bench quality-v3 \
+  --collection benchmarks/retrieval-quality/v3 \
+  --qualification-artifacts target/benchmarks/v3/phase-1.2a-qualification \
+  --verify-rerun
+```
+
+Then independently recalculate F32/I8/BM25/hybrid scores, filters, rankings,
+document projection, TREC rows, and per-query/macro retrieval metrics:
+
+```bash
+python3 scripts/quality/validate_v3_phase_1_2a.py \
+  --collection benchmarks/retrieval-quality/v3 \
+  --artifacts target/benchmarks/v3/phase-1.2a-qualification
+```
+
+The output directory must be fresh. It is explicitly partial and
+non-publication-ready, contains only A-C results, and intentionally has no final
+V3 `manifest.json`. Generated artifacts stay ignored under `target/`.
+
 Generation uses the local converted
 `sentence-transformers/all-MiniLM-L6-v2` Core ML model. Review relevance
 judgments independently from search output. Do not make the expected results

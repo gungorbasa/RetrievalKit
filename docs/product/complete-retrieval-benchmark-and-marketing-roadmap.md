@@ -381,11 +381,14 @@ Exit gate:
 
 ### Phase 1: Add Graph-Aware Evaluation Artifacts
 
-Status: active from 2026-07-16.
+Status: active from 2026-07-16. Phase 1.1 conformance and Phase 1.2a
+production-backed whole-corpus A-C retrieval qualification are complete. Graph
+selection and graph-scoped D-G execution remain the next Phase 1 work; the full
+A-G artifact and Phase 1 exit gate are not complete.
 
-First implementation task: add the checked-in V3 conformance fixture and its
-schema, population-hash, canonical-serialization, and byte-rerun validators in
-evaluation-only tooling.
+First implementation task (complete): add the checked-in V3 conformance fixture
+and its schema, population-hash, canonical-serialization, and byte-rerun
+validators in evaluation-only tooling.
 
 Extend evaluation-only tooling; do not add benchmark concerns to production
 Rust APIs or wrappers.

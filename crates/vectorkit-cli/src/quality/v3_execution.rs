@@ -534,31 +534,44 @@ pub(super) fn emit_qualification(
         ));
     }
     let results = execute(validated)?;
-    fs::create_dir_all(output.join("runs")).map_err(|error| {
+    let parent = output.parent().ok_or_else(|| {
         format!(
-            "failed to create Phase 1.2a qualification root '{}': {error}",
+            "Phase 1.2b qualification root '{}' has no parent",
             output.display()
         )
     })?;
-    fs::write(output.join("qrels.tsv"), &validated.bytes["qrels.tsv"])
-        .map_err(|error| format!("failed to write Phase 1.2a qrels: {error}"))?;
+    let staging = TemporaryDirectory::new_in(parent, ".phase-1.2b-qualification-staging")?;
+    let staged_output = &staging.path;
+    fs::create_dir_all(staged_output.join("runs")).map_err(|error| {
+        format!(
+            "failed to create Phase 1.2a qualification root '{}': {error}",
+            staged_output.display()
+        )
+    })?;
+    fs::write(
+        staged_output.join("qrels.tsv"),
+        &validated.bytes["qrels.tsv"],
+    )
+    .map_err(|error| format!("failed to write Phase 1.2a qrels: {error}"))?;
     write_canonical_json(
-        &output.join("rust-results.json"),
+        &staged_output.join("rust-results.json"),
         &serde_json::to_value(&results)
             .map_err(|error| format!("failed to encode Phase 1.2a Rust results: {error}"))?,
     )?;
     write_canonical_json(
-        &output.join("metrics.json"),
+        &staged_output.join("metrics.json"),
         &metrics_artifact(validated, &results),
     )?;
     fs::write(
-        output.join("timing-samples.jsonl"),
+        staged_output.join("timing-samples.jsonl"),
         canonical_json_line(&json!({"profile":"deterministic_quality","status":"not_measured"}))?,
     )
     .map_err(|error| format!("failed to write Phase 1.2a timing marker: {error}"))?;
     for run in &results.runs {
         fs::write(
-            output.join("runs").join(format!("{}.trec", run.run_id)),
+            staged_output
+                .join("runs")
+                .join(format!("{}.trec", run.run_id)),
             trec(run, validated.collection.evaluation_depth),
         )
         .map_err(|error| {
@@ -568,9 +581,9 @@ pub(super) fn emit_qualification(
             )
         })?;
     }
-    super::v3_graph_execution::emit_graph_qualification(validated, output)?;
+    super::v3_graph_execution::emit_graph_qualification(validated, staged_output)?;
     write_canonical_json(
-        &output.join("qualification.json"),
+        &staged_output.join("qualification.json"),
         &json!({
             "artifact_schema":"phase-1.2b-qualification-v1",
             "collection_id":validated.collection.collection_id,
@@ -581,6 +594,13 @@ pub(super) fn emit_qualification(
             "status":"qualification_only_no_final_manifest"
         }),
     )?;
+    fs::rename(staged_output, output).map_err(|error| {
+        format!(
+            "failed to atomically finalize Phase 1.2b qualification root '{}' from '{}': {error}",
+            output.display(),
+            staged_output.display()
+        )
+    })?;
     Ok(results)
 }
 
@@ -930,6 +950,26 @@ mod tests {
     fn phase_1_2a_qualification_rerun_is_byte_identical() {
         let validated = validate(&fixture_root()).unwrap();
         verify_qualification_deterministic_rerun(&validated).unwrap();
+    }
+
+    #[test]
+    fn invalid_graph_run_leaves_no_partial_qualification_artifact() {
+        let mut validated = validate(&fixture_root()).unwrap();
+        validated
+            .runs
+            .iter_mut()
+            .find(|run| run.configuration["run_letter"] == "d")
+            .unwrap()
+            .run_id
+            .push_str("-invalid");
+        let temporary = TemporaryDirectory::new("vectorkit-v3-invalid-finalization").unwrap();
+        let output = temporary.path.join("qualification");
+
+        let error = emit_qualification(&validated, &output).unwrap_err();
+
+        assert!(error.contains("identity or population changed"));
+        assert!(!output.exists());
+        assert_eq!(fs::read_dir(&temporary.path).unwrap().count(), 0);
     }
 
     fn test_hit(record_id: &str, chunk_key: &str, native_rank: usize) -> ChunkHit {

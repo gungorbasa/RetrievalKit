@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -46,6 +48,7 @@ const D_METRICS: [&str; 24] = [
     "truncated_max_visited",
     "truncated_max_working_bytes",
 ];
+static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
 const D_RUNS: [(&str, &str, &str, &str, &str, usize); 3] = [
     (
         "explicit",
@@ -165,6 +168,13 @@ struct RunArtifacts {
     selection_rows: Vec<Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct PersistenceValidation {
+    run_id: String,
+    save_validate_load_equivalent: bool,
+    stable_generation_fingerprint: String,
+}
+
 pub(super) fn emit_graph_qualification(
     validated: &ValidatedCollection,
     output: &Path,
@@ -173,21 +183,20 @@ pub(super) fn emit_graph_qualification(
     validate_frozen_runs(validated)?;
     let (fingerprint_preimage, fingerprint) = d_generation_fingerprint(validated)?;
     let mut runs = Vec::new();
+    let mut persistence = Vec::new();
     for run in validated
         .runs
         .iter()
         .filter(|run| run.configuration["run_letter"] == "d")
     {
         let database = build_graph_database(validated)?;
-        runs.push(execute_run(
-            validated,
-            run,
-            &database,
-            &seeds,
-            &fingerprint,
-        )?);
+        let (artifacts, validation) =
+            execute_run_with_persistence(validated, run, &database, &seeds, &fingerprint)?;
+        runs.push(artifacts);
+        persistence.push(validation);
     }
     runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
+    persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
     if runs.len() != 3 {
         return Err(format!(
             "V3 Phase 1.2b expected exactly three D runs, actual {}",
@@ -260,7 +269,84 @@ pub(super) fn emit_graph_qualification(
         &output.join("graph-generation-fingerprint.json"),
         &json!({"fingerprint":fingerprint,"preimage":fingerprint_preimage,"schema_version":1}),
     )?;
+    write_canonical_json(
+        &output.join("graph-persistence-validation.json"),
+        &json!({
+            "runs":persistence,
+            "schema_version":1,
+            "status":"valid"
+        }),
+    )?;
     Ok(results)
+}
+
+fn execute_run_with_persistence(
+    validated: &ValidatedCollection,
+    run: &RunIdentity,
+    database: &GraphDatabase,
+    seeds: &SeedResolutionSet,
+    fingerprint: &str,
+) -> Result<(RunArtifacts, PersistenceValidation), String> {
+    let before = execute_run(validated, run, database, seeds, fingerprint)?;
+    let temporary = TemporaryDirectory::new("vectorkit-v3-phase-1-2b-persistence")?;
+    let persisted = temporary.path.join("database");
+    database
+        .save_to_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2b save '{}': {error}", run.run_id))?;
+    GraphDatabase::validate_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2b validate '{}': {error}", run.run_id))?;
+    let loaded = GraphDatabase::load_from_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2b reload '{}': {error}", run.run_id))?;
+    verify_persisted_database(database, &loaded, run)?;
+    let after = execute_run(validated, run, &loaded, seeds, fingerprint)?;
+    if before != after {
+        return Err(format!(
+            "V3 Phase 1.2b persistence_mismatch for run '{}'",
+            run.run_id
+        ));
+    }
+    Ok((
+        before,
+        PersistenceValidation {
+            run_id: run.run_id.clone(),
+            save_validate_load_equivalent: true,
+            stable_generation_fingerprint: fingerprint.to_owned(),
+        },
+    ))
+}
+
+fn verify_persisted_database(
+    before: &GraphDatabase,
+    after: &GraphDatabase,
+    run: &RunIdentity,
+) -> Result<(), String> {
+    let stable_identities = |database: &GraphDatabase| {
+        database
+            .corpus()
+            .chunk_identities()
+            .map(|(identity, chunk_id)| {
+                (
+                    identity.record_id.as_str().to_owned(),
+                    identity.chunk_key.as_str().to_owned(),
+                    chunk_id,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    if before.corpus().corpus_id() != after.corpus().corpus_id()
+        || before.corpus().generation() != after.corpus().generation()
+        || stable_identities(before) != stable_identities(after)
+        || before.graph().schema() != after.graph().schema()
+        || before.graph().build_stats() != after.graph().build_stats()
+        || before.graph().node_count() != after.graph().node_count()
+        || before.graph().edge_count() != after.graph().edge_count()
+    {
+        return Err(format!(
+            "V3 Phase 1.2b reload_mismatch for run '{}'",
+            run.run_id
+        ));
+    }
+    Ok(())
 }
 
 fn validate_frozen_runs(validated: &ValidatedCollection) -> Result<(), String> {
@@ -973,11 +1059,45 @@ fn write_jsonl(path: &Path, rows: &[Value]) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| format!("write '{}': {error}", path.display()))
 }
 
+struct TemporaryDirectory {
+    path: PathBuf,
+}
+
+impl TemporaryDirectory {
+    fn new(prefix: &str) -> Result<Self, String> {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
+            .as_nanos();
+        let counter = TEMPORARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("{prefix}-{}-{nonce}-{counter}", std::process::id()));
+        fs::create_dir(&path).map_err(|error| {
+            format!(
+                "failed to create graph persistence directory '{}': {error}",
+                path.display()
+            )
+        })?;
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
+    use vectorkit_core::{CorpusId, RecordInput, VectorKitError};
+    use vectorkit_graph::GraphError;
+
     use super::*;
+    use crate::quality::v3_graph_input::production_schema;
+    use crate::quality::v3_ingestion::V3ProductionInputs;
     use crate::quality::v3_validation::validate;
 
     fn fixture_root() -> PathBuf {
@@ -1026,5 +1146,81 @@ mod tests {
             d_generation_fingerprint(&validated).unwrap(),
             (preimage, fingerprint)
         );
+    }
+
+    #[test]
+    fn persisted_d_lanes_reexecute_to_identical_stable_artifacts() {
+        let validated = validate(&fixture_root()).unwrap();
+        let seeds = resolve_seeds(&validated).unwrap();
+        let (_, fingerprint) = d_generation_fingerprint(&validated).unwrap();
+        for run in validated
+            .runs
+            .iter()
+            .filter(|run| run.configuration["run_letter"] == "d")
+        {
+            let database = build_graph_database(&validated).unwrap();
+            let (artifacts, persistence) =
+                execute_run_with_persistence(&validated, run, &database, &seeds, &fingerprint)
+                    .unwrap();
+            assert_eq!(artifacts.result.status, "valid");
+            assert!(persistence.save_validate_load_equivalent);
+            assert_eq!(persistence.stable_generation_fingerprint, fingerprint);
+        }
+    }
+
+    #[test]
+    fn rejects_cross_corpus_cross_generation_and_stale_candidate_operations() {
+        let validated = validate(&fixture_root()).unwrap();
+        let seeds = resolve_seeds(&validated).unwrap();
+        let query = validated
+            .queries
+            .iter()
+            .find(|query| query.query_id == "qc")
+            .unwrap();
+        let seed = resolved_seed(&seeds, "explicit", "qc").unwrap();
+        let graph_query = production_query(query, seed).unwrap();
+        let database = build_graph_database(&validated).unwrap();
+        let result = database.graph_query(&graph_query, None).unwrap();
+        let projected = database.project_candidates(&result).unwrap();
+
+        let mut inputs = V3ProductionInputs::from_validated(&validated).unwrap();
+        inputs.corpus_id = CorpusId::new("v3-cross-corpus").unwrap();
+        let cross_corpus = GraphDatabase::build(
+            inputs.build_corpus().unwrap(),
+            production_schema(&validated.graph_schema).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            cross_corpus.project_candidates(&result),
+            Err(GraphError::StaleGeneration { .. })
+        ));
+
+        let inputs = V3ProductionInputs::from_validated(&validated).unwrap();
+        let mut newer_corpus = inputs.build_corpus().unwrap();
+        let replacement = &inputs.records[0];
+        newer_corpus
+            .upsert(RecordInput {
+                record: replacement.record.clone(),
+                metadata: replacement.inherited_metadata.clone(),
+                chunks: replacement.chunks.clone(),
+            })
+            .unwrap();
+        assert!(matches!(
+            newer_corpus.filter_candidate_scope(&projected.scope, None),
+            Err(VectorKitError::StaleGeneration { .. })
+        ));
+        assert!(matches!(
+            newer_corpus.candidate_scope_identities(&projected.scope),
+            Err(VectorKitError::StaleGeneration { .. })
+        ));
+        let newer_database = GraphDatabase::build(
+            newer_corpus,
+            production_schema(&validated.graph_schema).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            newer_database.project_candidates(&result),
+            Err(GraphError::StaleGeneration { .. })
+        ));
     }
 }

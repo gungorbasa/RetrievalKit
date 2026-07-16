@@ -84,8 +84,13 @@ impl Error for GraphError {}
 
 impl From<vectorkit_core::VectorKitError> for GraphError {
     fn from(error: vectorkit_core::VectorKitError) -> Self {
-        Self::Core {
-            message: error.to_string(),
+        match error {
+            vectorkit_core::VectorKitError::StaleGeneration { .. } => Self::StaleGeneration {
+                message: error.to_string(),
+            },
+            _ => Self::Core {
+                message: error.to_string(),
+            },
         }
     }
 }

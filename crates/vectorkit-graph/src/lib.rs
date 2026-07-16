@@ -9,8 +9,8 @@ mod storage;
 use std::collections::BTreeSet;
 
 use vectorkit_core::{
-    CandidateScope, ChunkId, CorpusIndex, ExactVectorIndex, HybridHit, HybridQuery, KeywordHit,
-    KeywordQuery, RetrievalDatabase, SearchHit, SearchQuery,
+    CandidateScope, ChunkId, ChunkIdentity, CorpusIndex, ExactVectorIndex, Filter, HybridHit,
+    HybridQuery, KeywordHit, KeywordQuery, RetrievalDatabase, SearchHit, SearchQuery,
 };
 
 pub use builder::GraphBuildStats;
@@ -75,6 +75,15 @@ pub struct ProjectionTrace {
 pub struct ProjectedScope {
     pub scope: CandidateScope,
     pub trace: ProjectionTrace,
+}
+
+/// Stable external candidate identities projected from one graph result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphCandidateProjection {
+    pub candidates: Vec<ChunkIdentity>,
+    pub source_nodes: usize,
+    pub projected_chunks_before_filter: usize,
+    pub projected_chunks_after_filter: usize,
 }
 
 impl GraphEngine {
@@ -332,6 +341,15 @@ impl GraphDatabase {
         self.graph.project_candidates(&self.corpus, result)
     }
 
+    /// Projects, optionally filters, and materializes stable chunk identities.
+    pub fn project_candidate_identities(
+        &self,
+        result: &GraphResult,
+        filter: Option<&Filter>,
+    ) -> Result<GraphCandidateProjection> {
+        materialize_candidate_projection(&self.corpus, self.project_candidates(result)?, filter)
+    }
+
     pub fn save_to_dir(
         &self,
         directory: impl AsRef<std::path::Path>,
@@ -384,6 +402,19 @@ impl GraphRetrievalDatabase {
             .project_candidates(self.retrieval.corpus(), result)
     }
 
+    /// Projects, optionally filters, and materializes stable chunk identities.
+    pub fn project_candidate_identities(
+        &self,
+        result: &GraphResult,
+        filter: Option<&Filter>,
+    ) -> Result<GraphCandidateProjection> {
+        materialize_candidate_projection(
+            self.retrieval.corpus(),
+            self.project_candidates(result)?,
+            filter,
+        )
+    }
+
     pub fn semantic_search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {
         self.retrieval
             .semantic_search(query)
@@ -432,4 +463,21 @@ impl GraphRetrievalDatabase {
     pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
         persistence::validate_graph_retrieval_database(directory.as_ref())
     }
+}
+
+fn materialize_candidate_projection(
+    corpus: &CorpusIndex,
+    projected: ProjectedScope,
+    filter: Option<&Filter>,
+) -> Result<GraphCandidateProjection> {
+    let source_nodes = projected.trace.source_nodes;
+    let projected_chunks_before_filter = projected.trace.resolved_chunks;
+    let filtered = corpus.filter_candidate_scope(&projected.scope, filter)?;
+    let candidates = corpus.candidate_scope_identities(&filtered)?;
+    Ok(GraphCandidateProjection {
+        projected_chunks_after_filter: candidates.len(),
+        candidates,
+        source_nodes,
+        projected_chunks_before_filter,
+    })
 }

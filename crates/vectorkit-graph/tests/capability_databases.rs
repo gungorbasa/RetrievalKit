@@ -5,8 +5,8 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use vectorkit_core::{
-    CorpusChunkInput, CorpusId, CorpusIndex, FieldName, HybridQuery, Metadata, Record, RecordId,
-    RecordInput, RecordType, RecordValue, RetrievalDatabase,
+    CorpusChunkInput, CorpusId, CorpusIndex, FieldName, Filter, HybridQuery, Metadata, Record,
+    RecordId, RecordInput, RecordType, RecordValue, RetrievalDatabase,
 };
 use vectorkit_graph::{
     GraphDatabase, GraphQuery, GraphRetrievalDatabase, GraphSchema, NodeId, NodeType,
@@ -50,7 +50,7 @@ fn graph_only_database_builds_and_persists_without_retrieval_payload() {
                 )]),
                 content: None,
             },
-            metadata: Metadata::new(),
+            metadata: BTreeMap::from([("team".to_owned(), "mobile".into())]),
             chunks: vec![CorpusChunkInput {
                 key: vectorkit_core::ChunkKey::new("summary").unwrap(),
                 text: "Rust provides native retrieval".to_owned(),
@@ -68,7 +68,16 @@ fn graph_only_database_builds_and_persists_without_retrieval_payload() {
         NodeType::new("Topic").unwrap(),
         RecordId::new("rust").unwrap(),
     )]));
-    assert_eq!(database.graph_query(&query, None).unwrap().matches.len(), 1);
+    let selection = database.graph_query(&query, None).unwrap();
+    assert_eq!(selection.matches.len(), 1);
+    let projected = database
+        .project_candidate_identities(&selection, Some(&Filter::eq("team", "mobile")))
+        .unwrap();
+    assert_eq!(projected.source_nodes, 1);
+    assert_eq!(projected.projected_chunks_before_filter, 1);
+    assert_eq!(projected.projected_chunks_after_filter, 1);
+    assert_eq!(projected.candidates[0].record_id.as_str(), "rust");
+    assert_eq!(projected.candidates[0].chunk_key.as_str(), "summary");
 
     let directory = TestDirectory::new("graph-only");
     let sizes = database.save_to_dir(&directory.0).unwrap();

@@ -141,10 +141,24 @@ typedef struct {
     bool built_in;
 } VkGraphPathEdge;
 typedef struct { size_t seed_count; size_t visited_states; size_t traversed_edges; size_t result_count; size_t diagnostics; uint32_t truncation_reason; } VkGraphTrace;
+typedef struct { char *record_id; char *chunk_key; } VkGraphChunkIdentity;
+typedef struct {
+    VkGraphChunkIdentity *candidates;
+    size_t count;
+    size_t source_nodes;
+    size_t projected_chunks_before_filter;
+    size_t projected_chunks_after_filter;
+} VkGraphCandidateProjection;
 
 VkGraphResult *vectorkit_graph_query(const VkGraphIndex *index, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
 VkGraphResult *vectorkit_graph_database_query(const VkGraphDatabase *database, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
 VkGraphResult *vectorkit_graph_retrieval_database_query(const VkGraphRetrievalDatabase *database, VkGraphQuery query, const VkGraphCancellation *cancellation, VkStatus *status);
+// out_projection must be zero-initialized or previously cleared. Candidate
+// identities are returned in lexical (record_id, chunk_key) order.
+bool vectorkit_graph_database_project_candidates(const VkGraphDatabase *database, const VkGraphResult *result, const VkFilter *filter, VkGraphCandidateProjection *out_projection, VkStatus *status);
+bool vectorkit_graph_retrieval_database_project_candidates(const VkGraphRetrievalDatabase *database, const VkGraphResult *result, const VkFilter *filter, VkGraphCandidateProjection *out_projection, VkStatus *status);
+void vectorkit_graph_candidate_projection_free(VkGraphCandidateProjection projection);
+void vectorkit_graph_candidate_projection_clear(VkGraphCandidateProjection *projection);
 size_t vectorkit_graph_result_count(const VkGraphResult *result);
 bool vectorkit_graph_result_match(const VkGraphResult *result, size_t index, VkGraphMatch *out_match, VkStatus *status);
 void vectorkit_graph_match_clear(VkGraphMatch *value);

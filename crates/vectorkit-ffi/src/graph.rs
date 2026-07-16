@@ -76,6 +76,33 @@ pub struct VkGraphScope {
 }
 
 #[repr(C)]
+pub struct VkGraphChunkIdentity {
+    pub record_id: *mut c_char,
+    pub chunk_key: *mut c_char,
+}
+
+#[repr(C)]
+pub struct VkGraphCandidateProjection {
+    pub candidates: *mut VkGraphChunkIdentity,
+    pub count: usize,
+    pub source_nodes: usize,
+    pub projected_chunks_before_filter: usize,
+    pub projected_chunks_after_filter: usize,
+}
+
+impl Default for VkGraphCandidateProjection {
+    fn default() -> Self {
+        Self {
+            candidates: std::ptr::null_mut(),
+            count: 0,
+            source_nodes: 0,
+            projected_chunks_before_filter: 0,
+            projected_chunks_after_filter: 0,
+        }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct VkGraphNodeRef {
     pub node_type: *const c_char,
@@ -196,7 +223,7 @@ struct GraphOnlyRecordChunk {
 
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    6
+    7
 }
 
 #[no_mangle]
@@ -497,6 +524,87 @@ pub unsafe extern "C" fn vectorkit_graph_retrieval_database_query(
         let result = database.database.graph_query(&query, cancellation)?;
         Ok(Box::into_raw(Box::new(VkGraphResult { result })))
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_database_project_candidates(
+    database: *const VkGraphDatabase,
+    result: *const VkGraphResult,
+    filter: *const VkFilter,
+    out_projection: *mut VkGraphCandidateProjection,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph database must not be null"))?;
+        let result = unsafe { result.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
+        let out_projection = unsafe { out_projection.as_mut() }
+            .ok_or_else(|| FfiError::invalid_argument("out_projection must not be null"))?;
+        let filter = unsafe { optional_filter(filter) };
+        let projection = database
+            .database
+            .project_candidate_identities(&result.result, filter.as_ref())?;
+        *out_projection = candidate_projection_buffer(projection);
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_retrieval_database_project_candidates(
+    database: *const VkGraphRetrievalDatabase,
+    result: *const VkGraphResult,
+    filter: *const VkFilter,
+    out_projection: *mut VkGraphCandidateProjection,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let result = unsafe { result.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
+        let out_projection = unsafe { out_projection.as_mut() }
+            .ok_or_else(|| FfiError::invalid_argument("out_projection must not be null"))?;
+        let filter = unsafe { optional_filter(filter) };
+        let projection = database
+            .database
+            .project_candidate_identities(&result.result, filter.as_ref())?;
+        *out_projection = candidate_projection_buffer(projection);
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_candidate_projection_free(
+    projection: VkGraphCandidateProjection,
+) {
+    if projection.candidates.is_null() {
+        return;
+    }
+    let candidates = unsafe {
+        Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+            projection.candidates,
+            projection.count,
+        ))
+    };
+    for candidate in candidates.iter() {
+        unsafe {
+            super::vectorkit_string_free(candidate.record_id);
+            super::vectorkit_string_free(candidate.chunk_key);
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vectorkit_graph_candidate_projection_clear(
+    projection: *mut VkGraphCandidateProjection,
+) {
+    let Some(projection) = (unsafe { projection.as_mut() }) else {
+        return;
+    };
+    let owned = std::mem::take(projection);
+    unsafe { vectorkit_graph_candidate_projection_free(owned) };
 }
 
 #[no_mangle]
@@ -1206,6 +1314,27 @@ fn boxed_buffer<T>(values: Vec<T>) -> (*mut T, usize) {
     result
 }
 
+fn candidate_projection_buffer(
+    projection: vectorkit_graph::GraphCandidateProjection,
+) -> VkGraphCandidateProjection {
+    let candidates = projection
+        .candidates
+        .into_iter()
+        .map(|identity| VkGraphChunkIdentity {
+            record_id: string_to_owned_ptr(identity.record_id.as_str()),
+            chunk_key: string_to_owned_ptr(identity.chunk_key.as_str()),
+        })
+        .collect();
+    let (candidates, count) = boxed_buffer(candidates);
+    VkGraphCandidateProjection {
+        candidates,
+        count,
+        source_nodes: projection.source_nodes,
+        projected_chunks_before_filter: projection.projected_chunks_before_filter,
+        projected_chunks_after_filter: projection.projected_chunks_after_filter,
+    }
+}
+
 fn decode_schema(json: String) -> std::result::Result<GraphSchema, FfiError> {
     serde_json::from_str(&json)
         .map_err(|error| FfiError::invalid_argument(format!("invalid schema JSON: {error}")))
@@ -1393,7 +1522,7 @@ mod tests {
     use std::ffi::CString;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use vectorkit_core::{FieldName, RecordId, RecordType, RecordValue};
+    use vectorkit_core::{FieldName, Filter, RecordId, RecordType, RecordValue, VectorMetric};
     use vectorkit_graph::{
         ChunkNodeSchema, GraphSchema, NodeType, RecordNodeSchema, RelationshipType,
     };
@@ -1612,6 +1741,170 @@ mod tests {
         unsafe {
             super::super::vectorkit_hybrid_results_free(results);
             vectorkit_graph_retrieval_database_free(database);
+            super::super::vectorkit_status_clear(&mut status);
+        }
+    }
+
+    #[test]
+    fn candidate_projection_ffi_is_typed_filtered_ordered_and_generation_safe() {
+        fn schema() -> GraphSchema {
+            GraphSchema::new(vec![RecordNodeSchema {
+                record_type: RecordType::new("Item").unwrap(),
+                node_type: NodeType::new("Item").unwrap(),
+                queryable_fields: vec![],
+            }])
+        }
+        fn graph_database(corpus_id: &str) -> VkGraphDatabase {
+            let mut corpus = CorpusIndex::new(CorpusId::new(corpus_id).unwrap());
+            for (record_id, team) in [("z-item", "platform"), ("a-item", "mobile")] {
+                corpus
+                    .upsert(CoreRecordInput {
+                        record: Record {
+                            id: RecordId::new(record_id).unwrap(),
+                            record_type: RecordType::new("Item").unwrap(),
+                            fields: BTreeMap::new(),
+                            content: None,
+                        },
+                        metadata: BTreeMap::from([("team".to_owned(), team.into())]),
+                        chunks: vec![CorpusChunkInput {
+                            key: ChunkKey::new("body").unwrap(),
+                            text: record_id.to_owned(),
+                            metadata: BTreeMap::new(),
+                        }],
+                    })
+                    .unwrap();
+            }
+            VkGraphDatabase {
+                database: GraphDatabase::build(corpus, schema()).unwrap(),
+            }
+        }
+        fn selection(database: &VkGraphDatabase) -> VkGraphResult {
+            let nodes = ["z-item", "a-item"]
+                .into_iter()
+                .map(|record_id| {
+                    NodeId::record(
+                        NodeType::new("Item").unwrap(),
+                        RecordId::new(record_id).unwrap(),
+                    )
+                })
+                .collect();
+            VkGraphResult {
+                result: database
+                    .database
+                    .graph_query(&GraphQuery::new(Seed::NodeIds(nodes)), None)
+                    .unwrap(),
+            }
+        }
+
+        let database = graph_database("projection");
+        let result = selection(&database);
+        let filter = VkFilter {
+            filter: Filter::eq("team", "mobile"),
+        };
+        let mut status = VkStatus {
+            code: 0,
+            message: std::ptr::null_mut(),
+        };
+        let mut output = VkGraphCandidateProjection::default();
+        assert!(unsafe {
+            vectorkit_graph_database_project_candidates(
+                &database,
+                &result,
+                &filter,
+                &mut output,
+                &mut status,
+            )
+        });
+        assert_eq!(output.source_nodes, 2);
+        assert_eq!(output.projected_chunks_before_filter, 2);
+        assert_eq!(output.projected_chunks_after_filter, 1);
+        assert_eq!(output.count, 1);
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr((*output.candidates).record_id) }.to_bytes(),
+            b"a-item"
+        );
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr((*output.candidates).chunk_key) }.to_bytes(),
+            b"body"
+        );
+        unsafe { vectorkit_graph_candidate_projection_clear(&mut output) };
+        assert!(output.candidates.is_null());
+        assert_eq!(output.count, 0);
+        unsafe { vectorkit_graph_candidate_projection_clear(&mut output) };
+
+        let foreign = graph_database("foreign");
+        let foreign_result = selection(&foreign);
+        assert!(!unsafe {
+            vectorkit_graph_database_project_candidates(
+                &database,
+                &foreign_result,
+                std::ptr::null(),
+                &mut output,
+                &mut status,
+            )
+        });
+        assert_eq!(status.code, VK_GRAPH_STATUS_STALE_GENERATION);
+        assert!(output.candidates.is_null());
+        assert!(!unsafe {
+            vectorkit_graph_database_project_candidates(
+                &database,
+                &result,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                &mut status,
+            )
+        });
+        assert_eq!(status.code, super::super::VK_STATUS_INVALID_ARGUMENT);
+
+        let mut retrieval = RetrievalDatabase::new(
+            RetrievalConfiguration::semantic(IndexConfig::new(1, VectorMetric::DotProduct)),
+            CorpusId::new("retrieval-projection").unwrap(),
+        )
+        .unwrap();
+        retrieval
+            .upsert_record(
+                Record {
+                    id: RecordId::new("item").unwrap(),
+                    record_type: RecordType::new("Item").unwrap(),
+                    fields: BTreeMap::new(),
+                    content: None,
+                },
+                BTreeMap::new(),
+                vec![RecordChunkInput {
+                    key: ChunkKey::new("body").unwrap(),
+                    text: "item".to_owned(),
+                    embedding: vec![1.0],
+                    metadata: BTreeMap::new(),
+                }],
+            )
+            .unwrap();
+        let retrieval = VkGraphRetrievalDatabase {
+            database: GraphRetrievalDatabase::build(retrieval, schema()).unwrap(),
+        };
+        let retrieval_result = VkGraphResult {
+            result: retrieval
+                .database
+                .graph_query(
+                    &GraphQuery::new(Seed::NodeIds(vec![NodeId::record(
+                        NodeType::new("Item").unwrap(),
+                        RecordId::new("item").unwrap(),
+                    )])),
+                    None,
+                )
+                .unwrap(),
+        };
+        assert!(unsafe {
+            vectorkit_graph_retrieval_database_project_candidates(
+                &retrieval,
+                &retrieval_result,
+                std::ptr::null(),
+                &mut output,
+                &mut status,
+            )
+        });
+        assert_eq!(output.count, 1);
+        unsafe {
+            vectorkit_graph_candidate_projection_free(output);
             super::super::vectorkit_status_clear(&mut status);
         }
     }

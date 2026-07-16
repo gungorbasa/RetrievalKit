@@ -39,6 +39,11 @@ type AliasSortKey = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
 pub(super) struct ValidatedCollection {
     pub root: PathBuf,
     pub collection: Collection,
+    pub records: Vec<Record>,
+    pub queries: Vec<Query>,
+    pub corpus_embeddings: Vec<CorpusEmbedding>,
+    pub query_embeddings: Vec<QueryEmbedding>,
+    pub dimension: usize,
     pub populations: Populations,
     pub runs: Vec<RunIdentity>,
     pub bytes: BTreeMap<String, Vec<u8>>,
@@ -192,6 +197,11 @@ pub(super) fn validate(root: &Path) -> Result<ValidatedCollection, String> {
     Ok(ValidatedCollection {
         root,
         collection,
+        records,
+        queries,
+        corpus_embeddings,
+        query_embeddings,
+        dimension,
         populations,
         runs,
         bytes,

@@ -36,6 +36,7 @@ FFI work rather than wrapper-only changes.
 | Semantic retrieval | Rust exact search | `semanticSearch` | `semantic_search` | Aligned |
 | Hybrid retrieval | Rust hybrid ranking | `hybridSearch` | `hybrid_search` | Aligned |
 | Graph selection scopes retrieval | Generation-bound `GraphResult` projection | `within:` | `within=` | Aligned |
+| Graph selection projects stable chunk identities | Corpus-owned `project_candidate_identities` | Actor-isolated `projectCandidates(from:filter:)` | Not exposed | Rust/Swift aligned; Python deferred |
 | Metadata filter semantics | Rust `Filter` | Swift typed `Filter`/`GraphFilter` | Python `where={...}` and helpers | Aligned |
 | Save, load, and read-only validation | Rust persistence implementation | Swift native calls | Python native calls | Aligned |
 | Closed/consumed lifecycle safety | Rust ownership and typed results | ARC, actors, and explicit `close()` | native ownership, `close()`, and context managers | Aligned, idiomatic |
@@ -107,6 +108,13 @@ parity:
 
 Until these items are complete, describe the state as **architecture parity
 with qualified graph behavior**, not exhaustive result/performance parity.
+
+The stable candidate-identity projection added after this audit is deliberately
+not counted as Python parity. Its filtering and generation semantics are
+corpus-owned in Rust and exposed through typed C and Swift APIs. Any future
+production Python graph wrapper must call the same Rust operation and return the
+same lexical identities and counts; it must not reproduce scope filtering in
+Python.
 
 ## Verification Performed
 

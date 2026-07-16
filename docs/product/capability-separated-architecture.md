@@ -68,6 +68,44 @@ Chunk metadata overrides inherited record metadata on a duplicate key.
 Retrieval-capable upserts provide a separate embedding map whose keys must
 exactly match the input chunks. Graph-only upserts have no embedding parameter.
 
+## Candidate Projection Contract
+
+`CorpusIndex` owns generation validation, metadata-filter intersection, and
+stable identity materialization for candidate scopes. The production Rust API
+is:
+
+```rust
+CorpusIndex::filter_candidate_scope(scope, filter)
+CorpusIndex::candidate_scope_identities(scope)
+```
+
+`CandidateScope` remains opaque. Callers cannot inspect internal chunk IDs,
+membership, or the adaptive sparse/dense representation. Filtering uses the
+same production `Filter::matches` semantics as retrieval, rejects stale or
+cross-corpus scopes even when no filter is supplied, and excludes unavailable,
+deleted, or superseded chunks. Identity materialization returns each stable
+`(RecordId, ChunkKey)` once in lexical order and rejects inconsistent mappings.
+
+`GraphEngine` still performs graph-to-scope projection. `GraphDatabase` and
+`GraphRetrievalDatabase` then delegate optional filtering and identity
+materialization to their one canonical corpus through
+`project_candidate_identities`. Graph-only projection does not construct or
+require vector, BM25, or embedding state.
+
+The aggregate graph C ABI exposes typed, non-JSON projection operations for
+both database types. The caller receives owned `record_id`/`chunk_key` strings,
+`source_nodes`, and before/after filter counts, and releases the complete value
+with the provided free or clear function. Swift maps that result to
+`GraphChunkIdentity` and `GraphCandidateProjection` through actor-isolated
+`projectCandidates(from:filter:)` methods. Stale and cross-database selections
+use the existing typed stale-generation error.
+
+The work is O(scope size), aside from the required lexical identity sort, and
+does not scan the corpus. A no-filter projection still validates generation and
+scope membership. The current production Python graph surface does not expose
+this operation; an equivalent native projection must be added when that wrapper
+is introduced rather than reimplementing filtering in Python.
+
 ## Persistence Contract
 
 Each atomically activated immutable generation stores the corpus once and only

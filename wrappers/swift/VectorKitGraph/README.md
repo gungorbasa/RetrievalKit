@@ -24,6 +24,12 @@ let selection = try await database.graph.query(
     field: "title",
     equals: .string("Rust")
 )
+let projection = try await database.projectCandidates(
+    from: selection,
+    filter: .equals("team", .string("mobile"))
+)
+// Stable lexical (recordID, chunkKey) identities; no internal IDs are exposed.
+print(projection.candidates)
 ```
 
 Combined construction adds retrieval explicitly. A generation-bound graph
@@ -57,7 +63,10 @@ let hits = try await database.retrieval.hybridSearch(
 Both database owners and their query views are actors. `GraphSelection` retains
 its native candidate scope and releases it automatically; callers do not close
 query results manually. Database `close()` is available for deterministic early
-release, with `deinit` as the normal fallback.
+release, with `deinit` as the normal fallback. Both database types expose
+`projectCandidates(from:filter:)`; filtering, generation checks, and stable
+identity ordering run in Rust. The returned `GraphCandidateProjection` also
+reports source-node and before/after-filter chunk counts.
 
 Run the focused examples:
 

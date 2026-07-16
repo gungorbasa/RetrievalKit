@@ -32,6 +32,17 @@ Passing `NULL` or an empty string uses the default benchmark config:
 The returned string is UTF-8 JSON and must be released with
 `vectorkit_string_free`.
 
+The optional graph aggregate also provides typed candidate projection for
+`VkGraphDatabase` and `VkGraphRetrievalDatabase`. These calls accept a native
+`VkGraphResult` plus an optional `VkFilter` and return lexical stable chunk
+identities and source/before/after counts in `VkGraphCandidateProjection`; no
+JSON or internal chunk IDs cross this boundary. Initialize the output to zero,
+then release it exactly once with
+`vectorkit_graph_candidate_projection_free`, or use the idempotent
+`vectorkit_graph_candidate_projection_clear` on its address. Failed calls leave
+the output unchanged, and stale or cross-corpus results use the graph
+stale-generation status.
+
 The report includes runtime SIMD capability flags and one result row for each
 dimension, encoding, and filter mode. On Apple platforms, the report also
 includes current and peak resident memory snapshots in bytes. When

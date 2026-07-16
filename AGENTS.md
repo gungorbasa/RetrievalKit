@@ -47,6 +47,36 @@ Use `docs/product/vectorkit-product-spec.md` as the implementation source of tru
 - Expose enough trace/debug data to explain retrieval results.
 - Treat deleted, outdated, filtered, or dimension-mismatched chunks as correctness failures, not edge cases.
 
+## Cross-Language Architecture And Native APIs
+
+Rust and every language wrapper must present the same underlying system
+architecture, capability boundaries, ownership model, persistence behavior,
+query semantics, filtering behavior, ranking behavior, and correctness
+guarantees. A wrapper must not quietly combine components that are separate in
+Rust or another wrapper, split components that are intentionally unified, or
+reimplement core behavior in its own language.
+
+Architectural parity does not mean identical syntax. Every wrapper must feel
+native and idiomatic to developers in its language and follow that language's
+established best practices. For example, Python APIs should be Pythonic, Swift
+APIs should follow Swift conventions, and Rust APIs should be idiomatic Rust.
+Names, builders, value types, lifecycle patterns, error surfaces, sync/async
+interfaces, and packaging may differ when required for a high-quality native
+developer experience, while preserving the same system concepts and behavior.
+
+Depart from the shared architecture only when the difference materially
+improves correctness, performance, safety, platform integration, or developer
+experience and genuinely makes sense for that language or platform. Before
+doing so, document the reason, tradeoffs, and compatibility impact in the
+active product documentation and add tests proving the intended behavior. Do
+not introduce architectural differences merely for implementation convenience.
+
+Speed and quality are first-class requirements across Rust and all wrappers.
+Keep performance-sensitive retrieval work in Rust, minimize wrapper overhead
+and data copying, use native language best practices, and verify parity,
+correctness, performance-sensitive behavior, and API ergonomics before treating
+a wrapper change as complete.
+
 ## Performance Expectations
 
 The retrieval path should be designed for low latency on local devices.

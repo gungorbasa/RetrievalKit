@@ -21,6 +21,20 @@ Completed:
 
 The remaining V1 work is production hardening, measurement, and distribution.
 
+The implementation and qualification plan for advertising VectorKit as a
+complete semantic, hybrid, and graph-scoped retrieval package is maintained in
+`docs/product/complete-retrieval-benchmark-and-marketing-roadmap.md`. Its public
+quality, target-device, external-baseline, and claim gates are additional to
+the core V1 engineering phases below; benchmark-only code must remain outside
+production APIs and wrappers. The implementation-ready Phase 0 contract is
+`docs/product/graph-retrieval-evaluation-contract-v3.md`. The owner approved it
+and selected iPhone 14 Pro Max with iOS 26 or later as the conservative device.
+Its third focused revision passed two fresh isolated implementation-author
+reviews on 2026-07-16, closing the benchmark roadmap's Phase 0. Graph-aware
+evaluation-artifact Phase 1 is now active, beginning with the checked-in V3
+conformance fixture and evaluation-only validators. This is separate from the
+completed core V1 “Phase 1: Corruption Detection” below.
+
 ## Priority Summary
 
 | Order | Workstream | Why now | Gate to finish |

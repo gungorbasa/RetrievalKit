@@ -12,6 +12,22 @@ implemented, or superseded by the product spec.
   and schema-driven.
 - Prefer mature fast crates for performance-sensitive work when they clearly
   help. Avoid dependencies for simple local logic.
+- The planned commercial qualification must evaluate VectorKit as a complete
+  semantic, hybrid, and graph-scoped retrieval package while preserving the
+  capability-separated API architecture. The benchmark and claim
+  roadmap lives in
+  `docs/product/complete-retrieval-benchmark-and-marketing-roadmap.md`.
+- The implementation-ready graph evaluation V3 contract is in
+  `docs/product/graph-retrieval-evaluation-contract-v3.md`. The owner approved
+  it and selected iPhone 14 Pro Max with iOS 26 or later as the conservative
+  physical device. The third focused revision passed two fresh isolated
+  implementation-author reviews on 2026-07-16: both reproduced the exact A-J
+  fixture, population hashes, 15-run matrix, artifact/hash schemas, arithmetic,
+  and portability rules without a blocker. Benchmark roadmap Phase 0 is
+  complete and graph-aware evaluation-artifact Phase 1 is active. Start with a
+  checked-in V3 conformance fixture plus schema, population-hash,
+  canonical-serialization, and byte-rerun validators in evaluation-only
+  tooling; do not change production APIs or wrappers.
 
 ## Active Product Constraints
 
@@ -29,6 +45,13 @@ implemented, or superseded by the product spec.
 
 ## Optional Graph Roadmap Status
 
+- Retrieval configuration no longer uses a `.hybrid` extra. Every
+  retrieval-capable database builds semantic and BM25 state, and high-level
+  hybrid calls blend them directly with query-time `alpha` (`1` vector-only,
+  `0` BM25-only). Compact snapshots may omit persisted BM25 and rebuild it from
+  canonical chunk text on load. The graph aggregate ABI is version 6 after the
+  builder signature change.
+
 - The capability-separated architecture is approved. `CorpusIndex` becomes the
   canonical owner; `RetrievalIndex` and `GraphEngine` are derived components.
   Swift will expose `RetrievalDatabase`, `GraphDatabase`, and
@@ -45,10 +68,10 @@ implemented, or superseded by the product spec.
   -0.57%, internal BM25 -0.05%, and hybrid +0.41%, passing the +3% gate. See
   `docs/product/reports/capability-separated-qualification-report.md`.
 
-- Retrieval configuration now models semantic vector search as the required
-  base and `.hybrid` as an explicit optional extra. Omitting extras persists no
-  BM25 state; enabling `.hybrid` keeps semantic queries available and adds
-  hybrid queries on the same database. The graph aggregate ABI is version 5.
+- Retrieval configuration now always builds exact-vector and BM25 state.
+  Hybrid blending is selected directly per query with `alpha`; compact
+  persistence may omit BM25 bytes and rebuild them from canonical chunk text
+  on load. The graph aggregate ABI is version 6.
   Three interleaved before/after benchmark pairs measured exact -1.21%, BM25
   -2.61%, and hybrid +0.35%, passing the +3% p95 gate.
 
@@ -138,8 +161,8 @@ implemented, or superseded by the product spec.
   graph aggregate ABI version is now 3.
 - M4.5 adds Swift graph-scoped metadata filter parity (`equals`, `notEquals`,
   `exists`, inclusive ranges, in-values, all, and any) for exact, BM25, and
-  hybrid retrieval. Hybrid calls now expose candidate limits plus RRF and
-  weighted normalized-score fusion; exact and hybrid hits materialize native
+  hybrid retrieval. Hybrid calls expose candidate limits plus query-time alpha
+  over weighted normalized-score fusion; exact and hybrid hits materialize native
   filter decisions, and hybrid hits include complete ranking traces. Synthetic integration coverage
   proves graph scope and metadata filters intersect before ranking and that
   changing fusion weights changes the winning record without Swift-side
@@ -181,9 +204,15 @@ implemented, or superseded by the product spec.
   XCFramework builds pass for both base and aggregate artifacts, including
   symbol-neutrality and separate-linkage verification. The clean build exposed
   and fixed a Bash 3 empty-feature-array failure in the base build script. See
-  `docs/product/reports/graph-m4-swift-qualification-report.md`. The next code
-  milestone is the optional Python graph wrapper consuming the V1 fixture
-  unchanged; customer validation remains deferred.
+  `docs/product/reports/graph-m4-swift-qualification-report.md`.
+- M5 adds the separate optional `vectorkit-graph` Python distribution over the
+  same Rust `GraphDatabase` and `GraphRetrievalDatabase`. The base `vectorkit`
+  distribution remains graph-free. The optional aggregate exposes typed graph
+  models, graph-only and combined builders, and separate `database.graph` and
+  `database.retrieval` query namespaces. Synthetic Python tests and a runnable
+  graph-retrieval quickstart cover the public surface. As with the Swift native
+  artifacts, applications select one compatible distribution per process.
+  Customer validation remains deferred.
 
 ## Current Size, RAM, and Speed Goal
 
@@ -331,15 +360,36 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 - `docs/agents/python.md` defines Python wrapper guidance. Python is currently
   an internal developer wrapper before the public Swift wrapper is finalized.
-- `crates/vectorkit-python` exposes a thin PyO3 module that calls
-  `vectorkit-core` directly.
-- `wrappers/python` contains the maturin package. The public API is Pythonic:
+- `crates/vectorkit-python` exposes a thin PyO3 module. Its default feature set
+  calls only `vectorkit-core`; the `graph` feature adds the aggregate graph
+  bindings.
+- `wrappers/python` contains the graph-free `vectorkit` maturin package. The
+  public API is Pythonic:
   `Index.add(documents=[...])`, `Index.search(embedding, limit=10, where=...)`,
   `Index.keyword_search(...)`, `Index.save(...)`, `Index.load(...)`, and
   `delete_document(...)`.
+- The canonical Python capability API now also exposes
+  `RetrievalDatabaseBuilder`, `RetrievalDatabase`, and `database.retrieval`,
+  matching Rust and Swift ownership while using Pythonic mappings, keyword
+  arguments, snake_case methods, and context managers. Capability-neutral
+  records and chunks are passed separately from embeddings keyed by chunk key.
 - Embeddings are caller-provided. `search_text(index, text, embed=...)` is only
   a convenience helper that calls the supplied provider, validates one returned
   query vector, then calls vector search.
+- `wrappers/python-graph` contains the optional `vectorkit-graph` aggregate.
+  `GraphDatabaseBuilder` accepts graph-only records without embeddings.
+  `GraphRetrievalDatabaseBuilder` takes separate `graph=` and `retrieval=`
+  configurations, while built databases expose `database.graph` and
+  `database.retrieval`. The Python layer only marshals typed dictionaries;
+  schema validation, traversal, ranking, persistence, and hydration remain in
+  Rust.
+- The Python graph surface is idiomatic and lifecycle-safe: builders accept
+  iterables, scoped retrieval prefers `within=`, databases/selections support
+  `close()` and context managers, `TimestampMillis` preserves timestamp typing,
+  and graph queries expose cooperative cancellation plus second-based timeouts.
+- The formal Rust/Swift/Python matrix and remaining result/performance follow-up
+  work are recorded in
+  `docs/product/reports/cross-language-wrapper-parity-audit.md`.
 
 ## EmbeddingKit Context
 
@@ -411,9 +461,10 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   metadata allowlists, O(1) active average document length, and cached active
   document frequency. Persistence remains deterministic through the existing
   sorted binary format.
-- Hybrid search defaults to RRF with `rrf_k=60`; weighted normalized score
-  fusion remains explicit. Result traces expose vector/keyword ranks, raw
-  scores, normalized scores when applicable, matched terms, and fusion config.
+- High-level hybrid search defaults to weighted normalized fusion with
+  `alpha=0.6`. Internal Rust benchmarks may still exercise RRF. Result traces
+  expose vector/keyword ranks, raw scores, normalized scores, matched terms,
+  and fusion configuration.
 - Hybrid candidate limits are exposed through the Rust public API with
   `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
 - The CLI matrix benchmark can now vary filter selectivity and hybrid candidate

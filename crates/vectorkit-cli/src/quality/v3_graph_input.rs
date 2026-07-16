@@ -1,10 +1,11 @@
-use vectorkit_core::{FieldName, RecordType};
+use vectorkit_core::{FieldName, RecordType, VectorEncoding, VectorMetric};
 use vectorkit_graph::{
-    Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphDatabase, GraphSchema,
-    MissingTargetPolicy, NodeType, RecordNodeSchema, RelationshipSchema, RelationshipType,
+    Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphDatabase,
+    GraphRetrievalDatabase, GraphSchema, MissingTargetPolicy, NodeType, RecordNodeSchema,
+    RelationshipSchema, RelationshipType,
 };
 
-use super::v3_ingestion::build_graph_corpus;
+use super::v3_ingestion::{build_graph_corpus, V3ProductionInputs};
 use super::v3_schema::{
     ChunkNodeRule, GraphSchema as V3GraphSchema, RecordNodeRule, RelationshipRule,
 };
@@ -54,6 +55,63 @@ pub(super) fn build_graph_database(
         .map_err(|error| format!("V3 graph adapter: production graph build: {error}"))?;
     validate_graph_database(&database, validated)?;
     Ok(database)
+}
+
+pub(super) fn build_graph_retrieval_database(
+    validated: &ValidatedCollection,
+    encoding: VectorEncoding,
+) -> Result<GraphRetrievalDatabase, String> {
+    let actual_hash = super::v3_canonical::sha256(&validated.bytes["graph-schema.json"]);
+    if actual_hash != FROZEN_GRAPH_SCHEMA_SHA256 {
+        return Err(format!(
+            "V3 graph retrieval adapter: frozen graph schema hash expected {FROZEN_GRAPH_SCHEMA_SHA256}, actual {actual_hash}"
+        ));
+    }
+    let inputs = V3ProductionInputs::from_validated(validated)?;
+    let retrieval = inputs.build_database(encoding)?;
+    let database =
+        GraphRetrievalDatabase::build(retrieval, production_schema(&validated.graph_schema)?)
+            .map_err(|error| {
+                format!("V3 graph retrieval adapter: production combined build: {error}")
+            })?;
+    validate_graph_retrieval_database(&database, validated, encoding)?;
+    Ok(database)
+}
+
+fn validate_graph_retrieval_database(
+    database: &GraphRetrievalDatabase,
+    validated: &ValidatedCollection,
+    encoding: VectorEncoding,
+) -> Result<(), String> {
+    let stats = database.graph().build_stats();
+    let expected_chunks = validated
+        .records
+        .iter()
+        .map(|record| record.chunks.len())
+        .sum::<usize>();
+    let expected_nodes = validated.records.len() + expected_chunks;
+    if database.corpus().corpus_id().as_str() != validated.collection.corpus_id
+        || database.corpus().record_store().len() != validated.records.len()
+        || database.corpus().active_chunk_count() != expected_chunks
+        || database.corpus().generation().get() != validated.records.len() as u64
+        || database.retrieval().retrieval().vector_encoding() != encoding
+        || database.retrieval().retrieval().dimension() != validated.dimension
+        || database.retrieval().retrieval().metric() != VectorMetric::Cosine
+        || !database.retrieval().retrieval().has_bm25()
+        || stats.records != validated.records.len()
+        || stats.nodes != expected_nodes
+        || stats.edges != 26
+        || stats.diagnostics != 0
+        || database.graph().node_count() != expected_nodes
+        || database.graph().edge_count() != 26
+    {
+        return Err(format!(
+            "V3 graph retrieval adapter: combined database shape/configuration mismatch: corpus records/chunks {}/{}, stats {stats:?}",
+            database.corpus().record_store().len(),
+            database.corpus().active_chunk_count()
+        ));
+    }
+    Ok(())
 }
 
 fn validate_graph_database(
@@ -233,6 +291,19 @@ mod tests {
             stable_query_result(&ordered),
             stable_query_result(&shuffled)
         );
+    }
+
+    #[test]
+    fn builds_frozen_f32_and_i8_combined_databases() {
+        let validated = validate(&fixture_root()).unwrap();
+        for encoding in [VectorEncoding::F32, VectorEncoding::I8ScalarQuantized] {
+            let database = build_graph_retrieval_database(&validated, encoding).unwrap();
+            assert_eq!(database.corpus().active_chunk_count(), 8);
+            assert_eq!(database.graph().node_count(), 15);
+            assert_eq!(database.graph().edge_count(), 26);
+            assert_eq!(database.retrieval().retrieval().vector_encoding(), encoding);
+            assert!(database.retrieval().retrieval().has_bm25());
+        }
     }
 
     #[test]

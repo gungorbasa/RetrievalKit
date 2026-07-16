@@ -3,9 +3,10 @@ use std::fs;
 
 use serde_json::Value;
 use vectorkit_core::{
-    ChunkIdentity, ChunkKey, CorpusId, FieldName, Filter, IndexConfig, Metadata, MetadataValue,
-    Record, RecordChunkInput, RecordId, RecordType, RecordValue, RetrievalConfiguration,
-    RetrievalDatabase, VectorEncoding, VectorMetric,
+    ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, FieldName, Filter,
+    IndexConfig, Metadata, MetadataValue, Record, RecordChunkInput, RecordId, RecordInput,
+    RecordType, RecordValue, RetrievalConfiguration, RetrievalDatabase, VectorEncoding,
+    VectorMetric,
 };
 
 use super::v3_canonical::sha256;
@@ -35,7 +36,7 @@ const FROZEN_WHOLE_CORPUS_LOGICAL_RUNS: [(&str, &str); 3] = [
 pub(super) struct ProductionRecordInput {
     pub record: Record,
     pub inherited_metadata: Metadata,
-    pub chunks: Vec<RecordChunkInput>,
+    pub chunks: Vec<CorpusChunkInput>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +52,7 @@ pub(super) struct V3ProductionInputs {
     pub corpus_id: CorpusId,
     pub dimension: usize,
     pub records: Vec<ProductionRecordInput>,
+    corpus_embeddings: BTreeMap<ChunkIdentity, Vec<f32>>,
     pub queries: Vec<ProductionQueryInput>,
 }
 
@@ -59,25 +61,47 @@ impl V3ProductionInputs {
         verify_frozen_contract(validated)?;
         validate_quantization_inputs(validated)?;
 
-        let embeddings = validated
+        let corpus_embeddings = validated
             .corpus_embeddings
             .iter()
             .map(|row| {
-                (
-                    (row.record_id.as_str(), row.chunk_key.as_str()),
-                    row.values.as_slice(),
-                )
+                let record_id = RecordId::new(row.record_id.clone()).map_err(|error| {
+                    format!("V3 production ingestion: embedding record ID: {error}")
+                })?;
+                let chunk_key = ChunkKey::new(row.chunk_key.clone()).map_err(|error| {
+                    format!("V3 production ingestion: embedding chunk key: {error}")
+                })?;
+                Ok((ChunkIdentity::new(record_id, chunk_key), row.values.clone()))
             })
-            .collect::<BTreeMap<_, _>>();
-        if embeddings.len() != validated.corpus_embeddings.len() {
+            .collect::<Result<BTreeMap<_, _>, String>>()?;
+        if corpus_embeddings.len() != validated.corpus_embeddings.len() {
             return Err("V3 production ingestion: duplicate corpus embedding identity".to_owned());
         }
 
         let records = validated
             .records
             .iter()
-            .map(|record| convert_record(record, &embeddings, validated.dimension))
+            .map(convert_record)
             .collect::<Result<Vec<_>, _>>()?;
+
+        let chunk_identities = records
+            .iter()
+            .flat_map(|input| {
+                input
+                    .chunks
+                    .iter()
+                    .map(|chunk| ChunkIdentity::new(input.record.id.clone(), chunk.key.clone()))
+            })
+            .collect::<BTreeSet<_>>();
+        if chunk_identities.len() != corpus_embeddings.len()
+            || chunk_identities
+                .iter()
+                .any(|identity| !corpus_embeddings.contains_key(identity))
+        {
+            return Err(
+                "V3 production ingestion: corpus and embedding identities do not match".to_owned(),
+            );
+        }
 
         let query_embeddings = validated
             .query_embeddings
@@ -115,8 +139,35 @@ impl V3ProductionInputs {
                 .map_err(|error| format!("V3 production ingestion: invalid corpus ID: {error}"))?,
             dimension: validated.dimension,
             records,
+            corpus_embeddings,
             queries,
         })
+    }
+
+    pub(super) fn build_corpus(&self) -> Result<CorpusIndex, String> {
+        let mut corpus = CorpusIndex::new(self.corpus_id.clone());
+        for input in self.canonical_records()? {
+            let expected = input
+                .chunks
+                .iter()
+                .map(|chunk| ChunkIdentity::new(input.record.id.clone(), chunk.key.clone()))
+                .collect::<Vec<_>>();
+            let chunk_ids = corpus
+                .upsert(RecordInput {
+                    record: input.record.clone(),
+                    metadata: input.inherited_metadata.clone(),
+                    chunks: input.chunks.clone(),
+                })
+                .map_err(|error| {
+                    format!(
+                        "V3 production ingestion: record '{}': {error}",
+                        input.record.id.as_str()
+                    )
+                })?;
+            validate_ingested_identities(&corpus, &expected, &chunk_ids)?;
+        }
+        validate_corpus_shape(&corpus, self.records.len(), self.chunk_count())?;
+        Ok(corpus)
     }
 
     pub(super) fn build_database(
@@ -137,34 +188,37 @@ impl V3ProductionInputs {
         let mut database = RetrievalDatabase::new(configuration, self.corpus_id.clone())
             .map_err(|error| format!("V3 production ingestion: create database: {error}"))?;
 
-        let mut previous_identity: Option<(String, String)> = None;
-        for input in &self.records {
+        for input in self.canonical_records()? {
             let expected = input
                 .chunks
                 .iter()
                 .map(|chunk| ChunkIdentity::new(input.record.id.clone(), chunk.key.clone()))
                 .collect::<Vec<_>>();
-            for identity in &expected {
-                let current = (
-                    identity.record_id.as_str().to_owned(),
-                    identity.chunk_key.as_str().to_owned(),
-                );
-                if previous_identity
-                    .as_ref()
-                    .is_some_and(|previous| previous >= &current)
-                {
-                    return Err(format!(
-                        "V3 production ingestion: stable chunk identities are not in strict lexical order at {}/{}",
-                        current.0, current.1
-                    ));
-                }
-                previous_identity = Some(current);
-            }
+            let chunks = input
+                .chunks
+                .iter()
+                .zip(&expected)
+                .map(|(chunk, identity)| {
+                    let embedding = self.corpus_embeddings.get(identity).ok_or_else(|| {
+                        format!(
+                            "V3 production ingestion: missing embedding for {}/{}",
+                            identity.record_id.as_str(),
+                            identity.chunk_key.as_str()
+                        )
+                    })?;
+                    Ok(RecordChunkInput {
+                        key: chunk.key.clone(),
+                        text: chunk.text.clone(),
+                        embedding: embedding.clone(),
+                        metadata: chunk.metadata.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
             let chunk_ids = database
                 .upsert_record(
                     input.record.clone(),
                     input.inherited_metadata.clone(),
-                    input.chunks.clone(),
+                    chunks,
                 )
                 .map_err(|error| {
                     format!(
@@ -180,34 +234,95 @@ impl V3ProductionInputs {
                     chunk_ids.len()
                 ));
             }
-            for (identity, chunk_id) in expected.iter().zip(chunk_ids) {
-                if database.corpus().chunk_id_for_identity(identity) != Some(chunk_id)
-                    || database.corpus().chunk_identity(chunk_id) != Some(identity)
-                    || database
-                        .chunk(chunk_id)
-                        .is_none_or(|chunk| chunk.document_id != identity.record_id.as_str())
-                {
-                    return Err(format!(
-                        "V3 production ingestion: production identity mismatch for {}/{}",
-                        identity.record_id.as_str(),
-                        identity.chunk_key.as_str()
-                    ));
-                }
-            }
+            validate_ingested_identities(database.corpus(), &expected, &chunk_ids)?;
         }
 
-        let expected_chunks: usize = self.records.iter().map(|record| record.chunks.len()).sum();
-        if database.corpus().record_store().len() != self.records.len()
-            || database.corpus().active_chunk_count() != expected_chunks
-            || database.retrieval().vector_encoding() != encoding
+        validate_corpus_shape(database.corpus(), self.records.len(), self.chunk_count())?;
+        if database.retrieval().vector_encoding() != encoding
             || database.retrieval().dimension() != self.dimension
             || database.retrieval().metric() != VectorMetric::Cosine
-            || database.corpus().generation().get() != self.records.len() as u64
         {
-            return Err("V3 production ingestion: built database failed corpus, generation, dimension, metric, or encoding validation".to_owned());
+            return Err("V3 production ingestion: built database failed dimension, metric, or encoding validation".to_owned());
         }
         Ok(database)
     }
+
+    fn chunk_count(&self) -> usize {
+        self.records.iter().map(|record| record.chunks.len()).sum()
+    }
+
+    fn canonical_records(&self) -> Result<Vec<ProductionRecordInput>, String> {
+        let mut records = self.records.clone();
+        records.sort_by(|left, right| left.record.id.cmp(&right.record.id));
+        for record in &mut records {
+            record
+                .chunks
+                .sort_by(|left, right| left.key.cmp(&right.key));
+            if record
+                .chunks
+                .windows(2)
+                .any(|pair| pair[0].key == pair[1].key)
+            {
+                return Err(format!(
+                    "V3 production ingestion: duplicate stable chunk key in record '{}'",
+                    record.record.id.as_str()
+                ));
+            }
+        }
+        if records
+            .windows(2)
+            .any(|pair| pair[0].record.id == pair[1].record.id)
+        {
+            return Err("V3 production ingestion: duplicate stable record identity".to_owned());
+        }
+        Ok(records)
+    }
+}
+
+fn validate_ingested_identities(
+    corpus: &CorpusIndex,
+    expected: &[ChunkIdentity],
+    chunk_ids: &[u64],
+) -> Result<(), String> {
+    if chunk_ids.len() != expected.len() {
+        return Err(format!(
+            "V3 production ingestion: expected {} production chunks, actual {}",
+            expected.len(),
+            chunk_ids.len()
+        ));
+    }
+    for (identity, chunk_id) in expected.iter().zip(chunk_ids) {
+        if corpus.chunk_id_for_identity(identity) != Some(*chunk_id)
+            || corpus.chunk_identity(*chunk_id) != Some(identity)
+            || corpus
+                .chunk(*chunk_id)
+                .is_none_or(|chunk| chunk.document_id != identity.record_id.as_str())
+        {
+            return Err(format!(
+                "V3 production ingestion: production identity mismatch for {}/{}",
+                identity.record_id.as_str(),
+                identity.chunk_key.as_str()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_corpus_shape(
+    corpus: &CorpusIndex,
+    expected_records: usize,
+    expected_chunks: usize,
+) -> Result<(), String> {
+    if corpus.record_store().len() != expected_records
+        || corpus.active_chunk_count() != expected_chunks
+        || corpus.generation().get() != expected_records as u64
+    {
+        return Err(
+            "V3 production ingestion: built corpus failed record, chunk, or generation validation"
+                .to_owned(),
+        );
+    }
+    Ok(())
 }
 
 fn verify_frozen_contract(validated: &ValidatedCollection) -> Result<(), String> {
@@ -278,11 +393,7 @@ fn validate_quantization_inputs(validated: &ValidatedCollection) -> Result<(), S
     Ok(())
 }
 
-fn convert_record(
-    source: &V3Record,
-    embeddings: &BTreeMap<(&str, &str), &[f32]>,
-    dimension: usize,
-) -> Result<ProductionRecordInput, String> {
+fn convert_record(source: &V3Record) -> Result<ProductionRecordInput, String> {
     let record_id = RecordId::new(source.record_id.clone())
         .map_err(|error| format!("V3 production ingestion: record ID: {error}"))?;
     let fields = source
@@ -312,21 +423,7 @@ fn convert_record(
                     identity.0, identity.1
                 ));
             }
-            let embedding = embeddings.get(&identity).ok_or_else(|| {
-                format!(
-                    "V3 production ingestion: missing embedding for {}/{}",
-                    identity.0, identity.1
-                )
-            })?;
-            if embedding.len() != dimension {
-                return Err(format!(
-                    "V3 production ingestion: embedding for {}/{} expected dimension {dimension}, actual {}",
-                    identity.0,
-                    identity.1,
-                    embedding.len()
-                ));
-            }
-            Ok(RecordChunkInput {
+            Ok(CorpusChunkInput {
                 key: ChunkKey::new(chunk.chunk_key.clone()).map_err(|error| {
                     format!(
                         "V3 production ingestion: chunk key {}/{}: {error}",
@@ -334,7 +431,6 @@ fn convert_record(
                     )
                 })?,
                 text: chunk.text.clone(),
-                embedding: embedding.to_vec(),
                 metadata: convert_metadata(
                     &chunk.metadata,
                     &format!("{}/{}", identity.0, identity.1),

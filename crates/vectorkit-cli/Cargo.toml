@@ -16,3 +16,4 @@ sha2 = "0.10.9"
 simsimd = "6.5.16"
 vectorkit-core = { path = "../vectorkit-core" }
 vectorkit-ffi = { path = "../vectorkit-ffi" }
+vectorkit-graph = { path = "../vectorkit-graph" }

@@ -427,7 +427,108 @@ def project(hits: list[dict[str, Any]], depth: int) -> tuple[list[dict[str, Any]
     return documents, duplicates
 
 
-def assert_equal(expected: Any, actual: Any, path: str) -> None:
+def load_qrels(collection: Path) -> dict[str, dict[str, int]]:
+    qrels: dict[str, dict[str, int]] = {}
+    try:
+        rows = (collection / "qrels.tsv").read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise ValidationError(f"failed to read frozen qrels: {error}") from error
+    for row in rows:
+        query_id, zero, record_id, relevance = row.split(" ")
+        if zero != "0":
+            raise ValidationError(f"invalid qrel row '{row}'")
+        qrels.setdefault(query_id, {})[record_id] = int(relevance)
+    return qrels
+
+
+def relevant_count(
+    documents: list[dict[str, Any]], qrels: dict[str, int], cutoff: int
+) -> int:
+    return sum(
+        qrels.get(document["record_id"], 0) >= 1 for document in documents[:cutoff]
+    )
+
+
+def recall(documents: list[dict[str, Any]], qrels: dict[str, int], cutoff: int) -> float:
+    relevant = sum(relevance >= 1 for relevance in qrels.values())
+    return relevant_count(documents, qrels, cutoff) / relevant
+
+
+def reciprocal_rank(
+    documents: list[dict[str, Any]], qrels: dict[str, int], cutoff: int
+) -> float:
+    for rank, document in enumerate(documents[:cutoff], 1):
+        if qrels.get(document["record_id"], 0) >= 1:
+            return 1.0 / rank
+    return 0.0
+
+
+def average_precision(documents: list[dict[str, Any]], qrels: dict[str, int]) -> float:
+    relevant = sum(relevance >= 1 for relevance in qrels.values())
+    found = 0
+    total = 0.0
+    for rank, document in enumerate(documents, 1):
+        if qrels.get(document["record_id"], 0) >= 1:
+            found += 1
+            total += found / rank
+    return total / relevant
+
+
+def judged(
+    documents: list[dict[str, Any]], qrels: dict[str, int], cutoff: int
+) -> float:
+    denominator = min(cutoff, len(documents))
+    if denominator == 0:
+        return 0.0
+    return (
+        sum(document["record_id"] in qrels for document in documents[:cutoff])
+        / denominator
+    )
+
+
+def ndcg(documents: list[dict[str, Any]], qrels: dict[str, int], cutoff: int) -> float:
+    dcg = 0.0
+    for rank, document in enumerate(documents[:cutoff], 1):
+        gain = (2 ** qrels.get(document["record_id"], 0) - 1) / math.log2(rank + 1)
+        dcg += gain
+    ideal = sorted(qrels.items(), key=lambda item: (-item[1], item[0]))
+    idcg = 0.0
+    for rank, (_, relevance) in enumerate(ideal[:cutoff], 1):
+        idcg += (2**relevance - 1) / math.log2(rank + 1)
+    return dcg / idcg
+
+
+def retrieval_metrics(
+    documents: list[dict[str, Any]], qrels: dict[str, int]
+) -> dict[str, float]:
+    return {
+        "ap": average_precision(documents, qrels),
+        "judged_at_10": judged(documents, qrels, 10),
+        "judged_at_5": judged(documents, qrels, 5),
+        "mrr_at_10": reciprocal_rank(documents, qrels, 10),
+        "ndcg_at_10": ndcg(documents, qrels, 10),
+        "ndcg_at_5": ndcg(documents, qrels, 5),
+        "precision_at_5": relevant_count(documents, qrels, 5) / 5,
+        "recall_at_10": recall(documents, qrels, 10),
+        "recall_at_5": recall(documents, qrels, 5),
+        "success_at_1": float(relevant_count(documents, qrels, 1) > 0),
+    }
+
+
+def macro_metrics(rows: list[dict[str, float]]) -> dict[str, float]:
+    totals = {key: 0.0 for key in rows[0]}
+    for row in rows:
+        for key in totals:
+            totals[key] += row[key]
+    return {key: value / len(rows) for key, value in totals.items()}
+
+
+def assert_equal(
+    expected: Any,
+    actual: Any,
+    path: str,
+    differences: dict[str, float] | None = None,
+) -> None:
     if (
         isinstance(expected, (int, float))
         and not isinstance(expected, bool)
@@ -444,6 +545,13 @@ def assert_equal(expected: Any, actual: Any, path: str) -> None:
             if isinstance(expected, float) or isinstance(actual, float)
             else expected == actual
         )
+        if differences is not None and (
+            isinstance(expected, float) or isinstance(actual, float)
+        ):
+            category = "metrics" if ".metrics" in path or ".macro" in path else "scores"
+            differences[category] = max(
+                differences[category], abs(float(expected) - float(actual))
+            )
         if not equal:
             raise ValidationError(f"{path}: expected {expected!r}, actual {actual!r}")
         return
@@ -457,7 +565,7 @@ def assert_equal(expected: Any, actual: Any, path: str) -> None:
                 f"{path}: key mismatch expected {sorted(expected)}, actual {sorted(actual)}"
             )
         for key in expected:
-            assert_equal(expected[key], actual[key], f"{path}.{key}")
+            assert_equal(expected[key], actual[key], f"{path}.{key}", differences)
         return
     if isinstance(expected, list):
         if len(expected) != len(actual):
@@ -465,7 +573,7 @@ def assert_equal(expected: Any, actual: Any, path: str) -> None:
                 f"{path}: length mismatch expected {len(expected)}, actual {len(actual)}"
             )
         for offset, (left, right) in enumerate(zip(expected, actual, strict=True)):
-            assert_equal(left, right, f"{path}[{offset}]")
+            assert_equal(left, right, f"{path}[{offset}]", differences)
         return
     if expected != actual:
         raise ValidationError(f"{path}: expected {expected!r}, actual {actual!r}")
@@ -477,7 +585,9 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
     if marker.get("partial") is not True or marker.get("publication_ready") is not False:
         raise ValidationError("qualification marker does not identify a partial, non-publication artifact")
     results = read_json(artifacts / "rust-results.json")
+    rust_metrics = read_json(artifacts / "metrics.json")
     chunks, queries = load_fixture(collection)
+    qrels = load_qrels(collection)
     query_by_id = {query["query_id"]: query for query in queries}
     expected_letters = ["a", "b", "c"]
     actual_letters = [run["run_id"].split("-", 2)[1] for run in results["runs"]]
@@ -492,6 +602,8 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
         )
 
     checked = 0
+    differences = {"metrics": 0.0, "scores": 0.0}
+    calculated_metrics: dict[str, dict[str, dict[str, float]]] = {}
     for run in results["runs"]:
         letter = run["run_id"].split("-", 2)[1]
         if run["status"] != "valid":
@@ -503,6 +615,7 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
                 f"run '{run['run_id']}' query order expected {expected_query_ids}, actual {actual_query_ids}"
             )
         trec_lines: list[str] = []
+        calculated_metrics[run["run_id"]] = {}
         for actual in run["queries"]:
             query = query_by_id[actual["query_id"]]
             expected_limits = (
@@ -514,11 +627,13 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
                 expected_limits,
                 actual["candidate_limits"],
                 f"{run['run_id']}.{query['query_id']}.candidate_limits",
+                differences,
             )
             assert_equal(
                 query["metadata_filter"],
                 actual["filter"],
                 f"{run['run_id']}.{query['query_id']}.filter",
+                differences,
             )
             hits = (
                 semantic_hits(chunks, query, "f32" if letter == "a" else "i8")
@@ -526,16 +641,26 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
                 else hybrid_hits(chunks, query)
             )
             documents, duplicates = project(hits, 10)
-            assert_equal(hits, actual["chunk_hits"], f"{run['run_id']}.{query['query_id']}.chunk_hits")
+            assert_equal(
+                hits,
+                actual["chunk_hits"],
+                f"{run['run_id']}.{query['query_id']}.chunk_hits",
+                differences,
+            )
             assert_equal(
                 documents,
                 actual["projected_documents"],
                 f"{run['run_id']}.{query['query_id']}.projected_documents",
+                differences,
             )
             assert_equal(
                 duplicates,
                 actual["duplicate_collapse_count"],
                 f"{run['run_id']}.{query['query_id']}.duplicate_collapse_count",
+                differences,
+            )
+            calculated_metrics[run["run_id"]][query["query_id"]] = retrieval_metrics(
+                documents, qrels[query["query_id"]]
             )
             for document in documents:
                 trec_lines.append(
@@ -551,12 +676,41 @@ def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
         expected_trec = "".join(trec_lines)
         if actual_trec != expected_trec:
             raise ValidationError(f"TREC projection mismatch for run '{run['run_id']}'")
+
+    metric_run_ids = [run["run_id"] for run in rust_metrics["runs"]]
+    if metric_run_ids != FROZEN_RUN_IDS:
+        raise ValidationError(
+            f"Rust metric run IDs expected {FROZEN_RUN_IDS}, actual {metric_run_ids}"
+        )
+    for run in rust_metrics["runs"]:
+        run_id = run["run_id"]
+        query_rows = run["queries"]
+        expected_query_metrics = calculated_metrics[run_id]
+        if [row["query_id"] for row in query_rows] != sorted(expected_query_metrics):
+            raise ValidationError(f"Rust metric query order mismatch for run '{run_id}'")
+        ordered_metrics = []
+        for row in query_rows:
+            expected = expected_query_metrics[row["query_id"]]
+            assert_equal(
+                expected,
+                row["metrics"],
+                f"{run_id}.{row['query_id']}.metrics",
+                differences,
+            )
+            ordered_metrics.append(expected)
+        assert_equal(
+            macro_metrics(ordered_metrics),
+            run["macro"],
+            f"{run_id}.macro",
+            differences,
+        )
     return {
         "artifact_schema": REPORT_SCHEMA,
         "checked_query_runs": checked,
         "included_run_letters": expected_letters,
         "partial": True,
         "publication_ready": False,
+        "maximum_absolute_differences": differences,
         "score_comparison": {
             "absolute_tolerance": F32_SCORE_TOLERANCE,
             "relative_tolerance": F32_SCORE_TOLERANCE,

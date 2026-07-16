@@ -470,14 +470,33 @@ final class VectorKitGraphTests: XCTestCase {
     let schema = capabilitySchema()
     let builder = try GraphDatabase.Builder(corpusID: "knowledge", schema: schema)
     try await builder.upsert(capabilityInput(id: "rust", title: "Rust", text: "native retrieval"))
+    try await builder.upsert(
+      capabilityInput(id: "swift", title: "Swift", text: "native application code"))
     let database = try await builder.build()
 
     let selection = try await database.graph.query(
       nodeType: "Topic",
       field: "title",
-      equals: .string("Rust")
+      equals: [.string("Swift"), .string("Rust")]
     )
-    XCTAssertEqual(selection.matches.map(\.nodeID.recordID), ["rust"])
+    XCTAssertEqual(selection.matches.map(\.nodeID.recordID), ["rust", "swift"])
+    let allCandidates = try await database.projectCandidates(from: selection)
+    XCTAssertEqual(
+      allCandidates.candidates,
+      [
+        GraphChunkIdentity(recordID: "rust", chunkKey: "summary"),
+        GraphChunkIdentity(recordID: "swift", chunkKey: "summary"),
+      ])
+    XCTAssertEqual(allCandidates.sourceNodes, 2)
+    XCTAssertEqual(allCandidates.projectedChunksBeforeFilter, 2)
+    XCTAssertEqual(allCandidates.projectedChunksAfterFilter, 2)
+    let mobileCandidates = try await database.projectCandidates(
+      from: selection, filter: .equals("team", .string("mobile")))
+    XCTAssertEqual(
+      mobileCandidates.candidates,
+      [GraphChunkIdentity(recordID: "rust", chunkKey: "summary")])
+    XCTAssertEqual(mobileCandidates.projectedChunksBeforeFilter, 2)
+    XCTAssertEqual(mobileCandidates.projectedChunksAfterFilter, 1)
 
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("vectorkit-graph-only-\(UUID().uuidString)")
@@ -494,6 +513,10 @@ final class VectorKitGraphTests: XCTestCase {
       equals: .string("Rust")
     )
     XCTAssertEqual(reopenedSelection.matches.map(\.nodeID.recordID), ["rust"])
+    let reopenedCandidates = try await reopened.projectCandidates(from: reopenedSelection)
+    XCTAssertEqual(
+      reopenedCandidates.candidates,
+      [GraphChunkIdentity(recordID: "rust", chunkKey: "summary")])
   }
 
   func testCombinedDatabaseScopesHybridRetrievalWithoutCopyingRecords() async throws {
@@ -525,6 +548,10 @@ final class VectorKitGraphTests: XCTestCase {
       within: rustOnly
     )
     XCTAssertEqual(scoped.map(\.recordID), ["rust"])
+    let projected = try await database.projectCandidates(from: rustOnly)
+    XCTAssertEqual(
+      projected.candidates,
+      [GraphChunkIdentity(recordID: "rust", chunkKey: "summary")])
 
     let unscoped = try await database.retrieval.semanticSearch(embedding: [0, 1])
     XCTAssertEqual(unscoped.first?.recordID, "swift")
@@ -605,6 +632,13 @@ final class VectorKitGraphTests: XCTestCase {
       XCTAssertTrue(message.contains("source-corpus"))
       XCTAssertTrue(message.contains("target-corpus"))
     }
+    do {
+      _ = try await combined.projectCandidates(from: foreignSelection)
+      XCTFail("a projection from another corpus must be rejected")
+    } catch VectorKitGraphError.staleGeneration(let message) {
+      XCTAssertTrue(message.contains("source-corpus"))
+      XCTAssertTrue(message.contains("target-corpus"))
+    }
   }
 
   private func capabilitySchema() -> GraphSchema {
@@ -622,7 +656,8 @@ final class VectorKitGraphTests: XCTestCase {
       record: Record(
         id: id,
         type: "Topic",
-        fields: ["title": .string(title)]
+        fields: ["title": .string(title)],
+        metadata: ["team": .string(id == "rust" ? "mobile" : "platform")]
       ),
       chunks: [Chunk(key: "summary", text: text)]
     )

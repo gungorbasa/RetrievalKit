@@ -1428,6 +1428,31 @@ public final class GraphSelection: @unchecked Sendable {
   }
 }
 
+public struct GraphChunkIdentity: Equatable, Hashable, Sendable {
+  public let recordID: RecordID
+  public let chunkKey: ChunkKey
+  public init(recordID: RecordID, chunkKey: ChunkKey) {
+    self.recordID = recordID
+    self.chunkKey = chunkKey
+  }
+}
+
+public struct GraphCandidateProjection: Equatable, Sendable {
+  public let candidates: [GraphChunkIdentity]
+  public let sourceNodes: Int
+  public let projectedChunksBeforeFilter: Int
+  public let projectedChunksAfterFilter: Int
+  public init(
+    candidates: [GraphChunkIdentity], sourceNodes: Int, projectedChunksBeforeFilter: Int,
+    projectedChunksAfterFilter: Int
+  ) {
+    self.candidates = candidates
+    self.sourceNodes = sourceNodes
+    self.projectedChunksBeforeFilter = projectedChunksBeforeFilter
+    self.projectedChunksAfterFilter = projectedChunksAfterFilter
+  }
+}
+
 public actor GraphQueries {
   private let owner: NativeCapabilityDatabase
   fileprivate init(owner: NativeCapabilityDatabase) { self.owner = owner }
@@ -1604,6 +1629,47 @@ private func materializeSelection(_ result: OpaquePointer) throws -> GraphSelect
     native: NativeSelection(result))
 }
 
+private func materializeCandidateProjection(
+  owner: NativeCapabilityDatabase, selection: GraphSelection, filter: GraphFilter?
+) throws -> GraphCandidateProjection {
+  let nativeFilter = try filter?.makeFFI()
+  var output = VkGraphCandidateProjection(
+    candidates: nil, count: 0, source_nodes: 0, projected_chunks_before_filter: 0,
+    projected_chunks_after_filter: 0)
+  var status = VkStatus(code: 0, message: nil)
+  defer {
+    vectorkit_graph_candidate_projection_clear(&output)
+    vectorkit_status_clear(&status)
+  }
+  let database = OpaquePointer(bitPattern: try owner.requireHandle())
+  let result = try selection.native.requireHandle()
+  let succeeded = switch owner.kind {
+  case .graph:
+    vectorkit_graph_database_project_candidates(
+      database, result, nativeFilter?.pointer, &output, &status)
+  case .graphRetrieval:
+    vectorkit_graph_retrieval_database_project_candidates(
+      database, result, nativeFilter?.pointer, &output, &status)
+  }
+  guard succeeded else { throw Native.error(status, fallback: "candidate projection failed") }
+  var candidates: [GraphChunkIdentity] = []
+  candidates.reserveCapacity(output.count)
+  for index in 0..<output.count {
+    let value = output.candidates[index]
+    guard
+      let recordID = RecordID(rawValue: String(cString: value.record_id)),
+      let chunkKey = ChunkKey(rawValue: String(cString: value.chunk_key))
+    else {
+      throw VectorKitGraphError.internalError("native projection returned an invalid identity")
+    }
+    candidates.append(GraphChunkIdentity(recordID: recordID, chunkKey: chunkKey))
+  }
+  return GraphCandidateProjection(
+    candidates: candidates, sourceNodes: output.source_nodes,
+    projectedChunksBeforeFilter: output.projected_chunks_before_filter,
+    projectedChunksAfterFilter: output.projected_chunks_after_filter)
+}
+
 public actor GraphDatabase {
   public actor Builder {
     private var handle: UInt?
@@ -1648,6 +1714,14 @@ public actor GraphDatabase {
     graph = GraphQueries(owner: owner)
   }
   public func close() { owner.close() }
+  public func projectCandidates(
+    from selection: GraphSelection, filter: GraphFilter? = nil
+  ) async throws -> GraphCandidateProjection {
+    let owner = owner
+    return try await Task.detached(priority: Task.currentPriority) {
+      try materializeCandidateProjection(owner: owner, selection: selection, filter: filter)
+    }.value
+  }
   public func save(to directory: URL) async throws {
     let handle = try owner.requireHandle()
     try await Task.detached {
@@ -1814,6 +1888,14 @@ public actor GraphRetrievalDatabase {
     retrieval = GraphRetrievalQueries(owner: owner)
   }
   public func close() { owner.close() }
+  public func projectCandidates(
+    from selection: GraphSelection, filter: GraphFilter? = nil
+  ) async throws -> GraphCandidateProjection {
+    let owner = owner
+    return try await Task.detached(priority: Task.currentPriority) {
+      try materializeCandidateProjection(owner: owner, selection: selection, filter: filter)
+    }.value
+  }
   public func save(to directory: URL) async throws {
     let handle = try owner.requireHandle()
     try await Task.detached {

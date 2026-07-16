@@ -4,7 +4,7 @@ use vectorkit_graph::{
     MissingTargetPolicy, NodeType, RecordNodeSchema, RelationshipSchema, RelationshipType,
 };
 
-use super::v3_ingestion::V3ProductionInputs;
+use super::v3_ingestion::build_graph_corpus;
 use super::v3_schema::{
     ChunkNodeRule, GraphSchema as V3GraphSchema, RecordNodeRule, RelationshipRule,
 };
@@ -49,8 +49,7 @@ pub(super) fn build_graph_database(
             "V3 graph adapter: frozen graph schema hash expected {FROZEN_GRAPH_SCHEMA_SHA256}, actual {actual_hash}"
         ));
     }
-    let inputs = V3ProductionInputs::from_validated(validated)?;
-    let corpus = inputs.build_corpus()?;
+    let corpus = build_graph_corpus(validated)?;
     let database = GraphDatabase::build(corpus, production_schema(&validated.graph_schema)?)
         .map_err(|error| format!("V3 graph adapter: production graph build: {error}"))?;
     validate_graph_database(&database, validated)?;

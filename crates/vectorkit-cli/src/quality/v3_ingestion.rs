@@ -144,6 +144,7 @@ impl V3ProductionInputs {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn build_corpus(&self) -> Result<CorpusIndex, String> {
         let mut corpus = CorpusIndex::new(self.corpus_id.clone());
         for input in self.canonical_records()? {
@@ -277,6 +278,46 @@ impl V3ProductionInputs {
         }
         Ok(records)
     }
+}
+
+pub(super) fn build_graph_corpus(validated: &ValidatedCollection) -> Result<CorpusIndex, String> {
+    let collection_bytes = fs::read(validated.root.join("collection.json"))
+        .map_err(|error| format!("V3 graph ingestion: reread collection.json: {error}"))?;
+    let collection_hash = sha256(&collection_bytes);
+    if collection_hash != FROZEN_COLLECTION_SHA256 {
+        return Err(format!(
+            "V3 graph ingestion: frozen collection hash expected {FROZEN_COLLECTION_SHA256}, actual {collection_hash}"
+        ));
+    }
+    let mut records = validated
+        .records
+        .iter()
+        .map(convert_record)
+        .collect::<Result<Vec<_>, _>>()?;
+    records.sort_by(|left, right| left.record.id.cmp(&right.record.id));
+    let mut corpus = CorpusIndex::new(
+        CorpusId::new(validated.collection.corpus_id.clone())
+            .map_err(|error| format!("V3 graph ingestion: invalid corpus ID: {error}"))?,
+    );
+    for input in records {
+        corpus
+            .upsert(RecordInput {
+                record: input.record,
+                metadata: input.inherited_metadata,
+                chunks: input.chunks,
+            })
+            .map_err(|error| format!("V3 graph ingestion: canonical record upsert: {error}"))?;
+    }
+    validate_corpus_shape(
+        &corpus,
+        validated.records.len(),
+        validated
+            .records
+            .iter()
+            .map(|record| record.chunks.len())
+            .sum(),
+    )?;
+    Ok(corpus)
 }
 
 fn validate_ingested_identities(
@@ -567,7 +608,7 @@ fn convert_metadata_value(value: &Value, path: &str) -> Result<MetadataValue, St
     .ok_or_else(|| format!("V3 production ingestion: {path} has invalid metadata type '{tag}'"))
 }
 
-fn convert_filter(value: &Value) -> Result<Filter, String> {
+pub(super) fn convert_filter(value: &Value) -> Result<Filter, String> {
     let object = value
         .as_object()
         .ok_or_else(|| "V3 production ingestion: filter is not an object".to_owned())?;

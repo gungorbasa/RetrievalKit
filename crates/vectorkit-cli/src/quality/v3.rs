@@ -78,6 +78,8 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         "query_population_sha256":population_hash(&validated.populations.q),
         "phase_1_2a_executed":phase_1_2a_executed,
         "phase_1_2a_partial":phase_1_2a_executed,
+        "phase_1_2b_executed":phase_1_2a_executed,
+        "phase_1_2b_partial":phase_1_2a_executed,
         "rerun_verified":verify_rerun,
         "run_count":validated.runs.len(),
         "status":"valid"
@@ -326,6 +328,26 @@ fn generation_fingerprints(validated: &ValidatedCollection) -> Result<Value, Str
         .map(|(fingerprint, preimage)| json!({"fingerprint":fingerprint,"preimage":preimage}))
         .collect::<Vec<_>>();
     Ok(json!({"bindings":bindings,"foundation_only":true,"preimages":preimages,"schema_version":1}))
+}
+
+pub(super) fn d_generation_fingerprint(
+    validated: &ValidatedCollection,
+) -> Result<(Value, String), String> {
+    let preimage = json!({
+        "corpus_id":validated.collection.corpus_id,
+        "corpus_state_sha256":file_array_hash(
+            validated,
+            &["manifests/chunking.json", "manifests/preprocessing.json", "records.jsonl"],
+        )?,
+        "graph_state_sha256":file_array_hash(
+            validated,
+            &["graph-schema.json", "manifests/graph-construction.json"],
+        )?,
+        "retrieval_state_sha256":Value::Null,
+        "schema_version":1
+    });
+    let fingerprint = sha256(canonical_json(&preimage)?.as_bytes());
+    Ok((preimage, fingerprint))
 }
 
 fn file_array_hash(validated: &ValidatedCollection, paths: &[&str]) -> Result<String, String> {

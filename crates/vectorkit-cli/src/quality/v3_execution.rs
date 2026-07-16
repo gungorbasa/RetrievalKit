@@ -568,13 +568,14 @@ pub(super) fn emit_qualification(
             )
         })?;
     }
+    super::v3_graph_execution::emit_graph_qualification(validated, output)?;
     write_canonical_json(
         &output.join("qualification.json"),
         &json!({
-            "artifact_schema":QUALIFICATION_SCHEMA,
+            "artifact_schema":"phase-1.2b-qualification-v1",
             "collection_id":validated.collection.collection_id,
             "collection_version":validated.collection.collection_version,
-            "included_run_letters":["a","b","c"],
+            "included_run_letters":["a","b","c","d"],
             "partial":true,
             "publication_ready":false,
             "status":"qualification_only_no_final_manifest"

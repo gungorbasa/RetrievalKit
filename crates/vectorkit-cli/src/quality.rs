@@ -14,6 +14,7 @@ mod artifacts;
 pub(crate) mod v3;
 mod v3_canonical;
 mod v3_execution;
+mod v3_graph_execution;
 mod v3_graph_input;
 mod v3_ingestion;
 mod v3_population;

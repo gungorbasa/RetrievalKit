@@ -9,6 +9,51 @@ the same local or remote provider for indexing and querying.
 
 Requires Python 3.10 or newer.
 
+## Capability API
+
+Use `RetrievalDatabase` for new code. It matches the Rust and Swift system
+architecture while keeping Python naming and data structures idiomatic:
+
+```python
+from vectorkit import (
+    RetrievalConfiguration,
+    RetrievalDatabaseBuilder,
+    VectorIndexConfiguration,
+)
+
+builder = RetrievalDatabaseBuilder(
+    corpus_id="notes",
+    retrieval=RetrievalConfiguration(
+        semantic=VectorIndexConfiguration(dimension=384),
+    ),
+)
+builder.upsert(
+    {
+        "record": {
+            "id": "note-42",
+            "record_type": "Note",
+            "metadata": {"project": "vectorkit"},
+        },
+        "chunks": [{"key": "summary", "text": "Local retrieval architecture"}],
+    },
+    embeddings={"summary": embedding},
+)
+database = builder.build()
+
+hits = database.retrieval.semantic_search(
+    query_embedding,
+    where={"project": "vectorkit"},
+)
+```
+
+Records and chunks remain capability-neutral; embeddings are supplied
+separately by stable chunk key. Every retrieval database exposes both
+`semantic_search(...)` and `hybrid_search(...)`.
+
+The lower-level `Index` API remains available for compatibility, pipeline
+integration, mutation, compaction, and direct BM25 benchmarking. It is not the
+canonical capability-oriented database API.
+
 ## Local Development
 
 From this directory:
@@ -276,6 +321,21 @@ prefers sentence endings, then whitespace, and falls back to the hard character
 limit. The implementation lives in Rust and is shared with the separate Swift
 `VectorKitIngest` product.
 
+Graph capabilities are intentionally absent from this base distribution. Use
+the separate `vectorkit-graph` distribution in `wrappers/python-graph` when an
+application needs graph-only or combined graph-and-retrieval databases. The two
+native distributions must not be imported in the same Python process.
+
+Use `TimestampMillis` when metadata must remain distinct from an ordinary
+integer across ingestion, filtering, persistence, and result hydration:
+
+```python
+from vectorkit import TimestampMillis
+
+metadata = {"captured_at": TimestampMillis(120_000)}
+where = {"captured_at": {"$gte": TimestampMillis(60_000)}}
+```
+
 ## Document Pipeline
 
 The optional pipeline module composes chunking, a caller-provided embedding
@@ -337,16 +397,16 @@ hits = index.hybrid_search(
     query_embedding,
     limit=10,
     where={"project": "vectorkit"},
+    alpha=0.6,
 )
 ```
 
 `limit` is the final number of fused hits. `vector_candidates` and
 `keyword_candidates` control how many candidates each retrieval mode contributes
-before fusion. The experiment-backed defaults are I8 storage, 50 vector
-candidates, 50 keyword candidates, and reciprocal rank fusion with `rrf_k=60`.
-Pass `encoding="f32"` for correctness-reference indexes. Pass
-`fusion="weighted"` with explicit weights to opt into weighted normalized score
-fusion.
+before fusion. `alpha` directly controls weighted normalized fusion: `1` is
+vector-only, `0` is BM25-only, and the default `0.6` gives vector search 60% of
+the blend. The candidate defaults are 50 vector and 50 keyword results. Pass
+`encoding="f32"` for correctness-reference indexes.
 
 Inputs and search results are plain dictionaries, with public `TypedDict` shapes
 available for annotations:

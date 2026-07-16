@@ -187,10 +187,7 @@ class Pipeline:
         where: Filter | None = None,
         vector_candidates: int | None = None,
         keyword_candidates: int | None = None,
-        fusion: str = "rrf",
-        vector_weight: float = 0.6,
-        keyword_weight: float = 0.4,
-        rrf_k: float = 60.0,
+        alpha: float = 0.6,
     ) -> list[HybridHit]:
         """Embed text and run hybrid vector plus BM25 search."""
 
@@ -210,10 +207,7 @@ class Pipeline:
             where=where,
             vector_candidates=vector_candidates,
             keyword_candidates=keyword_candidates,
-            fusion=fusion,
-            vector_weight=vector_weight,
-            keyword_weight=keyword_weight,
-            rrf_k=rrf_k,
+            alpha=alpha,
         )
 
     def _validate_embedding(self, embedding: Sequence[float]) -> None:

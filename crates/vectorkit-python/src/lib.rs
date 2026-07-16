@@ -1,3 +1,7 @@
+#[cfg(feature = "graph")]
+mod graph;
+mod retrieval;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -18,6 +22,20 @@ pyo3::create_exception!(_native, PersistenceError, VectorKitError);
 pyo3::create_exception!(_native, FilterError, VectorKitError);
 pyo3::create_exception!(_native, UnsupportedFormatError, VectorKitError);
 pyo3::create_exception!(_native, CorruptIndexError, VectorKitError);
+pyo3::create_exception!(_native, InvalidIdentityError, VectorKitError);
+pyo3::create_exception!(_native, RetrievalCapabilityUnavailableError, VectorKitError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, GraphError, VectorKitError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, InvalidGraphSchemaError, GraphError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, GraphQueryError, GraphError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, StaleGraphSelectionError, GraphError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, GraphCancelledError, GraphError);
+#[cfg(feature = "graph")]
+pyo3::create_exception!(_native, GraphTimeoutError, GraphError);
 
 #[pyfunction]
 #[pyo3(signature = (text, *, max_characters, overlap_characters = 0, strategy = "sentence"))]
@@ -219,10 +237,7 @@ impl PyIndex {
         r#where = None,
         vector_candidates = None,
         keyword_candidates = None,
-        fusion = "rrf",
-        vector_weight = 0.6,
-        keyword_weight = 0.4,
-        rrf_k = 60.0
+        alpha = 0.6
     ))]
     // PyO3 maps the Pythonic keyword-only API directly to Rust parameters here.
     #[allow(clippy::too_many_arguments)]
@@ -235,10 +250,7 @@ impl PyIndex {
         r#where: Option<&Bound<'_, PyAny>>,
         vector_candidates: Option<usize>,
         keyword_candidates: Option<usize>,
-        fusion: &str,
-        vector_weight: f32,
-        keyword_weight: f32,
-        rrf_k: f32,
+        alpha: f32,
     ) -> PyResult<Py<PyAny>> {
         let filter = parse_optional_filter(r#where)?;
         let mut query = HybridQuery::new(text, embedding, limit);
@@ -248,17 +260,7 @@ impl PyIndex {
         if let Some(filter) = filter {
             query = query.with_filter(filter);
         }
-        query = match fusion.to_ascii_lowercase().as_str() {
-            "weighted" | "weighted_normalized" | "weighted-normalized" => {
-                query.with_weighted_normalized_score(vector_weight, keyword_weight)
-            }
-            "rrf" | "reciprocal_rank" | "reciprocal-rank" => query.with_rrf_k(rrf_k),
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "unsupported fusion '{fusion}'; expected 'weighted' or 'rrf'"
-                )));
-            }
-        };
+        query = query.with_alpha(alpha);
 
         let hits = py.detach(move || self.inner.hybrid_search(&query).map_err(py_error))?;
         hybrid_hits_to_py(py, &self.inner, &hits)
@@ -283,6 +285,9 @@ impl PyIndex {
 #[pymodule]
 fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIndex>()?;
+    retrieval::register(m)?;
+    #[cfg(feature = "graph")]
+    graph::register(m)?;
     m.add_function(wrap_pyfunction!(chunk_text, m)?)?;
     m.add("VectorKitError", py.get_type::<VectorKitError>())?;
     m.add(
@@ -296,10 +301,33 @@ fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<UnsupportedFormatError>(),
     )?;
     m.add("CorruptIndexError", py.get_type::<CorruptIndexError>())?;
+    m.add(
+        "InvalidIdentityError",
+        py.get_type::<InvalidIdentityError>(),
+    )?;
+    m.add(
+        "RetrievalCapabilityUnavailableError",
+        py.get_type::<RetrievalCapabilityUnavailableError>(),
+    )?;
+    #[cfg(feature = "graph")]
+    {
+        m.add("GraphError", py.get_type::<GraphError>())?;
+        m.add(
+            "InvalidGraphSchemaError",
+            py.get_type::<InvalidGraphSchemaError>(),
+        )?;
+        m.add("GraphQueryError", py.get_type::<GraphQueryError>())?;
+        m.add("GraphCancelledError", py.get_type::<GraphCancelledError>())?;
+        m.add("GraphTimeoutError", py.get_type::<GraphTimeoutError>())?;
+        m.add(
+            "StaleGraphSelectionError",
+            py.get_type::<StaleGraphSelectionError>(),
+        )?;
+    }
     Ok(())
 }
 
-fn parse_metric(metric: &str) -> PyResult<VectorMetric> {
+pub(crate) fn parse_metric(metric: &str) -> PyResult<VectorMetric> {
     match metric.to_ascii_lowercase().as_str() {
         "cosine" => Ok(VectorMetric::Cosine),
         "dot_product" | "dotproduct" | "dot-product" => Ok(VectorMetric::DotProduct),
@@ -309,7 +337,7 @@ fn parse_metric(metric: &str) -> PyResult<VectorMetric> {
     }
 }
 
-fn parse_encoding(encoding: &str) -> PyResult<VectorEncoding> {
+pub(crate) fn parse_encoding(encoding: &str) -> PyResult<VectorEncoding> {
     match encoding.to_ascii_lowercase().as_str() {
         "f32" => Ok(VectorEncoding::F32),
         "f16" => Ok(VectorEncoding::F16),
@@ -322,15 +350,15 @@ fn parse_encoding(encoding: &str) -> PyResult<VectorEncoding> {
     }
 }
 
-fn py_error(error: CoreError) -> PyErr {
+pub(crate) fn py_error(error: CoreError) -> PyErr {
     match error {
-        CoreError::InvalidIdentity { .. }
-        | CoreError::InvalidRecordValue { .. }
-        | CoreError::InvalidCandidateScope { .. }
-        | CoreError::StaleGeneration { .. }
-        | CoreError::RetrievalCapabilityUnavailable { .. } => {
-            VectorKitError::new_err(error.to_string())
+        CoreError::InvalidIdentity { .. } => InvalidIdentityError::new_err(error.to_string()),
+        CoreError::RetrievalCapabilityUnavailable { .. } => {
+            RetrievalCapabilityUnavailableError::new_err(error.to_string())
         }
+        CoreError::InvalidRecordValue { .. }
+        | CoreError::InvalidCandidateScope { .. }
+        | CoreError::StaleGeneration { .. } => VectorKitError::new_err(error.to_string()),
         CoreError::InvalidDimension { .. } => DimensionMismatchError::new_err(error.to_string()),
         CoreError::InvalidRange { .. } => FilterError::new_err(error.to_string()),
         CoreError::Persistence { .. } => PersistenceError::new_err(error.to_string()),
@@ -390,7 +418,9 @@ fn parse_metadata(value: &Bound<'_, PyAny>) -> PyResult<Metadata> {
 }
 
 fn parse_metadata_value(value: &Bound<'_, PyAny>) -> PyResult<MetadataValue> {
-    if value.is_instance_of::<PyBool>() {
+    if let Ok(timestamp) = value.getattr("__vectorkit_timestamp_millis__") {
+        Ok(MetadataValue::TimestampMillis(timestamp.extract()?))
+    } else if value.is_instance_of::<PyBool>() {
         Ok(MetadataValue::Boolean(value.extract()?))
     } else if value.is_instance_of::<PyString>() {
         Ok(MetadataValue::String(value.extract()?))
@@ -400,12 +430,12 @@ fn parse_metadata_value(value: &Bound<'_, PyAny>) -> PyResult<MetadataValue> {
         Ok(MetadataValue::Float(value.extract()?))
     } else {
         Err(PyTypeError::new_err(
-            "metadata values must be str, int, float, or bool",
+            "metadata values must be str, int, float, bool, or TimestampMillis",
         ))
     }
 }
 
-fn parse_optional_filter(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Filter>> {
+pub(crate) fn parse_optional_filter(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Filter>> {
     let Some(value) = value else {
         return Ok(None);
     };
@@ -549,7 +579,11 @@ fn search_hits_to_py(
     Ok(result.into_any().unbind())
 }
 
-fn search_hit_to_py(py: Python<'_>, hit: &SearchHit, chunk: &StoredChunk) -> PyResult<Py<PyAny>> {
+pub(crate) fn search_hit_to_py(
+    py: Python<'_>,
+    hit: &SearchHit,
+    chunk: &StoredChunk,
+) -> PyResult<Py<PyAny>> {
     let item = PyDict::new(py);
     item.set_item("chunk_id", hit.chunk_id)?;
     item.set_item("document_id", &hit.document_id)?;
@@ -613,7 +647,7 @@ fn hybrid_hits_to_py(
     Ok(result.into_any().unbind())
 }
 
-fn hybrid_trace_to_py(py: Python<'_>, hit: &HybridHit) -> PyResult<Py<PyAny>> {
+pub(crate) fn hybrid_trace_to_py(py: Python<'_>, hit: &HybridHit) -> PyResult<Py<PyAny>> {
     let trace = PyDict::new(py);
     trace.set_item("vector_rank", hit.trace.vector_rank)?;
     trace.set_item("keyword_rank", hit.trace.keyword_rank)?;
@@ -647,13 +681,22 @@ fn fusion_trace_to_py(py: Python<'_>, fusion: HybridFusionTrace) -> PyResult<Py<
     Ok(dict.into_any().unbind())
 }
 
-fn metadata_to_py(py: Python<'_>, metadata: &Metadata) -> PyResult<Py<PyAny>> {
+pub(crate) fn metadata_to_py(py: Python<'_>, metadata: &Metadata) -> PyResult<Py<PyAny>> {
     let dict = PyDict::new(py);
     for (key, value) in metadata {
         match value {
             MetadataValue::String(value) => dict.set_item(key, value)?,
-            MetadataValue::Integer(value) | MetadataValue::TimestampMillis(value) => {
-                dict.set_item(key, value)?
+            MetadataValue::Integer(value) => dict.set_item(key, value)?,
+            MetadataValue::TimestampMillis(value) => {
+                #[cfg(not(feature = "graph"))]
+                let module = "vectorkit.types";
+                #[cfg(feature = "graph")]
+                let module = "vectorkit_graph.graph_types";
+                let timestamp = py
+                    .import(module)?
+                    .getattr("TimestampMillis")?
+                    .call1((*value,))?;
+                dict.set_item(key, timestamp)?;
             }
             MetadataValue::Float(value) => dict.set_item(key, value)?,
             MetadataValue::Boolean(value) => dict.set_item(key, value)?,
@@ -662,7 +705,10 @@ fn metadata_to_py(py: Python<'_>, metadata: &Metadata) -> PyResult<Py<PyAny>> {
     Ok(dict.into_any().unbind())
 }
 
-fn file_size_report_to_py(py: Python<'_>, report: IndexFileSizeReport) -> PyResult<Py<PyAny>> {
+pub(crate) fn file_size_report_to_py(
+    py: Python<'_>,
+    report: IndexFileSizeReport,
+) -> PyResult<Py<PyAny>> {
     let dict = PyDict::new(py);
     dict.set_item("manifest_bytes", report.manifest_bytes)?;
     dict.set_item("vectors_bytes", report.vectors_bytes)?;

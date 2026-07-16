@@ -34,8 +34,7 @@ let builder = try GraphRetrievalDatabase.Builder(
     corpusID: "knowledge",
     graph: graphSchema,
     retrieval: .init(
-        semantic: .init(dimension: 384),
-        extras: [.hybrid]
+        semantic: .init(dimension: 384)
     )
 )
 try await builder.upsert(input, embeddings: ["summary": embedding])
@@ -49,6 +48,7 @@ let selection = try await database.graph.query(
 let hits = try await database.retrieval.hybridSearch(
     text: "native retrieval",
     embedding: queryEmbedding,
+    alpha: 0.6,
     topK: 10,
     within: selection
 )

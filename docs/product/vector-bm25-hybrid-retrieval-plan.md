@@ -1,7 +1,7 @@
 # Vector, BM25, And Hybrid Retrieval Plan
 
-Status: implemented. The later MiniLM quality benchmark sets the active V1
-defaults to I8 vector storage, `50/50` candidates, and RRF with `rrf_k=60`.
+Status: implemented. The active V1 defaults are I8 vector storage, `50/50`
+candidates, and weighted normalized fusion with query-time `alpha=0.6`.
 Refer to `vectorkit-product-spec.md` for current decisions.
 
 This note captures the current direction for improving VectorKit retrieval
@@ -37,7 +37,7 @@ Encoded vector search must be tested against exact f32 search.
 
 ## BM25 Search
 
-BM25 should be a first-class retrieval mode, not a fallback text scan.
+BM25 should be a first-class internal lexical component, not a fallback text scan.
 
 - Maintain a real inverted index.
 - Tokenize deterministically.
@@ -99,24 +99,23 @@ tune latency and candidate breadth per query.
 ## Fusion Strategy
 
 Weighted normalized score fusion is the current default. It min-max normalizes
-vector and BM25 scores across the fused candidate set, then applies explicit
-weights:
+vector and BM25 scores across the fused candidate set, then applies query-time
+`alpha`:
 
 ```text
 hybrid_score =
-  vector_weight * normalized_vector_score
+  alpha * normalized_vector_score
   +
-  keyword_weight * normalized_bm25_score
+  (1 - alpha) * normalized_bm25_score
 ```
 
 Default:
 
 ```text
-vector_weight = 0.6
-keyword_weight = 0.4
+alpha = 0.6
 ```
 
-Reciprocal Rank Fusion remains available:
+Reciprocal Rank Fusion remains available internally for benchmark comparisons:
 
 ```text
 hybrid_score =
@@ -125,7 +124,7 @@ hybrid_score =
   1 / (rrf_k + bm25_rank)
 ```
 
-Default:
+Common benchmark baseline:
 
 ```text
 rrf_k = 60

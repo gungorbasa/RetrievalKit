@@ -472,7 +472,10 @@ name = "vectorkit-python"
 version = "0.1.0"
 dependencies = [
  "pyo3",
+ "serde",
+ "serde_json",
  "vectorkit-core",
+ "vectorkit-graph",
  "vectorkit-ingest",
 ]
 

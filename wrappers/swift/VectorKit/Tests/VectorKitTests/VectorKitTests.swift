@@ -14,8 +14,7 @@ final class VectorKitTests: XCTestCase {
       HybridOptions.default,
       HybridOptions(
         vectorTopK: 50,
-        keywordTopK: 50,
-        fusion: .reciprocalRank(rrfK: 60)
+        keywordTopK: 50
       )
     )
   }
@@ -395,7 +394,7 @@ final class VectorKitTests: XCTestCase {
     XCTAssertTrue(filteredResults.allSatisfy { $0.documentID.hasPrefix("shot:") })
   }
 
-  func testSemanticRetrievalDatabaseRejectsHybridAndPersistsNoBM25() async throws {
+  func testRetrievalDatabaseSupportsHybridAndPersistsBM25() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "semantic-only",
       retrieval: .init(semantic: .init(dimension: 2, encoding: .f32))
@@ -411,25 +410,24 @@ final class VectorKitTests: XCTestCase {
 
     let semantic = try await database.retrieval.semanticSearch(embedding: [1, 0])
     XCTAssertEqual(semantic.map(\.documentID), ["rust"])
-    do {
-      _ = try await database.retrieval.hybridSearch(
-        text: "native",
-        embedding: [1, 0]
-      )
-      XCTFail("semantic mode must not expose BM25-backed search at runtime")
-    } catch VectorKitError.retrievalCapabilityUnavailable(let message) {
-      XCTAssertTrue(message.contains("hybrid"))
-    }
+    let hybrid = try await database.retrieval.hybridSearch(
+      text: "native",
+      embedding: [1, 0]
+    )
+    XCTAssertEqual(hybrid.map(\.documentID), ["rust"])
 
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("vectorkit-semantic-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: directory) }
     try await database.save(to: directory)
     try RetrievalDatabase.validate(at: directory)
-    XCTAssertFalse(recursiveFileNames(in: directory).contains("bm25.bin"))
+    XCTAssertTrue(recursiveFileNames(in: directory).contains("bm25.bin"))
 
     let reopened = try RetrievalDatabase.load(from: directory)
-    let reopenedHits = try await reopened.retrieval.semanticSearch(embedding: [1, 0])
+    let reopenedHits = try await reopened.retrieval.hybridSearch(
+      text: "native",
+      embedding: [1, 0]
+    )
     XCTAssertEqual(reopenedHits.map(\.documentID), ["rust"])
   }
 
@@ -437,8 +435,7 @@ final class VectorKitTests: XCTestCase {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "hybrid",
       retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32),
-        extras: [.hybrid]
+        semantic: .init(dimension: 2, encoding: .f32)
       )
     )
     let input = RecordInput(

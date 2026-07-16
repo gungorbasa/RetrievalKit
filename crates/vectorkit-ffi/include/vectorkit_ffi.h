@@ -167,7 +167,6 @@ typedef struct VkRetrievalDatabase VkRetrievalDatabase;
 void vectorkit_status_clear(VkStatus *status);
 
 VkRetrievalBuilder *vectorkit_retrieval_builder_new(
-    bool enable_hybrid,
     size_t dimension,
     uint32_t metric,
     uint32_t encoding,

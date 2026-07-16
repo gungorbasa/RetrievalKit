@@ -162,7 +162,7 @@ impl HybridQuery {
     ///
     /// `top_k` controls the final fused result count. The default pre-fusion
     /// candidate limits are `vector_top_k = 50` and `keyword_top_k = 50`, and
-    /// the default fusion is reciprocal rank fusion with `rrf_k = 60`.
+    /// the default fusion is weighted normalized score with `alpha = 0.6`.
     /// Override them with [`HybridQuery::with_candidate_limits`] when lower
     /// latency or broader candidate recall is more important for a query.
     pub fn new(text: impl Into<String>, embedding: Vec<f32>, top_k: usize) -> Self {
@@ -173,7 +173,10 @@ impl HybridQuery {
             vector_top_k: 50,
             keyword_top_k: 50,
             filter: None,
-            fusion: HybridFusion::ReciprocalRank { rrf_k: 60.0 },
+            fusion: HybridFusion::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4,
+            },
         }
     }
 
@@ -211,6 +214,13 @@ impl HybridQuery {
             keyword_weight,
         };
         self
+    }
+
+    /// Blends normalized vector and BM25 scores with one query-time value.
+    ///
+    /// `alpha = 1` is vector-only and `alpha = 0` is BM25-only.
+    pub fn with_alpha(self, alpha: f32) -> Self {
+        self.with_weighted_normalized_score(alpha, 1.0 - alpha)
     }
 }
 
@@ -448,6 +458,12 @@ mod tests {
         let query = HybridQuery::new("query", vec![0.0; 384], 5);
         assert_eq!(query.vector_top_k, 50);
         assert_eq!(query.keyword_top_k, 50);
-        assert_eq!(query.fusion, HybridFusion::ReciprocalRank { rrf_k: 60.0 });
+        assert_eq!(
+            query.fusion,
+            HybridFusion::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4
+            }
+        );
     }
 }

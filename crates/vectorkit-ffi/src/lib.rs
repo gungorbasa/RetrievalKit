@@ -263,7 +263,6 @@ pub unsafe extern "C" fn vectorkit_status_clear(status: *mut VkStatus) {
 /// String and status pointers must be valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_retrieval_builder_new(
-    enable_hybrid: bool,
     dimension: usize,
     metric: u32,
     encoding: u32,
@@ -273,11 +272,7 @@ pub unsafe extern "C" fn vectorkit_retrieval_builder_new(
     ffi_ptr(status, || {
         let vector = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding_code(encoding)?);
-        let configuration = if enable_hybrid {
-            RetrievalConfiguration::semantic(vector).with_hybrid()
-        } else {
-            RetrievalConfiguration::semantic(vector)
-        };
+        let configuration = RetrievalConfiguration::semantic(vector);
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let database = RetrievalDatabase::new(configuration, corpus_id)?;
         Ok(Box::into_raw(Box::new(VkRetrievalBuilder { database })))

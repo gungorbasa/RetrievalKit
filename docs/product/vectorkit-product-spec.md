@@ -109,14 +109,15 @@ GraphDatabase          = CorpusIndex + GraphEngine
 GraphRetrievalDatabase = CorpusIndex + GraphEngine + RetrievalIndex
 ```
 
-Retrieval configuration always starts with semantic exact-vector search.
-Callers may add the bounded `.hybrid` extra, which builds BM25 state and enables
-hybrid queries while preserving semantic queries on the same database. Omitting
-the extra persists vectors without BM25. BM25 remains directly benchmarked and
-tested in Rust, but keyword-only search is not a standalone high-level Swift
-product mode. Graph-only builders accept neither vector configuration nor
-embeddings. Combined graph selections become opaque generation-bound candidate
-scopes consumed by the retrieval capability.
+Every retrieval-capable database builds exact-vector and BM25 state and supports
+both semantic and hybrid queries. Hybrid blending is selected at query time with
+`alpha`, where `1` is vector-only, `0` is BM25-only, and values between them use
+weighted normalized-score fusion. BM25 may be omitted from a compact persisted
+snapshot, but it is rebuilt from canonical chunk text when that snapshot is
+loaded. Keyword-only search remains an internal benchmark surface rather than a
+standalone high-level product mode. Graph-only builders accept neither vector
+configuration nor embeddings. Combined graph selections become opaque
+generation-bound candidate scopes consumed by the retrieval capability.
 
 "Store once" means one canonical source record and payload owner, not one
 physical representation. Chunks, vector arrays, BM25 postings, flattened
@@ -201,6 +202,14 @@ same crate with the `graph` feature and exporting both retrieval and graph entry
 points. Applications must not link both artifacts. This gives graph-enabled
 users one Rust core implementation and one native handle universe without
 adding graph code to the base product.
+
+M5 Python packaging follows the same capability boundary. The base `vectorkit`
+distribution builds `vectorkit-python` without graph features. The optional
+`vectorkit-graph` aggregate builds the same binding crate with its `graph`
+feature and provides graph-only and combined graph-and-retrieval APIs. A
+combined database exposes separate `graph` and `retrieval` query namespaces.
+Applications may install both distributions for environment compatibility but
+must import only one native distribution in a process.
 
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed
@@ -688,10 +697,10 @@ BM25 must return:
 
 Hybrid search combines vector and BM25 results.
 
-V1 default fusion method:
+V1 public fusion method:
 
 ```text
-reciprocal rank fusion
+weighted normalized score fusion with query-time alpha
 ```
 
 Default:
@@ -699,10 +708,11 @@ Default:
 ```text
 vector_candidates: 50
 keyword_candidates: 50
-rrf_k: 60
+alpha: 0.6
 ```
 
-Weighted normalized score fusion remains available as an explicit option.
+`alpha = 1` is vector-only and `alpha = 0` is BM25-only. RRF remains an
+internal benchmark surface, not a high-level wrapper option.
 
 V1 hybrid query flow:
 
@@ -712,7 +722,7 @@ query embedding
 query text
   -> metadata-prefiltered BM25 candidate retrieval
 vector candidates + BM25 candidates
-  -> weighted normalized or RRF fusion
+  -> alpha-weighted normalized fusion
   -> final top_k
   -> result trace
 ```
@@ -1252,7 +1262,7 @@ Human-judged retrieval reports must additionally include:
 
 Human relevance fixtures must use versioned qrels independent of search output.
 For locked release evaluation, pool results from vector-only F32/I8, BM25,
-hybrid RRF, weighted fusion, and every candidate configuration under
+multiple hybrid alpha values, internal RRF baselines, and every candidate configuration under
 consideration. Blind judgments to originating system and rank.
 
 Future gold-standard compatibility:
@@ -1395,7 +1405,7 @@ Deliverables:
 - Tokenizer.
 - BM25 index.
 - Hybrid weighted normalized fusion.
-- Hybrid RRF fusion as an explicit option.
+- Query-time hybrid alpha.
 - Trace output.
 - Filter support.
 
@@ -1517,8 +1527,8 @@ dimension: caller-defined, fixed per index
 vector encoding: I8ScalarQuantized by default, F32/F16 opt-in
 exact search: enabled
 BM25: enabled
-hybrid fusion: reciprocal rank fusion with rrf_k 60
-weighted normalized fusion: available as an explicit option
+hybrid fusion: weighted normalized score with alpha 0.6
+internal RRF: benchmark-only
 HNSW: deferred until after small-index MVP
 metadata filters: simple typed filters
 storage: local files with mmap-friendly layouts
@@ -1533,7 +1543,7 @@ vector_candidates: 50
 keyword_candidates: 50
 rerank: exact_vector
 trace: false
-rrf_k: 60
+alpha: 0.6
 ```
 
 Debug search config:

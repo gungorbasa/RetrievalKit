@@ -14,8 +14,7 @@ struct VectorKitGraphRetrievalQuickstart {
       corpusID: "knowledge",
       graph: schema,
       retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32),
-        extras: [.hybrid]
+        semantic: .init(dimension: 2, encoding: .f32)
       )
     )
     try await builder.upsert(

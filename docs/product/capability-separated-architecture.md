@@ -15,7 +15,7 @@ CorpusIndex
 
 RetrievalIndex
   exact vectors
-  BM25 only with the hybrid extra
+  BM25 for direct hybrid queries
   filtering and existing scoring loops
 
 GraphEngine
@@ -39,13 +39,13 @@ and validated against that corpus.
 
 - `GraphDatabase` accepts a graph schema and capability-neutral records. It
   never accepts dimensions, vector metrics, encodings, or embeddings.
-- `RetrievalDatabase` requires semantic vector configuration and embeddings
-  keyed by stable chunk key. Callers can add the `.hybrid` extra.
-- `GraphRetrievalDatabase` accepts the same semantic base and optional hybrid
-  extra and is the only owner that composes a `GraphSelection` with retrieval.
-- BM25 is built only when the hybrid extra is enabled. It remains directly
-  tested and benchmarkable in Rust, but has no standalone high-level Swift
-  database mode.
+- `RetrievalDatabase` requires vector configuration and embeddings keyed by
+  stable chunk key. It always supports semantic and hybrid queries.
+- `GraphRetrievalDatabase` accepts the same retrieval configuration and is the
+  only owner that composes a `GraphSelection` with retrieval.
+- BM25 is built for every retrieval-capable database. High-level hybrid calls
+  accept query-time `alpha`; BM25 remains directly testable and benchmarkable
+  in Rust but has no standalone high-level database mode.
 - Capability selection occurs when the builder is created. It is not inferred
   from data or attached to a completed database.
 
@@ -130,7 +130,7 @@ Each candidate p95 must remain within 3% of the pre-refactor baseline.
 
 1. Contract and benchmark protocol.
 2. Canonical `CorpusIndex` extraction.
-3. `RetrievalIndex` with semantic base and optional hybrid state.
+3. `RetrievalIndex` with exact-vector and BM25 state.
 4. `GraphEngine`, database owners, and capability persistence.
 5. Capability-specific FFI and errors.
 6. Swift products, examples, and tests.

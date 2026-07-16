@@ -3,11 +3,65 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal, TypeAlias, TypedDict
 
-MetadataValue: TypeAlias = str | int | float | bool
+
+@dataclass(frozen=True)
+class TimestampMillis:
+    """Metadata timestamp kept distinct from an ordinary integer."""
+
+    value: int
+
+    @property
+    def __vectorkit_timestamp_millis__(self) -> int:
+        return self.value
+
+
+MetadataValue: TypeAlias = str | int | float | bool | TimestampMillis
 Metadata: TypeAlias = dict[str, MetadataValue]
 Embedding: TypeAlias = Sequence[float]
+RecordValue: TypeAlias = (
+    None | bool | int | float | str | list["RecordValue"] | dict[str, "RecordValue"]
+)
+@dataclass(frozen=True)
+class VectorIndexConfiguration:
+    dimension: int
+    metric: Literal["cosine", "dot_product"] = "cosine"
+    encoding: Literal["f32", "f16", "bf16", "i8", "binary"] = "i8"
+
+
+@dataclass(frozen=True)
+class RetrievalConfiguration:
+    semantic: VectorIndexConfiguration
+
+
+class RecordRequired(TypedDict):
+    id: str
+    record_type: str
+
+
+class Record(RecordRequired, total=False):
+    fields: dict[str, RecordValue]
+    metadata: Metadata
+    content: str | None
+
+
+class RecordChunkRequired(TypedDict):
+    key: str
+    text: str
+
+
+class RecordChunk(RecordChunkRequired, total=False):
+    metadata: Metadata
+
+
+class RecordInputRequired(TypedDict):
+    record: Record
+
+
+class RecordInput(RecordInputRequired, total=False):
+    chunks: list[RecordChunk]
 
 
 class TextChunk(TypedDict):
@@ -150,8 +204,15 @@ __all__ = [
     "Metadata",
     "MetadataValue",
     "RrfFusionTrace",
+    "Record",
+    "RecordChunk",
+    "RecordInput",
+    "RecordValue",
+    "RetrievalConfiguration",
     "SearchHit",
     "SearchTrace",
     "TextChunk",
+    "TimestampMillis",
+    "VectorIndexConfiguration",
     "WeightedNormalizedFusionTrace",
 ]

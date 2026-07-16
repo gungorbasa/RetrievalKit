@@ -86,7 +86,7 @@ impl Display for VectorKitError {
             }
             Self::RetrievalCapabilityUnavailable { capability } => write!(
                 f,
-                "{capability} retrieval is unavailable because this database was built without the {capability} extra; rebuild it with `.hybrid` in retrieval extras"
+                "{capability} retrieval state is unavailable; rebuild or reload the database from its canonical corpus"
             ),
             Self::Persistence {
                 operation,

@@ -8,7 +8,12 @@ from vectorkit import (
     Filter,
     HybridHit,
     Index,
+    RecordInput,
+    RetrievalConfiguration,
+    RetrievalDatabase,
+    RetrievalDatabaseBuilder,
     SearchHit,
+    VectorIndexConfiguration,
     where,
 )
 from vectorkit.ingest import RustTextChunker
@@ -73,3 +78,21 @@ def build_typed_pipeline(index: Index) -> Pipeline:
         count_tokens=lambda text: len(text.split()),
         max_tokens=256,
     )
+
+
+def typed_retrieval_database() -> RetrievalDatabase:
+    builder = RetrievalDatabaseBuilder(
+        corpus_id="typed-retrieval",
+        retrieval=RetrievalConfiguration(
+            semantic=VectorIndexConfiguration(dimension=2)
+        ),
+    )
+    record: RecordInput = {
+        "record": {"id": "alpha", "record_type": "Topic"},
+        "chunks": [{"key": "summary", "text": "alpha"}],
+    }
+    builder.upsert(record, embeddings={"summary": [1.0, 0.0]})
+    database = builder.build()
+    hits: list[SearchHit] = database.retrieval.semantic_search([1.0, 0.0])
+    _ = hits
+    return database

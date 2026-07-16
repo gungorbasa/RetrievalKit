@@ -18,7 +18,9 @@ code.
 
 ## Package Shape
 
-- Put Python wrapper code under `wrappers/python/`.
+- Put the graph-free base wrapper under `wrappers/python/`. Optional aggregate
+  capability distributions may use a sibling directory such as
+  `wrappers/python-graph/` when they must link a different native artifact.
 - Prefer a standard `pyproject.toml` package layout.
 - Prefer `pyo3` and `maturin` for Rust-backed bindings unless a concrete
   packaging issue makes another approach better.

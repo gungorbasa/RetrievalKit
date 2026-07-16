@@ -3,34 +3,24 @@ requires = ["maturin>=1.8,<2"]
 build-backend = "maturin"
 
 [project]
-name = "vectorkit"
+name = "vectorkit-graph"
 version = "0.1.0"
-description = "Thin Python wrapper for the VectorKit Rust retrieval core"
+description = "Optional aggregate graph package for VectorKit"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [
-  { name = "VectorKit" }
-]
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Rust",
-  "Topic :: Software Development :: Libraries"
-]
 
 [tool.maturin]
 manifest-path = "../../crates/vectorkit-python/Cargo.toml"
-module-name = "vectorkit._native"
+module-name = "vectorkit_graph._native"
 python-source = "python"
+features = ["graph"]
 exclude = ["python/**/__pycache__/**", "python/**/*.pyc"]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = [
-  "python/vectorkit",
-  "tests/typing_smoke.py",
-]
+files = ["python/vectorkit_graph", "tests/typing_smoke.py"]
 
 [tool.ruff]
 target-version = "py310"
@@ -38,9 +28,4 @@ line-length = 88
 src = ["python", "tests"]
 
 [tool.ruff.lint]
-select = [
-  "E",
-  "F",
-  "I",
-  "UP",
-]
+select = ["E", "F", "I", "UP"]

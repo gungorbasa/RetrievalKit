@@ -7,7 +7,14 @@ Rust-produced results.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
+
+if "vectorkit_graph._native" in sys.modules:
+    raise ImportError(
+        "vectorkit and vectorkit_graph are mutually exclusive native distributions; "
+        "use one capability package per process"
+    )
 
 from . import where
 from ._native import (
@@ -15,9 +22,18 @@ from ._native import (
     DimensionMismatchError,
     FilterError,
     Index,
+    InvalidIdentityError,
     PersistenceError,
+    RetrievalCapabilityUnavailableError,
     UnsupportedFormatError,
     VectorKitError,
+)
+from .retrieval import (
+    MissingEmbeddingError,
+    RetrievalDatabase,
+    RetrievalDatabaseBuilder,
+    RetrievalQueries,
+    UnexpectedEmbeddingError,
 )
 from .types import (
     AddDocumentResult,
@@ -35,9 +51,16 @@ from .types import (
     KeywordHit,
     Metadata,
     MetadataValue,
+    Record,
+    RecordChunk,
+    RecordInput,
+    RecordValue,
+    RetrievalConfiguration,
     RrfFusionTrace,
     SearchHit,
     SearchTrace,
+    TimestampMillis,
+    VectorIndexConfiguration,
     WeightedNormalizedFusionTrace,
 )
 
@@ -73,10 +96,7 @@ def hybrid_search_text(
     where: Filter | None = None,
     vector_candidates: int | None = None,
     keyword_candidates: int | None = None,
-    fusion: str = "rrf",
-    vector_weight: float = 0.6,
-    keyword_weight: float = 0.4,
-    rrf_k: float = 60.0,
+    alpha: float = 0.6,
 ) -> list[HybridHit]:
     """Embed one query string and run hybrid vector + keyword search."""
 
@@ -90,10 +110,7 @@ def hybrid_search_text(
         where=where,
         vector_candidates=vector_candidates,
         keyword_candidates=keyword_candidates,
-        fusion=fusion,
-        vector_weight=vector_weight,
-        keyword_weight=keyword_weight,
-        rrf_k=rrf_k,
+        alpha=alpha,
     )
 
 
@@ -115,14 +132,28 @@ __all__ = [
     "HybridHit",
     "HybridTrace",
     "Index",
+    "InvalidIdentityError",
     "KeywordHit",
     "Metadata",
     "MetadataValue",
+    "MissingEmbeddingError",
     "PersistenceError",
     "RrfFusionTrace",
+    "Record",
+    "RecordChunk",
+    "RecordInput",
+    "RecordValue",
+    "RetrievalConfiguration",
+    "RetrievalCapabilityUnavailableError",
+    "RetrievalDatabase",
+    "RetrievalDatabaseBuilder",
+    "RetrievalQueries",
     "SearchHit",
     "SearchTrace",
+    "TimestampMillis",
     "UnsupportedFormatError",
+    "UnexpectedEmbeddingError",
+    "VectorIndexConfiguration",
     "VectorKitError",
     "WeightedNormalizedFusionTrace",
     "hybrid_search_text",

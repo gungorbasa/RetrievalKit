@@ -6,8 +6,7 @@ struct VectorKitRetrievalQuickstart {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "knowledge",
       retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32),
-        extras: [.hybrid]
+        semantic: .init(dimension: 2, encoding: .f32)
       )
     )
     try await builder.upsert(

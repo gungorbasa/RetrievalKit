@@ -13,46 +13,37 @@ pub enum RetrievalMode {
     Hybrid,
 }
 
-/// Optional hybrid retrieval state derived alongside semantic vectors.
+/// Hybrid retrieval state derived alongside semantic vectors.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridRetrievalConfiguration {
     pub bm25: Bm25Config,
 }
 
-/// Semantic retrieval configuration plus optional derived capabilities.
+/// Exact-vector and BM25 retrieval configuration.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetrievalConfiguration {
     pub semantic: IndexConfig,
-    pub hybrid: Option<HybridRetrievalConfiguration>,
+    pub hybrid: HybridRetrievalConfiguration,
 }
 
 impl RetrievalConfiguration {
     pub fn semantic(vector: IndexConfig) -> Self {
         Self {
             semantic: vector,
-            hybrid: None,
+            hybrid: HybridRetrievalConfiguration::default(),
         }
-    }
-
-    pub fn with_hybrid(mut self) -> Self {
-        self.hybrid = Some(HybridRetrievalConfiguration::default());
-        self
     }
 
     pub fn with_hybrid_configuration(
         mut self,
         configuration: HybridRetrievalConfiguration,
     ) -> Self {
-        self.hybrid = Some(configuration);
+        self.hybrid = configuration;
         self
     }
 
     pub fn mode(&self) -> RetrievalMode {
-        if self.hybrid.is_some() {
-            RetrievalMode::Hybrid
-        } else {
-            RetrievalMode::Semantic
-        }
+        RetrievalMode::Hybrid
     }
 
     pub fn vector(&self) -> &IndexConfig {
@@ -79,10 +70,7 @@ impl RetrievalIndex {
     pub fn new(configuration: RetrievalConfiguration) -> Result<Self> {
         let mode = configuration.mode();
         let vector = configuration.vector();
-        let bm25 = configuration
-            .hybrid
-            .as_ref()
-            .map(|hybrid| Bm25Index::new(hybrid.bm25.clone()));
+        let bm25 = Some(Bm25Index::new(configuration.hybrid.bm25.clone()));
         Ok(Self {
             mode,
             dimension: vector.dimension,
@@ -128,23 +116,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn semantic_mode_does_not_construct_bm25_state() {
+    fn retrieval_configuration_always_constructs_bm25_state() {
         let retrieval = RetrievalIndex::new(RetrievalConfiguration::semantic(IndexConfig::new(
             384,
             VectorMetric::Cosine,
         )))
-        .unwrap();
-
-        assert_eq!(retrieval.mode(), RetrievalMode::Semantic);
-        assert!(!retrieval.has_bm25());
-    }
-
-    #[test]
-    fn hybrid_mode_constructs_bm25_state() {
-        let retrieval = RetrievalIndex::new(
-            RetrievalConfiguration::semantic(IndexConfig::new(384, VectorMetric::Cosine))
-                .with_hybrid(),
-        )
         .unwrap();
 
         assert_eq!(retrieval.mode(), RetrievalMode::Hybrid);

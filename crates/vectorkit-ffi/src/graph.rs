@@ -196,7 +196,7 @@ struct GraphOnlyRecordChunk {
 
 #[no_mangle]
 pub extern "C" fn vectorkit_graph_ffi_abi_version() -> u32 {
-    5
+    6
 }
 
 #[no_mangle]
@@ -274,7 +274,6 @@ pub unsafe extern "C" fn vectorkit_graph_database_builder_free(
 
 #[no_mangle]
 pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_new(
-    enable_hybrid: bool,
     dimension: usize,
     metric: u32,
     encoding: u32,
@@ -285,11 +284,7 @@ pub unsafe extern "C" fn vectorkit_graph_retrieval_builder_new(
     ffi_ptr(status, || {
         let vector = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding_code(encoding)?);
-        let configuration = if enable_hybrid {
-            RetrievalConfiguration::semantic(vector).with_hybrid()
-        } else {
-            RetrievalConfiguration::semantic(vector)
-        };
+        let configuration = RetrievalConfiguration::semantic(vector);
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
         let retrieval = RetrievalDatabase::new(configuration, corpus_id)?;
@@ -1539,7 +1534,6 @@ mod tests {
 
         let retrieval_builder = unsafe {
             vectorkit_graph_retrieval_builder_new(
-                false,
                 2,
                 1,
                 0,
@@ -1592,7 +1586,7 @@ mod tests {
             hits: std::ptr::null_mut(),
             count: 0,
         };
-        assert!(!unsafe {
+        assert!(unsafe {
             vectorkit_graph_retrieval_hybrid_search(
                 database,
                 std::ptr::null(),
@@ -1604,20 +1598,19 @@ mod tests {
                 VkHybridOptions {
                     vector_top_k: 1,
                     keyword_top_k: 1,
-                    fusion_type: 1,
-                    vector_weight: 0.0,
-                    keyword_weight: 0.0,
-                    rrf_k: 60.0,
+                    fusion_type: 0,
+                    vector_weight: 0.6,
+                    keyword_weight: 0.4,
+                    rrf_k: 0.0,
                 },
                 &mut results,
                 &mut status,
             )
         });
-        assert_eq!(
-            status.code,
-            VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
-        );
+        assert_eq!(status.code, super::super::VK_STATUS_OK);
+        assert_eq!(results.count, 1);
         unsafe {
+            super::super::vectorkit_hybrid_results_free(results);
             vectorkit_graph_retrieval_database_free(database);
             super::super::vectorkit_status_clear(&mut status);
         }

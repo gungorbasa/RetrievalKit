@@ -80,16 +80,11 @@ final class VectorKitGraphTests: XCTestCase {
     XCTAssertTrue(filteredExact[0].filterMatched)
     XCTAssertTrue(filteredHybrid[0].trace.filterMatched)
 
-    let vectorOnly = GraphHybridOptions(
-      vectorTopK: 2, keywordTopK: 2,
-      fusion: .weightedNormalizedScore(vectorWeight: 1, keywordWeight: 0))
-    let keywordOnly = GraphHybridOptions(
-      vectorTopK: 2, keywordTopK: 2,
-      fusion: .weightedNormalizedScore(vectorWeight: 0, keywordWeight: 1))
+    let candidates = GraphHybridOptions(vectorTopK: 2, keywordTopK: 2)
     let vectorPreferred = try await graph.hybridSearch(
-      text: "beta", embedding: [1, 0], topK: 2, in: both, options: vectorOnly)
+      text: "beta", embedding: [1, 0], topK: 2, in: both, alpha: 1, options: candidates)
     let keywordPreferred = try await graph.hybridSearch(
-      text: "beta", embedding: [1, 0], topK: 2, in: both, options: keywordOnly)
+      text: "beta", embedding: [1, 0], topK: 2, in: both, alpha: 0, options: candidates)
     XCTAssertEqual(vectorPreferred.first?.recordID, "alpha")
     XCTAssertEqual(keywordPreferred.first?.recordID, "beta")
     XCTAssertNotNil(vectorPreferred.first?.trace.normalizedVectorScore)
@@ -506,8 +501,7 @@ final class VectorKitGraphTests: XCTestCase {
       corpusID: "knowledge",
       graph: capabilitySchema(),
       retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32),
-        extras: [.hybrid]
+        semantic: .init(dimension: 2, encoding: .f32)
       )
     )
     try await builder.upsert(
@@ -554,7 +548,7 @@ final class VectorKitGraphTests: XCTestCase {
     XCTAssertEqual(reopenedHits.map(\.recordID), ["rust"])
   }
 
-  func testCombinedSemanticModeRejectsHybridQueries() async throws {
+  func testCombinedDatabaseSupportsHybridQueriesDirectly() async throws {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "semantic-graph",
       graph: capabilitySchema(),
@@ -566,15 +560,11 @@ final class VectorKitGraphTests: XCTestCase {
     )
     let database = try await builder.build()
 
-    do {
-      _ = try await database.retrieval.hybridSearch(
-        text: "native",
-        embedding: [1, 0]
-      )
-      XCTFail("semantic mode must reject hybrid queries")
-    } catch VectorKitGraphError.retrievalCapabilityUnavailable(let message) {
-      XCTAssertTrue(message.contains("hybrid"))
-    }
+    let hybrid = try await database.retrieval.hybridSearch(
+      text: "native",
+      embedding: [1, 0]
+    )
+    XCTAssertEqual(hybrid.map(\.recordID), ["rust"])
   }
 
   func testCombinedDatabaseRejectsSelectionFromAnotherCorpus() async throws {
@@ -596,8 +586,7 @@ final class VectorKitGraphTests: XCTestCase {
       corpusID: "target-corpus",
       graph: capabilitySchema(),
       retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32),
-        extras: [.hybrid]
+        semantic: .init(dimension: 2, encoding: .f32)
       )
     )
     try await combinedBuilder.upsert(

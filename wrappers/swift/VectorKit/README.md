@@ -53,8 +53,7 @@ import VectorKit
 let builder = try RetrievalDatabase.Builder(
     corpusID: "knowledge",
     retrieval: .init(
-        semantic: .init(dimension: 384),
-        extras: [.hybrid]
+        semantic: .init(dimension: 384)
     )
 )
 try await builder.upsert(input, embeddings: ["summary": embedding])
@@ -67,14 +66,16 @@ let semantic = try await database.retrieval.semanticSearch(
 let hybrid = try await database.retrieval.hybridSearch(
     text: "native retrieval",
     embedding: queryEmbedding,
-    topK: 10
+    topK: 10,
+    alpha: 0.6
 )
 ```
 
-Omit `extras` to persist semantic vectors only. Add `.hybrid` to build the
-internal BM25 component and enable `hybridSearch` alongside `semanticSearch`.
-There is no high-level keyword-only database mode. The `retrieval` actor handle
-is available only on retrieval products.
+Every retrieval database builds exact-vector and BM25 state and exposes
+`hybridSearch` alongside `semanticSearch`. `alpha` is query-time: `1` is
+vector-only, `0` is BM25-only. There is no separate high-level keyword-only
+database mode. The `retrieval` actor handle is available only on retrieval
+products.
 
 Run the focused example with:
 
@@ -183,10 +184,9 @@ let loadedIndex = try VectorIndex.load(from: indexURL)
 ```
 
 New indexes default to compact I8 scalar-quantized storage. Hybrid search
-defaults to 50 vector candidates, 50 keyword candidates, and reciprocal rank
-fusion with `rrfK = 60`, matching the checked-in quality benchmark. Pass
-`encoding: .f32` or explicit `HybridOptions` when a different tradeoff is
-required.
+defaults to 50 vector candidates, 50 keyword candidates, and `alpha = 0.6`.
+Pass `encoding: .f32`, a different `alpha`, or explicit candidate options when
+a different tradeoff is required.
 
 New saves use a checksummed V3 manifest. Validate a stored index without
 retaining it for search:

@@ -16,8 +16,15 @@ from vectorkit import (
     HybridHit,
     Index,
     KeywordHit,
+    MissingEmbeddingError,
     PersistenceError,
+    RetrievalConfiguration,
+    RetrievalDatabase,
+    RetrievalDatabaseBuilder,
     SearchHit,
+    TimestampMillis,
+    UnexpectedEmbeddingError,
+    VectorIndexConfiguration,
     hybrid_search_text,
     search_text,
     where,
@@ -61,6 +68,110 @@ def embed(texts: list[str]) -> list[list[float]]:
     return [values.get(text, [0.0, 0.0, 1.0, 0.0]) for text in texts]
 
 
+def test_timestamp_metadata_remains_typed_and_filters() -> None:
+    index = Index(dimension=2, metric="dot_product", encoding="f32")
+    timestamp = TimestampMillis(120_000)
+    index.add(
+        [
+            {
+                "id": "timestamped",
+                "chunks": [
+                    {
+                        "text": "timestamped chunk",
+                        "embedding": [1.0, 0.0],
+                        "metadata": {"created_at": timestamp},
+                    }
+                ],
+            }
+        ]
+    )
+
+    hits = index.search(
+        [1.0, 0.0],
+        where={"created_at": {"$gte": TimestampMillis(100_000)}},
+    )
+    assert hits[0]["metadata"]["created_at"] == timestamp
+
+
+def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
+    builder = RetrievalDatabaseBuilder(
+        corpus_id="python-retrieval",
+        retrieval=RetrievalConfiguration(
+            semantic=VectorIndexConfiguration(
+                dimension=2,
+                metric="dot_product",
+                encoding="f32",
+            )
+        ),
+    )
+    chunk_ids = builder.upsert(
+        {
+            "record": {
+                "id": "alpha",
+                "record_type": "Topic",
+                "fields": {"title": "Alpha"},
+                "metadata": {"tenant": "blue"},
+            },
+            "chunks": [{"key": "summary", "text": "alpha retrieval"}],
+        },
+        embeddings={"summary": [1.0, 0.0]},
+    )
+    assert len(chunk_ids) == 1
+    database = builder.build()
+
+    hits = database.retrieval.semantic_search(
+        [1.0, 0.0], where={"tenant": "blue"}
+    )
+    assert [hit["document_id"] for hit in hits] == ["alpha"]
+    assert database.retrieval.hybrid_search("alpha", [1.0, 0.0])[0][
+        "document_id"
+    ] == "alpha"
+
+    database.save(tmp_path)
+    RetrievalDatabase.validate(tmp_path)
+    loaded = RetrievalDatabase.load(tmp_path)
+    assert loaded.retrieval.semantic_search([1.0, 0.0])[0]["text"] == "alpha retrieval"
+
+
+def test_retrieval_builder_requires_exact_embedding_keys() -> None:
+    builder = RetrievalDatabaseBuilder(
+        corpus_id="python-retrieval-errors",
+        retrieval=RetrievalConfiguration(
+            semantic=VectorIndexConfiguration(dimension=2)
+        ),
+    )
+    record = {
+        "record": {"id": "alpha", "record_type": "Topic"},
+        "chunks": [{"key": "summary", "text": "alpha"}],
+    }
+    with pytest.raises(MissingEmbeddingError, match="summary"):
+        builder.upsert(record, embeddings={})
+    with pytest.raises(UnexpectedEmbeddingError, match="unknown"):
+        builder.upsert(
+            record,
+            embeddings={"summary": [1.0, 0.0], "unknown": [0.0, 1.0]},
+        )
+
+
+def test_retrieval_database_exposes_hybrid_without_extra() -> None:
+    builder = RetrievalDatabaseBuilder(
+        corpus_id="python-semantic-only",
+        retrieval=RetrievalConfiguration(
+            semantic=VectorIndexConfiguration(dimension=2)
+        ),
+    )
+    builder.upsert(
+        {
+            "record": {"id": "alpha", "record_type": "Topic"},
+            "chunks": [{"key": "summary", "text": "alpha"}],
+        },
+        embeddings={"summary": [1.0, 0.0]},
+    )
+    database = builder.build()
+    hits = database.retrieval.hybrid_search("alpha", [1.0, 0.0], alpha=0.6)
+    assert hits[0]["document_id"] == "alpha"
+
+
 def test_pipeline_ingests_raw_document_and_searches_text() -> None:
     index = Index(dimension=4)
     pipeline = Pipeline(index, embed=embed)
@@ -88,9 +199,7 @@ def test_pipeline_embedding_failure_leaves_existing_document_unchanged() -> None
     def fail(_texts: list[str]) -> list[list[float]]:
         raise RuntimeError("intentional embedding failure")
 
-    pipeline = Pipeline(
-        index, embed=fail, chunker=RustTextChunker(max_characters=20)
-    )
+    pipeline = Pipeline(index, embed=fail, chunker=RustTextChunker(max_characters=20))
 
     with pytest.raises(RuntimeError, match="intentional"):
         pipeline.add("doc-1", "replacement")
@@ -225,9 +334,7 @@ def test_compact_reclaims_tombstones_and_preserves_results(tmp_path) -> None:
         documents=[
             {
                 "id": "doc-1",
-                "chunks": [
-                    {"text": "old", "embedding": [1.0, 0.0, 0.0, 0.0]}
-                ],
+                "chunks": [{"text": "old", "embedding": [1.0, 0.0, 0.0, 0.0]}],
             }
         ]
     )
@@ -235,9 +342,7 @@ def test_compact_reclaims_tombstones_and_preserves_results(tmp_path) -> None:
         documents=[
             {
                 "id": "doc-1",
-                "chunks": [
-                    {"text": "current", "embedding": [0.0, 1.0, 0.0, 0.0]}
-                ],
+                "chunks": [{"text": "current", "embedding": [0.0, 1.0, 0.0, 0.0]}],
             }
         ]
     )
@@ -320,9 +425,7 @@ def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
         limit=10,
         vector_candidates=1,
         keyword_candidates=1,
-        fusion="weighted",
-        vector_weight=0.25,
-        keyword_weight=0.75,
+        alpha=0.25,
     )
 
     assert {hit["document_id"] for hit in hits} == {"doc-vector", "doc-keyword"}
@@ -348,7 +451,7 @@ def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
     assert [hit["document_id"] for hit in vector_only] == ["doc-vector"]
 
 
-def test_hybrid_search_supports_rrf_and_filters() -> None:
+def test_hybrid_search_supports_alpha_and_filters() -> None:
     index = Index(dimension=4)
     index.add(
         documents=[
@@ -379,13 +482,15 @@ def test_hybrid_search_supports_rrf_and_filters() -> None:
         "python",
         [1.0, 0.0, 0.0, 0.0],
         where={"project": "vectorkit"},
-        fusion="rrf",
-        rrf_k=42.0,
+        alpha=0.6,
     )
 
     assert [hit["document_id"] for hit in hits] == ["doc-1"]
     assert hits[0]["trace"]["filter_matched"] is True
-    assert hits[0]["trace"]["fusion"] == {"kind": "rrf", "rrf_k": 42.0}
+    fusion = hits[0]["trace"]["fusion"]
+    assert fusion["kind"] == "weighted_normalized"
+    assert fusion["vector_weight"] == pytest.approx(0.6)
+    assert fusion["keyword_weight"] == pytest.approx(0.4)
 
 
 def test_save_load_round_trip(tmp_path) -> None:
@@ -416,9 +521,7 @@ def test_save_load_round_trip(tmp_path) -> None:
         documents=[
             {
                 "id": "doc-2",
-                "chunks": [
-                    {"text": "beta", "embedding": [0.0, 1.0, 0.0, 0.0]}
-                ],
+                "chunks": [{"text": "beta", "embedding": [0.0, 1.0, 0.0, 0.0]}],
             }
         ]
     )
@@ -442,9 +545,7 @@ def test_save_error_includes_operation_cause_and_recovery_hint(tmp_path) -> None
 
 def test_validate_detects_corrupt_persisted_payload(tmp_path) -> None:
     index = Index(dimension=2)
-    index.add(
-        [{"id": "doc-1", "chunks": [{"text": "alpha", "embedding": [1.0, 0.0]}]}]
-    )
+    index.add([{"id": "doc-1", "chunks": [{"text": "alpha", "embedding": [1.0, 0.0]}]}])
     index.save(tmp_path)
     assert Index.validate(tmp_path) is None
 

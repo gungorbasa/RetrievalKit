@@ -604,14 +604,7 @@ impl ExactVectorIndex {
             metric: manifest.metric,
             vector_encoding: manifest.vector_encoding,
         };
-        let configuration = match manifest.retrieval_mode {
-            crate::retrieval_index::RetrievalMode::Semantic => {
-                RetrievalConfiguration::semantic(vector)
-            }
-            crate::retrieval_index::RetrievalMode::Hybrid => {
-                RetrievalConfiguration::semantic(vector).with_hybrid()
-            }
-        };
+        let configuration = RetrievalConfiguration::semantic(vector);
         let mut index = Self::try_with_retrieval_configuration_in_corpus(
             configuration,
             manifest.corpus_id.clone(),
@@ -644,6 +637,7 @@ impl ExactVectorIndex {
                 .map(|(identity, chunk_id)| (*chunk_id, identity.clone()))
                 .collect();
         }
+        let rebuild_bm25 = persisted_bm25.is_none();
         if let Some(persisted_bm25) = persisted_bm25 {
             index.retrieval.bm25 = Some(Bm25Index::from_persisted(
                 Bm25Config::default(),
@@ -651,6 +645,9 @@ impl ExactVectorIndex {
             )?);
         }
         index.rebuild_derived_state_from_loaded_chunks();
+        if rebuild_bm25 {
+            index.rebuild_bm25_from_loaded_chunks();
+        }
         index.validate_record_state()?;
 
         if index.active_chunk_count() != manifest.active_chunk_count {
@@ -1609,6 +1606,16 @@ impl ExactVectorIndex {
             self.retrieval
                 .metadata_filter_index
                 .insert(offset, &chunk.metadata);
+        }
+    }
+
+    fn rebuild_bm25_from_loaded_chunks(&mut self) {
+        let Some(bm25) = &mut self.retrieval.bm25 else {
+            return;
+        };
+        *bm25 = Bm25Index::new(Bm25Config::default());
+        for chunk in &self.corpus.chunks {
+            bm25.add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         }
     }
 
@@ -3810,7 +3817,8 @@ mod tests {
         let keyword_hits = loaded
             .keyword_search(&KeywordQuery::new("swift local", 10))
             .unwrap();
-        assert!(keyword_hits.is_empty());
+        assert_eq!(keyword_hits.len(), 1);
+        assert_eq!(keyword_hits[0].chunk_id, 0);
 
         let _ = std::fs::remove_dir_all(directory);
     }
@@ -3847,14 +3855,17 @@ mod tests {
         assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
         assert_eq!(
             shared_hit.trace.fusion,
-            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
+            HybridFusionTrace::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4
+            }
         );
 
         let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]
-    fn saved_index_without_bm25_still_runs_vector_side_hybrid() {
+    fn saved_index_without_bm25_rebuilds_full_hybrid_state() {
         let directory = temp_index_dir("hybrid-vector-only-round-trip");
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         index
@@ -3881,12 +3892,12 @@ mod tests {
 
         let vector_hit = hits.iter().find(|hit| hit.document_id == "doc-1").unwrap();
         assert_eq!(vector_hit.trace.vector_rank, Some(1));
-        assert_eq!(vector_hit.trace.keyword_rank, None);
+        assert_eq!(vector_hit.trace.keyword_rank, Some(1));
         assert!(vector_hit.vector_score.is_some());
-        assert_eq!(vector_hit.keyword_score, None);
-        assert_eq!(vector_hit.trace.normalized_vector_score, None);
-        assert_eq!(vector_hit.trace.normalized_keyword_score, None);
-        assert!(vector_hit.trace.matched_terms.is_empty());
+        assert!(vector_hit.keyword_score.is_some());
+        assert!(vector_hit.trace.normalized_vector_score.is_some());
+        assert!(vector_hit.trace.normalized_keyword_score.is_some());
+        assert_eq!(vector_hit.trace.matched_terms, vec!["search", "swift"]);
 
         let _ = std::fs::remove_dir_all(directory);
     }
@@ -4511,10 +4522,13 @@ mod tests {
         assert_eq!(shared_hit.trace.matched_terms, vec!["search", "swift"]);
         assert_eq!(
             shared_hit.trace.fusion,
-            HybridFusionTrace::ReciprocalRank { rrf_k: 60.0 }
+            HybridFusionTrace::WeightedNormalizedScore {
+                vector_weight: 0.6,
+                keyword_weight: 0.4
+            }
         );
-        assert_eq!(shared_hit.trace.normalized_vector_score, None);
-        assert_eq!(shared_hit.trace.normalized_keyword_score, None);
+        assert!(shared_hit.trace.normalized_vector_score.is_some());
+        assert!(shared_hit.trace.normalized_keyword_score.is_some());
     }
 
     #[test]

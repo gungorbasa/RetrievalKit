@@ -52,7 +52,6 @@ VkGraphDatabase *vectorkit_graph_database_builder_build(
 void vectorkit_graph_database_builder_free(VkGraphDatabaseBuilder *builder);
 
 VkGraphRetrievalBuilder *vectorkit_graph_retrieval_builder_new(
-    bool enable_hybrid,
     size_t dimension,
     uint32_t metric,
     uint32_t encoding,

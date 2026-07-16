@@ -199,58 +199,33 @@ public struct HybridTrace: Equatable, Sendable {
   public var filterMatched: Bool
 }
 
-/// Candidate and fusion options for hybrid search.
+/// Candidate options for hybrid search.
 public struct HybridOptions: Equatable, Sendable {
-  /// Hybrid rank fusion strategy.
-  public enum Fusion: Equatable, Sendable {
-    /// Fuse min-max normalized vector and keyword scores with explicit weights.
-    case weightedNormalizedScore(vectorWeight: Float, keywordWeight: Float)
-    /// Fuse candidates using reciprocal rank fusion.
-    case reciprocalRank(rrfK: Float)
-  }
-
   /// Number of vector candidates generated before fusion.
   public var vectorTopK: Int
   /// Number of keyword candidates generated before fusion.
   public var keywordTopK: Int
-  /// Fusion strategy used to rank the final results.
-  public var fusion: Fusion
-
-  /// Experiment-backed V1 defaults: 50 vector candidates, 50 keyword candidates, RRF with k=60.
+  /// Experiment-backed V1 defaults: 50 vector and 50 keyword candidates.
   public static let `default` = HybridOptions()
 
   /// Creates hybrid search options.
   public init(
     vectorTopK: Int = 50,
-    keywordTopK: Int = 50,
-    fusion: Fusion = .reciprocalRank(rrfK: 60)
+    keywordTopK: Int = 50
   ) {
     self.vectorTopK = vectorTopK
     self.keywordTopK = keywordTopK
-    self.fusion = fusion
   }
 
-  fileprivate var ffiValue: VkHybridOptions {
-    switch fusion {
-    case .weightedNormalizedScore(let vectorWeight, let keywordWeight):
-      VkHybridOptions(
-        vector_top_k: vectorTopK,
-        keyword_top_k: keywordTopK,
-        fusion_type: 0,
-        vector_weight: vectorWeight,
-        keyword_weight: keywordWeight,
-        rrf_k: 0
-      )
-    case .reciprocalRank(let rrfK):
-      VkHybridOptions(
-        vector_top_k: vectorTopK,
-        keyword_top_k: keywordTopK,
-        fusion_type: 1,
-        vector_weight: 0,
-        keyword_weight: 0,
-        rrf_k: rrfK
-      )
-    }
+  fileprivate func ffiValue(alpha: Float) -> VkHybridOptions {
+    VkHybridOptions(
+      vector_top_k: vectorTopK,
+      keyword_top_k: keywordTopK,
+      fusion_type: 0,
+      vector_weight: alpha,
+      keyword_weight: 1 - alpha,
+      rrf_k: 0
+    )
   }
 }
 
@@ -769,6 +744,7 @@ public actor VectorIndex {
     embedding: [Float],
     topK: Int = 10,
     filter: Filter? = nil,
+    alpha: Float = 0.6,
     options: HybridOptions = .default
   ) async throws -> [HybridResult] {
     let handle = handle
@@ -780,7 +756,7 @@ public actor VectorIndex {
         var output = VkHybridResultBuffer(hits: nil, count: 0)
         let arena = CStringArena()
         let embeddingBuffer = EmbeddingBuffer(embedding)
-        let ffiOptions = options.ffiValue
+        let ffiOptions = options.ffiValue(alpha: alpha)
         let ffiFilter = try filter?.makeFFI()
         var status = VkStatus(code: 0, message: nil)
         defer { vectorkit_status_clear(&status) }
@@ -821,23 +797,12 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
   }
 }
 
-public enum RetrievalExtra: Hashable, Sendable {
-  case hybrid
-}
-
 public struct RetrievalConfiguration: Equatable, Sendable {
   public var semantic: VectorIndexConfiguration
-  public var extras: Set<RetrievalExtra>
 
-  public init(
-    semantic: VectorIndexConfiguration,
-    extras: Set<RetrievalExtra> = []
-  ) {
+  public init(semantic: VectorIndexConfiguration) {
     self.semantic = semantic
-    self.extras = extras
   }
-
-  fileprivate var enablesHybrid: Bool { extras.contains(.hybrid) }
 }
 
 private struct NativeRetrievalChunk: Encodable {
@@ -904,6 +869,7 @@ public actor RetrievalQueries {
 
   public func hybridSearch(
     text: String, embedding: [Float], topK: Int = 10, filter: Filter? = nil,
+    alpha: Float = 0.6,
     options: HybridOptions = .default
   ) async throws -> [HybridResult] {
     let owner = owner
@@ -917,7 +883,7 @@ public actor RetrievalQueries {
       guard
         vectorkit_retrieval_hybrid_search(
           OpaquePointer(bitPattern: try owner.requireHandle()), arena.copy(text), values.pointer,
-          values.count, topK, ffiFilter?.pointer, options.ffiValue, &output, &status)
+          values.count, topK, ffiFilter?.pointer, options.ffiValue(alpha: alpha), &output, &status)
       else { throw VectorKitError.from(status: status) }
       defer { vectorkit_hybrid_results_free(output) }
       guard let hits = output.hits else { return [] }
@@ -934,8 +900,7 @@ public actor RetrievalDatabase {
       let pointer = try FFI.withStatusPointer { status in
         corpusID.rawValue.withCString { corpus in
           vectorkit_retrieval_builder_new(
-            retrieval.enablesHybrid, vector.dimension, vector.metric.ffiValue,
-            vector.encoding.ffiValue,
+            vector.dimension, vector.metric.ffiValue, vector.encoding.ffiValue,
             corpus, status)
         }
       }

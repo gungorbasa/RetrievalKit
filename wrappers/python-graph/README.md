@@ -1,0 +1,101 @@
+# VectorKit Graph for Python
+
+`vectorkit-graph` is the optional aggregate Python distribution for graph-only
+and combined graph-and-retrieval databases. It mirrors the separate
+`VectorKitGraph` Swift package; the base `vectorkit` distribution remains
+graph-free.
+
+Install this distribution instead of `vectorkit` in a graph-enabled process:
+
+```bash
+cd wrappers/python-graph
+maturin develop
+python examples/graph_retrieval_quickstart.py
+```
+
+The combined builder keeps graph schema and retrieval configuration explicit:
+
+```python
+from vectorkit_graph import (
+    GraphNode,
+    GraphRecordNode,
+    GraphRelationship,
+    GraphRetrievalDatabaseBuilder,
+    GraphSchema,
+    GraphTraversal,
+    RetrievalConfiguration,
+    VectorIndexConfiguration,
+)
+
+schema = GraphSchema(
+    record_nodes=[GraphRecordNode("Topic", "Topic", ["title"])],
+    relationships=[
+        GraphRelationship(
+            "related_to",
+            "Topic",
+            "Topic",
+            "related_id",
+            "optional_one",
+        )
+    ],
+)
+builder = GraphRetrievalDatabaseBuilder(
+    corpus_id="topics",
+    graph=schema,
+    retrieval=RetrievalConfiguration(
+        semantic=VectorIndexConfiguration(dimension=384),
+    ),
+)
+builder.upsert(
+    {
+        "record": {
+            "id": "alpha",
+            "record_type": "Topic",
+            "fields": {"title": "Alpha"},
+            "metadata": {"tenant": "blue"},
+        },
+        "chunks": [{"key": "summary", "text": "Graph retrieval"}],
+    },
+    embeddings={"summary": embedding},
+)
+database = builder.build()
+
+selection = database.graph.query(
+    seeds=[GraphNode("Topic", "alpha")],
+    traversals=[GraphTraversal("related_to", max_hops=2)],
+)
+hits = database.retrieval.semantic_search(
+    query_embedding,
+    within=selection,
+    where={"tenant": "blue"},
+)
+hybrid_hits = database.retrieval.hybrid_search(
+    "graph retrieval",
+    query_embedding,
+    within=selection,
+    where={"tenant": "blue"},
+    alpha=0.6,
+)
+```
+
+`GraphDatabaseBuilder(corpus_id=..., schema=...)` builds graph-only state and
+accepts capability-neutral records through `upsert(record)`, with no embedding
+parameter. `GraphRetrievalDatabaseBuilder` accepts the same record shape plus a
+separate embedding map keyed by chunk key. Combined databases deliberately expose
+`database.graph` and `database.retrieval` query namespaces so graph traversal
+and semantic/hybrid retrieval remain separate capabilities.
+
+Graph queries are deterministic and bounded by `GraphQueryLimits`. Selections
+are tied to the corpus generation that produced them and can scope semantic or
+hybrid retrieval through `within=`. Metadata filtering is supported by both
+retrieval methods through `where=`.
+Hybrid `alpha` is query-time: `1` is vector-only, `0` is BM25-only, and the
+default is `0.6`.
+
+Databases and selections support `close()` and context managers. Graph queries
+also support cooperative cancellation and second-based timeouts. Rust performs
+schema validation, graph traversal, filtering, ranking, persistence, and
+hydration; the Python layer only converts typed inputs and results.
+
+Because both packages embed native VectorKit core symbols, import either
+`vectorkit` or `vectorkit_graph` in one process, not both.

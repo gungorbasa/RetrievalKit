@@ -12,7 +12,7 @@ use crate::types::{
     SearchQuery, StoredChunk,
 };
 
-/// A graph-neutral database with semantic or hybrid retrieval enabled.
+/// A graph-neutral database with semantic and hybrid retrieval enabled.
 #[derive(Debug, Clone)]
 pub struct RetrievalDatabase {
     index: ExactVectorIndex,
@@ -136,7 +136,6 @@ mod tests {
     use crate::metadata::Metadata;
     use crate::record_store::{ChunkKey, FieldName, RecordType, RecordValue};
     use crate::types::{IndexConfig, VectorMetric};
-    use crate::VectorKitError;
 
     fn record() -> Record {
         Record {
@@ -160,36 +159,10 @@ mod tests {
     }
 
     #[test]
-    fn semantic_database_has_no_bm25_and_rejects_hybrid_queries() {
+    fn retrieval_database_supports_semantic_and_hybrid_queries() {
         let mut database = RetrievalDatabase::new(
             RetrievalConfiguration::semantic(IndexConfig::new(2, VectorMetric::DotProduct)),
             CorpusId::new("semantic").unwrap(),
-        )
-        .unwrap();
-        database
-            .upsert_record(record(), Metadata::new(), vec![chunk()])
-            .unwrap();
-
-        assert!(!database.retrieval().has_bm25());
-        assert_eq!(
-            database
-                .semantic_search(&SearchQuery::new(vec![1.0, 0.0], 1))
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(matches!(
-            database.hybrid_search(&HybridQuery::new("native", vec![1.0, 0.0], 1)),
-            Err(VectorKitError::RetrievalCapabilityUnavailable { .. })
-        ));
-    }
-
-    #[test]
-    fn hybrid_database_supports_semantic_and_hybrid_queries() {
-        let mut database = RetrievalDatabase::new(
-            RetrievalConfiguration::semantic(IndexConfig::new(2, VectorMetric::DotProduct))
-                .with_hybrid(),
-            CorpusId::new("hybrid").unwrap(),
         )
         .unwrap();
         database
@@ -206,7 +179,7 @@ mod tests {
         );
         assert_eq!(
             database
-                .hybrid_search(&HybridQuery::new("native", vec![1.0, 0.0], 1))
+                .hybrid_search(&HybridQuery::new("native", vec![1.0, 0.0], 1).with_alpha(0.6))
                 .unwrap()
                 .len(),
             1
@@ -214,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn semantic_database_persists_without_bm25_payload() {
+    fn compact_snapshot_rebuilds_bm25_on_load() {
         let mut database = RetrievalDatabase::new(
             RetrievalConfiguration::semantic(IndexConfig::new(2, VectorMetric::DotProduct)),
             CorpusId::new("semantic-persistence").unwrap(),
@@ -230,15 +203,25 @@ mod tests {
             .as_nanos();
         let directory =
             std::env::temp_dir().join(format!("vectorkit-semantic-{}-{nonce}", std::process::id()));
-        let report = database.save_to_dir(&directory).unwrap();
+        let report = database
+            .as_compatibility_index()
+            .save_to_dir_with_options(&directory, crate::IndexPersistenceOptions::vector_only())
+            .unwrap();
         assert_eq!(report.bm25_bytes, 0);
 
         let loaded = RetrievalDatabase::load_from_dir(&directory).unwrap();
-        assert_eq!(loaded.mode(), RetrievalMode::Semantic);
-        assert!(!loaded.retrieval().has_bm25());
+        assert_eq!(loaded.mode(), RetrievalMode::Hybrid);
+        assert!(loaded.retrieval().has_bm25());
         assert_eq!(
             loaded
                 .semantic_search(&SearchQuery::new(vec![1.0, 0.0], 1))
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            loaded
+                .hybrid_search(&HybridQuery::new("native", vec![1.0, 0.0], 1))
                 .unwrap()
                 .len(),
             1

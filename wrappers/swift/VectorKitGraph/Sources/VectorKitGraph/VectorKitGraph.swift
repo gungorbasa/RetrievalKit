@@ -174,31 +174,16 @@ public indirect enum GraphFilter: Equatable, Sendable {
 }
 
 public struct GraphHybridOptions: Equatable, Sendable {
-  public enum Fusion: Equatable, Sendable {
-    case weightedNormalizedScore(vectorWeight: Float, keywordWeight: Float)
-    case reciprocalRank(rrfK: Float)
-  }
   public var vectorTopK, keywordTopK: Int
-  public var fusion: Fusion
   public static let `default` = GraphHybridOptions()
-  public init(
-    vectorTopK: Int = 50, keywordTopK: Int = 50, fusion: Fusion = .reciprocalRank(rrfK: 60)
-  ) {
+  public init(vectorTopK: Int = 50, keywordTopK: Int = 50) {
     self.vectorTopK = vectorTopK
     self.keywordTopK = keywordTopK
-    self.fusion = fusion
   }
-  fileprivate var ffiValue: VkHybridOptions {
-    switch fusion {
-    case .weightedNormalizedScore(let vectorWeight, let keywordWeight):
-      VkHybridOptions(
-        vector_top_k: vectorTopK, keyword_top_k: keywordTopK, fusion_type: 0,
-        vector_weight: vectorWeight, keyword_weight: keywordWeight, rrf_k: 0)
-    case .reciprocalRank(let rrfK):
-      VkHybridOptions(
-        vector_top_k: vectorTopK, keyword_top_k: keywordTopK, fusion_type: 1, vector_weight: 0,
-        keyword_weight: 0, rrf_k: rrfK)
-    }
+  fileprivate func ffiValue(alpha: Float) -> VkHybridOptions {
+    VkHybridOptions(
+      vector_top_k: vectorTopK, keyword_top_k: keywordTopK, fusion_type: 0,
+      vector_weight: alpha, keyword_weight: 1 - alpha, rrf_k: 0)
   }
 }
 
@@ -989,14 +974,14 @@ public actor GraphIndex {
 
   public func hybridSearch(
     text: String, embedding: [Float], topK: Int, in result: GraphQueryResult,
-    filter: GraphFilter? = nil, options: GraphHybridOptions = .default
+    filter: GraphFilter? = nil, alpha: Float = 0.6, options: GraphHybridOptions = .default
   ) async throws -> [GraphHybridHit] {
     let owner = owner
     return try await access.withRead {
       try await Task.detached(priority: Task.currentPriority) {
         try Self.performHybridSearch(
           handle: owner.requireHandle(), text: text, embedding: embedding, topK: topK,
-          result: result, filter: filter, options: options)
+          result: result, filter: filter, alpha: alpha, options: options)
       }.value
     }
   }
@@ -1234,7 +1219,7 @@ public actor GraphIndex {
 
   private nonisolated static func performHybridSearch(
     handle: UInt, text: String, embedding: [Float], topK: Int, result: GraphQueryResult,
-    filter: GraphFilter?, options: GraphHybridOptions
+    filter: GraphFilter?, alpha: Float, options: GraphHybridOptions
   ) throws -> [GraphHybridHit] {
     try requireNonnegative(topK, name: "topK")
     try requireNonnegative(options.vectorTopK, name: "vectorTopK")
@@ -1256,7 +1241,7 @@ public actor GraphIndex {
       vectorkit_graph_scope_hybrid_search(
         OpaquePointer(bitPattern: handle), scope, arena.copy(text),
         embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer,
-        options.ffiValue, &output, &status)
+        options.ffiValue(alpha: alpha), &output, &status)
     }
     guard succeeded else { throw Native.error(status, fallback: "scoped hybrid search failed") }
     defer { vectorkit_hybrid_results_free(output) }
@@ -1349,23 +1334,12 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
     self.encoding = encoding
   }
 }
-public enum RetrievalExtra: Hashable, Sendable {
-  case hybrid
-}
-
 public struct RetrievalConfiguration: Equatable, Sendable {
   public var semantic: VectorIndexConfiguration
-  public var extras: Set<RetrievalExtra>
 
-  public init(
-    semantic: VectorIndexConfiguration,
-    extras: Set<RetrievalExtra> = []
-  ) {
+  public init(semantic: VectorIndexConfiguration) {
     self.semantic = semantic
-    self.extras = extras
   }
-
-  fileprivate var enablesHybrid: Bool { extras.contains(.hybrid) }
 }
 
 private struct CapabilityGraphBatch: Encodable {
@@ -1732,7 +1706,7 @@ public actor GraphRetrievalQueries {
   }
   public func hybridSearch(
     text: String, embedding: [Float], topK: Int = 10, within selection: GraphSelection? = nil,
-    filter: GraphFilter? = nil, options: GraphHybridOptions = .default
+    filter: GraphFilter? = nil, alpha: Float = 0.6, options: GraphHybridOptions = .default
   ) async throws -> [GraphHybridHit] {
     let owner = owner
     return try await Task.detached {
@@ -1746,7 +1720,7 @@ public actor GraphRetrievalQueries {
         vectorkit_graph_retrieval_hybrid_search(
           OpaquePointer(bitPattern: try owner.requireHandle()),
           try selection?.native.requireHandle(), arena.copy(text), buffer.baseAddress, buffer.count,
-          topK, nativeFilter?.pointer, options.ffiValue, &output, &status)
+          topK, nativeFilter?.pointer, options.ffiValue(alpha: alpha), &output, &status)
       }
       guard succeeded else { throw Native.error(status, fallback: "hybrid search failed") }
       defer { vectorkit_hybrid_results_free(output) }
@@ -1786,8 +1760,7 @@ public actor GraphRetrievalDatabase {
           corpusID.rawValue.withCString { corpus in
             json.withCString {
               vectorkit_graph_retrieval_builder_new(
-                retrieval.enablesHybrid, vector.dimension, vector.metric.ffi, vector.encoding.ffi,
-                corpus,
+                vector.dimension, vector.metric.ffi, vector.encoding.ffi, corpus,
                 $0, status)
             }
           }

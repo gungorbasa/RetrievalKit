@@ -19,6 +19,7 @@ mod v3_ingestion;
 mod v3_population;
 mod v3_runs;
 mod v3_schema;
+mod v3_seed;
 mod v3_validation;
 
 pub(crate) struct QualityOutcome {

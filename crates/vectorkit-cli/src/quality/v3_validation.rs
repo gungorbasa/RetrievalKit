@@ -45,6 +45,7 @@ pub(super) struct ValidatedCollection {
     pub corpus_embeddings: Vec<CorpusEmbedding>,
     pub query_embeddings: Vec<QueryEmbedding>,
     pub qrels: Vec<Qrel>,
+    pub exclusions: Vec<Exclusion>,
     pub dimension: usize,
     pub populations: Populations,
     pub runs: Vec<RunIdentity>,
@@ -205,6 +206,7 @@ pub(super) fn validate(root: &Path) -> Result<ValidatedCollection, String> {
         corpus_embeddings,
         query_embeddings,
         qrels,
+        exclusions,
         dimension,
         populations,
         runs,
@@ -2661,24 +2663,7 @@ fn validate_relative_path(file: &str, field: &str, value: &str) -> Result<(), St
 }
 
 fn normalize(value: &str) -> String {
-    value
-        .chars()
-        .flat_map(char::to_lowercase)
-        .map(|character| {
-            if character.is_whitespace() {
-                ' '
-            } else {
-                character
-            }
-        })
-        .fold(String::new(), |mut output, character| {
-            if character != ' ' || !output.ends_with(' ') {
-                output.push(character);
-            }
-            output
-        })
-        .trim()
-        .to_owned()
+    super::v3_seed::normalize(value)
 }
 
 fn boundary_match(value: &str, start: usize, end: usize) -> bool {

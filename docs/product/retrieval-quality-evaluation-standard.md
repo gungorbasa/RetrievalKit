@@ -162,81 +162,24 @@ I8/F32 fidelity and any future ANN engine, but not for human relevance.
 
 Source: https://ann-benchmarks.com/
 
-## VectorKit Gold-Standard Design
+## Active Evaluation Design
 
-### 1. Test collection
+The active evaluation path uses checked-in deterministic V1/V2 fixtures and
+public collections with existing qrels. SciFact and NFCorpus are the first
+real-world collections because both fit the under-50K V1 target and do not
+require VectorKit to operate an assessor workflow.
 
-Maintain three tiers:
+Every collection freezes its corpus, queries, qrels, embedding model,
+preprocessing, chunking policy, and evaluation split. Official test splits are
+used for final reporting. Train or development splits may be used for
+configuration work when the upstream collection provides them; never tune on
+the reported test split.
 
-| Tier | Purpose | Target shape |
-|:---|:---|:---|
-| PR smoke | Fast deterministic regression | 100+ judged queries |
-| Release | Configuration and ranking decisions | 300–500 judged queries |
-| Production shadow | Detect real-user failures and drift | Continuously sampled anonymized queries |
+Human-authored VectorKit-specific collection building is deferred until
+representative product data and actual assessors are available. There is no
+active pooling, blind-review, adjudication, or human-judgment workflow.
 
-Each version must freeze:
-
-- corpus revision
-- query text and category
-- relevance judgments
-- embedding model and revision
-- chunking configuration
-- metadata and filters
-- train/development/test split
-
-Never tune on the locked test split.
-
-### 2. Query coverage
-
-Include:
-
-- semantic paraphrases
-- exact names, identifiers, codes, and numbers
-- short and underspecified queries
-- long conversational questions
-- ambiguous and multi-answer needs
-- near-duplicate and conflicting documents
-- old, current, deleted, and replaced documents
-- metadata-filtered searches
-- negative constraints
-- typos, abbreviations, and multilingual queries
-- queries where vector and keyword signals disagree
-
-Report category-level results so strong exact-name performance cannot hide weak
-ambiguous-query performance.
-
-### 3. Pooling
-
-For each query, pool at least the top 20 unique results from:
-
-- vector-only F32
-- vector-only I8
-- BM25 only
-- hybrid RRF
-- hybrid weighted normalized fusion
-- every candidate configuration under consideration
-- any future reranker or ANN engine
-
-Randomize and blind document identity, originating system, score, and rank before
-judging.
-
-### 4. Judgments
-
-Use a documented 0–3 scale:
-
-| Grade | Meaning |
-|---:|:---|
-| 0 | Irrelevant or misleading |
-| 1 | Related context, but does not answer the need |
-| 2 | Useful partial answer |
-| 3 | Direct, complete answer |
-
-Use two independent assessors for the locked release set and adjudicate
-disagreements. Record assessor agreement. LLM judgments may expand a pool or
-prioritize review, but release qrels should remain human-owned unless a separate
-validation study shows the automated judge agrees with humans.
-
-### 5. Metrics
+### Metrics
 
 Primary product metrics:
 
@@ -266,11 +209,11 @@ Operational gates:
 - device P50/P95/P99 latency, RSS, persisted size, and build/load time reported
   separately from relevance
 
-### 6. Regression decisions
+### Regression decisions
 
 Do not select a configuration only because it matches a deeper F32 result list.
-Use human NDCG and recall for ranking decisions. Use F32 overlap only to approve
-compression or approximation.
+Use qrels-based NDCG and recall for ranking decisions. Use F32 overlap only to
+approve compression or approximation.
 
 For every candidate change:
 
@@ -281,44 +224,36 @@ For every candidate change:
 5. Require explicit review when one category regresses despite a higher global
    average.
 
-Initial project gates may remain absolute, but release decisions should also use
-paired change limits. Proposed starting limits for the locked set:
-
-- no more than 0.01 absolute NDCG@5 regression
-- no more than 0.015 absolute Recall@5 regression
-- no more than 0.01 Success@1 regression
-- I8 recall@10 versus F32 at least 0.99
-- zero lifecycle violations
-
-Recalibrate these limits after the first 300-query release collection. They are
-VectorKit policy, not universal industry thresholds.
+Keep collection-specific gates explicit. Do not promote provisional thresholds
+to release policy until repeatable SciFact and NFCorpus baselines exist.
 
 ## V3 Execution Plan
 
-1. Emit TREC-compatible qrels and run files from the Rust quality runner.
-2. Cross-check custom NDCG, MRR, Recall, Precision, and MAP calculations with
-   `ir_measures` or `trec_eval` on fixed golden examples.
-3. Add BM25-only and weighted-fusion runs to the existing vector/RRF matrix.
-4. Build a pooled annotation file from every mode and candidate configuration.
-5. Expand to at least 100 blind-judged queries for PR smoke coverage.
-6. Add BEIR SciFact and NFCorpus adapters for external comparison with Moss and
-   embedding baselines.
-7. Grow a locked 300–500-query release set from anonymized application queries,
-   reformulations, failed searches, and explicit user feedback.
-8. Add paired bootstrap confidence intervals and per-category regression gates.
-9. Evaluate downstream answer and citation quality separately when VectorKit is
+Implemented:
+
+1. Emit deterministic TREC-compatible qrels and run files from the Rust quality
+   runner.
+2. Cross-check per-query and aggregate metrics with `ir_measures`; periodically
+   check selected release metrics with official `trec_eval`.
+3. Evaluate vector F32/I8, BM25, RRF, and weighted fusion while retaining raw
+   scores separately from rank-derived TREC scores.
+4. Add BEIR SciFact and NFCorpus adapters with pinned downloads, checksums,
+   official test splits, and deterministic MiniLM preprocessing.
+
+Next:
+
+1. Establish repeatable external baselines and collection-specific regression
+   gates.
+2. Add paired bootstrap confidence intervals and per-category regression gates.
+3. Evaluate downstream answer and citation quality separately when VectorKit is
    used inside RAG; do not fold generation quality into retrieval metrics.
-10. After release distribution is stable, run an appropriate official NIST
-    TREC collection and decide whether to enter the TREC RAG track. Treat this
-    as a committed validation milestone, not a blocker for packaging V1.
+
+Deferred: a VectorKit-specific judged collection until assessors and
+representative product data exist.
 
 ## Current Position
 
-VectorKit V2 is stronger than a simple synthetic or latency-only benchmark and
-already includes several controls missing from Moss’s public quality suite. It
-is not yet a full gold-standard collection because judgments are curated by one
-development process, the query count is 42, result pooling is incomplete, and
-there is no locked production-derived test set.
-
-The next highest-value work is not another retrieval optimization. It is the V3
-pooling, standard-metric validation, and blind judgment pipeline described here.
+VectorKit V2 remains the fast deterministic regression fixture. The active next
+step is reproducible TREC evaluation on SciFact and NFCorpus using their
+upstream qrels. A VectorKit-specific human-reviewed release collection remains
+explicitly deferred.

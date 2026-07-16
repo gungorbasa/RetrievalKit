@@ -1947,7 +1947,7 @@ impl CliError {
                 "  vectorkit bench kernels [options]",
                 "  vectorkit bench topk [options]",
                 "  vectorkit bench memory [--config <scenario.json> | --config-json <json>]",
-                "  vectorkit bench quality --fixture <fixture.json> [--iterations <n>]",
+                "  vectorkit bench quality --fixture <fixture.json> [--qrels <qrels.tsv>] [--artifacts <directory>] [--iterations <n>]",
                 "",
                 "synthetic options:",
                 "  --chunks <n>       default 1000",

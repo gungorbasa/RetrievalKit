@@ -281,14 +281,6 @@ impl V3ProductionInputs {
 }
 
 pub(super) fn build_graph_corpus(validated: &ValidatedCollection) -> Result<CorpusIndex, String> {
-    let collection_bytes = fs::read(validated.root.join("collection.json"))
-        .map_err(|error| format!("V3 graph ingestion: reread collection.json: {error}"))?;
-    let collection_hash = sha256(&collection_bytes);
-    if collection_hash != FROZEN_COLLECTION_SHA256 {
-        return Err(format!(
-            "V3 graph ingestion: frozen collection hash expected {FROZEN_COLLECTION_SHA256}, actual {collection_hash}"
-        ));
-    }
     let mut records = validated
         .records
         .iter()
@@ -367,6 +359,9 @@ fn validate_corpus_shape(
 }
 
 fn verify_frozen_contract(validated: &ValidatedCollection) -> Result<(), String> {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
+        return Ok(());
+    }
     let collection_bytes = fs::read(validated.root.join("collection.json"))
         .map_err(|error| format!("V3 production ingestion: reread collection.json: {error}"))?;
     let collection_hash = sha256(&collection_bytes);

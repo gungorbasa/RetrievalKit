@@ -25,6 +25,7 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     let mut qualification_artifacts = None;
     let mut release_qualification_artifacts = None;
     let mut verify_rerun = false;
+    let mut production_ingestion = false;
     let mut offset = 0;
     while offset < args.len() {
         match args[offset].as_str() {
@@ -59,11 +60,15 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
                 verify_rerun = true;
                 offset += 1;
             }
+            "--production-ingestion" => {
+                production_ingestion = true;
+                offset += 1;
+            }
             value => return Err(format!("unknown quality-v3 argument '{value}'")),
         }
     }
     let collection = collection.ok_or_else(|| {
-        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--qualification-artifacts <target/benchmarks/v3/directory> | --release-qualification-artifacts <target/benchmarks/v3/directory>] [--verify-rerun]".to_owned()
+        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--qualification-artifacts <target/benchmarks/v3/directory> | --release-qualification-artifacts <target/benchmarks/v3/directory>] [--verify-rerun] [--production-ingestion]".to_owned()
     })?;
     if qualification_artifacts.is_some() && release_qualification_artifacts.is_some() {
         return Err(
@@ -72,6 +77,13 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         );
     }
     let mut validated = validate(&collection)?;
+    let production_ingestion_result = if production_ingestion {
+        Some(super::v3_graph_input::validate_production_ingestion(
+            &validated,
+        )?)
+    } else {
+        None
+    };
     let release_implementation = if release_qualification_artifacts.is_some() {
         let revision = release_implementation_revision()?;
         bind_implementation_revision(&mut validated, revision.clone())?;
@@ -132,6 +144,7 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         "final_manifest_complete":false,
         "publication_ready":false,
         "publication_status":"not_ready",
+        "production_ingestion":production_ingestion_result,
         "release_context":release_implementation.is_some(),
         "implementation_revision":release_implementation,
         "rerun_verified":verify_rerun,

@@ -192,12 +192,6 @@ pub(super) fn validate(root: &Path) -> Result<ValidatedCollection, String> {
         }),
     };
     let runs = canonical_runs(&collection, &queries, &populations, &context)?;
-    if runs.len() != 15 {
-        return Err(format!(
-            "run matrix expected exactly 15 runs for the conformance collection, actual {}",
-            runs.len()
-        ));
-    }
     validate_run_preimages(&runs)?;
     Ok(ValidatedCollection {
         root,

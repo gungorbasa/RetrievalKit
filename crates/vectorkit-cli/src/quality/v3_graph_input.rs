@@ -1,3 +1,4 @@
+use serde_json::{json, Value};
 use vectorkit_core::{FieldName, RecordType, VectorEncoding, VectorMetric};
 use vectorkit_graph::{
     Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphDatabase,
@@ -10,9 +11,6 @@ use super::v3_schema::{
     ChunkNodeRule, GraphSchema as V3GraphSchema, RecordNodeRule, RelationshipRule,
 };
 use super::v3_validation::ValidatedCollection;
-
-const FROZEN_GRAPH_SCHEMA_SHA256: &str =
-    "3796b16b5ff4aa40c19d923608beae4fd8c80ff554fb44244673e3c77c88a8a6";
 
 pub(super) fn production_schema(source: &V3GraphSchema) -> Result<GraphSchema, String> {
     if source.version != 1 {
@@ -44,12 +42,6 @@ pub(super) fn production_schema(source: &V3GraphSchema) -> Result<GraphSchema, S
 pub(super) fn build_graph_database(
     validated: &ValidatedCollection,
 ) -> Result<GraphDatabase, String> {
-    let actual_hash = super::v3_canonical::sha256(&validated.bytes["graph-schema.json"]);
-    if actual_hash != FROZEN_GRAPH_SCHEMA_SHA256 {
-        return Err(format!(
-            "V3 graph adapter: frozen graph schema hash expected {FROZEN_GRAPH_SCHEMA_SHA256}, actual {actual_hash}"
-        ));
-    }
     let corpus = build_graph_corpus(validated)?;
     let database = GraphDatabase::build(corpus, production_schema(&validated.graph_schema)?)
         .map_err(|error| format!("V3 graph adapter: production graph build: {error}"))?;
@@ -61,12 +53,6 @@ pub(super) fn build_graph_retrieval_database(
     validated: &ValidatedCollection,
     encoding: VectorEncoding,
 ) -> Result<GraphRetrievalDatabase, String> {
-    let actual_hash = super::v3_canonical::sha256(&validated.bytes["graph-schema.json"]);
-    if actual_hash != FROZEN_GRAPH_SCHEMA_SHA256 {
-        return Err(format!(
-            "V3 graph retrieval adapter: frozen graph schema hash expected {FROZEN_GRAPH_SCHEMA_SHA256}, actual {actual_hash}"
-        ));
-    }
     let inputs = V3ProductionInputs::from_validated(validated)?;
     let retrieval = inputs.build_database(encoding)?;
     let database =
@@ -76,6 +62,30 @@ pub(super) fn build_graph_retrieval_database(
             })?;
     validate_graph_retrieval_database(&database, validated, encoding)?;
     Ok(database)
+}
+
+pub(super) fn validate_production_ingestion(
+    validated: &ValidatedCollection,
+) -> Result<Value, String> {
+    let graph = build_graph_database(validated)?;
+    let combined = build_graph_retrieval_database(validated, VectorEncoding::F32)?;
+    if graph.graph().node_count() != combined.graph().node_count()
+        || graph.graph().edge_count() != combined.graph().edge_count()
+        || graph.graph().build_stats() != combined.graph().build_stats()
+    {
+        return Err(
+            "V3 production ingestion: graph-only and combined graph shapes differ".to_owned(),
+        );
+    }
+    Ok(json!({
+        "chunks":graph.corpus().active_chunk_count(),
+        "corpus_id":graph.corpus().corpus_id().as_str(),
+        "dimension":validated.dimension,
+        "edges":graph.graph().edge_count(),
+        "nodes":graph.graph().node_count(),
+        "records":graph.corpus().record_store().len(),
+        "status":"valid"
+    }))
 }
 
 fn validate_graph_retrieval_database(
@@ -100,10 +110,9 @@ fn validate_graph_retrieval_database(
         || !database.retrieval().retrieval().has_bm25()
         || stats.records != validated.records.len()
         || stats.nodes != expected_nodes
-        || stats.edges != 26
         || stats.diagnostics != 0
         || database.graph().node_count() != expected_nodes
-        || database.graph().edge_count() != 26
+        || database.graph().edge_count() != stats.edges
     {
         return Err(format!(
             "V3 graph retrieval adapter: combined database shape/configuration mismatch: corpus records/chunks {}/{}, stats {stats:?}",
@@ -131,10 +140,9 @@ fn validate_graph_database(
         || database.corpus().generation().get() != validated.records.len() as u64
         || stats.records != validated.records.len()
         || stats.nodes != expected_nodes
-        || stats.edges != 26
         || stats.diagnostics != 0
         || database.graph().node_count() != expected_nodes
-        || database.graph().edge_count() != 26
+        || database.graph().edge_count() != stats.edges
     {
         return Err(format!(
             "V3 graph adapter: graph shape mismatch: corpus records/chunks {}/{}, stats {stats:?}",

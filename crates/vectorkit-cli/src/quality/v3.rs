@@ -350,6 +350,52 @@ pub(super) fn d_generation_fingerprint(
     Ok((preimage, fingerprint))
 }
 
+pub(super) fn retrieval_generation_fingerprint(
+    validated: &ValidatedCollection,
+    letter: &str,
+) -> Result<(Value, String), String> {
+    let (encoding, uses_bm25, uses_quantization) = match letter {
+        "e" => ("f32", false, false),
+        "f" => ("i8", false, true),
+        "g" => ("i8", true, true),
+        actual => {
+            return Err(format!(
+                "retrieval generation fingerprint requires E, F, or G, actual '{actual}'"
+            ));
+        }
+    };
+    let normalization_hash = sha256(canonical_json(&normalization_policy())?.as_bytes());
+    let quantization_hash = sha256(canonical_json(&quantization_policy())?.as_bytes());
+    let bm25_hash = sha256(canonical_json(&bm25_policy())?.as_bytes());
+    let retrieval_preimage = json!({
+        "bm25_policy_sha256":if uses_bm25 { json!(bm25_hash) } else { Value::Null },
+        "files":[
+            {"path":"corpus-embeddings.f32.jsonl","sha256":sha256(&validated.bytes["corpus-embeddings.f32.jsonl"])},
+            {"path":"manifests/embedding.json","sha256":sha256(&validated.bytes["manifests/embedding.json"])}
+        ],
+        "metric":"cosine",
+        "normalization":"unit_l2",
+        "normalization_policy_sha256":normalization_hash,
+        "quantization_policy_sha256":if uses_quantization { json!(quantization_hash) } else { Value::Null },
+        "vector_encoding":encoding
+    });
+    let preimage = json!({
+        "corpus_id":validated.collection.corpus_id,
+        "corpus_state_sha256":file_array_hash(
+            validated,
+            &["manifests/chunking.json", "manifests/preprocessing.json", "records.jsonl"],
+        )?,
+        "graph_state_sha256":file_array_hash(
+            validated,
+            &["graph-schema.json", "manifests/graph-construction.json"],
+        )?,
+        "retrieval_state_sha256":sha256(canonical_json(&retrieval_preimage)?.as_bytes()),
+        "schema_version":1
+    });
+    let fingerprint = sha256(canonical_json(&preimage)?.as_bytes());
+    Ok((preimage, fingerprint))
+}
+
 fn file_array_hash(validated: &ValidatedCollection, paths: &[&str]) -> Result<String, String> {
     let mut values = paths
         .iter()

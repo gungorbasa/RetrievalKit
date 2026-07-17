@@ -582,13 +582,17 @@ pub(super) fn emit_qualification(
         })?;
     }
     super::v3_graph_execution::emit_graph_qualification(validated, staged_output)?;
+    super::v3_graph_retrieval_execution::emit_graph_retrieval_qualification(
+        validated,
+        staged_output,
+    )?;
     write_canonical_json(
         &staged_output.join("qualification.json"),
         &json!({
-            "artifact_schema":"phase-1.2b-qualification-v1",
+            "artifact_schema":"phase-1.2c-semantic-qualification-v1",
             "collection_id":validated.collection.collection_id,
             "collection_version":validated.collection.collection_version,
-            "included_run_letters":["a","b","c","d"],
+            "included_run_letters":["a","b","c","d","e","f"],
             "partial":true,
             "publication_ready":false,
             "status":"qualification_only_no_final_manifest"
@@ -937,13 +941,24 @@ mod tests {
         );
         assert!(output.join("rust-results.json").is_file());
         assert!(output.join("metrics.json").is_file());
+        assert!(output.join("graph-retrieval-rust-results.json").is_file());
+        assert!(output
+            .join("graph-retrieval-generation-fingerprints.json")
+            .is_file());
+        assert!(output
+            .join("graph-retrieval-selection-path-equality.json")
+            .is_file());
         assert!(output.join("qualification.json").is_file());
         assert!(!output.join("manifest.json").exists());
         let marker: Value =
             serde_json::from_slice(&fs::read(output.join("qualification.json")).unwrap()).unwrap();
         assert_eq!(marker["partial"], true);
         assert_eq!(marker["publication_ready"], false);
-        assert_eq!(fs::read_dir(output.join("runs")).unwrap().count(), 3);
+        assert_eq!(fs::read_dir(output.join("runs")).unwrap().count(), 9);
+        assert_eq!(
+            marker["included_run_letters"],
+            json!(["a", "b", "c", "d", "e", "f"])
+        );
     }
 
     #[test]

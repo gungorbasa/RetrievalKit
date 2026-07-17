@@ -569,8 +569,17 @@ fn validate_native_hits(
             || (left_score == right_score && left_identity >= right_identity)
         {
             return Err(format!(
-                "V3 Phase 1.2a contract_violation in run '{}' query '{}': native ordering or stable tie-break mismatch",
-                run.run_id, query_id
+                "V3 Phase 1.2a contract_violation in run '{}' query '{}': native ordering or stable tie-break mismatch: left={:?}/{:?} score={:?} bits={:08x}, right={:?}/{:?} score={:?} bits={:08x}",
+                run.run_id,
+                query_id,
+                pair[0].record_id,
+                pair[0].chunk_key,
+                left_score,
+                left_score.to_bits(),
+                pair[1].record_id,
+                pair[1].chunk_key,
+                right_score,
+                right_score.to_bits()
             ));
         }
     }

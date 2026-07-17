@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0 and 1 complete, Phase 2 active, Phase 2a complete
+Status: active; Phases 0, 1, and 2 complete; Phase 3 inactive
 
 Date: 2026-07-17
 
@@ -393,9 +393,10 @@ The qualification-only A-G artifact remains deterministic and independently
 cross-checked. A separate clean release-context pipeline now verifies pinned
 `ir_measures` and official NIST `trec_eval`, validates the closed V3 schemas,
 and atomically publishes the exact 44-file public layout. Two fresh emissions
-are byte-identical. Phase 2 is now active only for the selected public adapter;
-Phase 2a selection and contract work is complete, while implementation remains
-pending.
+are byte-identical. Phase 2 is complete: the selected HotpotQA adapter was
+built twice, independently validated, production-ingested, compared
+byte-for-byte, and atomically published under ignored local output. Phase 3
+remains inactive.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -458,11 +459,15 @@ public quality, performance, device, or marketing claim.
 
 ### Phase 2: Build The First Public Graph Collection Adapter
 
-Status: active. Phase 2a selected HotpotQA and froze adapter contract V1 on
-2026-07-17. The adapter implementation and clean-machine artifact gate remain
-pending. The exact next task is to implement the selected HotpotQA adapter from
-the frozen contract. No quality, performance, device, or marketing claim is
-implied.
+Status: complete on 2026-07-17. Phase 2a selected HotpotQA and froze adapter
+contract V1. Phase 2b reproduced the pinned 12,670-record linked-abstract
+corpus, 43,737 directed source links, development and locked-reporting
+populations, and frozen MiniLM files. Two fresh complete builds passed an
+independent full-upstream replay and production-backed ingestion, matched
+byte-for-byte, and published atomically. The adapter-manifest SHA-256 is
+`8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6`.
+See `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`. No quality,
+performance, device, or marketing claim is implied.
 
 Deliverables:
 
@@ -481,9 +486,17 @@ Exit gate:
 - a clean machine can reproduce corpus, graph, embeddings, queries, qrels, and
   evidence artifacts from pinned upstream sources
 
+Exit result: PASS. Every input is checksum-pinned, both closed V3 roots pass
+independent and production-backed validation, all generated files are covered
+by the adapter manifest, and the complete rerun is byte-identical. Raw inputs
+and generated outputs remain untracked under ignored `target/` storage.
+
 ### Phase 3: Run The Quality Ablation
 
-Status: inactive until the Phase 2 adapter implementation passes its exit gate.
+Status: inactive. The Phase 2 exit gate has passed; the exact next task is to
+run the A-G quality ablation, select configuration using development data only,
+freeze it, and then evaluate the locked reporting split without per-query
+tuning or qrels leakage.
 
 Deliverables:
 

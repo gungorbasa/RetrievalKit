@@ -130,6 +130,37 @@ Generation uses the local converted
 judgments independently from search output. Do not make the expected results
 match whichever ranking the current implementation happens to produce.
 
+## HotpotQA public graph adapter
+
+Benchmark roadmap Phase 2 is complete. The frozen HotpotQA linked-abstract
+adapter emits separate development and locked test V3 roots under ignored
+`target/` storage. It does not commit or redistribute upstream data or generated
+collections.
+
+After acquiring the pinned sources through the documented CC BY-SA 4.0
+acceptance workflow and preparing the frozen local MiniLM model, run the full
+two-build qualification:
+
+```bash
+target/benchmarks/public-collections/inspection-venv/bin/python \
+  scripts/quality/build_hotpotqa_graph_collection.py \
+  --cache-dir target/benchmarks/public-collections \
+  --abstracts-dir target/benchmarks/public-collections/sources/hotpotqa-abstracts \
+  --model-dir target/embedding-models/all-MiniLM-L6-v2 \
+  --output target/benchmarks/public-collections/hotpotqa-linked-abstracts-graph-v1 \
+  --repeat-and-compare
+```
+
+The command verifies every source/model checksum, builds and embeds 12,670
+records, independently replays the full upstream seed resolution, validates
+both roots through production-backed corpus/graph ingestion, compares every
+file byte-for-byte, and atomically publishes only a complete root. The
+qualified adapter-manifest SHA-256 is
+`8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6`.
+See
+`docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`
+for complete identities, counts, hashes, and phase-boundary checks.
+
 ## External collections
 
 Schema version 2 evaluation collections keep the manifest, document JSONL,

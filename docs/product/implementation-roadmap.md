@@ -44,13 +44,19 @@ The Phase 1.2c completeness pass additionally serializes all six canonical
 invalid-execution reasons with query/run attribution, reports each Phase 1.2
 slice explicitly in the CLI, and enforces the exact 56-file qualification
 inventory. Repeated valid and invalid outputs are byte-identical; the valid
-artifact hash is unchanged. Benchmark Phase 2 is active: Phase 2a selected
+artifact hash is unchanged. Benchmark Phase 2 is complete. Phase 2a selected
 HotpotQA distractor train/dev over the official linked-abstract corpus and
-froze `docs/product/public-graph-collection-adapter-contract-v1.md`. The adapter
-implementation remains pending and Phase 3 remains inactive. The exact next
-benchmark task is to implement the selected HotpotQA adapter from that frozen
-contract. No public quality, performance, device, or marketing claim has been
-authorized.
+froze `docs/product/public-graph-collection-adapter-contract-v1.md`. Phase 2b
+built the 12,670-record adapter twice from pinned inputs, independently replayed
+the upstream seed resolution, validated production-backed ingestion, proved
+all generated files byte-identical, and atomically published adapter manifest
+SHA-256
+`8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6`.
+See `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`. Phase 3
+remains inactive. The exact next benchmark task is the A-G quality ablation,
+with configuration selected on development data before the locked reporting
+split is run. No public quality, performance, device, or marketing claim has
+been authorized.
 
 ## Priority Summary
 

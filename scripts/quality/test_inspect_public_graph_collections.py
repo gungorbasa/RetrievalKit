@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import inspect
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from scripts.quality import inspect_public_graph_collections as probe
 
@@ -81,6 +85,52 @@ class PublicGraphCollectionProbeTests(unittest.TestCase):
 
         rows = list(probe.iter_json_array(io.BytesIO(b'[ {"a":1}, {"a":2} ]'), 3))
         self.assertEqual(rows, [{"a": 1}, {"a": 2}])
+
+    def test_hotpot_download_requires_and_preserves_license_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            with self.assertRaisesRegex(
+                probe.InspectionError, "requires explicit CC BY-SA 4.0 acceptance"
+            ):
+                probe.require_hotpot_license_acceptance(
+                    cache, interactive=False
+                )
+            marker = probe.require_hotpot_license_acceptance(
+                cache, accepted=True, interactive=False
+            )
+            self.assertEqual(
+                marker.read_bytes(), probe.hotpot_license_acceptance_bytes()
+            )
+            self.assertEqual(
+                probe.require_hotpot_license_acceptance(cache, interactive=False),
+                marker,
+            )
+
+    def test_hotpot_rejects_tampered_license_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            marker = probe.require_hotpot_license_acceptance(
+                cache, accepted=True, interactive=False
+            )
+            marker.write_bytes(b"{}\n")
+            with self.assertRaisesRegex(
+                probe.InspectionError, "invalid HotpotQA license acceptance record"
+            ):
+                probe.require_hotpot_license_acceptance(cache, interactive=False)
+
+    def test_hotpot_license_acceptance_flag_has_stable_destination(self) -> None:
+        with mock.patch.object(
+            sys,
+            "argv",
+            [
+                "inspect_public_graph_collections.py",
+                "verify-sources",
+                "--download",
+                "--accept-hotpotqa-cc-by-sa-4.0",
+            ],
+        ):
+            args = probe.parse_args()
+        self.assertTrue(args.accept_hotpotqa_cc_by_sa_4_0)
 
 
 if __name__ == "__main__":

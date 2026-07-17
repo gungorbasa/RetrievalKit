@@ -143,6 +143,11 @@ two-build qualification:
 
 ```bash
 target/benchmarks/public-collections/inspection-venv/bin/python \
+  scripts/quality/inspect_public_graph_collections.py \
+  --cache-dir target/benchmarks/public-collections \
+  verify-sources --download --accept-hotpotqa-cc-by-sa-4.0
+
+target/benchmarks/public-collections/inspection-venv/bin/python \
   scripts/quality/build_hotpotqa_graph_collection.py \
   --cache-dir target/benchmarks/public-collections \
   --abstracts-dir target/benchmarks/public-collections/sources/hotpotqa-abstracts \

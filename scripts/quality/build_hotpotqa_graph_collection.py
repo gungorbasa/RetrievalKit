@@ -32,6 +32,13 @@ from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE = ROOT / "target/benchmarks/public-collections"
 SAMPLE_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
+HOTPOT_LICENSE_ID = "CC-BY-SA-4.0"
+HOTPOT_NOTICE_SHA256 = (
+    "7faee46f984d08420a5224019a63510956e950159996db04c4d602e2dcaaa5c4"
+)
+HOTPOT_ACCEPTANCE_RELATIVE_PATH = Path(
+    "license-acceptance/hotpotqa-cc-by-sa-4.0-v1.json"
+)
 TRAIN_SPLIT = "train"
 DEV_SPLIT = "dev_distractor"
 TRAIN_LIMIT = 2_000
@@ -279,6 +286,22 @@ def verify_artifact(path: Path, artifact: Artifact) -> None:
 
 
 def verify_source_artifacts(cache_dir: Path) -> tuple[Path, ...]:
+    acceptance = cache_dir / HOTPOT_ACCEPTANCE_RELATIVE_PATH
+    expected_acceptance = canonical_bytes(
+        {
+            "accepted": True,
+            "license_id": HOTPOT_LICENSE_ID,
+            "notice_sha256": HOTPOT_NOTICE_SHA256,
+            "schema_version": 1,
+        },
+        final_lf=True,
+    )
+    if not acceptance.is_file() or acceptance.read_bytes() != expected_acceptance:
+        raise AdapterError(
+            "missing or invalid HotpotQA CC BY-SA 4.0 acceptance record; run "
+            "inspect_public_graph_collections.py verify-sources --download "
+            "--accept-hotpotqa-cc-by-sa-4.0 before building"
+        )
     downloads = cache_dir / "downloads"
     paths = tuple(downloads / artifact.filename for artifact in ARTIFACTS)
     for path, artifact in zip(paths, ARTIFACTS, strict=True):

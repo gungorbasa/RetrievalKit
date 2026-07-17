@@ -60,6 +60,13 @@ class GoldTrap(Mapping[str, Any]):
 
 
 class HotpotSourceCorpusTests(unittest.TestCase):
+    def test_source_verification_requires_license_acceptance_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(
+                hotpot.AdapterError, "missing or invalid HotpotQA CC BY-SA 4.0"
+            ):
+                hotpot.verify_source_artifacts(Path(temporary))
+
     def test_source_parser_cannot_reach_judgments(self) -> None:
         parsed = hotpot.parse_source_query(GoldTrap(), "train")
         self.assertEqual(parsed.upstream_id, "q1")

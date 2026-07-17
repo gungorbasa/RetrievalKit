@@ -6,6 +6,19 @@ Scope: benchmark roadmap Phase 2 only
 
 ## Qualified command
 
+Before first source download, explicit license acceptance was recorded and all
+six pinned public-source artifacts were verified with:
+
+```sh
+target/benchmarks/public-collections/inspection-venv/bin/python \
+  scripts/quality/inspect_public_graph_collections.py \
+  --cache-dir target/benchmarks/public-collections \
+  verify-sources --download --accept-hotpotqa-cc-by-sa-4.0
+```
+
+The acceptance record is checksum-pinned and required by both the builder and
+independent validator. A missing or modified record fails closed.
+
 The adapter was built twice from pinned inputs, independently validated after
 each build, compared recursively byte-for-byte, and atomically published with:
 

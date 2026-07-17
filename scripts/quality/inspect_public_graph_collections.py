@@ -24,7 +24,7 @@ import zipfile
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Iterator, Mapping, Sequence
+from typing import Any, BinaryIO, Callable, Iterable, Iterator, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +33,13 @@ HOTPOT_SELECTION_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
 HOTPOT_TRAIN_LIMIT = 2_000
 HOTPOT_REPORTING_LIMIT = 1_000
 HOTPOT_NEIGHBOR_LIMIT = 15
+HOTPOT_LICENSE_ID = "CC-BY-SA-4.0"
+HOTPOT_NOTICE_SHA256 = (
+    "7faee46f984d08420a5224019a63510956e950159996db04c4d602e2dcaaa5c4"
+)
+HOTPOT_ACCEPTANCE_RELATIVE_PATH = Path(
+    "license-acceptance/hotpotqa-cc-by-sa-4.0-v1.json"
+)
 MAX_CORPUS_RECORDS = (HOTPOT_TRAIN_LIMIT + HOTPOT_REPORTING_LIMIT) * (
     HOTPOT_NEIGHBOR_LIMIT + 1
 )
@@ -286,6 +293,57 @@ def canonical_bytes(value: object) -> bytes:
 
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def hotpot_license_acceptance_bytes() -> bytes:
+    return canonical_bytes(
+        {
+            "accepted": True,
+            "license_id": HOTPOT_LICENSE_ID,
+            "notice_sha256": HOTPOT_NOTICE_SHA256,
+            "schema_version": 1,
+        }
+    ) + b"\n"
+
+
+def require_hotpot_license_acceptance(
+    cache_dir: Path,
+    *,
+    accepted: bool = False,
+    interactive: bool | None = None,
+    input_fn: Callable[[str], str] = input,
+) -> Path:
+    marker = cache_dir / HOTPOT_ACCEPTANCE_RELATIVE_PATH
+    expected = hotpot_license_acceptance_bytes()
+    if marker.is_file():
+        if marker.read_bytes() != expected:
+            raise InspectionError(f"invalid HotpotQA license acceptance record: {marker}")
+        return marker
+    if interactive is None:
+        interactive = sys.stdin.isatty()
+    if not accepted:
+        if not interactive:
+            raise InspectionError(
+                "HotpotQA source access requires explicit CC BY-SA 4.0 acceptance; "
+                "rerun verify-sources with --accept-hotpotqa-cc-by-sa-4.0"
+            )
+        print(
+            "HotpotQA questions and linked Wikipedia abstracts are used under "
+            "CC BY-SA 4.0. Attribution to the HotpotQA authors and Wikipedia "
+            "contributors, identification of adaptations, and ShareAlike are required. "
+            "See https://creativecommons.org/licenses/by-sa/4.0/.",
+            file=sys.stderr,
+        )
+        accepted = input_fn(
+            "Type 'I ACCEPT CC-BY-SA-4.0' to record acceptance before download: "
+        ) == "I ACCEPT CC-BY-SA-4.0"
+    if not accepted:
+        raise InspectionError("HotpotQA CC BY-SA 4.0 license was not accepted")
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    temporary = marker.with_suffix(marker.suffix + ".tmp")
+    temporary.write_bytes(expected)
+    temporary.replace(marker)
+    return marker
 
 
 def file_digest(path: Path, algorithm: str = "sha256") -> str:
@@ -1015,6 +1073,11 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     verify = subparsers.add_parser("verify-sources")
     verify.add_argument("--download", action="store_true")
+    verify.add_argument(
+        "--accept-hotpotqa-cc-by-sa-4.0",
+        action="store_true",
+        dest="accept_hotpotqa_cc_by_sa_4_0",
+    )
     hotpot = subparsers.add_parser("inspect-hotpotqa")
     hotpot.add_argument("--abstracts-dir", type=Path, required=True)
     hotpot.add_argument("--output", type=Path, required=True)
@@ -1028,6 +1091,10 @@ def main() -> None:
     args = parse_args()
     downloads = args.cache_dir / "downloads"
     if args.command == "verify-sources":
+        require_hotpot_license_acceptance(
+            args.cache_dir,
+            accepted=args.accept_hotpotqa_cc_by_sa_4_0,
+        )
         artifacts = HOTPOT_ARTIFACTS + TWOWIKI_ARTIFACTS
         for artifact in artifacts:
             if args.download:

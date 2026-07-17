@@ -115,6 +115,9 @@ QUESTION_FIELDS = {
     "type",
 }
 SAMPLE_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
+HOTPOT_ACCEPTANCE_RELATIVE_PATH = Path(
+    "license-acceptance/hotpotqa-cc-by-sa-4.0-v1.json"
+)
 FLOAT_TOKEN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e-?[0-9]+)?$")
 
 
@@ -578,6 +581,23 @@ def verify_builder_isolation(builder: Path) -> None:
 
 
 def validate_sources(cache_dir: Path, model_dir: Path, source_inventory: Mapping[str, Any]) -> None:
+    acceptance_path = cache_dir / HOTPOT_ACCEPTANCE_RELATIVE_PATH
+    expected_acceptance = canonical(
+        {
+            "accepted": True,
+            "license_id": "CC-BY-SA-4.0",
+            "notice_sha256": (
+                "7faee46f984d08420a5224019a63510956e950159996db04c4d602e2dcaaa5c4"
+            ),
+            "schema_version": 1,
+        },
+        final_lf=True,
+    )
+    if (
+        not acceptance_path.is_file()
+        or acceptance_path.read_bytes() != expected_acceptance
+    ):
+        raise ValidationError("license and attribution acceptance record mismatch")
     downloads = cache_dir / "downloads"
     for filename, (size, digest) in SOURCE_FILES.items():
         verify_source_file(downloads / filename, size, digest)

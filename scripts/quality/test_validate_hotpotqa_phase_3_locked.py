@@ -35,6 +35,20 @@ class LockedValidatorNegativeTests(unittest.TestCase):
             b'{"fusion_score":0.00006289711745921522}',
         )
 
+    def test_metric_value_accepts_query_and_macro_wrappers(self) -> None:
+        self.assertEqual(
+            validator.metric_value({"status": "valid", "value": 0.5}), 0.5
+        )
+        self.assertEqual(
+            validator.metric_value(
+                {"denominator": 2, "status_counts": {"valid": 2}, "value": 0.5}
+            ),
+            0.5,
+        )
+        self.assertIsNone(
+            validator.metric_value({"status": "not_applicable", "value": None})
+        )
+
     def test_qrels_opened_during_stage_a(self) -> None:
         audit = self.stage_a()
         audit["opened_collection_files"].append("qrels.tsv")

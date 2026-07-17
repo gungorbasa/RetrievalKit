@@ -242,7 +242,10 @@ def calculate_metrics(documents: list[str], qrels: dict[str, int]) -> dict[str, 
 
 def metric_value(value: Any) -> float | None:
     if isinstance(value, dict):
-        return value.get("value") if value.get("status") == "valid" else None
+        if "status" in value and value["status"] != "valid":
+            return None
+        nested = value.get("value")
+        return float(nested) if nested is not None else None
     return float(value)
 
 

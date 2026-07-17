@@ -30,14 +30,20 @@ implemented, or superseded by the product spec.
   qualifies production-backed whole-corpus A-C (F32 semantic, I8 semantic, and
   I8 weighted hybrid), exhaustive document projection, metrics, save/load
   equivalence, byte-identical partial artifacts, and independent Python
-  rankings/TREC/metrics. Phase 1.2b Run D now qualifies explicit/topic/team
+  rankings/TREC/metrics. Phase 1.2b Run D qualifies explicit/topic/team
   graph selection through production `GraphDatabase`, corpus-owned candidate
   filtering and stable identity materialization, Rust/FFI/Swift projection
   parity, save/validate/load equality, stale-selection rejection, byte-stable
   partial artifacts, and exact independent Python agreement for 7 selections
-  and 14 paths. Keep Phase 1 active: graph-scoped E-G and the A-C external
-  publication validator remain open, so no full V3 manifest or graph-retrieval
-  claim is complete.
+  and 14 paths. Phase 1.2c now qualifies all nine E-G runs through production
+  `GraphRetrievalDatabase`, 15 valid executions and six exclusions, D-equivalent
+  selections/paths, paired A-E/B-F/C-G metrics, combined persistence and stale
+  selection rejection, independent Python reconstruction, pinned
+  `ir_measures`, and two byte-identical 56-file artifact sets. Phase 1.2c is
+  complete. Keep overall Phase 1 active: official `trec_eval` and final public
+  manifest assembly remain open, so no public graph-retrieval claim is
+  complete. See
+  `docs/product/reports/graph-retrieval-phase-1-graph-scoped-retrieval-report.md`.
 
 ## Active Product Constraints
 

@@ -382,10 +382,12 @@ Exit gate:
 ### Phase 1: Add Graph-Aware Evaluation Artifacts
 
 Status: active from 2026-07-16. Phase 1.1 conformance, Phase 1.2a
-production-backed whole-corpus A-C retrieval, and Phase 1.2b production graph
-selection D are complete. Graph-scoped retrieval E-G is the next Phase 1 work;
-the full A-G artifact and Phase 1 exit gate are not complete. Phase 2 remains
-inactive.
+production-backed whole-corpus A-C retrieval, Phase 1.2b production graph
+selection D, and Phase 1.2c production graph-scoped E-G retrieval are complete.
+The qualification-only A-G artifact is deterministic and independently
+cross-checked, including pinned `ir_measures`. Official `trec_eval` and final
+public-manifest assembly remain open, so the Phase 1 exit gate is not complete.
+Phase 2 remains inactive.
 
 First implementation task (complete): add the checked-in V3 conformance fixture
 and its schema, population-hash, canonical-serialization, and byte-rerun
@@ -397,6 +399,14 @@ persistence equivalence and stale-selection rejection, emit deterministic
 partial artifacts, and obtain exact agreement from an independent Python graph
 oracle. See
 `docs/product/reports/graph-retrieval-phase-1-graph-selection-report.md`.
+
+Third implementation slice (complete): execute nine E-G runs through their own
+production combined databases, prove D-equivalent selection/path logic,
+calculate retrieval/evidence/graph metrics and all nine A-E/B-F/C-G
+comparisons, prove save/validate/load and stale-selection behavior, reproduce
+the results with an independent Python oracle and pinned `ir_measures`, and
+emit two byte-identical 56-file canonical qualification sets. See
+`docs/product/reports/graph-retrieval-phase-1-graph-scoped-retrieval-report.md`.
 
 Extend evaluation-only tooling; do not add benchmark concerns to production
 Rust APIs or wrappers.

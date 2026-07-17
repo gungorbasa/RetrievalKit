@@ -53,8 +53,15 @@ implemented, or superseded by the product spec.
   section 4.7 logical-run portability. See
   `docs/product/reports/graph-retrieval-phase-1-publication-report.md`. No public
   graph-retrieval quality, performance, device, or marketing claim is complete.
-  The next exact benchmark task is Phase 2: document the HotpotQA versus
-  2WikiMultiHopQA choice and build the first public graph collection adapter.
+  Benchmark Phase 2 is active. Phase 2a selected HotpotQA distractor train V1.1
+  and publicly judged distractor dev V1 over the January 14, 2019
+  linked-abstract corpus; the exact source, label-blind corpus, graph, query,
+  seed, MiniLM, manifest, and validation rules are frozen in
+  `docs/product/public-graph-collection-adapter-contract-v1.md`. 2Wiki is
+  deferred because its dataset-content license is unstated and its Dropbox
+  artifacts are mutable without publisher checksums. Adapter implementation is
+  pending and Phase 3 remains inactive. The next exact benchmark task is to
+  implement the selected HotpotQA adapter from the frozen contract.
 
 ## Active Product Constraints
 

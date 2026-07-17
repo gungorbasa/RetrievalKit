@@ -1,8 +1,8 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0 and 1 complete, Phase 2 not started
+Status: active; Phases 0 and 1 complete, Phase 2 active, Phase 2a complete
 
-Date: 2026-07-15
+Date: 2026-07-17
 
 ## Purpose
 
@@ -161,16 +161,21 @@ without labeling the result as end-to-end.
 
 ### Canonical graph-quality collection
 
-The first public graph-quality adapter should evaluate either HotpotQA or
-2WikiMultiHopQA. Prefer the collection that can be adapted without gold-label
-leakage and with the clearest license and deterministic source artifacts.
+The first public graph-quality adapter is HotpotQA distractor train V1.1 and
+publicly judged distractor dev V1 over the January 14, 2019 linked-abstract
+corpus. The evidence-based selection and frozen implementation contract are:
+
+- `docs/product/public-graph-collection-selection.md`
+- `docs/product/public-graph-collection-adapter-contract-v1.md`
 
 - HotpotQA provides natural multi-hop questions and human-created supporting
   facts. It is distributed under CC BY-SA 4.0.
   Source: https://hotpotqa.github.io/
 - 2WikiMultiHopQA combines structured and unstructured sources and provides
-  evidence describing reasoning paths.
-  Source: https://arxiv.org/abs/2011.01060
+  evidence describing reasoning paths, but is deferred because the official
+  repository does not state a dataset-content license and its mutable Dropbox
+  objects have no publisher-provided checksums or versioned release assets.
+  Source: https://aclanthology.org/2020.coling-main.580/
 
 The V1 product supports fewer than 50K chunks, so a public adapter must create a
 fixed, globally shared collection within that envelope. It must not construct a
@@ -388,7 +393,9 @@ The qualification-only A-G artifact remains deterministic and independently
 cross-checked. A separate clean release-context pipeline now verifies pinned
 `ir_measures` and official NIST `trec_eval`, validates the closed V3 schemas,
 and atomically publishes the exact 44-file public layout. Two fresh emissions
-are byte-identical. Phase 2 remains inactive.
+are byte-identical. Phase 2 is now active only for the selected public adapter;
+Phase 2a selection and contract work is complete, while implementation remains
+pending.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -451,6 +458,12 @@ public quality, performance, device, or marketing claim.
 
 ### Phase 2: Build The First Public Graph Collection Adapter
 
+Status: active. Phase 2a selected HotpotQA and froze adapter contract V1 on
+2026-07-17. The adapter implementation and clean-machine artifact gate remain
+pending. The exact next task is to implement the selected HotpotQA adapter from
+the frozen contract. No quality, performance, device, or marketing claim is
+implied.
+
 Deliverables:
 
 - documented selection between HotpotQA and 2WikiMultiHopQA
@@ -469,6 +482,8 @@ Exit gate:
   evidence artifacts from pinned upstream sources
 
 ### Phase 3: Run The Quality Ablation
+
+Status: inactive until the Phase 2 adapter implementation passes its exit gate.
 
 Deliverables:
 

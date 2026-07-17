@@ -44,10 +44,13 @@ The Phase 1.2c completeness pass additionally serializes all six canonical
 invalid-execution reasons with query/run attribution, reports each Phase 1.2
 slice explicitly in the CLI, and enforces the exact 56-file qualification
 inventory. Repeated valid and invalid outputs are byte-identical; the valid
-artifact hash is unchanged. The exact next benchmark task is Phase 2's
-documented selection between HotpotQA and 2WikiMultiHopQA and construction of
-the first public graph collection adapter. No public quality, performance,
-device, or marketing claim has been authorized.
+artifact hash is unchanged. Benchmark Phase 2 is active: Phase 2a selected
+HotpotQA distractor train/dev over the official linked-abstract corpus and
+froze `docs/product/public-graph-collection-adapter-contract-v1.md`. The adapter
+implementation remains pending and Phase 3 remains inactive. The exact next
+benchmark task is to implement the selected HotpotQA adapter from that frozen
+contract. No public quality, performance, device, or marketing claim has been
+authorized.
 
 ## Priority Summary
 

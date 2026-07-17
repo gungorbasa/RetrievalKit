@@ -6,6 +6,10 @@ Status: PASS for Phase 1.2c qualification. Overall graph-aware evaluation
 Phase 1 remains active because official `trec_eval` and final public artifact
 assembly are open.
 
+The 2026-07-17 completeness closure added canonical invalid-execution
+serialization, accurate CLI qualification status, and an exact 56-file
+inventory gate without changing the frozen valid artifact bytes.
+
 ## Scope and commits
 
 Work started from clean branch `codex/graph-m1-core-foundation` at
@@ -25,6 +29,14 @@ Commits:
 8. `Document V3 graph retrieval qualification` — this report's commit; its
    object ID is recorded in the final handoff because a commit cannot embed its
    own content-derived Git object ID.
+
+Completeness-closure commits:
+
+1. `0b4c1a1` — `Serialize V3 invalid execution outcomes`
+2. `5cf0da7` — `Report complete V3 qualification status`
+3. `2a26fbc` — `Require complete V3 artifact inventories`
+4. `Document complete V3 qualification behavior` — this report update's
+   commit; its object ID is recorded in the final handoff.
 
 Each E-G run owns a production `GraphRetrievalDatabase`. Seed resolution,
 traversal, generation-bound selection, projection, production metadata
@@ -214,13 +226,40 @@ and remains a publication gate.
 Two fresh complete emissions were recursively byte-identical after adding both
 cross-check reports and the canonical index:
 
-- `target/benchmarks/v3/phase-1.2c-final-a`
-- `target/benchmarks/v3/phase-1.2c-final-b`
+- `target/benchmarks/v3/phase-1.2c-completeness-a`
+- `target/benchmarks/v3/phase-1.2c-completeness-b`
 
 Each index covers 56 files. Artifact-set SHA-256:
 `ee264e919ab5872fd400354f5aa332993fd55fdedcaab400e6f5ba41619f631c`.
 The marker remains partial/non-publication-ready, no final manifest was emitted,
 and ignored target artifacts were not committed.
+
+## Invalid-execution and inventory completeness
+
+Evaluation-only deterministic fault injection exercised all contract reasons.
+`contract_violation` was checked both query-locally and run-wide. The shared
+reasons `generation_mismatch`, `stale_selection`, `persistence_mismatch`,
+`reload_mismatch`, and `non_deterministic_ranking` invalidated every attempted
+row only in the affected run. A simultaneous D-team failure proved the exact
+precedence order by retaining `generation_mismatch`; run-wide attribution
+overrode local attribution. Topic-lane `derived_seed_no_match` and
+`derived_seed_ambiguous` rows remained `excluded_pre_freeze`.
+
+For invalid rows, Rust results contain empty hit and document arrays, zero
+duplicate collapses, and the canonical reason. Metrics use null
+`invalid_execution` values and exclude them from macro and micro aggregation.
+TREC, selection, path, projection, equality, persistence, paired-comparison,
+and qualification diagnostics are rebuilt from final statuses. No partial row
+survives, unrelated runs remain valid, and two repeated invalid emissions are
+byte-identical. The successful A-G fixture remains byte-identical to the
+pre-closure qualification.
+
+The finalizer now accepts exactly the frozen 56-file preimage: 12 A-C/E-G TREC
+runs, 12 D-G selection files, 12 D-G path files, and 20 required root
+artifacts. Missing, unexpected, incorrectly named, modified, and stale-index
+cases are rejected. The hash index remains outside its own preimage, and the
+valid artifact-set SHA-256 remains
+`ee264e919ab5872fd400354f5aa332993fd55fdedcaab400e6f5ba41619f631c`.
 
 ## Verification and conclusion
 
@@ -230,12 +269,12 @@ Passed checks:
 - core: 129 unit + 10 M1 integration tests
 - graph: 30 tests across all suites
 - FFI: 15 base and 19 graph-feature tests
-- CLI: 67 tests
+- CLI: 72 tests
 - warning-denying Clippy for core, graph, FFI base/graph, and CLI
 - Swift base/graph linkage, suites, cross-wrapper fixture, and quickstarts
 - Phase 1.1 foundation conformance/rerun; Phase 1.2a A-C; Phase 1.2b D;
   Phase 1.2c E-G, independent Python, `ir_measures`, and hash index
-- nine Python unit tests, `py_compile`, Ruff, `git diff --check`, and frozen
+- 14 Python unit tests, `py_compile`, Ruff, `git diff --check`, and frozen
   fixture `git diff --exit-code`
 
 Phase 1.2c is complete. Overall evaluation Phase 1 stays active until official

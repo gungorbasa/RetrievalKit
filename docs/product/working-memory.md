@@ -40,7 +40,14 @@ implemented, or superseded by the product spec.
   selections/paths, paired A-E/B-F/C-G metrics, combined persistence and stale
   selection rejection, independent Python reconstruction, pinned
   `ir_measures`, and two byte-identical 56-file artifact sets. Phase 1.2c is
-  complete. Keep overall Phase 1 active: official `trec_eval` and final public
+  complete. Its integration-review closure now handles query-local and
+  run-wide invalid executions canonically for all six reasons, rebuilds every
+  status-derived artifact, reports 1.2a/1.2b/1.2c and publication state
+  accurately in the CLI, and rejects any inventory other than the exact
+  56-file preimage. Repeated invalid outputs are byte-identical and the valid
+  artifact-set SHA-256 remains
+  `ee264e919ab5872fd400354f5aa332993fd55fdedcaab400e6f5ba41619f631c`.
+  Keep overall Phase 1 active: official `trec_eval` and final public
   manifest assembly remain open, so no public graph-retrieval claim is
   complete. See
   `docs/product/reports/graph-retrieval-phase-1-graph-scoped-retrieval-report.md`.

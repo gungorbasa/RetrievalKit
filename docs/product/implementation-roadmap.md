@@ -38,6 +38,12 @@ combined persistence, an independent Python oracle, pinned `ir_measures`, and
 byte-identical canonical artifact sets. Official `trec_eval` and final public
 manifest assembly remain open, so overall Phase 1 has not exited. This is
 separate from the completed core V1 “Phase 1: Corruption Detection” below.
+The Phase 1.2c completeness pass additionally serializes all six canonical
+invalid-execution reasons with query/run attribution, reports each Phase 1.2
+slice explicitly in the CLI, and enforces the exact 56-file qualification
+inventory. Repeated valid and invalid outputs are byte-identical; the valid
+artifact hash is unchanged. The next benchmark task is still official
+`trec_eval` plus final public-manifest assembly, not Phase 2 or marketing.
 
 ## Priority Summary
 

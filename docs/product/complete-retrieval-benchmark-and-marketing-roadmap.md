@@ -389,6 +389,14 @@ cross-checked, including pinned `ir_measures`. Official `trec_eval` and final
 public-manifest assembly remain open, so the Phase 1 exit gate is not complete.
 Phase 2 remains inactive.
 
+The Phase 1.2c completeness review is also closed. Classified execution
+failures now serialize canonical query-local or run-wide `invalid_execution`
+outcomes and rebuild all affected downstream artifacts without aborting the
+qualification. The CLI reports 1.2a, 1.2b, and 1.2c separately. Artifact
+finalization enforces the exact 56-file preimage and rechecks a stored index;
+the valid frozen bytes and artifact-set SHA-256 are unchanged. These remain
+qualification-only artifacts, not a public result package or marketing basis.
+
 First implementation task (complete): add the checked-in V3 conformance fixture
 and its schema, population-hash, canonical-serialization, and byte-rerun
 validators in evaluation-only tooling.

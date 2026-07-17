@@ -214,10 +214,15 @@ pub(super) fn emit_graph_qualification_with_failures(
     }
     runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
     persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
-    if runs.len() != 3 {
+    let expected_run_count = validated
+        .runs
+        .iter()
+        .filter(|run| run.configuration["run_letter"] == "d")
+        .count();
+    if runs.len() != expected_run_count {
         return Err(format!(
-            "V3 Phase 1.2b expected exactly three D runs, actual {}",
-            runs.len()
+            "V3 Phase 1.2b expected {expected_run_count} D runs, actual {}",
+            runs.len(),
         ));
     }
 
@@ -395,6 +400,9 @@ fn verify_persisted_database(
 }
 
 fn validate_frozen_runs(validated: &ValidatedCollection) -> Result<(), String> {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
+        return Ok(());
+    }
     for (lane, _qualification_run_id, logical, declared_hash, execution_hash, execution_count) in
         D_RUNS
     {

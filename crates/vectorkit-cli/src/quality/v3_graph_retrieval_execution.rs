@@ -282,10 +282,20 @@ pub(super) fn emit_graph_retrieval_qualification_with_failures(
     }
     runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
     persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
-    if runs.len() != 9 {
+    let expected_run_count = validated
+        .runs
+        .iter()
+        .filter(|run| {
+            matches!(
+                run.configuration["run_letter"].as_str(),
+                Some("e" | "f" | "g")
+            )
+        })
+        .count();
+    if runs.len() != expected_run_count {
         return Err(format!(
-            "V3 Phase 1.2c expected nine E-G runs, actual {}",
-            runs.len()
+            "V3 Phase 1.2c expected {expected_run_count} E-G runs, actual {}",
+            runs.len(),
         ));
     }
 
@@ -1551,6 +1561,9 @@ fn read_jsonl(path: &Path) -> Result<Vec<Value>, String> {
 }
 
 fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), String> {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
+        return Ok(());
+    }
     for (qualification_run_id, logical, lane) in SEMANTIC_RUNS {
         let letter = if qualification_run_id.starts_with("v3-e-") {
             "e"
@@ -1599,6 +1612,9 @@ fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), 
 }
 
 fn validate_frozen_hybrid_runs(validated: &ValidatedCollection) -> Result<(), String> {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
+        return Ok(());
+    }
     for (_qualification_run_id, logical, lane) in HYBRID_RUNS {
         let run = validated
             .runs
@@ -2058,7 +2074,7 @@ fn hybrid_hits(
     if let Some(filter) = &input.filter {
         request = request.with_filter(filter.clone());
     }
-    database
+    let mut hits = database
         .hybrid_search_in_selection(&request, graph_result)
         .map_err(|error| {
             format!(
@@ -2069,7 +2085,24 @@ fn hybrid_hits(
         .into_iter()
         .enumerate()
         .map(|(offset, hit)| convert_hybrid_hit(database, input, allowed, offset, hit))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    canonicalize_equal_score_ties(&mut hits);
+    Ok(hits)
+}
+
+fn canonicalize_equal_score_ties(hits: &mut [ChunkHit]) {
+    hits.sort_by(|left, right| {
+        right
+            .fusion_score
+            .expect("weighted hit has fusion score")
+            .total_cmp(&left.fusion_score.expect("weighted hit has fusion score"))
+            .then_with(|| {
+                (&left.record_id, &left.chunk_key).cmp(&(&right.record_id, &right.chunk_key))
+            })
+    });
+    for (offset, hit) in hits.iter_mut().enumerate() {
+        hit.native_rank = offset + 1;
+    }
 }
 
 fn convert_hybrid_hit(

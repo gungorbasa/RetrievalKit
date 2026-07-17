@@ -134,6 +134,177 @@ class HotpotSourceCorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(hotpot.AdapterError, "count/hash mismatch"):
             hotpot.validate_frozen_corpus(corpus, {"records": 2})
 
+    def test_canonical_graph_files_are_closed_and_label_blind(self) -> None:
+        corpus = hotpot.FrozenCorpus(
+            records=(
+                hotpot.CorpusRecord(
+                    "hotpotqa:wiki:1",
+                    "1",
+                    "Alpha",
+                    "Alpha text.",
+                    ("hotpotqa:wiki:2",),
+                ),
+                hotpot.CorpusRecord(
+                    "hotpotqa:wiki:2", "2", "Beta", "Beta text.", ()
+                ),
+            ),
+            resolutions=(),
+            preimage_sha256="0" * 64,
+            source_conflicting_titles=0,
+            source_records=2,
+            source_unique_titles=2,
+            selected_conflicting_titles=(),
+            selected_missing_titles=(),
+        )
+        split = hotpot.SplitArtifacts(
+            split="development",
+            queries=(
+                {
+                    "category": "bridge:easy",
+                    "derived_seed_policy_id": hotpot.DERIVED_POLICY_ID,
+                    "explicit_seed": None,
+                    "metadata_filter": None,
+                    "query_id": "q1",
+                    "split": "development",
+                    "tasks": ["evidence", "retrieval"],
+                    "text": "Alpha?",
+                    "traversal": hotpot.TRAVERSAL,
+                },
+            ),
+            qrels=(("q1", "hotpotqa:wiki:1", 1), ("q1", "hotpotqa:wiki:2", 1)),
+            evidence=(
+                {
+                    "evidence_sets": [
+                        ["hotpotqa:wiki:1", "hotpotqa:wiki:2"]
+                    ],
+                    "query_id": "q1",
+                },
+            ),
+            exclusions=(),
+            population_sha256=hotpot.population_hash(["q1"]),
+            derived_population_sha256=hotpot.population_hash(["q1"]),
+        )
+        files = hotpot.canonical_collection_core_files(corpus, split)
+        self.assertEqual(
+            set(files),
+            {
+                "evidence-judgments.jsonl",
+                "exclusions.jsonl",
+                "expected-paths.jsonl",
+                "graph-schema.json",
+                "qrels.tsv",
+                "queries.jsonl",
+                "records.jsonl",
+            },
+        )
+        self.assertEqual(files["expected-paths.jsonl"], b"")
+        self.assertEqual(files["qrels.tsv"].count(b"\n"), 2)
+        schema = hotpot.json.loads(files["graph-schema.json"])
+        self.assertEqual(schema, hotpot.graph_schema())
+        self.assertIsNone(schema["relationships"][0]["inverse_relationship"])
+        combined = files["records.jsonl"] + files["graph-schema.json"]
+        for forbidden in (b"answer", b"supporting_facts", b"qrels", b"evidence"):
+            self.assertNotIn(forbidden, combined)
+        records = [hotpot.json.loads(line) for line in files["records.jsonl"].splitlines()]
+        self.assertEqual(records[0]["chunks"][0]["chunk_key"], "abstract")
+        self.assertEqual(records[0]["chunks"][0]["text"], "Alpha\n\nAlpha text.")
+        self.assertEqual(
+            records[0]["fields"]["outgoing_record_ids"]["value"],
+            [{"type": "string", "value": "hotpotqa:wiki:2"}],
+        )
+
+    def test_seed_aliases_use_only_retained_titles_in_canonical_order(self) -> None:
+        corpus = hotpot.FrozenCorpus(
+            records=(
+                hotpot.CorpusRecord("r2", "2", "Beta", "", ()),
+                hotpot.CorpusRecord("r1", "1", "alpha", "", ()),
+            ),
+            resolutions=(),
+            preimage_sha256="0" * 64,
+            source_conflicting_titles=0,
+            source_records=2,
+            source_unique_titles=2,
+            selected_conflicting_titles=(),
+            selected_missing_titles=(),
+        )
+        aliases = hotpot.seed_aliases(corpus)
+        self.assertEqual([row["normalized_alias"] for row in aliases], ["alpha", "beta"])
+        self.assertEqual(aliases[0]["source"]["field"], ["title"])
+
+    def test_collection_and_six_manifests_close_exact_inventory(self) -> None:
+        corpus = hotpot.FrozenCorpus(
+            records=(hotpot.CorpusRecord("r1", "1", "Alpha", "text", ()),),
+            resolutions=(),
+            preimage_sha256="0" * 64,
+            source_conflicting_titles=0,
+            source_records=1,
+            source_unique_titles=1,
+            selected_conflicting_titles=(),
+            selected_missing_titles=(),
+        )
+        split = hotpot.SplitArtifacts(
+            split="development",
+            queries=(),
+            qrels=(),
+            evidence=(),
+            exclusions=(),
+            population_sha256=hotpot.EMPTY_POPULATION_SHA256,
+            derived_population_sha256=hotpot.EMPTY_POPULATION_SHA256,
+        )
+        inventory = {
+            "upstream/corpus/c": "1" * 64,
+            "upstream/judgment/j": "2" * 64,
+            "upstream/license/hotpotqa-attribution-v1": "3" * 64,
+            "upstream/model/m": "4" * 64,
+            "upstream/query/q": "5" * 64,
+            "upstream/scenario/s": "6" * 64,
+            "upstream/tokenizer/t": "7" * 64,
+        }
+        embedding_parameters = {
+            "dimension": 384,
+            "document_prefix": "",
+            "input_construction": "exact title plus two LF bytes plus text",
+            "model_checksum": "4" * 64,
+            "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+            "model_output_normalization": "unit L2",
+            "model_revision": "revision",
+            "pooling": "attention-mask mean pooling",
+            "quantization": hotpot.QUANTIZATION_POLICY,
+            "query_prefix": "",
+            "runtime": "Core ML",
+            "sequence_length": 256,
+            "tokenizer_id": "BertTokenizer",
+            "tokenizer_revision": "revision",
+            "truncation_policy": "longest-first right truncation",
+        }
+        files = hotpot.assemble_collection_files(
+            corpus,
+            split,
+            b'{"chunk_key":"abstract","record_id":"r1","values":[1]}\n',
+            b"",
+            inventory,
+            embedding_parameters,
+            "7" * 64,
+        )
+        self.assertEqual(set(files), {"collection.json", *hotpot.COLLECTION_PATHS.values()})
+        header = hotpot.json.loads(files["collection.json"])
+        self.assertEqual({row["path"] for row in header["files"]}, set(hotpot.COLLECTION_PATHS.values()))
+        self.assertEqual(header["counts"]["records"], 1)
+        self.assertEqual(
+            {path for path in files if path.startswith("manifests/")},
+            {
+                "manifests/chunking.json",
+                "manifests/embedding.json",
+                "manifests/graph-construction.json",
+                "manifests/preprocessing.json",
+                "manifests/seed-policy.json",
+                "manifests/split.json",
+            },
+        )
+        for entry in header["files"]:
+            self.assertEqual(entry["bytes"], len(files[entry["path"]]))
+            self.assertEqual(entry["sha256"], hotpot.sha256_bytes(files[entry["path"]]))
+
 
 if __name__ == "__main__":
     unittest.main()

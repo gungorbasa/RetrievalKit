@@ -289,6 +289,17 @@ mod tests {
     }
 
     #[test]
+    fn canonical_encoding_round_trips_long_binary64_values() {
+        let input = b"{\"success_at_1\":0.9767827529021559}\n";
+        let value = parse_canonical_json(Path::new("metrics.json"), input).unwrap();
+        assert_eq!(
+            value["success_at_1"].as_f64().unwrap().to_bits(),
+            0x3fef_41cd_e760_5f19
+        );
+        assert_eq!(canonical_json_line(&value).unwrap(), input);
+    }
+
+    #[test]
     fn zero_row_jsonl_is_zero_bytes() {
         assert!(parse_canonical_jsonl(Path::new("empty.jsonl"), b"")
             .unwrap()

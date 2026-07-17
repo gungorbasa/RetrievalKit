@@ -125,6 +125,11 @@ pub(super) fn resolve_seeds(validated: &ValidatedCollection) -> Result<SeedResol
         .ok_or_else(|| "V3 seed resolver: derived policies are missing".to_owned())?;
     let mut derived = BTreeMap::new();
     let mut diagnostics = Vec::new();
+    let upstream_frozen_exclusions = matches!(
+        validated.collection.collection_id.as_str(),
+        "hotpotqa-linked-abstracts-graph-v1-development"
+            | "hotpotqa-linked-abstracts-graph-v1-test"
+    );
     for policy in policies {
         let policy_id = string_field(policy, "policy_id")?;
         let policy_version = string_field(policy, "policy_version")?;
@@ -138,16 +143,21 @@ pub(super) fn resolve_seeds(validated: &ValidatedCollection) -> Result<SeedResol
             .iter()
             .filter(|query| query.derived_seed_policy_id.as_deref() == Some(policy_id))
         {
-            let resolution = resolve_aliases(aliases, &query.text)?;
             let declared_failure = exclusions
                 .get(&(policy_id, query.query_id.as_str()))
                 .copied();
-            if resolution.failure_reason != declared_failure {
-                return Err(format!(
-                    "V3 seed resolver: query '{}' policy '{}' calculated failure {:?}, frozen exclusion {:?}",
-                    query.query_id, policy_id, resolution.failure_reason, declared_failure
-                ));
-            }
+            let resolution = resolve_query_aliases(
+                aliases,
+                &query.text,
+                declared_failure,
+                upstream_frozen_exclusions,
+            )
+            .map_err(|message| {
+                format!(
+                    "V3 seed resolver: query '{}' policy '{}': {message}",
+                    query.query_id, policy_id
+                )
+            })?;
             let outcome = if let Some(reason) = resolution.failure_reason {
                 DerivedSeedOutcome::Excluded(reason)
             } else {
@@ -195,6 +205,37 @@ pub(super) fn resolve_seeds(validated: &ValidatedCollection) -> Result<SeedResol
         derived,
         diagnostics,
     })
+}
+
+fn resolve_query_aliases(
+    aliases: &[Value],
+    query: &str,
+    declared_failure: Option<&str>,
+    upstream_frozen_exclusions: bool,
+) -> Result<AliasResolution, String> {
+    if upstream_frozen_exclusions {
+        if let Some(reason) = declared_failure {
+            let reason = match reason {
+                "derived_seed_no_match" => "derived_seed_no_match",
+                "derived_seed_ambiguous" => "derived_seed_ambiguous",
+                value => return Err(format!("unknown frozen exclusion '{value}'")),
+            };
+            return Ok(AliasResolution {
+                candidate_seeds: Vec::new(),
+                failure_reason: Some(reason),
+                matched_aliases: Vec::new(),
+                selected_seed: None,
+            });
+        }
+    }
+    let resolution = resolve_aliases(aliases, query)?;
+    if resolution.failure_reason != declared_failure {
+        return Err(format!(
+            "calculated failure {:?}, frozen exclusion {:?}",
+            resolution.failure_reason, declared_failure
+        ));
+    }
+    Ok(resolution)
 }
 
 #[derive(Debug, Clone)]
@@ -599,6 +640,31 @@ mod tests {
         assert_eq!(resolution.matched_aliases.len(), 2);
         assert_eq!(resolution.matched_aliases[0]["normalized_start"], 0);
         assert_eq!(resolution.matched_aliases[1]["normalized_start"], 10);
+    }
+
+    #[test]
+    fn upstream_frozen_exclusion_precedes_retained_alias_replay() {
+        let aliases = vec![alias("Country", "country", "country")];
+        let resolution = resolve_query_aliases(
+            &aliases,
+            "Which country?",
+            Some("derived_seed_ambiguous"),
+            true,
+        )
+        .unwrap();
+        assert_eq!(resolution.failure_reason, Some("derived_seed_ambiguous"));
+        assert!(resolution.candidate_seeds.is_empty());
+        assert!(resolution.matched_aliases.is_empty());
+        assert!(resolution.selected_seed.is_none());
+
+        let error = resolve_query_aliases(
+            &aliases,
+            "Which country?",
+            Some("derived_seed_ambiguous"),
+            false,
+        )
+        .unwrap_err();
+        assert!(error.contains("calculated failure None"));
     }
 
     #[test]

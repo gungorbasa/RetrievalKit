@@ -29,6 +29,45 @@ def observed(value: float = 0.5) -> dict[tuple[str, str], float]:
 
 
 class OfficialTrecEvalValidatorTests(unittest.TestCase):
+    def test_darwin_build_strips_debug_metadata_and_normalizes_uuid(self) -> None:
+        with mock.patch.object(bootstrap.sys, "platform", "darwin"):
+            with mock.patch.object(
+                bootstrap.shutil,
+                "which",
+                side_effect=lambda tool: f"/usr/bin/{tool}",
+            ):
+                compiler_arguments, post_link = bootstrap.reproducible_build_settings()
+        self.assertEqual(compiler_arguments, [])
+        self.assertEqual(post_link["arguments"], ["-S"])
+        self.assertEqual(post_link["executable"], "/usr/bin/strip")
+        self.assertEqual(
+            post_link["macho_uuid_normalization"],
+            "sha256_with_lc_uuid_zeroed_first_16_bytes",
+        )
+        self.assertEqual(
+            post_link["codesign"],
+            {
+                "executable": "/usr/bin/codesign",
+                "remove_arguments": ["--remove-signature"],
+                "sign_arguments": ["--force", "--sign", "-", "--timestamp=none"],
+            },
+        )
+
+    def test_macho_uuid_normalization_is_content_derived(self) -> None:
+        header = bytearray(32)
+        header[:4] = b"\xcf\xfa\xed\xfe"
+        header[16:20] = (1).to_bytes(4, "little")
+        header[20:24] = (24).to_bytes(4, "little")
+        command = (0x1B).to_bytes(4, "little") + (24).to_bytes(4, "little")
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first"
+            second = Path(directory) / "second"
+            first.write_bytes(header + command + (b"a" * 16) + b"payload")
+            second.write_bytes(header + command + (b"b" * 16) + b"payload")
+            bootstrap.normalize_macho_uuid(first)
+            bootstrap.normalize_macho_uuid(second)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
     def test_successful_supported_metric_comparison(self) -> None:
         queries, aggregates, query_max, aggregate_max = validator.compare_run_metrics(
             "run", rust_run(), ["q1"], observed()

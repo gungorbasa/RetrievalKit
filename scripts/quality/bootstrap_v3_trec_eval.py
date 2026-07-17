@@ -164,6 +164,65 @@ def verify_executable(binary: Path) -> str:
     return sha256(binary.read_bytes())
 
 
+def normalize_macho_uuid(binary: Path) -> None:
+    data = bytearray(binary.read_bytes())
+    if len(data) < 32 or data[:4] != b"\xcf\xfa\xed\xfe":
+        raise BootstrapError("expected a thin little-endian 64-bit Mach-O executable")
+    command_count = int.from_bytes(data[16:20], "little")
+    command_bytes = int.from_bytes(data[20:24], "little")
+    offset = 32
+    limit = offset + command_bytes
+    if limit > len(data):
+        raise BootstrapError("Mach-O load-command region exceeds the executable")
+    uuid_offsets: list[int] = []
+    for _ in range(command_count):
+        if offset + 8 > limit:
+            raise BootstrapError("Mach-O load command is truncated")
+        command = int.from_bytes(data[offset : offset + 4], "little")
+        size = int.from_bytes(data[offset + 4 : offset + 8], "little")
+        if size < 8 or offset + size > limit:
+            raise BootstrapError("Mach-O load command has an invalid size")
+        if command == 0x1B:
+            if size != 24:
+                raise BootstrapError("Mach-O LC_UUID has an invalid size")
+            uuid_offsets.append(offset + 8)
+        offset += size
+    if offset != limit or len(uuid_offsets) != 1:
+        raise BootstrapError("Mach-O executable must contain exactly one LC_UUID")
+    uuid_offset = uuid_offsets[0]
+    data[uuid_offset : uuid_offset + 16] = b"\0" * 16
+    data[uuid_offset : uuid_offset + 16] = hashlib.sha256(data).digest()[:16]
+    binary.write_bytes(data)
+
+
+def reproducible_build_settings() -> tuple[list[str], dict[str, object]]:
+    compiler_arguments: list[str] = []
+    strip = shutil.which("strip")
+    if strip is None:
+        raise BootstrapError("the strip tool required for a reproducible build was not found")
+    post_link: dict[str, object] = {
+        "arguments": ["-S"],
+        "executable": str(Path(strip).resolve()),
+    }
+    if sys.platform == "darwin":
+        codesign = shutil.which("codesign")
+        if codesign is None:
+            raise BootstrapError("codesign required for a reproducible Mach-O build was not found")
+        post_link.update(
+            {
+                "codesign": {
+                    "executable": str(Path(codesign).resolve()),
+                    "remove_arguments": ["--remove-signature"],
+                    "sign_arguments": ["--force", "--sign", "-", "--timestamp=none"],
+                },
+                "macho_uuid_normalization": (
+                    "sha256_with_lc_uuid_zeroed_first_16_bytes"
+                ),
+            }
+        )
+    return compiler_arguments, post_link
+
+
 def build(tool_root: Path, compiler: str) -> dict[str, object]:
     archive = tool_root / "source.tar.gz"
     download_archive(archive)
@@ -192,11 +251,13 @@ def build(tool_root: Path, compiler: str) -> dict[str, object]:
         else:
             os.replace(staged_source, source)
 
+    compiler_arguments, post_link = reproducible_build_settings()
     with tempfile.TemporaryDirectory(prefix=".build-staging-", dir=tool_root) as directory:
         build_root = Path(directory) / "source"
         shutil.copytree(tool_root / "source", build_root)
+        make_compiler = " ".join([compiler_info["executable"], *compiler_arguments])
         result = subprocess.run(
-            ["make", f"CC={compiler_info['executable']}"],
+            ["make", f"CC={make_compiler}"],
             cwd=build_root,
             capture_output=True,
             check=False,
@@ -208,6 +269,46 @@ def build(tool_root: Path, compiler: str) -> dict[str, object]:
                 + (result.stderr.strip() or result.stdout.strip())
             )
         built = build_root / "trec_eval"
+        stripped = subprocess.run(
+            [str(post_link["executable"]), *post_link["arguments"], str(built)],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        if stripped.returncode != 0:
+            raise BootstrapError(
+                "failed to strip nondeterministic debug metadata from trec_eval:\n"
+                + (stripped.stderr.strip() or stripped.stdout.strip())
+            )
+        if sys.platform == "darwin":
+            codesign = post_link["codesign"]
+            remove_signature = subprocess.run(
+                [
+                    str(codesign["executable"]),
+                    *codesign["remove_arguments"],
+                    str(built),
+                ],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            if remove_signature.returncode != 0:
+                raise BootstrapError(
+                    "failed to remove the nondeterministic Mach-O signature:\n"
+                    + (remove_signature.stderr.strip() or remove_signature.stdout.strip())
+                )
+            normalize_macho_uuid(built)
+            sign = subprocess.run(
+                [str(codesign["executable"]), *codesign["sign_arguments"], str(built)],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            if sign.returncode != 0:
+                raise BootstrapError(
+                    "failed to apply a deterministic ad-hoc Mach-O signature:\n"
+                    + (sign.stderr.strip() or sign.stdout.strip())
+                )
         executable_sha256 = verify_executable(built)
         bin_root = tool_root / "bin"
         bin_root.mkdir(exist_ok=True)
@@ -228,8 +329,10 @@ def build(tool_root: Path, compiler: str) -> dict[str, object]:
         "archive_sha256": ARCHIVE_SHA256,
         "archive_url": ARCHIVE_URL,
         "compiler": compiler_info,
+        "compiler_arguments": compiler_arguments,
         "executable": str((tool_root / "bin/trec_eval").resolve()),
         "executable_sha256": executable_sha256,
+        "post_link": post_link,
         "precision_patch": PRECISION_PATCH,
         "source_file_count": len(tree_files),
         "source_tree_sha256": tree_sha256,

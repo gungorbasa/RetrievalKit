@@ -26,9 +26,13 @@ therefore applies a checksum-verified, output-only formatting patch changing
 algorithm changes. The patched source-tree SHA-256 is
 `b68cb9ad8d407c6e1e4d1bce9d867a7525a841d4a1b98b19478a984dde445e28`.
 The resulting executable SHA-256 is
-`2e7be5f86c08d1a89f813af09504af505e310ded22b6a9cfad3d27556740bcdd`,
+`8f5d10550314dd401bb79fd215064e28a135c9535279d3d0288a07f4c3e51e5f`,
 built with `/usr/bin/cc`, Apple clang 21.0.0
-(`clang-2100.1.1.101`), target `arm64-apple-darwin25.5.0`.
+(`clang-2100.1.1.101`), target `arm64-apple-darwin25.5.0`. To make the
+Mach-O bytes reproducible, the bootstrap strips debug metadata, removes the
+linker's nondeterministic ad-hoc signature, replaces `LC_UUID` with the first
+16 bytes of SHA-256 calculated with that field zeroed, and applies a
+timestamp-free ad-hoc signature. Two clean rebuilds are byte-identical.
 
 All 12 ranked A-C/E-G TREC runs pass at tolerance `1e-9`. Exact mappings are:
 

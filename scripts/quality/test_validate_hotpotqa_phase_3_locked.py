@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 import validate_hotpotqa_phase_3_locked as validator
+from hotpotqa_phase_3_canonical import canonical
 
 
 class LockedValidatorNegativeTests(unittest.TestCase):
@@ -23,6 +24,16 @@ class LockedValidatorNegativeTests(unittest.TestCase):
                 "vector_candidate_limit": 100,
             }
         }
+
+    def test_canonical_numbers_match_rust_thresholds(self) -> None:
+        self.assertEqual(
+            canonical([2, 1, -0.0, 1e-7, 1e20, 1e21]),
+            b"[2,1,0,1e-7,100000000000000000000,1e21]",
+        )
+        self.assertEqual(
+            canonical({"fusion_score": 6.289711745921522e-05}),
+            b'{"fusion_score":0.00006289711745921522}',
+        )
 
     def test_qrels_opened_during_stage_a(self) -> None:
         audit = self.stage_a()

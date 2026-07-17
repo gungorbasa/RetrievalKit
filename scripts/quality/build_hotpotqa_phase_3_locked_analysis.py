@@ -11,15 +11,11 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from hotpotqa_phase_3_canonical import canonical
+
 
 class AnalysisError(ValueError):
     pass
-
-
-def canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True
-    ).encode()
 
 
 def read_json(path: Path) -> Any:

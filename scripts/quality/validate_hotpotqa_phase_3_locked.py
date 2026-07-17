@@ -11,6 +11,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from hotpotqa_phase_3_canonical import canonical
+
 LOCK_SHA256 = "ec4757562140b92f298c85341ab64442dfcb07634da500e8abfe291401b95118"
 COLLECTION_SHA256 = "496d21d1c686e2ef3bc36d9820d0cda058f4ca6b82bb029889ed62b48b084f72"
 ADAPTER_SHA256 = "8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6"
@@ -42,12 +44,6 @@ class ValidationError(ValueError):
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True
-    ).encode()
 
 
 def read_json(path: Path) -> Any:

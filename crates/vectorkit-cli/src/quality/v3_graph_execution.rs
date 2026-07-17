@@ -746,6 +746,7 @@ fn apply_failures(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_query(
     validated: &ValidatedCollection,
     database: &GraphDatabase,

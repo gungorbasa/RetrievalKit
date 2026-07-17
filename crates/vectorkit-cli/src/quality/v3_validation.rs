@@ -32,6 +32,12 @@ const EXPECTED_PATHS: [(&str, &str); 15] = [
     ("split_manifest", "manifests/split.json"),
 ];
 
+pub(super) const LABEL_PATHS: [&str; 3] = [
+    "evidence-judgments.jsonl",
+    "expected-paths.jsonl",
+    "qrels.tsv",
+];
+
 type ManifestSpec<'a> = (&'a str, &'a [&'a str], &'a [&'a str], &'a [&'a str]);
 type AliasSortKey = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
 
@@ -52,6 +58,157 @@ pub(super) struct ValidatedCollection {
     pub populations: Populations,
     pub runs: Vec<RunIdentity>,
     pub bytes: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Debug)]
+pub(super) struct RankingInputValidation {
+    pub validated: ValidatedCollection,
+    pub opened_collection_files: Vec<String>,
+}
+
+/// Validate every input needed to execute rankings without opening test labels.
+///
+/// Label file identities are bound by the already-validated canonical
+/// `collection.json`; their bytes are deliberately absent from `bytes` until
+/// the scoring stage calls `validate`.
+pub(super) fn validate_ranking_inputs(root: &Path) -> Result<RankingInputValidation, String> {
+    verify_normative_fixture()?;
+    let root = root.canonicalize().map_err(|error| {
+        format!(
+            "failed to resolve collection root '{}': {error}",
+            root.display()
+        )
+    })?;
+    validate_layout(&root)?;
+    let collection_bytes = read(&root, "collection.json")?;
+    let collection_value = parse_canonical_json(&root.join("collection.json"), &collection_bytes)?;
+    let collection: Collection = from_value("collection.json", collection_value)?;
+    validate_collection_header(&collection)?;
+
+    let mut bytes = BTreeMap::new();
+    for (_, relative) in EXPECTED_PATHS {
+        if !LABEL_PATHS.contains(&relative) {
+            bytes.insert(relative.to_owned(), read(&root, relative)?);
+        }
+    }
+    validate_file_index_for_ranking(&collection, &bytes)?;
+
+    let records = parse_rows::<Record>(
+        "records.jsonl",
+        parse_canonical_jsonl(
+            &root.join(&collection.paths.records),
+            &bytes[&collection.paths.records],
+        )?,
+    )?;
+    let graph_schema: GraphSchema = from_value(
+        "graph-schema.json",
+        parse_canonical_json(
+            &root.join(&collection.paths.graph_schema),
+            &bytes[&collection.paths.graph_schema],
+        )?,
+    )?;
+    let queries = parse_rows::<Query>(
+        "queries.jsonl",
+        parse_canonical_jsonl(
+            &root.join(&collection.paths.queries),
+            &bytes[&collection.paths.queries],
+        )?,
+    )?;
+    let corpus_embeddings = parse_rows::<CorpusEmbedding>(
+        "corpus-embeddings.f32.jsonl",
+        parse_canonical_jsonl(
+            &root.join(&collection.paths.corpus_embeddings_f32),
+            &bytes[&collection.paths.corpus_embeddings_f32],
+        )?,
+    )?;
+    let query_embeddings = parse_rows::<QueryEmbedding>(
+        "query-embeddings.f32.jsonl",
+        parse_canonical_jsonl(
+            &root.join(&collection.paths.query_embeddings_f32),
+            &bytes[&collection.paths.query_embeddings_f32],
+        )?,
+    )?;
+    let exclusions = parse_rows::<Exclusion>(
+        "exclusions.jsonl",
+        parse_canonical_jsonl(
+            &root.join(&collection.paths.exclusions),
+            &bytes[&collection.paths.exclusions],
+        )?,
+    )?;
+    let manifests = load_manifests(&root, &collection, &bytes)?;
+    validate_records(&records)?;
+    validate_graph_schema(&graph_schema, &records)?;
+    validate_queries(&queries, &collection, &graph_schema)?;
+    validate_exclusions(&exclusions, &queries)?;
+    if records.len() != collection.counts.records
+        || records
+            .iter()
+            .map(|record| record.chunks.len())
+            .sum::<usize>()
+            != collection.counts.chunks
+        || queries.len() != collection.counts.queries
+        || exclusions.len() != collection.counts.exclusion_rows
+    {
+        return Err("ranking-input collection counts differ from collection.json".to_owned());
+    }
+    let source_inventory_sha256 = validate_manifests(&manifests, &bytes, Some(&collection))?;
+    let dimension = embedding_dimension(&manifests["embedding"])?;
+    validate_embeddings(
+        &records,
+        &queries,
+        &corpus_embeddings,
+        &query_embeddings,
+        dimension,
+    )?;
+    let populations = Populations::derive(&queries, &exclusions)?;
+    validate_seed_policy(
+        &manifests["seed-policy"],
+        &queries,
+        &populations,
+        &exclusions,
+        false,
+    )?;
+    validate_split_manifest(
+        &manifests["split"],
+        &collection,
+        &populations,
+        &exclusions,
+        &source_inventory_sha256,
+    )?;
+    let context = RunContext {
+        graph_schema_sha256: sha256(&bytes[&collection.paths.graph_schema]),
+        seed_policy_sha256: sha256(&bytes[&collection.paths.seed_policy_manifest]),
+        implementation_revision: serde_json::json!({
+            "binary_sha256":"cc57e402a8c92ff14601f6390c76b15d1b6a4598e219c8b58009c36e2daa4f97",
+            "git_commit":"d145b76ef60b964dcf004516fc4b94b00147d7c7",
+            "source_sha256":null
+        }),
+    };
+    let runs = canonical_runs(&collection, &queries, &populations, &context)?;
+    validate_run_preimages(&runs)?;
+    let mut opened_collection_files = vec!["collection.json".to_owned()];
+    opened_collection_files.extend(bytes.keys().cloned());
+    opened_collection_files.sort();
+    Ok(RankingInputValidation {
+        validated: ValidatedCollection {
+            root,
+            collection,
+            records,
+            graph_schema,
+            queries,
+            corpus_embeddings,
+            query_embeddings,
+            qrels: Vec::new(),
+            evidence: Vec::new(),
+            expected_paths: Vec::new(),
+            exclusions,
+            dimension,
+            populations,
+            runs,
+            bytes,
+        },
+        opened_collection_files,
+    })
 }
 
 pub(super) fn validate(root: &Path) -> Result<ValidatedCollection, String> {
@@ -158,7 +315,7 @@ pub(super) fn validate(root: &Path) -> Result<ValidatedCollection, String> {
         &expected_paths,
         &exclusions,
     )?;
-    let source_inventory_sha256 = validate_manifests(&manifests, &bytes)?;
+    let source_inventory_sha256 = validate_manifests(&manifests, &bytes, None)?;
 
     let dimension = embedding_dimension(&manifests["embedding"])?;
     validate_embeddings(
@@ -374,6 +531,38 @@ fn validate_file_index(
             "collection.json: field 'files' path set expected {:?}, actual {:?}",
             expected_paths, actual_paths
         ));
+    }
+    Ok(())
+}
+
+fn validate_file_index_for_ranking(
+    collection: &Collection,
+    bytes: &BTreeMap<String, Vec<u8>>,
+) -> Result<(), String> {
+    let indexed = collection
+        .files
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let expected = EXPECTED_PATHS
+        .iter()
+        .map(|(_, path)| *path)
+        .collect::<BTreeSet<_>>();
+    if indexed.keys().copied().collect::<BTreeSet<_>>() != expected {
+        return Err("collection.json: ranking input file inventory changed".to_owned());
+    }
+    for (path, actual) in bytes {
+        let entry = indexed[path.as_str()];
+        let digest = sha256(actual);
+        if entry.bytes != actual.len() as u64 || entry.sha256 != digest {
+            return Err(format!(
+                "collection.json: ranking input '{path}' checksum or byte count mismatch"
+            ));
+        }
+    }
+    for path in LABEL_PATHS {
+        let entry = indexed[path];
+        validate_sha("collection.json", "files[].sha256", &entry.sha256)?;
     }
     Ok(())
 }
@@ -1196,6 +1385,7 @@ fn load_manifests(
 fn validate_manifests(
     manifests: &BTreeMap<String, TransformationManifest>,
     bytes: &BTreeMap<String, Vec<u8>>,
+    ranking_collection: Option<&Collection>,
 ) -> Result<String, String> {
     let specs: [ManifestSpec<'_>; 6] = [
         ("preprocessing", &[], &["upstream/corpus/"], &[]),
@@ -1415,7 +1605,26 @@ fn validate_manifests(
         for output in &manifest.outputs {
             validate_relative_path(&file, "outputs[].path", &output.path)?;
             validate_sha(&file, "outputs[].sha256", &output.sha256)?;
-            let digest = sha256(&bytes[&output.path]);
+            let digest = if let Some(value) = bytes.get(&output.path) {
+                sha256(value)
+            } else if let Some(collection) = ranking_collection {
+                collection
+                    .files
+                    .iter()
+                    .find(|entry| entry.path == output.path)
+                    .map(|entry| entry.sha256.clone())
+                    .ok_or_else(|| {
+                        format!(
+                            "{file}: output '{}' is absent from collection index",
+                            output.path
+                        )
+                    })?
+            } else {
+                return Err(format!(
+                    "{file}: output '{}' bytes are missing",
+                    output.path
+                ));
+            };
             if output.sha256 != digest {
                 return Err(format!(
                     "{file}: output '{}' expected sha256 {}, actual {}",

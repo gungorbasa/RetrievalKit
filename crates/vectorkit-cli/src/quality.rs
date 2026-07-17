@@ -20,6 +20,7 @@ mod v3_graph_input;
 mod v3_graph_retrieval_execution;
 pub(crate) mod v3_hotpotqa;
 mod v3_ingestion;
+mod v3_locked;
 mod v3_population;
 mod v3_runs;
 mod v3_schema;

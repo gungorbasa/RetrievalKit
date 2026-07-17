@@ -46,6 +46,10 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     match mode.as_str() {
         "tune" => run_tuning(rest),
         "matrix" => run_matrix(rest),
+        "locked-report" => {
+            let arguments = super::v3_locked::parse_arguments(rest)?;
+            super::v3_locked::execute(arguments)
+        }
         value => Err(format!(
             "unknown quality-v3-hotpotqa mode '{value}'; {}",
             usage()

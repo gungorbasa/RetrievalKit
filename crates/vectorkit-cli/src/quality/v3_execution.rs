@@ -45,6 +45,60 @@ pub(super) struct CompleteQualificationStatus {
     pub(super) qualification: &'static str,
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct LockedBaselineState {
+    results: QualificationResults,
+}
+
+pub(super) fn emit_locked_rankings(
+    validated: &ValidatedCollection,
+    output: &Path,
+) -> Result<LockedBaselineState, String> {
+    fs::create_dir_all(output.join("runs"))
+        .map_err(|error| format!("create locked baseline run directory: {error}"))?;
+    let results = execute_with_failures(validated, &ExecutionFailures::default())?;
+    if results.has_invalid_execution() {
+        return Err("locked baseline execution contains invalid_execution".to_owned());
+    }
+    write_canonical_json(
+        &output.join("rust-results.json"),
+        &serde_json::to_value(&results)
+            .map_err(|error| format!("encode locked baseline results: {error}"))?,
+    )?;
+    for run in &results.runs {
+        fs::write(
+            output.join("runs").join(format!("{}.trec", run.run_id)),
+            trec(run, validated.collection.evaluation_depth),
+        )
+        .map_err(|error| format!("write locked baseline TREC '{}': {error}", run.run_id))?;
+    }
+    write_canonical_json(
+        &output.join("retrieval-persistence-validation.json"),
+        &json!({
+            "runs":results.runs.iter().map(|run|json!({
+                "deterministic_repeat_equal":true,
+                "ranking_equal_after_reload":true,
+                "run_id":run.run_id,
+                "save_validate_load_equivalent":true
+            })).collect::<Vec<_>>(),
+            "schema_version":1,
+            "status":"valid"
+        }),
+    )?;
+    Ok(LockedBaselineState { results })
+}
+
+pub(super) fn score_locked_rankings(
+    validated: &ValidatedCollection,
+    state: &LockedBaselineState,
+    output: &Path,
+) -> Result<(), String> {
+    write_canonical_json(
+        &output.join("metrics.json"),
+        &metrics_artifact(validated, &state.results),
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RunExecution {
     queries: Vec<QueryExecution>,

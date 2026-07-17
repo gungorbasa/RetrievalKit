@@ -189,6 +189,11 @@ struct RunArtifacts {
     selection_rows: Vec<Value>,
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct LockedGraphRetrievalState {
+    runs: Vec<RunArtifacts>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct ValidQuery {
     result: QueryExecution,
@@ -366,6 +371,131 @@ pub(super) fn emit_graph_retrieval_qualification_with_failures(
         &json!({"runs":persistence,"schema_version":1,"status":if runs.iter().any(|run|run.result.status=="invalid_execution") {"invalid_execution"} else {"valid"}}),
     )?;
     Ok(results)
+}
+
+pub(super) fn emit_locked_graph_retrieval_rankings(
+    validated: &ValidatedCollection,
+    output: &Path,
+) -> Result<LockedGraphRetrievalState, String> {
+    validate_frozen_semantic_runs(validated)?;
+    validate_frozen_hybrid_runs(validated)?;
+    let seeds = resolve_seeds(validated)?;
+    let inputs = V3ProductionInputs::from_validated(validated)?;
+    let source_queries = validated
+        .queries
+        .iter()
+        .map(|query| (query.query_id.as_str(), query))
+        .collect::<BTreeMap<_, _>>();
+    let mut runs = Vec::new();
+    let mut persistence = Vec::new();
+    let mut fingerprints = BTreeMap::new();
+    for run in validated.runs.iter().filter(|run| {
+        matches!(
+            run.configuration["run_letter"].as_str(),
+            Some("e" | "f" | "g")
+        )
+    }) {
+        let letter = run.configuration["run_letter"].as_str().unwrap();
+        let encoding = match letter {
+            "e" => VectorEncoding::F32,
+            "f" | "g" => VectorEncoding::I8ScalarQuantized,
+            _ => unreachable!(),
+        };
+        let (preimage, fingerprint) = retrieval_generation_fingerprint(validated, letter)?;
+        fingerprints.insert(fingerprint.clone(), preimage);
+        let database = build_graph_retrieval_database(validated, encoding)?;
+        let (artifacts, validation) = execute_run_with_persistence_and_failures(
+            validated,
+            run,
+            &database,
+            &inputs,
+            &source_queries,
+            &seeds,
+            &fingerprint,
+            &ExecutionFailures::default(),
+        )?;
+        if artifacts.result.status != "valid" {
+            return Err("locked graph retrieval contains invalid_execution".to_owned());
+        }
+        runs.push(artifacts);
+        persistence.push(validation);
+    }
+    runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
+    persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
+    let mut projection_rows = Vec::new();
+    for run in &runs {
+        write_jsonl(
+            &output
+                .join("graph-selections")
+                .join(format!("{}.jsonl", run.result.run_id)),
+            &run.selection_rows,
+        )?;
+        write_jsonl(
+            &output
+                .join("graph-paths")
+                .join(format!("{}.jsonl", run.result.run_id)),
+            &run.path_rows,
+        )?;
+        fs::write(
+            output
+                .join("runs")
+                .join(format!("{}.trec", run.result.run_id)),
+            trec(&run.result, validated.collection.evaluation_depth),
+        )
+        .map_err(|error| format!("write locked graph retrieval TREC: {error}"))?;
+        projection_rows.extend(run.projection_rows.clone());
+    }
+    projection_rows.sort_by_key(|row| {
+        (
+            row["run_id"].as_str().unwrap().to_owned(),
+            row["query_id"].as_str().unwrap().to_owned(),
+        )
+    });
+    write_jsonl(
+        &output.join("graph-retrieval-projection-identities.jsonl"),
+        &projection_rows,
+    )?;
+    let equality = validate_selection_path_equality_with_d(validated, output, &runs)?;
+    let results = GraphRetrievalQualificationResults {
+        collection_id: validated.collection.collection_id.clone(),
+        collection_version: validated.collection.collection_version.clone(),
+        runs: runs.iter().map(|run| run.result.clone()).collect(),
+        schema_version: 3,
+    };
+    write_canonical_json(
+        &output.join("graph-retrieval-rust-results.json"),
+        &serde_json::to_value(&results)
+            .map_err(|error| format!("encode locked graph retrieval results: {error}"))?,
+    )?;
+    write_canonical_json(
+        &output.join("graph-retrieval-generation-fingerprints.json"),
+        &json!({
+            "fingerprints":fingerprints.into_iter().map(|(fingerprint,preimage)|json!({"fingerprint":fingerprint,"preimage":preimage})).collect::<Vec<_>>(),
+            "schema_version":1
+        }),
+    )?;
+    write_canonical_json(
+        &output.join("graph-retrieval-selection-path-equality.json"),
+        &equality,
+    )?;
+    write_canonical_json(
+        &output.join("graph-retrieval-persistence-validation.json"),
+        &json!({"runs":persistence,"schema_version":1,"status":"valid"}),
+    )?;
+    Ok(LockedGraphRetrievalState { runs })
+}
+
+pub(super) fn score_locked_graph_retrieval_rankings(
+    validated: &ValidatedCollection,
+    state: &LockedGraphRetrievalState,
+    output: &Path,
+) -> Result<(), String> {
+    let (metrics, paired) = metrics_and_paired_artifacts(validated, &state.runs, output)?;
+    write_canonical_json(&output.join("graph-retrieval-metrics.json"), &metrics)?;
+    write_canonical_json(
+        &output.join("graph-retrieval-paired-comparisons.json"),
+        &paired,
+    )
 }
 
 #[cfg(test)]

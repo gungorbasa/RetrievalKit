@@ -178,6 +178,12 @@ struct RunArtifacts {
     valid: BTreeMap<String, ValidGraphQuery>,
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct LockedGraphState {
+    runs: Vec<RunArtifacts>,
+    generation_fingerprint: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct PersistenceValidation {
     run_id: String,
@@ -208,6 +214,7 @@ pub(super) fn emit_graph_qualification_with_failures(
             &seeds,
             &fingerprint,
             failures,
+            true,
         )?;
         runs.push(artifacts);
         persistence.push(validation);
@@ -302,6 +309,159 @@ pub(super) fn emit_graph_qualification_with_failures(
     Ok(results)
 }
 
+pub(super) fn emit_locked_graph_rankings(
+    validated: &ValidatedCollection,
+    output: &Path,
+) -> Result<LockedGraphState, String> {
+    let seeds = resolve_seeds(validated)?;
+    validate_frozen_runs(validated)?;
+    let (fingerprint_preimage, fingerprint) = d_generation_fingerprint(validated)?;
+    let mut runs = Vec::new();
+    let mut persistence = Vec::new();
+    for run in validated
+        .runs
+        .iter()
+        .filter(|run| run.configuration["run_letter"] == "d")
+    {
+        let database = build_graph_database(validated)?;
+        let (artifacts, validation) = execute_run_with_persistence_and_failures(
+            validated,
+            run,
+            &database,
+            &seeds,
+            &fingerprint,
+            &ExecutionFailures::default(),
+            false,
+        )?;
+        if artifacts.result.status != "valid" {
+            return Err("locked graph selection contains invalid_execution".to_owned());
+        }
+        runs.push(artifacts);
+        persistence.push(validation);
+    }
+    runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
+    persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
+    fs::create_dir_all(output.join("graph-selections"))
+        .map_err(|error| format!("create locked graph selections: {error}"))?;
+    fs::create_dir_all(output.join("graph-paths"))
+        .map_err(|error| format!("create locked graph paths: {error}"))?;
+    let mut projection_rows = Vec::new();
+    for run in &runs {
+        write_jsonl(
+            &output
+                .join("graph-selections")
+                .join(format!("{}.jsonl", run.result.run_id)),
+            &run.selection_rows,
+        )?;
+        write_jsonl(
+            &output
+                .join("graph-paths")
+                .join(format!("{}.jsonl", run.result.run_id)),
+            &run.path_rows,
+        )?;
+        projection_rows.extend(run.projection_rows.clone());
+    }
+    projection_rows.sort_by_key(|row| {
+        (
+            row["run_id"].as_str().unwrap().to_owned(),
+            row["query_id"].as_str().unwrap().to_owned(),
+        )
+    });
+    write_jsonl(
+        &output.join("graph-projection-identities.jsonl"),
+        &projection_rows,
+    )?;
+    let seed_resolutions = serde_json::to_value(&seeds.diagnostics)
+        .map_err(|error| format!("encode locked seed diagnostics: {error}"))?;
+    let results = GraphQualificationResults {
+        collection_id: validated.collection.collection_id.clone(),
+        collection_version: validated.collection.collection_version.clone(),
+        runs: runs.iter().map(|run| run.result.clone()).collect(),
+        schema_version: 3,
+        seed_resolutions: seed_resolutions.clone(),
+    };
+    write_canonical_json(
+        &output.join("graph-rust-results.json"),
+        &serde_json::to_value(&results)
+            .map_err(|error| format!("encode locked graph results: {error}"))?,
+    )?;
+    write_canonical_json(
+        &output.join("seed-resolution-diagnostics.json"),
+        &json!({"schema_version":3,"seed_resolutions":seed_resolutions}),
+    )?;
+    write_canonical_json(
+        &output.join("graph-generation-fingerprint.json"),
+        &json!({"fingerprint":fingerprint,"preimage":fingerprint_preimage,"schema_version":1}),
+    )?;
+    write_canonical_json(
+        &output.join("graph-persistence-validation.json"),
+        &json!({"runs":persistence,"schema_version":1,"status":"valid"}),
+    )?;
+    Ok(LockedGraphState {
+        runs,
+        generation_fingerprint: fingerprint,
+    })
+}
+
+pub(super) fn score_locked_graph_rankings(
+    validated: &ValidatedCollection,
+    state: &LockedGraphState,
+    output: &Path,
+) -> Result<(), String> {
+    let mut scored = state.runs.clone();
+    for artifacts in &mut scored {
+        let run = validated
+            .runs
+            .iter()
+            .find(|run| run.run_id == artifacts.result.run_id)
+            .ok_or_else(|| format!("missing locked D run '{}'", artifacts.result.run_id))?;
+        let lane = run.configuration["seed_lane"]
+            .as_str()
+            .ok_or_else(|| format!("locked D run '{}' has no lane", run.run_id))?;
+        for (query_id, execution) in &mut artifacts.valid {
+            let query = validated
+                .queries
+                .iter()
+                .find(|query| query.query_id == *query_id)
+                .ok_or_else(|| format!("locked D query '{query_id}' is missing"))?;
+            let reason = execution.selection_row["truncated_reason"].as_str();
+            let truncated = match reason {
+                None => None,
+                Some("max_hops") => Some(TruncationReason::MaxHops),
+                Some("max_results") => Some(TruncationReason::MaxResults),
+                Some("max_visited") => Some(TruncationReason::MaxVisited),
+                Some("max_working_bytes") => Some(TruncationReason::MaxWorkingBytes),
+                Some(actual) => return Err(format!("invalid locked truncation reason '{actual}'")),
+            };
+            execution.metrics = query_metrics(QueryMetricContext {
+                validated,
+                lane,
+                query,
+                documents: &execution.candidate_documents,
+                eligible_chunks: execution.eligible_chunks,
+                projected_chunks: execution.projected_chunks,
+                path_rows: &execution.path_rows,
+                truncated,
+            })?;
+        }
+        artifacts.metrics =
+            run_metrics(validated, run, &artifacts.valid, &artifacts.result.queries)?;
+    }
+    write_canonical_json(
+        &output.join("graph-metrics.json"),
+        &json!({
+            "collection_id":validated.collection.collection_id,
+            "collection_version":validated.collection.collection_version,
+            "generation_fingerprint":state.generation_fingerprint,
+            "metric_definition_version":"graph-retrieval-v3-r2",
+            "partial":false,
+            "publication_ready":true,
+            "runs":scored.iter().map(|run|run.metrics.clone()).collect::<Vec<_>>(),
+            "schema_version":3
+        }),
+    )
+}
+
 #[cfg(test)]
 fn execute_run_with_persistence(
     validated: &ValidatedCollection,
@@ -317,6 +477,7 @@ fn execute_run_with_persistence(
         seeds,
         fingerprint,
         &ExecutionFailures::default(),
+        true,
     )
 }
 
@@ -327,9 +488,10 @@ fn execute_run_with_persistence_and_failures(
     seeds: &SeedResolutionSet,
     fingerprint: &str,
     injected_failures: &ExecutionFailures,
+    score_metrics: bool,
 ) -> Result<(RunArtifacts, PersistenceValidation), String> {
-    let mut before = execute_run(validated, run, database, seeds, fingerprint)?;
-    let repeated = execute_run(validated, run, database, seeds, fingerprint)?;
+    let mut before = execute_run(validated, run, database, seeds, fingerprint, score_metrics)?;
+    let repeated = execute_run(validated, run, database, seeds, fingerprint, score_metrics)?;
     let mut failures = injected_failures.clone();
     if before != repeated {
         failures.run(run.run_id.clone(), FailureReason::NonDeterministicRanking);
@@ -346,11 +508,11 @@ fn execute_run_with_persistence_and_failures(
     if verify_persisted_database(database, &loaded, run).is_err() {
         failures.run(run.run_id.clone(), FailureReason::ReloadMismatch);
     }
-    let after = execute_run(validated, run, &loaded, seeds, fingerprint)?;
+    let after = execute_run(validated, run, &loaded, seeds, fingerprint, score_metrics)?;
     if before != after {
         failures.run(run.run_id.clone(), FailureReason::PersistenceMismatch);
     }
-    apply_failures(validated, run, &mut before, &failures)?;
+    apply_failures(validated, run, &mut before, &failures, score_metrics)?;
     let persistence_equivalent = !matches!(
         failures.run_reason(&run.run_id),
         Some(FailureReason::PersistenceMismatch | FailureReason::ReloadMismatch)
@@ -437,6 +599,7 @@ fn execute_run(
     database: &GraphDatabase,
     seeds: &SeedResolutionSet,
     fingerprint: &str,
+    score_metrics: bool,
 ) -> Result<RunArtifacts, String> {
     let lane = run.configuration["seed_lane"]
         .as_str()
@@ -459,7 +622,16 @@ fn execute_run(
             continue;
         }
         let seed = resolved_seed(seeds, lane, query_id)?;
-        match execute_query(validated, database, run, lane, query, seed, fingerprint) {
+        match execute_query(
+            validated,
+            database,
+            run,
+            lane,
+            query,
+            seed,
+            fingerprint,
+            score_metrics,
+        ) {
             Ok(execution) => {
                 result_rows.push(result_row(query, run, "valid", None));
                 valid.insert(query_id.clone(), execution);
@@ -477,7 +649,11 @@ fn execute_run(
     }
     result_rows.sort_by(|left, right| left.query_id.cmp(&right.query_id));
 
-    let metrics = run_metrics(validated, run, &valid, &result_rows)?;
+    let metrics = if score_metrics {
+        run_metrics(validated, run, &valid, &result_rows)?
+    } else {
+        Value::Null
+    };
     let mut selection_rows = valid
         .values()
         .map(|query| query.selection_row.clone())
@@ -511,7 +687,13 @@ fn execute_run(
         selection_rows,
         valid,
     };
-    apply_failures(validated, run, &mut artifacts, &observed_failures)?;
+    apply_failures(
+        validated,
+        run,
+        &mut artifacts,
+        &observed_failures,
+        score_metrics,
+    )?;
     Ok(artifacts)
 }
 
@@ -520,6 +702,7 @@ fn apply_failures(
     run: &RunIdentity,
     artifacts: &mut RunArtifacts,
     failures: &ExecutionFailures,
+    score_metrics: bool,
 ) -> Result<(), String> {
     if !failures.run_is_invalid(&run.run_id) {
         return Ok(());
@@ -555,7 +738,11 @@ fn apply_failures(
     } else {
         "invalid_execution"
     };
-    artifacts.metrics = run_metrics(validated, run, &artifacts.valid, &artifacts.result.queries)?;
+    artifacts.metrics = if score_metrics {
+        run_metrics(validated, run, &artifacts.valid, &artifacts.result.queries)?
+    } else {
+        Value::Null
+    };
     Ok(())
 }
 
@@ -567,6 +754,7 @@ fn execute_query(
     query: &Query,
     seed: &ResolvedSeed,
     fingerprint: &str,
+    score_metrics: bool,
 ) -> Result<ValidGraphQuery, String> {
     let graph_query = production_query(query, seed)?;
     let graph_result = database
@@ -635,16 +823,20 @@ fn execute_query(
         .map(|matched| path_row(&query.query_id, &run.run_id, matched))
         .collect::<Result<Vec<_>, _>>()?;
     let truncated_reason = truncation_name(graph_result.truncated);
-    let metrics = query_metrics(QueryMetricContext {
-        validated,
-        lane,
-        query,
-        documents: &candidate_documents,
-        eligible_chunks: eligible.len(),
-        projected_chunks: identities.len(),
-        path_rows: &path_rows,
-        truncated: graph_result.truncated,
-    })?;
+    let metrics = if score_metrics {
+        query_metrics(QueryMetricContext {
+            validated,
+            lane,
+            query,
+            documents: &candidate_documents,
+            eligible_chunks: eligible.len(),
+            projected_chunks: identities.len(),
+            path_rows: &path_rows,
+            truncated: graph_result.truncated,
+        })?
+    } else {
+        BTreeMap::new()
+    };
     let selection_row = json!({
         "active_corpus_chunks_before_filter":database.corpus().active_chunk_count(),
         "corpus_id":database.corpus().corpus_id().as_str(),
@@ -1249,7 +1441,7 @@ mod tests {
                 assert_eq!(database.graph().node_count(), 15);
                 assert_eq!(database.graph().edge_count(), 26);
                 assert_eq!(database.corpus().active_chunk_count(), 8);
-                execute_run(&validated, run, &database, &seeds, &fingerprint).unwrap()
+                execute_run(&validated, run, &database, &seeds, &fingerprint, true).unwrap()
             })
             .collect::<Vec<_>>();
         assert_eq!(runs.len(), 3);

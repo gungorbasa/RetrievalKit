@@ -43,13 +43,15 @@ MAPPINGS = (
 )
 
 
-def frozen_runs(collection: Path) -> list[dict[str, Any]]:
+def frozen_runs(
+    collection: Path, revision: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     header = read_json(collection / "collection.json")
     files = {entry["path"]: (collection / entry["path"]).read_bytes() for entry in header["files"]}
     files["collection.json"] = (collection / "collection.json").read_bytes()
     return [
         run
-        for run in foundation.derive_runs(files)
+        for run in foundation.derive_runs(files, revision)
         if run["configuration"]["run_letter"] in {"a", "b", "c", "e", "f", "g"}
     ]
 
@@ -80,9 +82,13 @@ def aggregate_metric(run: dict[str, Any], metric_name: str) -> float:
     return float(value)
 
 
-def validate(collection: Path, artifacts: Path) -> dict[str, Any]:
+def validate(
+    collection: Path,
+    artifacts: Path,
+    revision: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     verify_frozen_fixture(collection)
-    runs = frozen_runs(collection)
+    runs = frozen_runs(collection, revision)
     if len(runs) != 12:
         raise ValidationError(f"expected 12 A-C/E-G runs, actual {len(runs)}")
     rust_by_id = rust_metrics(artifacts)
@@ -193,13 +199,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collection", type=Path, default=DEFAULT_COLLECTION)
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--implementation-revision", type=Path)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        report = validate(args.collection.resolve(), args.artifacts.resolve())
+        revision = (
+            read_json(args.implementation_revision.resolve())
+            if args.implementation_revision
+            else None
+        )
+        report = validate(args.collection.resolve(), args.artifacts.resolve(), revision)
         if not args.check_only:
             write_report(args.artifacts.resolve() / REPORT_NAME, report)
         print(json.dumps(report, indent=2, sort_keys=True))

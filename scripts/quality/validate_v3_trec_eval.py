@@ -111,7 +111,9 @@ def load_dependency_identity(identity_path: Path, binary: Path) -> dict[str, Any
     return identity
 
 
-def frozen_ranked_runs(collection: Path) -> list[dict[str, Any]]:
+def frozen_ranked_runs(
+    collection: Path, revision: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     header = read_json(collection / "collection.json")
     files = {
         entry["path"]: (collection / entry["path"]).read_bytes()
@@ -120,7 +122,7 @@ def frozen_ranked_runs(collection: Path) -> list[dict[str, Any]]:
     files["collection.json"] = (collection / "collection.json").read_bytes()
     runs = [
         run
-        for run in foundation.derive_runs(files)
+        for run in foundation.derive_runs(files, revision)
         if run["configuration"]["run_letter"] in {"a", "b", "c", "e", "f", "g"}
     ]
     if len(runs) != 12:
@@ -335,11 +337,12 @@ def validate(
     artifacts: Path,
     binary: Path,
     identity_path: Path,
+    implementation_revision: dict[str, Any] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, Any]:
     verify_frozen_fixture(collection)
     dependency = load_dependency_identity(identity_path, binary)
-    expected_runs = frozen_ranked_runs(collection)
+    expected_runs = frozen_ranked_runs(collection, implementation_revision)
     expected_run_ids = [run["run_id"] for run in expected_runs]
     actual_run_files = sorted(path.stem for path in (artifacts / "runs").glob("*.trec"))
     validate_run_inventory(actual_run_files, expected_run_ids)
@@ -495,6 +498,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument("--trec-eval", type=Path)
     parser.add_argument("--tool-identity", type=Path)
+    parser.add_argument("--implementation-revision", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--check-only", action="store_true")
     return parser.parse_args()
@@ -508,9 +512,12 @@ def main() -> int:
     artifacts = args.artifacts.resolve()
     output = (args.output or artifacts.parent / f"{artifacts.name}-{REPORT_NAME}").resolve()
     try:
-        report = validate(
-            args.collection.resolve(), artifacts, binary, identity
+        revision = (
+            read_json(args.implementation_revision.resolve())
+            if args.implementation_revision
+            else None
         )
+        report = validate(args.collection.resolve(), artifacts, binary, identity, revision)
         if not args.check_only:
             write_report(output, report)
         print(json.dumps(report, indent=2, sort_keys=True))

@@ -989,7 +989,10 @@ def implementation_revision() -> dict[str, Any]:
     }
 
 
-def derive_runs(collection_files: dict[str, bytes]) -> list[dict[str, Any]]:
+def derive_runs(
+    collection_files: dict[str, bytes],
+    revision: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     model = fixture_model()
     populations = derive_populations(model)
     collection = json.loads(collection_files["collection.json"])
@@ -1053,7 +1056,7 @@ def derive_runs(collection_files: dict[str, bytes]) -> list[dict[str, Any]]:
             "evaluation_depth": collection["evaluation_depth"],
             "fusion_alpha": 0.6 if weighted else None,
             "graph_schema_sha256": graph_hash if graph else None,
-            "implementation_revision": implementation_revision(),
+            "implementation_revision": revision or implementation_revision(),
             "metadata_filter_policy_id": "v3-query-filter-ast-v1",
             "metric": "cosine" if retrieval_run else None,
             "normalization": "unit_l2" if retrieval_run else None,

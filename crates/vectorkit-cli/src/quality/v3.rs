@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,7 +12,9 @@ use super::v3_canonical::{
 };
 use super::v3_execution::{emit_qualification, verify_qualification_deterministic_rerun};
 use super::v3_population::population_hash;
-use super::v3_runs::{bm25_policy, normalization_policy, quantization_policy, RunIdentity};
+use super::v3_runs::{
+    bm25_policy, canonical_runs, normalization_policy, quantization_policy, RunContext, RunIdentity,
+};
 use super::v3_validation::{validate, ValidatedCollection};
 
 static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -20,6 +23,7 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     let mut collection = None;
     let mut artifacts = None;
     let mut qualification_artifacts = None;
+    let mut release_qualification_artifacts = None;
     let mut verify_rerun = false;
     let mut offset = 0;
     while offset < args.len() {
@@ -44,6 +48,13 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
                     })?));
                 offset += 2;
             }
+            "--release-qualification-artifacts" => {
+                release_qualification_artifacts =
+                    Some(PathBuf::from(args.get(offset + 1).ok_or_else(|| {
+                        "missing value for '--release-qualification-artifacts'".to_owned()
+                    })?));
+                offset += 2;
+            }
             "--verify-rerun" => {
                 verify_rerun = true;
                 offset += 1;
@@ -52,13 +63,27 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         }
     }
     let collection = collection.ok_or_else(|| {
-        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--qualification-artifacts <target/benchmarks/v3/directory>] [--verify-rerun]".to_owned()
+        "usage: vectorkit bench quality-v3 --collection <v3-directory> [--foundation-artifacts <directory>] [--qualification-artifacts <target/benchmarks/v3/directory> | --release-qualification-artifacts <target/benchmarks/v3/directory>] [--verify-rerun]".to_owned()
     })?;
-    let validated = validate(&collection)?;
+    if qualification_artifacts.is_some() && release_qualification_artifacts.is_some() {
+        return Err(
+            "--qualification-artifacts and --release-qualification-artifacts are mutually exclusive"
+                .to_owned(),
+        );
+    }
+    let mut validated = validate(&collection)?;
+    let release_implementation = if release_qualification_artifacts.is_some() {
+        let revision = release_implementation_revision()?;
+        bind_implementation_revision(&mut validated, revision.clone())?;
+        Some(revision)
+    } else {
+        None
+    };
     if let Some(path) = artifacts {
         emit_foundation(&validated, &path)?;
     }
-    let qualification = if let Some(path) = qualification_artifacts {
+    let qualification_path = qualification_artifacts.or(release_qualification_artifacts);
+    let qualification = if let Some(path) = qualification_path {
         let path = qualification_output_path(&path)?;
         Some(emit_qualification(&validated, &path)?)
     } else {
@@ -107,6 +132,8 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         "final_manifest_complete":false,
         "publication_ready":false,
         "publication_status":"not_ready",
+        "release_context":release_implementation.is_some(),
+        "implementation_revision":release_implementation,
         "rerun_verified":verify_rerun,
         "run_count":validated.runs.len(),
         "status":if qualification_status=="invalid_execution" {"invalid_execution"} else {"valid"},
@@ -114,6 +141,92 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     });
     serde_json::to_string_pretty(&result)
         .map_err(|error| format!("failed to serialize V3 validation result: {error}"))
+}
+
+fn bind_implementation_revision(
+    validated: &mut ValidatedCollection,
+    implementation_revision: Value,
+) -> Result<(), String> {
+    let context = RunContext {
+        graph_schema_sha256: sha256(&validated.bytes[&validated.collection.paths.graph_schema]),
+        seed_policy_sha256: sha256(
+            &validated.bytes[&validated.collection.paths.seed_policy_manifest],
+        ),
+        implementation_revision,
+    };
+    validated.runs = canonical_runs(
+        &validated.collection,
+        &validated.queries,
+        &validated.populations,
+        &context,
+    )?;
+    if validated.runs.len() != 15 {
+        return Err(format!(
+            "release run matrix expected exactly 15 runs, actual {}",
+            validated.runs.len()
+        ));
+    }
+    Ok(())
+}
+
+fn release_implementation_revision() -> Result<Value, String> {
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve repository root: {error}"))?;
+    let status = Command::new("git")
+        .args(["status", "--porcelain=v1", "--untracked-files=all"])
+        .current_dir(&repository)
+        .output()
+        .map_err(|error| format!("failed to inspect release worktree: {error}"))?;
+    if !status.status.success() {
+        return Err(format!(
+            "failed to inspect release worktree: {}",
+            String::from_utf8_lossy(&status.stderr).trim()
+        ));
+    }
+    if !status.stdout.is_empty() {
+        return Err("release V3 publication requires a clean worktree".to_owned());
+    }
+    let revision = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&repository)
+        .output()
+        .map_err(|error| format!("failed to resolve release Git revision: {error}"))?;
+    if !revision.status.success() {
+        return Err(format!(
+            "failed to resolve release Git revision: {}",
+            String::from_utf8_lossy(&revision.stderr).trim()
+        ));
+    }
+    let git_commit = String::from_utf8(revision.stdout)
+        .map_err(|_| "release Git revision is not UTF-8".to_owned())?
+        .trim()
+        .to_owned();
+    if git_commit.len() != 40
+        || !git_commit
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "release Git revision expected 40 lowercase hexadecimal characters, actual '{git_commit}'"
+        ));
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("failed to resolve release executable: {error}"))?
+        .canonicalize()
+        .map_err(|error| format!("failed to canonicalize release executable: {error}"))?;
+    let executable_bytes = fs::read(&executable).map_err(|error| {
+        format!(
+            "failed to read release executable '{}': {error}",
+            executable.display()
+        )
+    })?;
+    Ok(json!({
+        "binary_sha256":sha256(&executable_bytes),
+        "git_commit":git_commit,
+        "source_sha256":Value::Null
+    }))
 }
 
 fn qualification_output_path(requested: &Path) -> Result<PathBuf, String> {
@@ -654,6 +767,41 @@ mod tests {
         assert_eq!(output["phase_1_complete"], false);
         assert_eq!(output["publication_ready"], false);
         assert_eq!(output["publication_status"], "not_ready");
+        assert_eq!(output["release_context"], false);
+        assert_eq!(output["implementation_revision"], Value::Null);
+    }
+
+    #[test]
+    fn release_revision_changes_run_ids_but_preserves_logical_runs() {
+        let mut validated = validate(&fixture_root()).unwrap();
+        let original = validated
+            .runs
+            .iter()
+            .map(|run| (run.run_id.clone(), run.logical_run_sha256.clone()))
+            .collect::<Vec<_>>();
+        let revision = json!({
+            "binary_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "git_commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "source_sha256":null
+        });
+        bind_implementation_revision(&mut validated, revision.clone()).unwrap();
+        let release = validated
+            .runs
+            .iter()
+            .map(|run| (run.run_id.clone(), run.logical_run_sha256.clone()))
+            .collect::<Vec<_>>();
+        assert_ne!(
+            original.iter().map(|row| &row.0).collect::<Vec<_>>(),
+            release.iter().map(|row| &row.0).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            original.iter().map(|row| &row.1).collect::<Vec<_>>(),
+            release.iter().map(|row| &row.1).collect::<Vec<_>>()
+        );
+        assert!(validated
+            .runs
+            .iter()
+            .all(|run| run.configuration["implementation_revision"] == revision));
     }
 
     #[test]

@@ -100,15 +100,17 @@ fn run_matrix(args: &[String]) -> Result<String, String> {
     }
     let lock_value: Value = serde_json::from_slice(&lock_bytes)
         .map_err(|error| format!("parse HotpotQA selected-configuration lock: {error}"))?;
-    if lock_bytes != format!("{}\n", canonical_json(&lock_value)?).as_bytes()
-        || lock_value["protocol_schema"] != "hotpotqa-phase-3-selected-configuration-v1"
-        || lock_value["search_space_sha256"] != SEARCH_SPACE_SHA256
-        || lock_value["selection_source"] != "development Run C alone"
-        || lock_value["test_results_status"] != "unavailable and not inspected"
-    {
-        return Err(
-            "HotpotQA selected-configuration lock is not the frozen canonical lock".to_owned(),
-        );
+    let canonical_bytes_equal =
+        lock_bytes == format!("{}\n", canonical_json(&lock_value)?).as_bytes();
+    let protocol_equal =
+        lock_value["protocol_schema"] == "hotpotqa-phase-3-selected-configuration-v1";
+    let search_equal = lock_value["search_space_sha256"] == SEARCH_SPACE_SHA256;
+    let source_equal = lock_value["selection_source"] == "development Run C alone";
+    let test_equal = lock_value["test_results_status"] == "unavailable and not inspected";
+    if !canonical_bytes_equal || !protocol_equal || !search_equal || !source_equal || !test_equal {
+        return Err(format!(
+            "HotpotQA selected-configuration lock is not the frozen canonical lock: canonical_bytes={canonical_bytes_equal}, protocol={protocol_equal}, search_space={search_equal}, selection_source={source_equal}, test_status={test_equal}"
+        ));
     }
     let selected = &lock_value["selected_candidate"];
     if selected["fusion_alpha_f32_bits"] != "3e4ccccd" {

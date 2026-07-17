@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import bz2
 import hashlib
 import json
 import math
@@ -95,6 +96,25 @@ SOURCE_FILES = {
         "c20b638ca82b21d04fe12e14ff417ad05153d4d215a65de54497fca4e972f7c6",
     ),
 }
+ABSTRACT_FIELDS = {
+    "charoffset",
+    "charoffset_with_links",
+    "id",
+    "text",
+    "text_with_links",
+    "title",
+    "url",
+}
+QUESTION_FIELDS = {
+    "answer",
+    "context",
+    "id",
+    "level",
+    "question",
+    "supporting_facts",
+    "type",
+}
+SAMPLE_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
 FLOAT_TOKEN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e-?[0-9]+)?$")
 
 
@@ -133,6 +153,29 @@ def normalize(value: str) -> str:
     return unicodedata.normalize(
         "NFC", " ".join(unicodedata.normalize("NFC", value).casefold().split())
     )
+
+
+def boundary_offsets(value: str) -> tuple[int, ...]:
+    def alphanumeric(character: str) -> bool:
+        return character.isalpha() or character.isnumeric()
+
+    offsets = [0]
+    for offset in range(1, len(value)):
+        if alphanumeric(value[offset - 1]) != alphanumeric(value[offset]):
+            offsets.append(offset)
+    offsets.append(len(value))
+    return tuple(offsets)
+
+
+def alias_substrings(value: str) -> set[str]:
+    normalized = normalize(value)
+    offsets = boundary_offsets(normalized)
+    return {
+        normalized[start:end]
+        for start in offsets[:-1]
+        for end in offsets[1:]
+        if start < end and normalized[start:end].strip()
+    }
 
 
 def require_version(actual: Any, expected: Any, label: str) -> None:
@@ -562,6 +605,248 @@ def validate_sources(cache_dir: Path, model_dir: Path, source_inventory: Mapping
     acceptance = source_inventory["license_acceptance"]
     if not acceptance["required_before_download"] or acceptance["license_id"] != "CC-BY-SA-4.0":
         raise ValidationError("license and attribution material mismatch")
+    notice = source_inventory.get("attribution_notice")
+    if (
+        not isinstance(notice, str)
+        or "Wikipedia contributors" not in notice
+        or "CC BY-SA 4.0" not in notice
+        or "ShareAlike" not in notice
+        or "VectorKit" not in notice
+    ):
+        raise ValidationError("license and attribution material mismatch")
+    expected_inventory = {
+        "upstream/corpus/hotpotqa-linked-abstracts-2019-01-14": SOURCE_FILES[
+            "enwiki-20171001-pages-meta-current-withlinks-abstracts.tar.bz2"
+        ][1],
+        "upstream/judgment/hotpotqa-distractor-train-00000-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-train-00000-1908d6af.parquet"
+        ][1],
+        "upstream/judgment/hotpotqa-distractor-train-00001-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-train-00001-1908d6af.parquet"
+        ][1],
+        "upstream/judgment/hotpotqa-distractor-validation-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-validation-1908d6af.parquet"
+        ][1],
+        "upstream/license/hotpotqa-attribution-v1": sha256((notice + "\n").encode()),
+        "upstream/model/all-minilm-l6-v2-conversion-metadata": MODEL_FILES[
+            "metadata.json"
+        ],
+        "upstream/model/all-minilm-l6-v2-coreml-manifest": MODEL_FILES[
+            "AllMiniLML6V2.mlpackage/Manifest.json"
+        ],
+        "upstream/model/all-minilm-l6-v2-coreml-model": MODEL_FILES[
+            "AllMiniLML6V2.mlpackage/Data/com.apple.CoreML/model.mlmodel"
+        ],
+        "upstream/model/all-minilm-l6-v2-coreml-weights": MODEL_FILES[
+            "AllMiniLML6V2.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
+        ],
+        "upstream/query/hotpotqa-distractor-train-00000-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-train-00000-1908d6af.parquet"
+        ][1],
+        "upstream/query/hotpotqa-distractor-train-00001-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-train-00001-1908d6af.parquet"
+        ][1],
+        "upstream/query/hotpotqa-distractor-validation-1908d6af": SOURCE_FILES[
+            "hotpotqa-distractor-validation-1908d6af.parquet"
+        ][1],
+        "upstream/scenario/hotpotqa-adapter-contract-v1": (
+            "a4960536b707e211809137dc9b8651bf3f8ac3cf39b0d77ac1742e64560d8c70"
+        ),
+        "upstream/tokenizer/all-minilm-l6-v2-tokenizer": MODEL_FILES[
+            "tokenizer/tokenizer.json"
+        ],
+        "upstream/tokenizer/all-minilm-l6-v2-tokenizer-config": MODEL_FILES[
+            "tokenizer/tokenizer_config.json"
+        ],
+        "upstream/tokenizer/unicode-15.1-normalization-policy-v1": (
+            "7b13da0b0166e76a5ea62915fdcf1a0e1e089852b02777d133aa5c30df53a0ac"
+        ),
+    }
+    sources = source_inventory.get("sources")
+    if not isinstance(sources, list):
+        raise ValidationError("source inventory schema mismatch")
+    source_ids = [row.get("source_id") for row in sources if isinstance(row, dict)]
+    if source_ids != sorted(expected_inventory, key=lexical):
+        raise ValidationError("source inventory identity mismatch")
+    actual_inventory: dict[str, str] = {}
+    for row in sources:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"bytes", "path", "sha256", "source_id", "url"}
+            or not isinstance(row["bytes"], int)
+            or row["bytes"] <= 0
+            or not isinstance(row["path"], str)
+            or not row["path"]
+            or not isinstance(row["url"], str)
+            or not row["url"]
+        ):
+            raise ValidationError("source inventory schema mismatch")
+        actual_inventory[row["source_id"]] = row["sha256"]
+    if actual_inventory != expected_inventory:
+        raise ValidationError("source inventory checksum mismatch")
+
+
+def replay_source_seed_resolution(
+    cache_dir: Path, inspection: Mapping[str, Any]
+) -> None:
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as parquet
+    except ImportError as error:
+        raise ValidationError("independent source replay requires pinned pyarrow") from error
+    if pa.__version__ != "25.0.0":
+        raise ValidationError(
+            f"independent source replay expected pyarrow 25.0.0, found {pa.__version__}"
+        )
+    downloads = cache_dir / "downloads"
+
+    def read_questions(filename: str, split: str) -> list[dict[str, str]]:
+        source = parquet.ParquetFile(downloads / filename)
+        if set(source.schema_arrow.names) != QUESTION_FIELDS:
+            raise ValidationError(f"unknown source version: question schema {filename}")
+        rows: list[dict[str, str]] = []
+        for batch in source.iter_batches(batch_size=512):
+            for raw in batch.to_pylist():
+                rows.append(
+                    {
+                        "level": str(raw["level"]),
+                        "query_type": str(raw["type"]),
+                        "question_text": str(raw["question"]),
+                        "split": split,
+                        "upstream_id": str(raw["id"]),
+                    }
+                )
+        return rows
+
+    train = read_questions(
+        "hotpotqa-distractor-train-00000-1908d6af.parquet", "train"
+    ) + read_questions(
+        "hotpotqa-distractor-train-00001-1908d6af.parquet", "train"
+    )
+    development = read_questions(
+        "hotpotqa-distractor-validation-1908d6af.parquet", "dev_distractor"
+    )
+    if len(train) != 90_447 or len(development) != 7_405:
+        raise ValidationError("unknown source version: question row counts")
+    all_ids = [row["upstream_id"] for row in train + development]
+    if len(set(all_ids)) != len(all_ids):
+        raise ValidationError("unknown source version: duplicated question ID")
+
+    def sample(rows: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
+        def key(row: Mapping[str, str]) -> tuple[bytes, bytes]:
+            preimage = (
+                SAMPLE_SALT.encode()
+                + b"\0"
+                + row["split"].encode()
+                + b"\0"
+                + row["upstream_id"].encode()
+            )
+            return hashlib.sha256(preimage).digest(), lexical(row["upstream_id"])
+
+        return sorted(rows, key=key)[:limit]
+
+    sampled = sample(train, 2_000) + sample(development, 1_000)
+    if len(sampled) != inspection["sample"]["count"]:
+        raise ValidationError("sample IDs and sampling hashes mismatch")
+    sampled_bytes = b"".join(canonical(row, final_lf=True) for row in sampled)
+    if sha256(sampled_bytes) != inspection["sample"]["identities_sha256"]:
+        raise ValidationError("sample IDs and sampling hashes mismatch")
+
+    substrings: dict[str, list[str]] = {}
+    questions_by_id = {row["upstream_id"]: row for row in sampled}
+    for row in sampled:
+        for alias in alias_substrings(row["question_text"]):
+            substrings.setdefault(alias, []).append(row["upstream_id"])
+    candidates: dict[str, list[tuple[str, str, str]]] = {}
+    source_ids: set[str] = set()
+    title_digests: dict[str, bytes] = {}
+    conflicting_titles: set[str] = set()
+    abstracts_dir = cache_dir / "sources/hotpotqa-abstracts"
+    shards = sorted(abstracts_dir.rglob("*.bz2"), key=lambda path: lexical(path.as_posix()))
+    unexpected = [
+        path
+        for path in abstracts_dir.rglob("*")
+        if path.is_file() and path.suffix != ".bz2"
+    ]
+    if len(shards) != 15_517 or unexpected:
+        raise ValidationError("unknown source version: extracted abstract inventory")
+    records_seen = 0
+    for shard in shards:
+        with bz2.open(shard, "rt", encoding="utf-8") as source:
+            for line in source:
+                row = json.loads(line)
+                records_seen += 1
+                if not isinstance(row, dict) or set(row) != ABSTRACT_FIELDS:
+                    raise ValidationError("unknown source version: abstract schema")
+                source_id = row["id"]
+                title = row["title"]
+                if (
+                    not isinstance(source_id, str)
+                    or not source_id.isdecimal()
+                    or source_id in source_ids
+                    or not isinstance(title, str)
+                    or not isinstance(row["text"], list)
+                    or not all(isinstance(value, str) for value in row["text"])
+                ):
+                    raise ValidationError("unknown source version: invalid abstract row")
+                source_ids.add(source_id)
+                normalized_title = normalize(title)
+                text_digest = hashlib.sha256("".join(row["text"]).encode()).digest()
+                previous = title_digests.setdefault(normalized_title, text_digest)
+                if previous != text_digest:
+                    conflicting_titles.add(normalized_title)
+                for query_id in substrings.get(normalized_title, ()):
+                    candidates.setdefault(query_id, []).append(
+                        (f"hotpotqa:wiki:{source_id}", normalized_title, title)
+                    )
+    corpus = inspection["corpus"]
+    if (
+        records_seen != corpus["source_records"]
+        or len(title_digests) != corpus["source_unique_titles"]
+        or len(conflicting_titles) != corpus["source_conflicting_title_count"]
+    ):
+        raise ValidationError("corpus count/hash mismatch: independent source replay")
+
+    expected_rows = inspection["seed_resolutions"]
+    expected_by_id = {row["upstream_id"]: row for row in expected_rows}
+    if len(expected_by_id) != 3_000:
+        raise ValidationError("alias resolution provenance mismatch")
+    counts: Counter[str] = Counter()
+    for query_id in sorted(questions_by_id, key=lexical):
+        rows = candidates.get(query_id, [])
+        if rows:
+            longest = max(len(row[1]) for row in rows)
+            by_record = {row[0]: row for row in rows if len(row[1]) == longest}
+        else:
+            by_record = {}
+        candidate_ids = sorted(by_record, key=lexical)
+        status = (
+            "no_match"
+            if not candidate_ids
+            else "resolved"
+            if len(candidate_ids) == 1
+            else "ambiguous"
+        )
+        selected_id = candidate_ids[0] if status == "resolved" else None
+        selected_title = by_record[selected_id][2] if selected_id is not None else None
+        expected = expected_by_id.get(query_id)
+        question = questions_by_id[query_id]["question_text"]
+        actual = {
+            "candidate_record_ids": candidate_ids,
+            "normalization_policy_id": "nfc-casefold-whitespace-v1",
+            "selected_record_id": selected_id,
+            "selected_title": selected_title,
+            "source_question_sha256": sha256(question.encode()),
+            "status": status,
+            "upstream_id": query_id,
+        }
+        if expected != actual:
+            raise ValidationError(
+                f"alias resolution provenance mismatch for query {query_id}"
+            )
+        counts[status] += 1
+    if dict(sorted(counts.items())) != EXPECTED_RESOLUTIONS:
+        raise ValidationError("alias resolution provenance mismatch")
 
 
 def validate_adapter(
@@ -582,6 +867,7 @@ def validate_adapter(
     adapter_manifest = read_canonical_json(root / "adapter-manifest.json")
     validate_sources(cache_dir, model_dir, source_inventory)
     verify_builder_isolation(ROOT / "scripts/quality/build_hotpotqa_graph_collection.py")
+    replay_source_seed_resolution(cache_dir, inspection)
     require_version(adapter_manifest["schema_version"], 1, "adapter manifest version")
     development = validate_split(root / "development", "development", inspection)
     test = validate_split(root / "test", "test", inspection)

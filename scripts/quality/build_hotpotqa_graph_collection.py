@@ -15,6 +15,7 @@ import html
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -1112,6 +1113,38 @@ MODEL_FILES = {
         "872b6936be955bc3aea75ed599264d865626d68feede7e58b01e378e6332bd74",
     ),
 }
+ATTRIBUTION_NOTICE = (
+    "HotpotQA distractor train V1.1 and distractor dev V1, and the processed "
+    "October 1, 2017 English Wikipedia linked abstracts, are used under CC "
+    "BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Attribute "
+    "Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W. Cohen, "
+    "Ruslan Salakhutdinov, and Christopher D. Manning for HotpotQA (EMNLP "
+    "2018), and Wikipedia contributors for article content and links. "
+    "VectorKit deterministically samples questions, retains a source-only "
+    "linked-abstract subset, maps pages and links to canonical records and "
+    "graph inputs, and generates local MiniLM embeddings. Adapted material "
+    "remains subject to CC BY-SA 4.0 ShareAlike. Raw upstream data is not "
+    "redistributed by this repository.\n"
+)
+UNICODE_POLICY_BYTES = (
+    b"Unicode 15.1 NFC; default full case folding; Unicode White_Space to "
+    b"ASCII space collapse and trim; punctuation preserved; policy "
+    b"unicode-15.1-nfc-full-fold-whitespace-v1\n"
+)
+
+
+def scenario_bytes() -> bytes:
+    return canonical_bytes(
+        {
+            "adapter_contract": "public-graph-collection-adapter-contract-v1",
+            "collection_id": COLLECTION_BASE_ID,
+            "corpus_id": CORPUS_ID,
+            "derived_seed_policy_id": DERIVED_POLICY_ID,
+            "sample_salt": SAMPLE_SALT,
+            "schema_version": 1,
+        },
+        final_lf=True,
+    )
 
 
 def manifest_input(source_id: str, digest: str) -> dict[str, str]:
@@ -1799,6 +1832,390 @@ def generate_frozen_embeddings(
     return corpus_bytes, query_bytes, embedding_parameters(runtime), model_inventory
 
 
+def build_source_inventory(
+    cache_dir: Path,
+    model_dir: Path,
+    model_inventory: Mapping[str, str],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    downloads = cache_dir / "downloads"
+    inventory: dict[str, str] = {}
+    rows: list[dict[str, Any]] = []
+
+    def add(
+        source_id: str,
+        digest: str,
+        byte_count: int,
+        logical_path: str,
+        url: str,
+    ) -> None:
+        if source_id in inventory:
+            raise AdapterError(f"duplicate source inventory identity: {source_id}")
+        inventory[source_id] = digest
+        rows.append(
+            {
+                "bytes": byte_count,
+                "path": logical_path,
+                "sha256": digest,
+                "source_id": source_id,
+                "url": url,
+            }
+        )
+
+    for artifact in ARTIFACTS:
+        source_path = downloads / artifact.filename
+        add(
+            artifact.source_id,
+            artifact.sha256,
+            source_path.stat().st_size,
+            f"downloads/{artifact.filename}",
+            artifact.url,
+        )
+        if artifact.source_id.startswith("upstream/query/"):
+            add(
+                artifact.source_id.replace("upstream/query/", "upstream/judgment/", 1),
+                artifact.sha256,
+                source_path.stat().st_size,
+                f"downloads/{artifact.filename}",
+                artifact.url,
+            )
+    for source_id, digest in sorted(model_inventory.items(), key=lambda row: lexical(row[0])):
+        relative = MODEL_FILES[source_id][0]
+        path = model_dir / relative
+        add(
+            source_id,
+            digest,
+            path.stat().st_size,
+            f"embedding-model/{relative}",
+            f"https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/tree/{MODEL_REVISION}",
+        )
+    add(
+        "upstream/license/hotpotqa-attribution-v1",
+        sha256_bytes(ATTRIBUTION_NOTICE.encode("utf-8")),
+        len(ATTRIBUTION_NOTICE.encode("utf-8")),
+        "embedded/hotpotqa-attribution-v1.txt",
+        "https://creativecommons.org/licenses/by-sa/4.0/",
+    )
+    scenario = scenario_bytes()
+    add(
+        "upstream/scenario/hotpotqa-adapter-contract-v1",
+        sha256_bytes(scenario),
+        len(scenario),
+        "embedded/hotpotqa-adapter-contract-v1.json",
+        "docs/product/public-graph-collection-adapter-contract-v1.md",
+    )
+    add(
+        "upstream/tokenizer/unicode-15.1-normalization-policy-v1",
+        sha256_bytes(UNICODE_POLICY_BYTES),
+        len(UNICODE_POLICY_BYTES),
+        "embedded/unicode-15.1-normalization-policy-v1.txt",
+        "https://www.unicode.org/versions/Unicode15.1.0/",
+    )
+    rows.sort(key=lambda row: lexical(row["source_id"]))
+    return inventory, {
+        "attribution_notice": ATTRIBUTION_NOTICE.rstrip("\n"),
+        "license_acceptance": {
+            "accepted_for_local_cache": True,
+            "license_id": "CC-BY-SA-4.0",
+            "required_before_download": True,
+            "workflow": "explicit acceptance before source acquisition; generated material preserves attribution and ShareAlike",
+        },
+        "schema_version": 1,
+        "sources": rows,
+    }
+
+
+def build_inspection(
+    corpus: FrozenCorpus,
+    source_queries: Sequence[SourceQuery],
+    splits: Mapping[str, SplitArtifacts],
+    collection_files: Mapping[str, Mapping[str, bytes]],
+    embedding_parameters_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    resolution_counts = dict(
+        sorted(Counter(row.status for row in corpus.resolutions).items())
+    )
+    source_by_id = {query.upstream_id: query for query in source_queries}
+    resolution_rows = []
+    for resolution in corpus.resolutions:
+        source = source_by_id[resolution.upstream_id]
+        resolution_rows.append(
+            {
+                **asdict(resolution),
+                "normalization_policy_id": "nfc-casefold-whitespace-v1",
+                "source_question_sha256": sha256_bytes(
+                    source.question_text.encode("utf-8")
+                ),
+            }
+        )
+    return {
+        "collections": {
+            split: {
+                "collection_sha256": sha256_bytes(files["collection.json"]),
+                "derived_population_sha256": splits[split].derived_population_sha256,
+                "evidence_rows": len(splits[split].evidence),
+                "exclusion_rows": len(splits[split].exclusions),
+                "population_sha256": splits[split].population_sha256,
+                "qrel_rows": len(splits[split].qrels),
+                "queries": len(splits[split].queries),
+            }
+            for split, files in sorted(collection_files.items(), key=lambda row: lexical(row[0]))
+        },
+        "corpus": {
+            "chunks": len(corpus.records),
+            "corpus_preimage_sha256": corpus.preimage_sha256,
+            "directed_links_to_edges": sum(
+                len(record.outgoing_record_ids) for record in corpus.records
+            ),
+            "records": len(corpus.records),
+            "selected_conflicting_titles": list(corpus.selected_conflicting_titles),
+            "selected_missing_titles": list(corpus.selected_missing_titles),
+            "source_conflicting_title_count": corpus.source_conflicting_titles,
+            "source_records": corpus.source_records,
+            "source_unique_titles": corpus.source_unique_titles,
+        },
+        "embeddings": {
+            "corpus_sha256": EXPECTED_EMBEDDING_SHA256["corpus"],
+            "development_query_sha256": EXPECTED_EMBEDDING_SHA256["development"],
+            "parameters": dict(embedding_parameters_value),
+            "test_query_sha256": EXPECTED_EMBEDDING_SHA256["test"],
+        },
+        "sample": {
+            "count": len(source_queries),
+            "identities_sha256": sha256_bytes(
+                jsonl_bytes(asdict(query) for query in source_queries)
+            ),
+            "salt": SAMPLE_SALT,
+        },
+        "schema_version": 1,
+        "seed_resolution_counts": resolution_counts,
+        "seed_resolutions": resolution_rows,
+    }
+
+
+def adapter_manifest_files(root: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*"), key=lambda value: lexical(value.relative_to(root).as_posix())):
+        if path.is_symlink() or not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative == "adapter-manifest.json":
+            continue
+        rows.append(
+            {
+                "bytes": path.stat().st_size,
+                "path": relative,
+                "sha256": file_digest(path),
+            }
+        )
+    return rows
+
+
+def build_once(
+    stage: Path,
+    cache_dir: Path,
+    abstracts_dir: Path,
+    model_dir: Path,
+    production_cli: Path,
+) -> dict[str, Any]:
+    if any(stage.iterdir()):
+        raise AdapterError(f"staging directory is not empty: {stage}")
+    corpus, source_queries, _, splits = build_real_collection_inputs(
+        cache_dir, abstracts_dir
+    )
+    embedding_work = stage / ".embedding-work"
+    embedding_work.mkdir()
+    try:
+        corpus_embeddings, query_embeddings, parameters, model_inventory = (
+            generate_frozen_embeddings(corpus, splits, model_dir, embedding_work)
+        )
+    finally:
+        shutil.rmtree(embedding_work, ignore_errors=True)
+    inventory, source_inventory = build_source_inventory(
+        cache_dir, model_dir, model_inventory
+    )
+    unicode_hash = sha256_bytes(UNICODE_POLICY_BYTES)
+    collection_files = {
+        split: assemble_collection_files(
+            corpus,
+            splits[split],
+            corpus_embeddings,
+            query_embeddings[split],
+            inventory,
+            parameters,
+            unicode_hash,
+        )
+        for split in ("development", "test")
+    }
+    if (
+        collection_files["development"]["records.jsonl"]
+        != collection_files["test"]["records.jsonl"]
+        or collection_files["development"]["graph-schema.json"]
+        != collection_files["test"]["graph-schema.json"]
+        or collection_files["development"]["corpus-embeddings.f32.jsonl"]
+        != collection_files["test"]["corpus-embeddings.f32.jsonl"]
+    ):
+        raise AdapterError("shared corpus files differ between collection roots")
+    for split in ("development", "test"):
+        write_collection_files(stage / split, collection_files[split])
+    (stage / "source-inventory.json").write_bytes(
+        canonical_bytes(source_inventory, final_lf=True)
+    )
+    inspection = build_inspection(
+        corpus, source_queries, splits, collection_files, parameters
+    )
+    (stage / "inspection.json").write_bytes(
+        canonical_bytes(inspection, final_lf=True)
+    )
+    manifest = {
+        "files": adapter_manifest_files(stage),
+        "schema_version": 1,
+    }
+    (stage / "adapter-manifest.json").write_bytes(
+        canonical_bytes(manifest, final_lf=True)
+    )
+    return run_independent_validator(
+        stage, cache_dir, model_dir, production_cli
+    )
+
+
+def prepare_production_cli() -> Path:
+    command = ["cargo", "build", "-p", "vectorkit-cli"]
+    result = subprocess.run(
+        command, cwd=ROOT, text=True, capture_output=True, check=False
+    )
+    if result.returncode != 0:
+        raise AdapterError(
+            "failed to build production-backed validation CLI: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    cli = ROOT / "target/debug/vectorkit"
+    if not cli.is_file():
+        raise AdapterError(f"production-backed validation CLI is missing: {cli}")
+    return cli
+
+
+def run_independent_validator(
+    stage: Path,
+    cache_dir: Path,
+    model_dir: Path,
+    production_cli: Path,
+) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(ROOT / "scripts/quality/validate_hotpotqa_graph_collection.py"),
+        "--root",
+        str(stage),
+        "--cache-dir",
+        str(cache_dir),
+        "--model-dir",
+        str(model_dir),
+        "--production-cli",
+        str(production_cli),
+    ]
+    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise AdapterError(
+            "independent adapter validation failed: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise AdapterError("independent validator returned invalid JSON") from error
+    if value.get("status") != "valid":
+        raise AdapterError(f"independent validator did not pass: {value}")
+    return value
+
+
+def first_file_difference(left: Path, right: Path) -> int | None:
+    offset = 0
+    with left.open("rb") as left_file, right.open("rb") as right_file:
+        while True:
+            left_block = left_file.read(1024 * 1024)
+            right_block = right_file.read(1024 * 1024)
+            common = min(len(left_block), len(right_block))
+            for index in range(common):
+                if left_block[index] != right_block[index]:
+                    return offset + index
+            if len(left_block) != len(right_block):
+                return offset + common
+            if not left_block:
+                return None
+            offset += len(left_block)
+
+
+def compare_builds(left: Path, right: Path) -> None:
+    left_files = {
+        path.relative_to(left).as_posix()
+        for path in left.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    right_files = {
+        path.relative_to(right).as_posix()
+        for path in right.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    if left_files != right_files:
+        difference = sorted(left_files ^ right_files, key=lexical)[0]
+        raise AdapterError(f"byte rerun inventory mismatch at {difference}")
+    for relative in sorted(left_files, key=lexical):
+        difference = first_file_difference(left / relative, right / relative)
+        if difference is not None:
+            raise AdapterError(
+                f"byte rerun mismatch at {relative}, byte offset {difference}"
+            )
+
+
+def atomic_build(args: argparse.Namespace) -> dict[str, Any]:
+    output = args.output.resolve()
+    if output.exists() or output.is_symlink():
+        raise AdapterError(f"final output already exists; refusing to merge: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    production_cli = prepare_production_cli()
+    stages: list[Path] = []
+    try:
+        build_count = 2 if args.repeat_and_compare else 1
+        results: list[dict[str, Any]] = []
+        for build_number in range(1, build_count + 1):
+            stage = Path(
+                tempfile.mkdtemp(
+                    prefix=f".{output.name}.stage-{build_number}-",
+                    dir=output.parent,
+                )
+            )
+            stages.append(stage)
+            print(f"building validated adapter pass {build_number}/{build_count}", file=sys.stderr)
+            results.append(
+                build_once(
+                    stage,
+                    args.cache_dir.resolve(),
+                    args.abstracts_dir.resolve(),
+                    args.model_dir.resolve(),
+                    production_cli,
+                )
+            )
+        if args.repeat_and_compare:
+            compare_builds(stages[0], stages[1])
+        os.replace(stages[0], output)
+        stages.pop(0)
+        for stage in stages:
+            shutil.rmtree(stage)
+        stages.clear()
+        result = dict(results[0])
+        result.update(
+            {
+                "byte_rerun": "identical" if args.repeat_and_compare else "not_requested",
+                "output": str(output),
+                "published": True,
+            }
+        )
+        return result
+    finally:
+        for stage in stages:
+            if stage.exists() and stage.parent == output.parent:
+                shutil.rmtree(stage, ignore_errors=True)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cache-dir", type=Path, required=True)
@@ -1830,26 +2247,8 @@ def main() -> None:
         )
         return
     args = parse_args()
-    # Later Phase 2b commits complete canonical emission, embedding, validation,
-    # and atomic publication.  Keeping this call live makes Task 1 independently
-    # executable and validates the complete real source corpus.
-    corpus, source_queries, _, splits = build_real_collection_inputs(
-        args.cache_dir, args.abstracts_dir
-    )
-    print(
-        json.dumps(
-            {
-                "corpus_preimage_sha256": corpus.preimage_sha256,
-                "edges": sum(len(record.outgoing_record_ids) for record in corpus.records),
-                "development_queries": len(splits["development"].queries),
-                "records": len(corpus.records),
-                "sampled_queries": len(source_queries),
-                "status": "source_corpus_valid",
-                "test_queries": len(splits["test"].queries),
-            },
-            sort_keys=True,
-        )
-    )
+    result = atomic_build(args)
+    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
 
 
 if __name__ == "__main__":

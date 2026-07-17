@@ -48,7 +48,7 @@ are recorded as unsupported, not approximated. Maximum absolute difference is
 ## Release determinism identity
 
 The exact release executable SHA-256 is
-`66746e7d4c4a7620b779cba6f515fa448ee8c8169c13014e7822c43951790636`.
+`0802506743fcc79ffc7bb0d1277cb2f443c6dd249fbb9d34cb10c88a2007e96e`.
 It reports rustc `1.92.0`, target `aarch64-apple-darwin`, LLVM `21.1.3`, CPU
 architecture `arm64`, OS build `25F84`, one execution thread, locale `C`,
 round-to-nearest-ties-to-even floating-point mode, and no runtime flags. The

@@ -322,7 +322,7 @@ pub(super) fn emit_graph_retrieval_qualification_with_failures(
         &output.join("graph-retrieval-projection-identities.jsonl"),
         &projection_rows,
     )?;
-    let equality = validate_selection_path_equality_with_d(output, &runs)?;
+    let equality = validate_selection_path_equality_with_d(validated, output, &runs)?;
     let results = GraphRetrievalQualificationResults {
         collection_id: validated.collection.collection_id.clone(),
         collection_version: validated.collection.collection_version.clone(),
@@ -978,11 +978,19 @@ fn paired_comparisons(
     run_metrics: &[Value],
     artifacts: &[RunArtifacts],
 ) -> Result<(Vec<Value>, Vec<Value>), String> {
-    let baseline_run_id = |letter: &str| match letter {
-        "e" => "v3-a-whole-semantic-f32-na-cfg-984e4c3bf991",
-        "f" => "v3-b-whole-semantic-i8-na-cfg-e9898ca6ef53",
-        "g" => "v3-c-whole-weighted-i8-na-cfg-81e0395aa8e0",
-        _ => unreachable!(),
+    let baseline_run_id = |letter: &str| -> Result<&str, String> {
+        let baseline_letter = match letter {
+            "e" => "a",
+            "f" => "b",
+            "g" => "c",
+            actual => return Err(format!("unsupported graph retrieval run letter '{actual}'")),
+        };
+        validated
+            .runs
+            .iter()
+            .find(|run| run.configuration["run_letter"] == baseline_letter)
+            .map(|run| run.run_id.as_str())
+            .ok_or_else(|| format!("missing baseline run letter '{baseline_letter}'"))
     };
     let mut contract_rows = Vec::new();
     let mut diagnostic_rows = Vec::new();
@@ -996,7 +1004,7 @@ fn paired_comparisons(
         let letter = scoped_identity.configuration["run_letter"]
             .as_str()
             .unwrap();
-        let baseline_run_id = baseline_run_id(letter);
+        let baseline_run_id = baseline_run_id(letter)?;
         let baseline_run = baseline_results["runs"]
             .as_array()
             .unwrap()
@@ -1416,14 +1424,19 @@ fn gain(grade: u8, offset: usize) -> f64 {
 }
 
 fn validate_selection_path_equality_with_d(
+    validated: &ValidatedCollection,
     output: &Path,
     runs: &[RunArtifacts],
 ) -> Result<Value, String> {
-    let d_run_id = |lane: &str| match lane {
-        "explicit" => Ok("v3-d-selection-none-none-explicit-cfg-13feb2a18ac3"),
-        "topic" => Ok("v3-d-selection-none-none-topic-cfg-bf6bed5c72e7"),
-        "team" => Ok("v3-d-selection-none-none-team-cfg-7278e2315c8f"),
-        actual => Err(format!("unsupported graph retrieval lane '{actual}'")),
+    let d_run_id = |lane: &str| -> Result<&str, String> {
+        validated
+            .runs
+            .iter()
+            .find(|run| {
+                run.configuration["run_letter"] == "d" && run.configuration["seed_lane"] == lane
+            })
+            .map(|run| run.run_id.as_str())
+            .ok_or_else(|| format!("missing D selection run for lane '{lane}'"))
     };
     let mut rows = Vec::new();
     for run in runs {

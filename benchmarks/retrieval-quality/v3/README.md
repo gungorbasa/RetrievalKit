@@ -87,9 +87,9 @@ uv run --python 3.13 --with ir_measures==0.4.3 \
   python scripts/quality/assemble_v3_publication.py \
   --collection benchmarks/retrieval-quality/v3 \
   --executable target/release/vectorkit \
-  --qualification-artifacts target/benchmarks/v3/release-qualification \
+  --qualification-output target/benchmarks/v3/release-qualification \
   --output target/benchmarks/v3/publication \
-  --gate-reports target/benchmarks/v3/publication-gates
+  --gate-report-root target/benchmarks/v3/publication-gates
 ```
 
 The resulting public root has exactly 44 files, including a 43-entry

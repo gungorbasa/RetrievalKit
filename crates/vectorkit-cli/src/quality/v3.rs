@@ -58,17 +58,31 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
     if let Some(path) = artifacts {
         emit_foundation(&validated, &path)?;
     }
-    let phase_1_2a_executed = qualification_artifacts.is_some();
-    if let Some(path) = qualification_artifacts {
+    let qualification = if let Some(path) = qualification_artifacts {
         let path = qualification_output_path(&path)?;
-        emit_qualification(&validated, &path)?;
-    }
+        Some(emit_qualification(&validated, &path)?)
+    } else {
+        None
+    };
     if verify_rerun {
         verify_deterministic_rerun(&collection)?;
-        if phase_1_2a_executed {
+        if qualification.is_some() {
             verify_qualification_deterministic_rerun(&validated)?;
         }
     }
+    let phase_1_2a_executed = qualification.is_some();
+    let phase_1_2b_executed = qualification.is_some();
+    let phase_1_2c_executed = qualification.is_some();
+    let phase_status = |status: Option<&'static str>| status.unwrap_or("not_executed");
+    let qualification_status = qualification
+        .as_ref()
+        .map(|status| status.qualification)
+        .unwrap_or("not_executed");
+    let overall_qualification_status = match qualification_status {
+        "valid" => "valid_partial",
+        "invalid_execution" => "invalid_execution",
+        _ => "not_executed",
+    };
     let result = json!({
         "collection_id":validated.collection.collection_id,
         "collection_version":validated.collection.collection_version,
@@ -78,11 +92,25 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
         "query_population_sha256":population_hash(&validated.populations.q),
         "phase_1_2a_executed":phase_1_2a_executed,
         "phase_1_2a_partial":phase_1_2a_executed,
-        "phase_1_2b_executed":phase_1_2a_executed,
-        "phase_1_2b_partial":phase_1_2a_executed,
+        "phase_1_2a_execution_status":phase_status(qualification.as_ref().map(|status|status.phase_1_2a)),
+        "phase_1_2b_executed":phase_1_2b_executed,
+        "phase_1_2b_partial":phase_1_2b_executed,
+        "phase_1_2b_execution_status":phase_status(qualification.as_ref().map(|status|status.phase_1_2b)),
+        "phase_1_2c_executed":phase_1_2c_executed,
+        "phase_1_2c_partial":phase_1_2c_executed,
+        "phase_1_2c_execution_status":phase_status(qualification.as_ref().map(|status|status.phase_1_2c)),
+        "qualification_partial":qualification.is_some(),
+        "qualification_status":qualification_status,
+        "overall_qualification_status":overall_qualification_status,
+        "phase_1_complete":false,
+        "official_trec_eval_complete":false,
+        "final_manifest_complete":false,
+        "publication_ready":false,
+        "publication_status":"not_ready",
         "rerun_verified":verify_rerun,
         "run_count":validated.runs.len(),
-        "status":"valid"
+        "status":if qualification_status=="invalid_execution" {"invalid_execution"} else {"valid"},
+        "validation_status":"valid"
     });
     serde_json::to_string_pretty(&result)
         .map_err(|error| format!("failed to serialize V3 validation result: {error}"))
@@ -96,13 +124,13 @@ fn qualification_output_path(requested: &Path) -> Result<PathBuf, String> {
     let allowed = repository.join("target/benchmarks/v3");
     fs::create_dir_all(&allowed).map_err(|error| {
         format!(
-            "failed to create Phase 1.2a target root '{}': {error}",
+            "failed to create complete V3 target root '{}': {error}",
             allowed.display()
         )
     })?;
     let allowed = allowed
         .canonicalize()
-        .map_err(|error| format!("failed to resolve Phase 1.2a target root: {error}"))?;
+        .map_err(|error| format!("failed to resolve complete V3 target root: {error}"))?;
     let absolute = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
@@ -112,25 +140,25 @@ fn qualification_output_path(requested: &Path) -> Result<PathBuf, String> {
     };
     let name = absolute.file_name().ok_or_else(|| {
         format!(
-            "Phase 1.2a qualification path '{}' must name a directory",
+            "complete V3 qualification path '{}' must name a directory",
             requested.display()
         )
     })?;
     let parent = absolute.parent().ok_or_else(|| {
         format!(
-            "Phase 1.2a qualification path '{}' has no parent",
+            "complete V3 qualification path '{}' has no parent",
             requested.display()
         )
     })?;
     let parent = parent.canonicalize().map_err(|error| {
         format!(
-            "Phase 1.2a qualification parent '{}' must already resolve beneath target/benchmarks/v3: {error}",
+            "complete V3 qualification parent '{}' must already resolve beneath target/benchmarks/v3: {error}",
             parent.display()
         )
     })?;
     if parent != allowed {
         return Err(format!(
-            "Phase 1.2a qualification artifacts must be a direct child of '{}', actual '{}'",
+            "complete V3 qualification artifacts must be a direct child of '{}', actual '{}'",
             allowed.display(),
             absolute.display()
         ));
@@ -602,6 +630,71 @@ mod tests {
     #[test]
     fn foundation_rerun_is_byte_identical() {
         verify_deterministic_rerun(&fixture_root()).unwrap();
+    }
+
+    #[test]
+    fn cli_serializes_not_executed_qualification_and_publication_statuses() {
+        let output: Value = serde_json::from_str(
+            &run_cli(&[
+                "--collection".to_owned(),
+                fixture_root().display().to_string(),
+            ])
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(output["status"], "valid");
+        assert_eq!(output["validation_status"], "valid");
+        assert_eq!(output["overall_qualification_status"], "not_executed");
+        assert_eq!(output["qualification_status"], "not_executed");
+        for phase in ["phase_1_2a", "phase_1_2b", "phase_1_2c"] {
+            assert_eq!(output[format!("{phase}_executed")], false);
+            assert_eq!(output[format!("{phase}_partial")], false);
+            assert_eq!(output[format!("{phase}_execution_status")], "not_executed");
+        }
+        assert_eq!(output["phase_1_complete"], false);
+        assert_eq!(output["publication_ready"], false);
+        assert_eq!(output["publication_status"], "not_ready");
+    }
+
+    #[test]
+    fn cli_serializes_complete_a_through_g_partial_qualification_statuses() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let target = repository.join("target/benchmarks/v3");
+        fs::create_dir_all(&target).unwrap();
+        let output_path = target.join(format!(
+            "phase-1.2c-cli-status-{}-{}",
+            std::process::id(),
+            TEMPORARY_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(!output_path.exists());
+        let _output_guard = TemporaryDirectory {
+            path: output_path.clone(),
+        };
+        let output: Value = serde_json::from_str(
+            &run_cli(&[
+                "--collection".to_owned(),
+                fixture_root().display().to_string(),
+                "--qualification-artifacts".to_owned(),
+                output_path.display().to_string(),
+            ])
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(output["status"], "valid");
+        assert_eq!(output["overall_qualification_status"], "valid_partial");
+        assert_eq!(output["qualification_status"], "valid");
+        assert_eq!(output["qualification_partial"], true);
+        for phase in ["phase_1_2a", "phase_1_2b", "phase_1_2c"] {
+            assert_eq!(output[format!("{phase}_executed")], true);
+            assert_eq!(output[format!("{phase}_partial")], true);
+            assert_eq!(output[format!("{phase}_execution_status")], "valid");
+        }
+        assert_eq!(output["official_trec_eval_complete"], false);
+        assert_eq!(output["final_manifest_complete"], false);
+        assert_eq!(output["publication_ready"], false);
     }
 
     #[test]

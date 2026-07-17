@@ -35,6 +35,14 @@ impl QualificationResults {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CompleteQualificationStatus {
+    pub(super) phase_1_2a: &'static str,
+    pub(super) phase_1_2b: &'static str,
+    pub(super) phase_1_2c: &'static str,
+    pub(super) qualification: &'static str,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RunExecution {
     queries: Vec<QueryExecution>,
@@ -591,7 +599,7 @@ fn project_documents(
 pub(super) fn emit_qualification(
     validated: &ValidatedCollection,
     output: &Path,
-) -> Result<QualificationResults, String> {
+) -> Result<CompleteQualificationStatus, String> {
     emit_qualification_with_failures(validated, output, &ExecutionFailures::default())
 }
 
@@ -599,25 +607,25 @@ pub(super) fn emit_qualification_with_failures(
     validated: &ValidatedCollection,
     output: &Path,
     failures: &ExecutionFailures,
-) -> Result<QualificationResults, String> {
+) -> Result<CompleteQualificationStatus, String> {
     if output.exists() {
         return Err(format!(
-            "Phase 1.2a qualification root '{}' already exists; a fresh directory is required",
+            "complete V3 qualification root '{}' already exists; a fresh directory is required",
             output.display()
         ));
     }
     let results = execute_with_failures(validated, failures)?;
     let parent = output.parent().ok_or_else(|| {
         format!(
-            "Phase 1.2b qualification root '{}' has no parent",
+            "complete V3 qualification root '{}' has no parent",
             output.display()
         )
     })?;
-    let staging = TemporaryDirectory::new_in(parent, ".phase-1.2b-qualification-staging")?;
+    let staging = TemporaryDirectory::new_in(parent, ".phase-1.2c-qualification-staging")?;
     let staged_output = &staging.path;
     fs::create_dir_all(staged_output.join("runs")).map_err(|error| {
         format!(
-            "failed to create Phase 1.2a qualification root '{}': {error}",
+            "failed to create complete V3 qualification root '{}': {error}",
             staged_output.display()
         )
     })?;
@@ -625,11 +633,11 @@ pub(super) fn emit_qualification_with_failures(
         staged_output.join("qrels.tsv"),
         &validated.bytes["qrels.tsv"],
     )
-    .map_err(|error| format!("failed to write Phase 1.2a qrels: {error}"))?;
+    .map_err(|error| format!("failed to write complete V3 qrels: {error}"))?;
     write_canonical_json(
         &staged_output.join("rust-results.json"),
         &serde_json::to_value(&results)
-            .map_err(|error| format!("failed to encode Phase 1.2a Rust results: {error}"))?,
+            .map_err(|error| format!("failed to encode A-C Rust results: {error}"))?,
     )?;
     write_canonical_json(
         &staged_output.join("metrics.json"),
@@ -639,7 +647,7 @@ pub(super) fn emit_qualification_with_failures(
         staged_output.join("timing-samples.jsonl"),
         canonical_json_line(&json!({"profile":"deterministic_quality","status":"not_measured"}))?,
     )
-    .map_err(|error| format!("failed to write Phase 1.2a timing marker: {error}"))?;
+    .map_err(|error| format!("failed to write V3 timing marker: {error}"))?;
     for run in &results.runs {
         fs::write(
             staged_output
@@ -647,12 +655,7 @@ pub(super) fn emit_qualification_with_failures(
                 .join(format!("{}.trec", run.run_id)),
             trec(run, validated.collection.evaluation_depth),
         )
-        .map_err(|error| {
-            format!(
-                "failed to write Phase 1.2a TREC run '{}': {error}",
-                run.run_id
-            )
-        })?;
+        .map_err(|error| format!("failed to write A-C TREC run '{}': {error}", run.run_id))?;
     }
     let graph_results = super::v3_graph_execution::emit_graph_qualification_with_failures(
         validated,
@@ -683,12 +686,36 @@ pub(super) fn emit_qualification_with_failures(
     )?;
     fs::rename(staged_output, output).map_err(|error| {
         format!(
-            "failed to atomically finalize Phase 1.2b qualification root '{}' from '{}': {error}",
+            "failed to atomically finalize complete V3 qualification root '{}' from '{}': {error}",
             output.display(),
             staged_output.display()
         )
     })?;
-    Ok(results)
+    let phase_1_2a = if results.has_invalid_execution() {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
+    let phase_1_2b = if graph_results.has_invalid_execution() {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
+    let phase_1_2c = if graph_retrieval_results.has_invalid_execution() {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
+    Ok(CompleteQualificationStatus {
+        phase_1_2a,
+        phase_1_2b,
+        phase_1_2c,
+        qualification: if [phase_1_2a, phase_1_2b, phase_1_2c].contains(&"invalid_execution") {
+            "invalid_execution"
+        } else {
+            "valid"
+        },
+    })
 }
 
 pub(super) fn verify_qualification_deterministic_rerun(
@@ -705,8 +732,8 @@ pub(super) fn verify_qualification_deterministic_rerun(
             target.display()
         )
     })?;
-    let first = TemporaryDirectory::new_in(&target, "phase-1.2a-rerun-a")?;
-    let second = TemporaryDirectory::new_in(&target, "phase-1.2a-rerun-b")?;
+    let first = TemporaryDirectory::new_in(&target, "phase-1.2c-rerun-a")?;
+    let second = TemporaryDirectory::new_in(&target, "phase-1.2c-rerun-b")?;
     let first_output = first.path.join("qualification");
     let second_output = second.path.join("qualification");
     emit_qualification(validated, &first_output)?;
@@ -714,7 +741,7 @@ pub(super) fn verify_qualification_deterministic_rerun(
     super::v3::compare_directories_with_label(
         &first_output,
         &second_output,
-        "Phase 1.2a qualification",
+        "complete V3 qualification",
     )
 }
 

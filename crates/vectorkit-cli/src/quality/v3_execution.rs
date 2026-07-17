@@ -476,13 +476,30 @@ fn hybrid_hits(
     if let Some(filter) = &query.filter {
         request = request.with_filter(filter.clone());
     }
-    database
+    let mut hits = database
         .hybrid_search(&request)
         .map_err(|error| format!("V3 Phase 1.2a hybrid query '{}': {error}", query.query_id))?
         .into_iter()
         .enumerate()
         .map(|(offset, hit)| convert_hybrid_hit(database, query, offset, hit))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    canonicalize_equal_score_ties(&mut hits);
+    Ok(hits)
+}
+
+fn canonicalize_equal_score_ties(hits: &mut [ChunkHit]) {
+    hits.sort_by(|left, right| {
+        right
+            .fusion_score
+            .expect("weighted hit has fusion score")
+            .total_cmp(&left.fusion_score.expect("weighted hit has fusion score"))
+            .then_with(|| {
+                (&left.record_id, &left.chunk_key).cmp(&(&right.record_id, &right.chunk_key))
+            })
+    });
+    for (offset, hit) in hits.iter_mut().enumerate() {
+        hit.native_rank = offset + 1;
+    }
 }
 
 fn convert_hybrid_hit(

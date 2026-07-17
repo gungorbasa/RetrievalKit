@@ -14,6 +14,7 @@ use vectorkit_graph::{
 
 use super::v3::d_generation_fingerprint;
 use super::v3_canonical::{canonical_json, canonical_json_line, write_canonical_json};
+use super::v3_execution_status::{classify_query_failure, ExecutionFailures, FailureReason};
 use super::v3_graph_input::build_graph_database;
 use super::v3_ingestion::convert_filter;
 use super::v3_population::population_hash;
@@ -83,6 +84,14 @@ pub(super) struct GraphQualificationResults {
     runs: Vec<GraphRunExecution>,
     schema_version: u8,
     seed_resolutions: Value,
+}
+
+impl GraphQualificationResults {
+    pub(super) fn has_invalid_execution(&self) -> bool {
+        self.runs
+            .iter()
+            .any(|run| run.status == "invalid_execution")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -166,6 +175,7 @@ struct RunArtifacts {
     path_rows: Vec<Value>,
     projection_rows: Vec<Value>,
     selection_rows: Vec<Value>,
+    valid: BTreeMap<String, ValidGraphQuery>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -175,9 +185,10 @@ struct PersistenceValidation {
     stable_generation_fingerprint: String,
 }
 
-pub(super) fn emit_graph_qualification(
+pub(super) fn emit_graph_qualification_with_failures(
     validated: &ValidatedCollection,
     output: &Path,
+    failures: &ExecutionFailures,
 ) -> Result<GraphQualificationResults, String> {
     let seeds = resolve_seeds(validated)?;
     validate_frozen_runs(validated)?;
@@ -190,8 +201,14 @@ pub(super) fn emit_graph_qualification(
         .filter(|run| run.configuration["run_letter"] == "d")
     {
         let database = build_graph_database(validated)?;
-        let (artifacts, validation) =
-            execute_run_with_persistence(validated, run, &database, &seeds, &fingerprint)?;
+        let (artifacts, validation) = execute_run_with_persistence_and_failures(
+            validated,
+            run,
+            &database,
+            &seeds,
+            &fingerprint,
+            failures,
+        )?;
         runs.push(artifacts);
         persistence.push(validation);
     }
@@ -274,12 +291,13 @@ pub(super) fn emit_graph_qualification(
         &json!({
             "runs":persistence,
             "schema_version":1,
-            "status":"valid"
+            "status":if runs.iter().any(|run|run.result.status=="invalid_execution") {"invalid_execution"} else {"valid"}
         }),
     )?;
     Ok(results)
 }
 
+#[cfg(test)]
 fn execute_run_with_persistence(
     validated: &ValidatedCollection,
     run: &RunIdentity,
@@ -287,7 +305,30 @@ fn execute_run_with_persistence(
     seeds: &SeedResolutionSet,
     fingerprint: &str,
 ) -> Result<(RunArtifacts, PersistenceValidation), String> {
-    let before = execute_run(validated, run, database, seeds, fingerprint)?;
+    execute_run_with_persistence_and_failures(
+        validated,
+        run,
+        database,
+        seeds,
+        fingerprint,
+        &ExecutionFailures::default(),
+    )
+}
+
+fn execute_run_with_persistence_and_failures(
+    validated: &ValidatedCollection,
+    run: &RunIdentity,
+    database: &GraphDatabase,
+    seeds: &SeedResolutionSet,
+    fingerprint: &str,
+    injected_failures: &ExecutionFailures,
+) -> Result<(RunArtifacts, PersistenceValidation), String> {
+    let mut before = execute_run(validated, run, database, seeds, fingerprint)?;
+    let repeated = execute_run(validated, run, database, seeds, fingerprint)?;
+    let mut failures = injected_failures.clone();
+    if before != repeated {
+        failures.run(run.run_id.clone(), FailureReason::NonDeterministicRanking);
+    }
     let temporary = TemporaryDirectory::new("vectorkit-v3-phase-1-2b-persistence")?;
     let persisted = temporary.path.join("database");
     database
@@ -297,19 +338,23 @@ fn execute_run_with_persistence(
         .map_err(|error| format!("V3 Phase 1.2b validate '{}': {error}", run.run_id))?;
     let loaded = GraphDatabase::load_from_dir(&persisted)
         .map_err(|error| format!("V3 Phase 1.2b reload '{}': {error}", run.run_id))?;
-    verify_persisted_database(database, &loaded, run)?;
+    if verify_persisted_database(database, &loaded, run).is_err() {
+        failures.run(run.run_id.clone(), FailureReason::ReloadMismatch);
+    }
     let after = execute_run(validated, run, &loaded, seeds, fingerprint)?;
     if before != after {
-        return Err(format!(
-            "V3 Phase 1.2b persistence_mismatch for run '{}'",
-            run.run_id
-        ));
+        failures.run(run.run_id.clone(), FailureReason::PersistenceMismatch);
     }
+    apply_failures(validated, run, &mut before, &failures)?;
+    let persistence_equivalent = !matches!(
+        failures.run_reason(&run.run_id),
+        Some(FailureReason::PersistenceMismatch | FailureReason::ReloadMismatch)
+    );
     Ok((
         before,
         PersistenceValidation {
             run_id: run.run_id.clone(),
-            save_validate_load_equivalent: true,
+            save_validate_load_equivalent: persistence_equivalent,
             stable_generation_fingerprint: fingerprint.to_owned(),
         },
     ))
@@ -394,6 +439,7 @@ fn execute_run(
         .collect::<BTreeMap<_, _>>();
     let mut result_rows = Vec::new();
     let mut valid = BTreeMap::<String, ValidGraphQuery>::new();
+    let mut observed_failures = ExecutionFailures::default();
     for query_id in &run.declared {
         let query = queries
             .get(query_id.as_str())
@@ -404,13 +450,25 @@ fn execute_run(
             continue;
         }
         let seed = resolved_seed(seeds, lane, query_id)?;
-        let execution = execute_query(validated, database, run, lane, query, seed, fingerprint)?;
-        result_rows.push(result_row(query, run, "valid", None));
-        valid.insert(query_id.clone(), execution);
+        match execute_query(validated, database, run, lane, query, seed, fingerprint) {
+            Ok(execution) => {
+                result_rows.push(result_row(query, run, "valid", None));
+                valid.insert(query_id.clone(), execution);
+            }
+            Err(error) => {
+                let (reason, run_wide) = classify_query_failure(&error);
+                if run_wide {
+                    observed_failures.run(run.run_id.clone(), reason);
+                } else {
+                    observed_failures.query(run.run_id.clone(), query_id.clone(), reason);
+                }
+                result_rows.push(result_row(query, run, "valid", None));
+            }
+        }
     }
     result_rows.sort_by(|left, right| left.query_id.cmp(&right.query_id));
 
-    let metrics = run_metrics(validated, run, &valid)?;
+    let metrics = run_metrics(validated, run, &valid, &result_rows)?;
     let mut selection_rows = valid
         .values()
         .map(|query| query.selection_row.clone())
@@ -432,7 +490,7 @@ fn execute_run(
             })
         })
         .collect();
-    Ok(RunArtifacts {
+    let mut artifacts = RunArtifacts {
         result: GraphRunExecution {
             queries: result_rows,
             run_id: run.run_id.clone(),
@@ -442,7 +500,54 @@ fn execute_run(
         path_rows,
         projection_rows,
         selection_rows,
-    })
+        valid,
+    };
+    apply_failures(validated, run, &mut artifacts, &observed_failures)?;
+    Ok(artifacts)
+}
+
+fn apply_failures(
+    validated: &ValidatedCollection,
+    run: &RunIdentity,
+    artifacts: &mut RunArtifacts,
+    failures: &ExecutionFailures,
+) -> Result<(), String> {
+    if !failures.run_is_invalid(&run.run_id) {
+        return Ok(());
+    }
+    let mut invalid_queries = BTreeSet::new();
+    for result in &mut artifacts.result.queries {
+        if result.execution_status == "excluded_pre_freeze" {
+            continue;
+        }
+        if let Some(reason) = failures.reason_for(&run.run_id, &result.query_id) {
+            result.execution_status = "invalid_execution";
+            result.status_reason = Some(reason.as_str().to_owned());
+            result.chunk_hits.clear();
+            result.projected_documents.clear();
+            result.duplicate_collapse_count = 0;
+            invalid_queries.insert(result.query_id.clone());
+        }
+    }
+    for query_id in &invalid_queries {
+        artifacts.valid.remove(query_id);
+    }
+    artifacts
+        .selection_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts
+        .path_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts
+        .projection_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts.result.status = if invalid_queries.is_empty() {
+        "valid"
+    } else {
+        "invalid_execution"
+    };
+    artifacts.metrics = run_metrics(validated, run, &artifacts.valid, &artifacts.result.queries)?;
+    Ok(())
 }
 
 fn execute_query(
@@ -866,6 +971,7 @@ fn run_metrics(
     validated: &ValidatedCollection,
     run: &RunIdentity,
     valid: &BTreeMap<String, ValidGraphQuery>,
+    results: &[GraphQueryExecution],
 ) -> Result<Value, String> {
     let mut queries = Vec::new();
     for query_id in &run.declared {
@@ -874,6 +980,21 @@ fn run_metrics(
                 "candidate_counts":{"eligible_chunks":execution.eligible_chunks,"projected_chunks":execution.projected_chunks},
                 "execution_status":"valid",
                 "metrics":metrics_json(&execution.metrics),
+                "query_id":query_id
+            }));
+        } else if run.execution.contains(query_id) {
+            let result = results
+                .iter()
+                .find(|result| result.query_id == *query_id)
+                .ok_or_else(|| format!("missing D result row for '{query_id}'"))?;
+            let metrics = D_METRICS
+                .iter()
+                .map(|name| (*name, Metric::status("invalid_execution")))
+                .collect();
+            queries.push(json!({
+                "candidate_counts":Value::Null,
+                "execution_status":result.execution_status,
+                "metrics":metrics_json(&metrics),
                 "query_id":query_id
             }));
         } else {
@@ -896,8 +1017,8 @@ fn run_metrics(
             "attempted":run.execution.len(),
             "declared":run.declared.len(),
             "excluded_pre_freeze":run.declared.len()-run.execution.len(),
-            "invalid_execution":0,
-            "valid_execution":run.execution.len()
+            "invalid_execution":run.execution.len()-valid.len(),
+            "valid_execution":valid.len()
         },
         "declared_population_sha256":population_hash(&run.declared),
         "execution_population_sha256":population_hash(&run.execution),
@@ -905,7 +1026,7 @@ fn run_metrics(
         "micro":micro,
         "queries":queries,
         "run_id":run.run_id,
-        "status":"valid"
+        "status":if valid.len()==run.execution.len(){"valid"}else{"invalid_execution"}
     }))
 }
 

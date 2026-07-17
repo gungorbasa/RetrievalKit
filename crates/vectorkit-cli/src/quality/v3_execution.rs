@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use vectorkit_core::{HybridHit, HybridQuery, RetrievalDatabase, SearchQuery, VectorEncoding};
 
 use super::v3_canonical::{canonical_json_line, write_canonical_json};
+use super::v3_execution_status::{ExecutionFailures, FailureReason};
 use super::v3_ingestion::{ProductionQueryInput, V3ProductionInputs};
 use super::v3_runs::RunIdentity;
 use super::v3_schema::Qrel;
@@ -24,6 +25,14 @@ pub(super) struct QualificationResults {
     runs: Vec<RunExecution>,
     schema_version: u8,
     seed_resolutions: Vec<Value>,
+}
+
+impl QualificationResults {
+    pub(super) fn has_invalid_execution(&self) -> bool {
+        self.runs
+            .iter()
+            .any(|run| run.status == "invalid_execution")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -118,7 +127,15 @@ impl ExistingMetrics {
     }
 }
 
+#[cfg(test)]
 pub(super) fn execute(validated: &ValidatedCollection) -> Result<QualificationResults, String> {
+    execute_with_failures(validated, &ExecutionFailures::default())
+}
+
+fn execute_with_failures(
+    validated: &ValidatedCollection,
+    failures: &ExecutionFailures,
+) -> Result<QualificationResults, String> {
     let inputs = V3ProductionInputs::from_validated(validated)?;
     let source_queries = validated
         .queries
@@ -134,7 +151,7 @@ pub(super) fn execute(validated: &ValidatedCollection) -> Result<QualificationRe
                 Some("a" | "b" | "c")
             )
         })
-        .map(|run| execute_run_with_persistence(run, &inputs, &source_queries, validated))
+        .map(|run| execute_run_with_persistence(run, &inputs, &source_queries, validated, failures))
         .collect::<Result<Vec<_>, _>>()?;
     runs.sort_by(|left, right| left.run_id.cmp(&right.run_id));
     if runs.len() != 3 {
@@ -157,6 +174,7 @@ fn execute_run_with_persistence(
     inputs: &V3ProductionInputs,
     source_queries: &BTreeMap<&str, &super::v3_schema::Query>,
     validated: &ValidatedCollection,
+    injected_failures: &ExecutionFailures,
 ) -> Result<RunExecution, String> {
     let encoding = match run.configuration["vector_encoding"].as_str() {
         Some("f32") => VectorEncoding::F32,
@@ -169,7 +187,12 @@ fn execute_run_with_persistence(
         }
     };
     let database = inputs.build_database(encoding)?;
-    let before = execute_run(run, inputs, source_queries, validated, &database)?;
+    let mut before = execute_run(run, inputs, source_queries, validated, &database)?;
+    let repeated = execute_run(run, inputs, source_queries, validated, &database)?;
+    let mut failures = injected_failures.clone();
+    if before != repeated {
+        failures.run(run.run_id.clone(), FailureReason::NonDeterministicRanking);
+    }
 
     let temporary = TemporaryDirectory::new("vectorkit-v3-phase-1-2a-persistence")?;
     let persisted = temporary.path.join("database");
@@ -180,14 +203,14 @@ fn execute_run_with_persistence(
         .map_err(|error| format!("V3 Phase 1.2a validate '{}': {error}", run.run_id))?;
     let loaded = RetrievalDatabase::load_from_dir(&persisted)
         .map_err(|error| format!("V3 Phase 1.2a reload '{}': {error}", run.run_id))?;
-    verify_persisted_database(&database, &loaded, run)?;
+    if verify_persisted_database(&database, &loaded, run).is_err() {
+        failures.run(run.run_id.clone(), FailureReason::ReloadMismatch);
+    }
     let after = execute_run(run, inputs, source_queries, validated, &loaded)?;
     if before != after {
-        return Err(format!(
-            "V3 Phase 1.2a persistence_mismatch for run '{}'",
-            run.run_id
-        ));
+        failures.run(run.run_id.clone(), FailureReason::PersistenceMismatch);
     }
+    apply_failures(&mut before, &failures);
     Ok(before)
 }
 
@@ -259,47 +282,89 @@ fn execute_run(
         let source = source_queries
             .get(query_id.as_str())
             .ok_or_else(|| format!("V3 Phase 1.2a source query '{}' is missing", query_id))?;
-        let chunk_hits = if matches!(letter, "a" | "b") {
-            semantic_hits(database, input)?
-        } else if letter == "c" {
-            let alpha = run.configuration["fusion_alpha"]
-                .as_f64()
-                .map(|value| value as f32)
-                .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
-                .ok_or_else(|| {
-                    format!(
-                        "V3 Phase 1.2a run '{}' has invalid fusion alpha",
-                        run.run_id
-                    )
-                })?;
-            hybrid_hits(database, input, candidate_limits, alpha)?
-        } else {
-            return Err(format!(
-                "V3 Phase 1.2a attempted non-A-C run '{}'",
-                run.run_id
-            ));
-        };
-        validate_native_hits(&chunk_hits, run, query_id)?;
-        let (projected_documents, duplicate_collapse_count) =
-            project_documents(&chunk_hits, evaluation_depth);
-        queries.push(QueryExecution {
+        let execution = (|| {
+            let chunk_hits = if matches!(letter, "a" | "b") {
+                semantic_hits(database, input)?
+            } else if letter == "c" {
+                let alpha = run.configuration["fusion_alpha"]
+                    .as_f64()
+                    .map(|value| value as f32)
+                    .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+                    .ok_or_else(|| {
+                        format!(
+                            "V3 Phase 1.2a run '{}' has invalid fusion alpha",
+                            run.run_id
+                        )
+                    })?;
+                hybrid_hits(database, input, candidate_limits, alpha)?
+            } else {
+                return Err(format!(
+                    "V3 Phase 1.2a attempted non-A-C run '{}'",
+                    run.run_id
+                ));
+            };
+            validate_native_hits(&chunk_hits, run, query_id)?;
+            let (projected_documents, duplicate_collapse_count) =
+                project_documents(&chunk_hits, evaluation_depth);
+            Ok(QueryExecution {
+                candidate_limits,
+                chunk_hits,
+                duplicate_collapse_count,
+                execution_status: "valid",
+                filter: source.metadata_filter.clone(),
+                projected_documents,
+                query_id: query_id.clone(),
+                selection_run_id: None,
+                status_reason: None,
+            })
+        })();
+        queries.push(execution.unwrap_or_else(|_| QueryExecution {
             candidate_limits,
-            chunk_hits,
-            duplicate_collapse_count,
-            execution_status: "valid",
+            chunk_hits: Vec::new(),
+            duplicate_collapse_count: 0,
+            execution_status: "invalid_execution",
             filter: source.metadata_filter.clone(),
-            projected_documents,
+            projected_documents: Vec::new(),
             query_id: query_id.clone(),
             selection_run_id: None,
-            status_reason: None,
-        });
+            status_reason: Some(FailureReason::ContractViolation.as_str().to_owned()),
+        }));
     }
     queries.sort_by(|left, right| left.query_id.cmp(&right.query_id));
+    let status = if queries
+        .iter()
+        .any(|query| query.execution_status == "invalid_execution")
+    {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
     Ok(RunExecution {
         queries,
         run_id: run.run_id.clone(),
-        status: "valid",
+        status,
     })
+}
+
+fn apply_failures(run: &mut RunExecution, failures: &ExecutionFailures) {
+    for query in &mut run.queries {
+        if let Some(reason) = failures.reason_for(&run.run_id, &query.query_id) {
+            query.execution_status = "invalid_execution";
+            query.status_reason = Some(reason.as_str().to_owned());
+            query.chunk_hits.clear();
+            query.projected_documents.clear();
+            query.duplicate_collapse_count = 0;
+        }
+    }
+    run.status = if run
+        .queries
+        .iter()
+        .any(|query| query.execution_status == "invalid_execution")
+    {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
 }
 
 fn candidate_limits(run: &RunIdentity) -> Result<CandidateLimits, String> {
@@ -527,13 +592,21 @@ pub(super) fn emit_qualification(
     validated: &ValidatedCollection,
     output: &Path,
 ) -> Result<QualificationResults, String> {
+    emit_qualification_with_failures(validated, output, &ExecutionFailures::default())
+}
+
+pub(super) fn emit_qualification_with_failures(
+    validated: &ValidatedCollection,
+    output: &Path,
+    failures: &ExecutionFailures,
+) -> Result<QualificationResults, String> {
     if output.exists() {
         return Err(format!(
             "Phase 1.2a qualification root '{}' already exists; a fresh directory is required",
             output.display()
         ));
     }
-    let results = execute(validated)?;
+    let results = execute_with_failures(validated, failures)?;
     let parent = output.parent().ok_or_else(|| {
         format!(
             "Phase 1.2b qualification root '{}' has no parent",
@@ -581,11 +654,17 @@ pub(super) fn emit_qualification(
             )
         })?;
     }
-    super::v3_graph_execution::emit_graph_qualification(validated, staged_output)?;
-    super::v3_graph_retrieval_execution::emit_graph_retrieval_qualification(
+    let graph_results = super::v3_graph_execution::emit_graph_qualification_with_failures(
         validated,
         staged_output,
+        failures,
     )?;
+    let graph_retrieval_results =
+        super::v3_graph_retrieval_execution::emit_graph_retrieval_qualification_with_failures(
+            validated,
+            staged_output,
+            failures,
+        )?;
     write_canonical_json(
         &staged_output.join("qualification.json"),
         &json!({
@@ -595,7 +674,11 @@ pub(super) fn emit_qualification(
             "included_run_letters":["a","b","c","d","e","f","g"],
             "partial":true,
             "publication_ready":false,
-            "status":"qualification_only_no_final_manifest"
+            "status":if !failures.is_empty() || results.has_invalid_execution() || graph_results.has_invalid_execution() || graph_retrieval_results.has_invalid_execution() {
+                "invalid_execution"
+            } else {
+                "qualification_only_no_final_manifest"
+            }
         }),
     )?;
     fs::rename(staged_output, output).map_err(|error| {
@@ -655,6 +738,9 @@ fn metrics_artifact(validated: &ValidatedCollection, results: &QualificationResu
         .runs
         .iter()
         .map(|run| {
+            if run.status == "invalid_execution" {
+                return invalid_aware_metrics_run(validated, run);
+            }
             let mut macro_metrics = ExistingMetrics::default();
             let queries = run
                 .queries
@@ -692,6 +778,106 @@ fn metrics_artifact(validated: &ValidatedCollection, results: &QualificationResu
         "partial":true,
         "publication_ready":false,
         "runs":runs
+    })
+}
+
+fn invalid_aware_metrics_run(validated: &ValidatedCollection, run: &RunExecution) -> Value {
+    let qrels = qrels_by_query(&validated.qrels);
+    let metric_names = [
+        "ap",
+        "judged_at_10",
+        "judged_at_5",
+        "mrr_at_10",
+        "ndcg_at_10",
+        "ndcg_at_5",
+        "precision_at_5",
+        "recall_at_10",
+        "recall_at_5",
+        "success_at_1",
+    ];
+    let queries = run
+        .queries
+        .iter()
+        .map(|query| {
+            let metrics = if query.execution_status == "invalid_execution" {
+                metric_names
+                    .iter()
+                    .map(|name| ((*name).to_owned(), json!({"status":"invalid_execution","value":Value::Null})))
+                    .collect::<serde_json::Map<_, _>>()
+            } else {
+                let values = serde_json::to_value(query_metrics(
+                    &query.projected_documents,
+                    qrels.get(query.query_id.as_str()).unwrap(),
+                ))
+                .unwrap();
+                values
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(name, value)| {
+                        (name.clone(), json!({"status":"valid","value":value}))
+                    })
+                    .collect()
+            };
+            json!({"execution_status":query.execution_status,"metrics":metrics,"query_id":query.query_id})
+        })
+        .collect::<Vec<_>>();
+    let macro_metrics = metric_names
+        .iter()
+        .map(|name| {
+            let mut numerator = 0.0;
+            let mut denominator = 0_u64;
+            let mut invalid = 0_u64;
+            for query in &queries {
+                let row = &query["metrics"][*name];
+                if row["status"] == "valid" {
+                    numerator += row["value"].as_f64().unwrap();
+                    denominator += 1;
+                } else {
+                    invalid += 1;
+                }
+            }
+            (
+                (*name).to_owned(),
+                json!({
+                    "denominator":denominator,
+                    "numerator":numerator,
+                    "status_counts":{
+                        "excluded_pre_freeze":0,
+                        "invalid_execution":invalid,
+                        "not_applicable":0,
+                        "undefined":0,
+                        "valid":denominator
+                    },
+                    "value":if denominator==0 { Value::Null } else { json!(numerator/denominator as f64) }
+                }),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>();
+    let invalid = run
+        .queries
+        .iter()
+        .filter(|query| query.execution_status == "invalid_execution")
+        .count();
+    let identity = validated
+        .runs
+        .iter()
+        .find(|candidate| candidate.run_id == run.run_id)
+        .unwrap();
+    json!({
+        "counts":{
+            "attempted":run.queries.len(),
+            "declared":run.queries.len(),
+            "excluded_pre_freeze":0,
+            "invalid_execution":invalid,
+            "valid_execution":run.queries.len()-invalid
+        },
+        "declared_population_sha256":identity.declared_hash(),
+        "execution_population_sha256":identity.execution_hash(),
+        "macro":macro_metrics,
+        "queries":queries,
+        "run_id":run.run_id,
+        "status":"invalid_execution"
     })
 }
 
@@ -991,6 +1177,172 @@ mod tests {
     fn phase_1_2a_qualification_rerun_is_byte_identical() {
         let validated = validate(&fixture_root()).unwrap();
         verify_qualification_deterministic_rerun(&validated).unwrap();
+    }
+
+    #[test]
+    fn serializes_canonical_invalid_execution_outcomes_without_partial_rows() {
+        let validated = validate(&fixture_root()).unwrap();
+        let run_id = |letter: &str, lane: Option<&str>| {
+            validated
+                .runs
+                .iter()
+                .find(|run| {
+                    run.configuration["run_letter"] == letter
+                        && lane.is_none_or(|lane| run.configuration["seed_lane"] == lane)
+                })
+                .unwrap()
+                .run_id
+                .clone()
+        };
+        let a = run_id("a", None);
+        let b = run_id("b", None);
+        let c = run_id("c", None);
+        let d_explicit = run_id("d", Some("explicit"));
+        let d_team = run_id("d", Some("team"));
+        let e_explicit = run_id("e", Some("explicit"));
+        let e_topic = run_id("e", Some("topic"));
+        let f_explicit = run_id("f", Some("explicit"));
+        let g_explicit = run_id("g", Some("explicit"));
+        let mut failures = ExecutionFailures::default();
+        failures.query(&a, "qa", FailureReason::ContractViolation);
+        failures.run(&b, FailureReason::ContractViolation);
+        failures.run(&c, FailureReason::ContractViolation);
+        failures.run(&d_explicit, FailureReason::StaleSelection);
+        failures.run(&d_team, FailureReason::ContractViolation);
+        failures.run(&d_team, FailureReason::ReloadMismatch);
+        failures.run(&d_team, FailureReason::GenerationMismatch);
+        failures.run(&d_team, FailureReason::StaleSelection);
+        failures.run(&e_topic, FailureReason::PersistenceMismatch);
+        failures.run(&f_explicit, FailureReason::ReloadMismatch);
+        failures.run(&g_explicit, FailureReason::NonDeterministicRanking);
+
+        let first = TemporaryDirectory::new("vectorkit-v3-invalid-a").unwrap();
+        let second = TemporaryDirectory::new("vectorkit-v3-invalid-b").unwrap();
+        let first_output = first.path.join("qualification");
+        let second_output = second.path.join("qualification");
+        emit_qualification_with_failures(&validated, &first_output, &failures).unwrap();
+        emit_qualification_with_failures(&validated, &second_output, &failures).unwrap();
+        super::super::v3::compare_directories_with_label(
+            &first_output,
+            &second_output,
+            "invalid qualification",
+        )
+        .unwrap();
+
+        let read = |name: &str| -> Value {
+            serde_json::from_slice(&fs::read(first_output.join(name)).unwrap()).unwrap()
+        };
+        let result_files = [
+            "rust-results.json",
+            "graph-rust-results.json",
+            "graph-retrieval-rust-results.json",
+        ];
+        let mut statuses = BTreeMap::new();
+        for file in result_files {
+            let value = read(file);
+            for run in value["runs"].as_array().unwrap() {
+                statuses.insert(run["run_id"].as_str().unwrap().to_owned(), run.clone());
+            }
+        }
+        let a_run = &statuses[&a];
+        assert_eq!(a_run["status"], "invalid_execution");
+        assert_eq!(
+            a_run["queries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|query| query["execution_status"] == "invalid_execution")
+                .count(),
+            1
+        );
+        assert!(statuses[&e_explicit]["status"] == "valid");
+        for (run_id, expected) in [
+            (&b, "contract_violation"),
+            (&c, "contract_violation"),
+            (&d_explicit, "stale_selection"),
+            (&d_team, "generation_mismatch"),
+            (&e_topic, "persistence_mismatch"),
+            (&f_explicit, "reload_mismatch"),
+            (&g_explicit, "non_deterministic_ranking"),
+        ] {
+            let run = &statuses[run_id];
+            assert_eq!(run["status"], "invalid_execution");
+            for query in run["queries"].as_array().unwrap() {
+                if query["execution_status"] == "excluded_pre_freeze" {
+                    assert!(matches!(
+                        query["status_reason"].as_str(),
+                        Some("derived_seed_no_match" | "derived_seed_ambiguous")
+                    ));
+                    continue;
+                }
+                assert_eq!(query["execution_status"], "invalid_execution");
+                assert_eq!(query["status_reason"], expected);
+                assert!(query["chunk_hits"].as_array().unwrap().is_empty());
+                assert!(query["projected_documents"].as_array().unwrap().is_empty());
+                assert_eq!(query["duplicate_collapse_count"], 0);
+            }
+        }
+
+        for (directory, extension) in [("graph-selections", "jsonl"), ("graph-paths", "jsonl")] {
+            for run_id in [&d_explicit, &d_team, &e_topic, &f_explicit, &g_explicit] {
+                assert!(fs::read(
+                    first_output
+                        .join(directory)
+                        .join(format!("{run_id}.{extension}"))
+                )
+                .unwrap()
+                .is_empty());
+            }
+        }
+        for run_id in [&b, &c, &e_topic, &f_explicit, &g_explicit] {
+            assert!(
+                fs::read(first_output.join("runs").join(format!("{run_id}.trec")))
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        let a_trec = String::from_utf8(
+            fs::read(first_output.join("runs").join(format!("{a}.trec"))).unwrap(),
+        )
+        .unwrap();
+        assert!(!a_trec.lines().any(|line| line.starts_with("qa ")));
+        assert!(a_trec.lines().any(|line| line.starts_with("qb ")));
+
+        for file in [
+            "metrics.json",
+            "graph-metrics.json",
+            "graph-retrieval-metrics.json",
+        ] {
+            let value = read(file);
+            for run in value["runs"].as_array().unwrap() {
+                if statuses[run["run_id"].as_str().unwrap()]["status"] == "invalid_execution" {
+                    for query in run["queries"].as_array().unwrap() {
+                        if query["execution_status"] == "invalid_execution" {
+                            assert!(query["metrics"]
+                                .as_object()
+                                .unwrap()
+                                .values()
+                                .all(|metric| {
+                                    metric["status"] == "invalid_execution"
+                                        && metric["value"].is_null()
+                                }));
+                        }
+                    }
+                }
+            }
+        }
+        let paired = read("graph-retrieval-metrics.json");
+        assert!(paired["paired_comparisons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["status"] == "invalid_execution")
+            .all(|row| row["metrics"]
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|metric| metric["delta"].is_null())));
+        assert_eq!(read("qualification.json")["status"], "invalid_execution");
     }
 
     #[test]

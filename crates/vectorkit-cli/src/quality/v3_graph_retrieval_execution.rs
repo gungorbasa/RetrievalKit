@@ -14,6 +14,7 @@ use vectorkit_graph::{
 
 use super::v3::retrieval_generation_fingerprint;
 use super::v3_canonical::{canonical_json, canonical_json_line, write_canonical_json};
+use super::v3_execution_status::{classify_query_failure, ExecutionFailures, FailureReason};
 use super::v3_graph_input::build_graph_retrieval_database;
 use super::v3_ingestion::{convert_filter, ProductionQueryInput, V3ProductionInputs};
 use super::v3_runs::RunIdentity;
@@ -122,6 +123,14 @@ pub(super) struct GraphRetrievalQualificationResults {
     schema_version: u8,
 }
 
+impl GraphRetrievalQualificationResults {
+    pub(super) fn has_invalid_execution(&self) -> bool {
+        self.runs
+            .iter()
+            .any(|run| run.status == "invalid_execution")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RunExecution {
     queries: Vec<QueryExecution>,
@@ -226,9 +235,10 @@ impl Metric {
     }
 }
 
-pub(super) fn emit_graph_retrieval_qualification(
+pub(super) fn emit_graph_retrieval_qualification_with_failures(
     validated: &ValidatedCollection,
     output: &Path,
+    failures: &ExecutionFailures,
 ) -> Result<GraphRetrievalQualificationResults, String> {
     validate_frozen_semantic_runs(validated)?;
     validate_frozen_hybrid_runs(validated)?;
@@ -257,7 +267,7 @@ pub(super) fn emit_graph_retrieval_qualification(
         let (preimage, fingerprint) = retrieval_generation_fingerprint(validated, letter)?;
         fingerprints.insert(fingerprint.clone(), preimage);
         let database = build_graph_retrieval_database(validated, encoding)?;
-        let (artifacts, validation) = execute_run_with_persistence(
+        let (artifacts, validation) = execute_run_with_persistence_and_failures(
             validated,
             run,
             &database,
@@ -265,6 +275,7 @@ pub(super) fn emit_graph_retrieval_qualification(
             &source_queries,
             &seeds,
             &fingerprint,
+            failures,
         )?;
         runs.push(artifacts);
         persistence.push(validation);
@@ -342,11 +353,12 @@ pub(super) fn emit_graph_retrieval_qualification(
     )?;
     write_canonical_json(
         &output.join("graph-retrieval-persistence-validation.json"),
-        &json!({"runs":persistence,"schema_version":1,"status":"valid"}),
+        &json!({"runs":persistence,"schema_version":1,"status":if runs.iter().any(|run|run.result.status=="invalid_execution") {"invalid_execution"} else {"valid"}}),
     )?;
     Ok(results)
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn execute_run_with_persistence(
     validated: &ValidatedCollection,
@@ -357,7 +369,30 @@ fn execute_run_with_persistence(
     seeds: &SeedResolutionSet,
     fingerprint: &str,
 ) -> Result<(RunArtifacts, PersistenceValidation), String> {
-    let before = execute_run(
+    execute_run_with_persistence_and_failures(
+        validated,
+        run,
+        database,
+        inputs,
+        source_queries,
+        seeds,
+        fingerprint,
+        &ExecutionFailures::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_run_with_persistence_and_failures(
+    validated: &ValidatedCollection,
+    run: &RunIdentity,
+    database: &GraphRetrievalDatabase,
+    inputs: &V3ProductionInputs,
+    source_queries: &BTreeMap<&str, &Query>,
+    seeds: &SeedResolutionSet,
+    fingerprint: &str,
+    injected_failures: &ExecutionFailures,
+) -> Result<(RunArtifacts, PersistenceValidation), String> {
+    let mut before = execute_run(
         validated,
         run,
         database,
@@ -366,6 +401,19 @@ fn execute_run_with_persistence(
         seeds,
         fingerprint,
     )?;
+    let repeated = execute_run(
+        validated,
+        run,
+        database,
+        inputs,
+        source_queries,
+        seeds,
+        fingerprint,
+    )?;
+    let mut failures = injected_failures.clone();
+    if before != repeated {
+        failures.run(run.run_id.clone(), FailureReason::NonDeterministicRanking);
+    }
     let temporary = TemporaryDirectory::new("vectorkit-v3-phase-1-2c-persistence")?;
     let persisted = temporary.path.join("database");
     database
@@ -375,7 +423,9 @@ fn execute_run_with_persistence(
         .map_err(|error| format!("V3 Phase 1.2c validate '{}': {error}", run.run_id))?;
     let loaded = GraphRetrievalDatabase::load_from_dir(&persisted)
         .map_err(|error| format!("V3 Phase 1.2c reload '{}': {error}", run.run_id))?;
-    verify_persisted_database(database, &loaded, run)?;
+    if verify_persisted_database(database, &loaded, run).is_err() {
+        failures.run(run.run_id.clone(), FailureReason::ReloadMismatch);
+    }
     let after = execute_run(
         validated,
         run,
@@ -386,21 +436,33 @@ fn execute_run_with_persistence(
         fingerprint,
     )?;
     if before != after {
-        return Err(format!(
-            "V3 Phase 1.2c persistence_mismatch for run '{}'",
-            run.run_id
-        ));
+        failures.run(run.run_id.clone(), FailureReason::PersistenceMismatch);
     }
+    apply_failures(run, &mut before, &failures);
+    let run_reason = failures.run_reason(&run.run_id);
+    let persistence_equivalent = !matches!(
+        run_reason,
+        Some(FailureReason::PersistenceMismatch | FailureReason::ReloadMismatch)
+    );
     Ok((
         before,
         PersistenceValidation {
-            generation_equal: true,
-            path_equal: true,
-            projection_equal: true,
-            ranking_equal: true,
+            generation_equal: !matches!(
+                run_reason,
+                Some(FailureReason::GenerationMismatch | FailureReason::ReloadMismatch)
+            ),
+            path_equal: !matches!(run_reason, Some(FailureReason::PersistenceMismatch)),
+            projection_equal: !matches!(run_reason, Some(FailureReason::PersistenceMismatch)),
+            ranking_equal: !matches!(
+                run_reason,
+                Some(FailureReason::PersistenceMismatch | FailureReason::NonDeterministicRanking)
+            ),
             run_id: run.run_id.clone(),
-            save_validate_load_equivalent: true,
-            selection_equal: true,
+            save_validate_load_equivalent: persistence_equivalent,
+            selection_equal: !matches!(
+                run_reason,
+                Some(FailureReason::StaleSelection | FailureReason::PersistenceMismatch)
+            ),
             stable_generation_fingerprint: fingerprint.to_owned(),
         },
     ))
@@ -467,6 +529,12 @@ fn metrics_and_paired_artifacts(
     .map_err(|error| format!("parse finalized A-C results: {error}"))?;
     let (paired_contract, paired_diagnostics) =
         paired_comparisons(validated, &baseline, &run_metrics, runs)?;
+    let invalid = baseline["runs"]
+        .as_array()
+        .is_some_and(|runs| runs.iter().any(|run| run["status"] == "invalid_execution"))
+        || run_metrics
+            .iter()
+            .any(|run| run["status"] == "invalid_execution");
     Ok((
         json!({
             "collection_id":validated.collection.collection_id,
@@ -481,7 +549,7 @@ fn metrics_and_paired_artifacts(
         json!({
             "comparisons":paired_diagnostics,
             "schema_version":1,
-            "status":"valid"
+            "status":if invalid {"invalid_execution"} else {"valid"}
         }),
     ))
 }
@@ -536,6 +604,24 @@ fn metrics_for_run(
             }));
             continue;
         }
+        if result.execution_status == "invalid_execution" {
+            let metrics = METRIC_NAMES
+                .iter()
+                .map(|name| {
+                    (
+                        (*name).to_owned(),
+                        Metric::status("invalid_execution").json(),
+                    )
+                })
+                .collect::<Map<_, _>>();
+            query_rows.push(json!({
+                "candidate_counts":Value::Null,
+                "execution_status":"invalid_execution",
+                "metrics":metrics,
+                "query_id":query_id
+            }));
+            continue;
+        }
         let query = queries_by_id[query_id.as_str()];
         let selection = selections[query_id.as_str()];
         let projection = projections[query_id.as_str()];
@@ -564,8 +650,8 @@ fn metrics_for_run(
             "attempted":run.execution.len(),
             "declared":run.declared.len(),
             "excluded_pre_freeze":run.declared.len()-run.execution.len(),
-            "invalid_execution":0,
-            "valid_execution":run.execution.len()
+            "invalid_execution":query_rows.iter().filter(|row|row["execution_status"]=="invalid_execution").count(),
+            "valid_execution":query_rows.iter().filter(|row|row["execution_status"]=="valid").count()
         },
         "declared_population_sha256":run.declared_hash(),
         "execution_population_sha256":run.execution_hash(),
@@ -573,7 +659,7 @@ fn metrics_for_run(
         "micro":micro,
         "queries":query_rows,
         "run_id":run.run_id,
-        "status":"valid"
+        "status":if artifacts.result.status=="valid" {"valid"} else {"invalid_execution"}
     }))
 }
 
@@ -921,6 +1007,8 @@ fn paired_comparisons(
             .iter()
             .find(|run| run.result.run_id == scoped_run_id)
             .unwrap();
+        let comparison_invalid = baseline_run["status"] == "invalid_execution"
+            || scoped["status"] == "invalid_execution";
         let mut contract_metrics = Map::new();
         let mut diagnostic_metrics = Map::new();
         for name in PAIRED_METRICS {
@@ -948,8 +1036,11 @@ fn paired_comparisons(
                     .iter()
                     .map(|document| document["record_id"].as_str().unwrap().to_owned())
                     .collect::<Vec<_>>();
-                let baseline_metric =
-                    paired_query_metric(validated, query, name, &baseline_documents, &qrels)?;
+                let baseline_metric = if baseline_query["execution_status"] == "invalid_execution" {
+                    Metric::status("invalid_execution").json()
+                } else {
+                    paired_query_metric(validated, query, name, &baseline_documents, &qrels)?
+                };
                 let scoped_row = scoped["queries"]
                     .as_array()
                     .unwrap()
@@ -973,19 +1064,27 @@ fn paired_comparisons(
             let scoped_refs = scoped_rows.iter().collect::<Vec<_>>();
             let baseline_macro = macro_metric(&baseline_refs)?;
             let scoped_macro = macro_metric(&scoped_refs)?;
-            let delta = paired_delta(&baseline_macro, &scoped_macro);
+            let delta = if comparison_invalid {
+                Value::Null
+            } else {
+                paired_delta(&baseline_macro, &scoped_macro)
+            };
             contract_metrics.insert(
                 name.to_owned(),
                 json!({"baseline":baseline_macro,"delta":delta,"scoped":scoped_macro}),
             );
-            let relative = match (
-                baseline_macro["value"].as_f64(),
-                scoped_macro["value"].as_f64(),
-            ) {
-                (Some(baseline), Some(scoped)) if baseline != 0.0 => {
-                    json!((scoped - baseline) / baseline)
+            let relative = if comparison_invalid {
+                Value::Null
+            } else {
+                match (
+                    baseline_macro["value"].as_f64(),
+                    scoped_macro["value"].as_f64(),
+                ) {
+                    (Some(baseline), Some(scoped)) if baseline != 0.0 => {
+                        json!((scoped - baseline) / baseline)
+                    }
+                    _ => Value::Null,
                 }
-                _ => Value::Null,
             };
             diagnostic_metrics.insert(
                 name.to_owned(),
@@ -1006,22 +1105,31 @@ fn paired_comparisons(
             scoped_artifacts,
             &scoped_identity.execution,
         )?;
+        let comparison_status = if comparison_invalid {
+            "invalid_execution"
+        } else {
+            "valid"
+        };
         contract_rows.push(json!({
             "baseline_run_id":baseline_run_id,
             "metrics":contract_metrics,
             "query_population_sha256":scoped_identity.execution_hash(),
             "scoped_run_id":scoped_run_id,
             "seed_lane":scoped_identity.configuration["seed_lane"],
-            "status":"valid"
+            "status":comparison_status
         }));
-        diagnostic_rows.push(json!({
+        let mut diagnostic = json!({
             "baseline_run_id":baseline_run_id,
             "candidate_and_loss":candidate,
             "metrics":diagnostic_metrics,
             "query_population_sha256":scoped_identity.execution_hash(),
             "scoped_run_id":scoped_run_id,
             "seed_lane":scoped_identity.configuration["seed_lane"]
-        }));
+        });
+        if comparison_status == "invalid_execution" {
+            diagnostic["status"] = json!(comparison_status);
+        }
+        diagnostic_rows.push(diagnostic);
     }
     contract_rows.sort_by_key(|row| {
         (
@@ -1096,18 +1204,6 @@ fn paired_candidate_summary(
     let mut evidence_lost = 0_usize;
     let mut per_query = Vec::new();
     for query_id in population {
-        let selection = scoped
-            .selection_rows
-            .iter()
-            .find(|row| row["query_id"] == *query_id)
-            .unwrap();
-        let eligible_count = selection["eligible_corpus_chunks_after_filter"]
-            .as_u64()
-            .unwrap() as usize;
-        let projected_count = selection["projected_chunks_after_filter"].as_u64().unwrap() as usize;
-        eligible += eligible_count;
-        projected += projected_count;
-        let qrels = qrels_for_query(&validated.qrels, query_id);
         let baseline_query = baseline_run["queries"]
             .as_array()
             .unwrap()
@@ -1120,6 +1216,23 @@ fn paired_candidate_summary(
             .iter()
             .find(|row| row.query_id == *query_id)
             .unwrap();
+        if baseline_query["execution_status"] == "invalid_execution"
+            || scoped_query.execution_status == "invalid_execution"
+        {
+            continue;
+        }
+        let selection = scoped
+            .selection_rows
+            .iter()
+            .find(|row| row["query_id"] == *query_id)
+            .unwrap();
+        let eligible_count = selection["eligible_corpus_chunks_after_filter"]
+            .as_u64()
+            .unwrap() as usize;
+        let projected_count = selection["projected_chunks_after_filter"].as_u64().unwrap() as usize;
+        eligible += eligible_count;
+        projected += projected_count;
+        let qrels = qrels_for_query(&validated.qrels, query_id);
         let baseline_documents = baseline_query["projected_documents"]
             .as_array()
             .unwrap()
@@ -1326,13 +1439,18 @@ fn validate_selection_path_equality_with_d(
                 run.result.run_id
             ));
         }
-        let run_identity = run
-            .selection_rows
-            .first()
-            .ok_or_else(|| format!("run '{}' has no valid selections", run.result.run_id))?;
-        let lane = run_identity["seed_lane"]
-            .as_str()
-            .ok_or_else(|| format!("run '{}' selection has no lane", run.result.run_id))?;
+        let lane = if run.result.run_id.contains("-explicit-") {
+            "explicit"
+        } else if run.result.run_id.contains("-topic-") {
+            "topic"
+        } else if run.result.run_id.contains("-team-") {
+            "team"
+        } else {
+            return Err(format!(
+                "run '{}' has no recognizable seed lane",
+                run.result.run_id
+            ));
+        };
         let d_run_id = d_run_id(lane)?;
         let d_selections = read_jsonl(
             &output
@@ -1367,23 +1485,28 @@ fn validate_selection_path_equality_with_d(
             .cloned()
             .map(normalized_path)
             .collect::<Result<Vec<_>, _>>()?;
-        if actual_selections != expected_selections || actual_paths != expected_paths {
-            return Err(format!(
-                "run '{}' selection/path differs logically from D lane '{}'",
-                run.result.run_id, lane
-            ));
-        }
-        rows.push(json!({
+        let equal = actual_selections == expected_selections && actual_paths == expected_paths;
+        let invalid = run.result.status == "invalid_execution" || !equal;
+        let mut row = json!({
             "d_run_id":d_run_id,
             "path_rows":actual_paths.len(),
             "query_count":actual_selections.len(),
             "run_id":run.result.run_id,
-            "selection_equal":true,
-            "path_equal":true
-        }));
+            "selection_equal":equal,
+            "path_equal":equal
+        });
+        if invalid {
+            row["status"] = json!("invalid_execution");
+        }
+        rows.push(row);
     }
     rows.sort_by_key(|row| row["run_id"].as_str().unwrap().to_owned());
-    Ok(json!({"runs":rows,"schema_version":1,"status":"valid"}))
+    let status = if rows.iter().any(|row| row["status"] == "invalid_execution") {
+        "invalid_execution"
+    } else {
+        "valid"
+    };
+    Ok(json!({"runs":rows,"schema_version":1,"status":status}))
 }
 
 fn normalized_selection(mut row: Value) -> Result<String, String> {
@@ -1506,6 +1629,7 @@ fn execute_run(
         .ok_or_else(|| format!("graph retrieval run '{}' has no lane", run.run_id))?;
     let mut result_rows = Vec::new();
     let mut valid = Vec::new();
+    let mut observed_failures = ExecutionFailures::default();
     for query_id in &run.declared {
         let source = source_queries
             .get(query_id.as_str())
@@ -1525,7 +1649,7 @@ fn execute_run(
             .find(|query| query.query_id == *query_id)
             .ok_or_else(|| format!("graph retrieval production query '{query_id}' is missing"))?;
         let seed = resolved_seed(seeds, lane, query_id)?;
-        let execution = execute_query(
+        match execute_query(
             validated,
             database,
             run,
@@ -1534,9 +1658,31 @@ fn execute_run(
             input,
             seed,
             fingerprint,
-        )?;
-        result_rows.push(execution.result.clone());
-        valid.push(execution);
+        ) {
+            Ok(execution) => {
+                result_rows.push(execution.result.clone());
+                valid.push(execution);
+            }
+            Err(error) => {
+                let (reason, run_wide) = classify_query_failure(&error);
+                if run_wide {
+                    observed_failures.run(run.run_id.clone(), reason);
+                } else {
+                    observed_failures.query(run.run_id.clone(), query_id.clone(), reason);
+                }
+                result_rows.push(QueryExecution {
+                    candidate_limits: candidate_limits(run)?,
+                    chunk_hits: Vec::new(),
+                    duplicate_collapse_count: 0,
+                    execution_status: "valid",
+                    filter: source.metadata_filter.clone(),
+                    projected_documents: Vec::new(),
+                    query_id: query_id.clone(),
+                    selection_run_id: Some(run.run_id.clone()),
+                    status_reason: None,
+                });
+            }
+        }
     }
     result_rows.sort_by(|left, right| left.query_id.cmp(&right.query_id));
     let mut selection_rows = valid
@@ -1554,7 +1700,7 @@ fn execute_run(
         .map(|query| query.projection_row)
         .collect::<Vec<_>>();
     projection_rows.sort_by_key(|row| row["query_id"].as_str().unwrap().to_owned());
-    Ok(RunArtifacts {
+    let mut artifacts = RunArtifacts {
         result: RunExecution {
             queries: result_rows,
             run_id: run.run_id.clone(),
@@ -1563,7 +1709,43 @@ fn execute_run(
         path_rows,
         projection_rows,
         selection_rows,
-    })
+    };
+    apply_failures(run, &mut artifacts, &observed_failures);
+    Ok(artifacts)
+}
+
+fn apply_failures(run: &RunIdentity, artifacts: &mut RunArtifacts, failures: &ExecutionFailures) {
+    if !failures.run_is_invalid(&run.run_id) {
+        return;
+    }
+    let mut invalid_queries = BTreeSet::new();
+    for result in &mut artifacts.result.queries {
+        if result.execution_status == "excluded_pre_freeze" {
+            continue;
+        }
+        if let Some(reason) = failures.reason_for(&run.run_id, &result.query_id) {
+            result.execution_status = "invalid_execution";
+            result.status_reason = Some(reason.as_str().to_owned());
+            result.chunk_hits.clear();
+            result.projected_documents.clear();
+            result.duplicate_collapse_count = 0;
+            invalid_queries.insert(result.query_id.clone());
+        }
+    }
+    artifacts
+        .selection_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts
+        .path_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts
+        .projection_rows
+        .retain(|row| !invalid_queries.contains(row["query_id"].as_str().unwrap()));
+    artifacts.result.status = if invalid_queries.is_empty() {
+        "valid"
+    } else {
+        "invalid_execution"
+    };
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -20,7 +20,7 @@ const COLLECTION_ID: &str = "hotpotqa-linked-abstracts-graph-v1-test";
 const COLLECTION_ROOT_SHA256: &str =
     "496d21d1c686e2ef3bc36d9820d0cda058f4ca6b82bb029889ed62b48b084f72";
 const TEST_POPULATION_SHA256: &str =
-    "9b7532b17be9ca0df3b727fe911da4ff090dcd551535ba742f0a0df73a6f7010";
+    "9b7532b17be9ca0df3d727fe911da4ff090dcd551535ba742f0a0df73a6f7010";
 const DERIVED_POPULATION_SHA256: &str =
     "93c252bd743e4084c7c50e9f7dee970af2977967a62c5717ba8edc000101a9d8";
 const SELECTED_CONFIGURATION_SHA256: &str =
@@ -477,9 +477,22 @@ fn validate_test_identity(validated: &ValidatedCollection) -> Result<(), String>
         || super::v3_population::population_hash(&validated.populations.retrieval)
             != TEST_POPULATION_SHA256
     {
-        return Err(
-            "locked test collection identity or population differs from contract".to_owned(),
-        );
+        return Err(format!(
+            "locked test collection identity or population differs from contract: split={}({}), collection_id={}({}), version={}({}), records={}({}), queries={}({}), population_sha256={}({})",
+            validated.collection.split,
+            validated.collection.split != "test",
+            validated.collection.collection_id,
+            validated.collection.collection_id != COLLECTION_ID,
+            validated.collection.collection_version,
+            validated.collection.collection_version != "1",
+            validated.collection.counts.records,
+            validated.collection.counts.records != 12_670,
+            validated.collection.counts.queries,
+            validated.collection.counts.queries != 297,
+            super::v3_population::population_hash(&validated.populations.retrieval),
+            super::v3_population::population_hash(&validated.populations.retrieval)
+                != TEST_POPULATION_SHA256
+        ));
     }
     let derived = validated.populations.successful("hotpotqa-exact-title-v1");
     if super::v3_population::population_hash(&derived) != DERIVED_POPULATION_SHA256
@@ -873,5 +886,43 @@ mod tests {
                 "qrels.tsv"
             ]
         );
+    }
+
+    #[test]
+    fn frozen_test_ranking_inputs_have_locked_populations_without_labels() {
+        let repository = repository_root().unwrap();
+        let root = repository
+            .join("target/benchmarks/public-collections/hotpotqa-linked-abstracts-graph-v1/test");
+        if !root.exists() {
+            return;
+        }
+        let mut ranking = v3_validation::validate_ranking_inputs(&root)
+            .unwrap()
+            .validated;
+        let revision = json!({
+            "binary_sha256":"test",
+            "executable":"test",
+            "git_commit":"test",
+            "source_state":"clean",
+            "source_tree_sha256":"test"
+        });
+        bind_locked_runs(
+            &mut ranking,
+            HybridConfiguration {
+                fusion_alpha: 0.2,
+                vector_candidate_limit: 100,
+                keyword_candidate_limit: 100,
+            },
+            &revision,
+        )
+        .unwrap();
+        assert_eq!(
+            super::super::v3_population::population_hash(&ranking.populations.retrieval).as_bytes(),
+            TEST_POPULATION_SHA256.as_bytes()
+        );
+        validate_test_identity(&ranking).unwrap();
+        assert!(ranking.qrels.is_empty());
+        assert!(ranking.evidence.is_empty());
+        assert!(ranking.expected_paths.is_empty());
     }
 }

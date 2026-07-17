@@ -72,9 +72,20 @@ implemented, or superseded by the product spec.
   `ec4757562140b92f298c85341ab64442dfcb07634da500e8abfe291401b95118`.
   See
   `docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`. The
-  sealed test contents remain unopened and uninspected. Phase 3b is pending;
-  the exact next task is a separate one-shot sealed-test execution using the
-  immutable lock, without retuning or qrels leakage. Phase 4 remains inactive.
+  Phase 3b locked run is complete. The dedicated pipeline produced two
+  byte-identical label-free ranking roots, opened labels only after ranking
+  seal
+  `90a0dd8ab2b9a3b575ad6e80366703fb8eb24dc01dd11d859645da00ccc9128c`,
+  reproduced the scored root, and atomically published a 39-file canonical
+  result. A–C executed 297 test queries and D–G executed 296 after the one
+  frozen ambiguity exclusion. Independent recalculation differed by at most
+  `1.7763568394002505e-15`; pinned `ir_measures` and official `trec_eval`
+  matched exactly. Three attempts are disclosed, with no result root from the
+  two failed evaluator attempts. See
+  `docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Benchmark
+  Phase 3 is complete. Phase 4 remains inactive; the exact next task is to
+  pre-register and implement deterministic 10K/25K/50K target-device graph
+  fixtures and the staged/end-to-end measurement protocol before device runs.
 
 ## Active Product Constraints
 

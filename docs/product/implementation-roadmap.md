@@ -58,10 +58,15 @@ selected and froze alpha `0.2` with vector/keyword limits `100`/`100`, and the
 development A-G matrix passed independent replay, external metric checks, and
 two-root byte determinism. See
 `docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`.
-Phase 3b locked reporting is pending; its exact next task is one immutable-lock
-execution on the sealed test split without retuning or qrels leakage. Phase 4
-device work remains inactive. No public quality, performance, device, or
-marketing claim has been authorized.
+Phase 3b locked reporting is complete. Its two-stage pipeline sealed
+byte-identical label-free rankings before opening labels, reproduced the
+scored root, passed independent and pinned external metric checks, and
+published the 39-file canonical root without retuning. See
+`docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Benchmark
+Phase 3 is complete. Phase 4 device work remains inactive; its exact next task
+is to pre-register and implement deterministic 10K/25K/50K target-device graph
+fixtures and the staged/end-to-end measurement protocol. No public quality,
+performance, device, or marketing claim has been authorized.
 
 ## Priority Summary
 

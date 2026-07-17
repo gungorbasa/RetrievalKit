@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0, 1, 2, and 3a complete; Phase 3b pending; Phase 4 inactive
+Status: active; Phases 0–3 complete; Phase 4 inactive
 
 Date: 2026-07-17
 
@@ -395,8 +395,8 @@ cross-checked. A separate clean release-context pipeline now verifies pinned
 and atomically publishes the exact 44-file public layout. Two fresh emissions
 are byte-identical. Phase 2 is complete: the selected HotpotQA adapter was
 built twice, independently validated, production-ingested, compared
-byte-for-byte, and atomically published under ignored local output. Phase 3a
-is complete on development data; Phase 3b locked reporting is pending.
+byte-for-byte, and atomically published under ignored local output. Phase 3 is
+complete on development and locked test data; Phase 4 remains inactive.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -493,7 +493,7 @@ and generated outputs remain untracked under ignored `target/` storage.
 
 ### Phase 3: Run The Quality Ablation
 
-Status: active. Phase 3a completed on 2026-07-17. The pre-registered 36-candidate
+Status: complete on 2026-07-17. Phase 3a's pre-registered 36-candidate
 Run C development search selected weighted hybrid alpha `0.2`, vector candidate
 limit `100`, and keyword candidate limit `100`. The configuration is frozen at
 SHA-256
@@ -501,13 +501,21 @@ SHA-256
 Development A-G executed through production-backed retrieval, passed an
 independent full replay, matched pinned `ir_measures==0.4.3` and official NIST
 `trec_eval` for supported metrics, and produced two recursively byte-identical
-39-file roots. The locked test contents were not opened, scored, or inspected.
+39-file roots. The locked test contents were not opened, scored, or inspected
+during selection.
 See
 `docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`.
 
-Phase 3b remains pending. Its exact task is one separate, one-shot evaluation
-of the sealed test split using the immutable lock, without retuning,
-per-query changes, or test-qrels leakage. Phase 4 remains inactive.
+Phase 3b then ran the immutable configuration through a dedicated two-stage
+locked pipeline. Two label-free ranking roots and two scoring-only roots were
+byte-identical. A–C executed 297 queries; D–G executed 296 after the single
+frozen ambiguous-seed exclusion. The independent validator's maximum metric
+difference was `1.7763568394002505e-15`; pinned `ir_measures` and official NIST
+`trec_eval` matched supported metrics exactly. Three attempts are disclosed:
+two evaluator defects published no result root, and the third attempt
+atomically published the sole canonical 39-file root. See
+`docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Phase 4
+remains inactive.
 
 Deliverables:
 
@@ -528,7 +536,17 @@ If graph scoping does not improve the intended queries, publish the negative
 result internally and improve the dataset adapter, schema, or supported product
 workflow. Do not manufacture a marketing claim from an unfavorable result.
 
+Exit result: PASS. Test labels opened only after the ranking seal; no test
+result selected or changed configuration; all deterministic, independent,
+external, population, graph-equality, persistence, and inventory gates passed.
+This completes quality-ablation Phase 3 only and authorizes no marketing or
+device-performance claim.
+
 ### Phase 4: Add Target-Device Graph Benchmarks
+
+Status: inactive. The exact next task is to pre-register and implement the
+deterministic 10K, 25K, and 50K target-device fixtures and staged/end-to-end
+measurement protocol before any device execution.
 
 Deliverables:
 

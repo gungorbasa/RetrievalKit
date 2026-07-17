@@ -52,11 +52,16 @@ the upstream seed resolution, validated production-backed ingestion, proved
 all generated files byte-identical, and atomically published adapter manifest
 SHA-256
 `8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6`.
-See `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`. Phase 3
-remains inactive. The exact next benchmark task is the A-G quality ablation,
-with configuration selected on development data before the locked reporting
-split is run. No public quality, performance, device, or marketing claim has
-been authorized.
+See `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`. Benchmark
+Phase 3a is complete: a pre-registered 36-candidate Run C development search
+selected and froze alpha `0.2` with vector/keyword limits `100`/`100`, and the
+development A-G matrix passed independent replay, external metric checks, and
+two-root byte determinism. See
+`docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`.
+Phase 3b locked reporting is pending; its exact next task is one immutable-lock
+execution on the sealed test split without retuning or qrels leakage. Phase 4
+device work remains inactive. No public quality, performance, device, or
+marketing claim has been authorized.
 
 ## Priority Summary
 

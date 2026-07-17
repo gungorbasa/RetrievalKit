@@ -64,10 +64,17 @@ implemented, or superseded by the product spec.
   `8a9822e788eb81f2bb7f43b7c62c1690d45c64c8c698f37193706f8d0e67a3e6`.
   See `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`. 2Wiki is
   deferred because its dataset-content license is unstated and its Dropbox
-  artifacts are mutable without publisher checksums. Phase 3 remains inactive.
-  The next exact benchmark task is the A-G quality ablation: choose and freeze
-  configuration using development data, then run the locked reporting split
-  without per-query tuning or qrels leakage.
+  artifacts are mutable without publisher checksums. Benchmark Phase 3a is
+  complete. The pre-registered 36-candidate development search froze weighted
+  hybrid alpha `0.2` with vector/keyword limits `100`/`100`; development A-G
+  passed independent replay, pinned `ir_measures`, official NIST `trec_eval`,
+  persistence checks, and two-root byte determinism. The lock SHA-256 is
+  `ec4757562140b92f298c85341ab64442dfcb07634da500e8abfe291401b95118`.
+  See
+  `docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`. The
+  sealed test contents remain unopened and uninspected. Phase 3b is pending;
+  the exact next task is a separate one-shot sealed-test execution using the
+  immutable lock, without retuning or qrels leakage. Phase 4 remains inactive.
 
 ## Active Product Constraints
 

@@ -166,6 +166,41 @@ See
 `docs/product/reports/hotpotqa-graph-adapter-phase-2-report.md`
 for complete identities, counts, hashes, and phase-boundary checks.
 
+Benchmark Phase 3a is also complete. The development-only Run C search
+pre-registered all 36 combinations of alpha (`0.2`, `0.4`, `0.6`, `0.8`) and
+vector/keyword candidate limits (`25`, `50`, `100`). It selected alpha `0.2`,
+vector limit `100`, and keyword limit `100`, then froze that result in
+`hotpotqa/phase-3-selected-configuration.json`. The search-space SHA-256 is
+`30a93141c0b36d446617342ae846ff4174ff1f8b0f0f9cf008882ed6f3cbdeca`; the
+configuration-lock SHA-256 is
+`ec4757562140b92f298c85341ab64442dfcb07634da500e8abfe291401b95118`.
+
+The development A-G matrix is independently replayed with:
+
+```bash
+python3 scripts/quality/freeze_hotpotqa_phase_3_configuration.py --check
+
+python3 scripts/quality/validate_hotpotqa_phase_3.py \
+  --search-space benchmarks/retrieval-quality/hotpotqa/phase-3-development-search-space.json \
+  --lock benchmarks/retrieval-quality/hotpotqa/phase-3-selected-configuration.json \
+  --tuning target/benchmarks/hotpotqa-phase-3a/tuning \
+  --matrix target/benchmarks/hotpotqa-phase-3a/development-matrix
+```
+
+The validator recalculates rankings, metrics, graph scopes, paths, paired
+comparisons, slices, errors, persistence, and file inventories independently.
+Pinned `ir_measures==0.4.3` and official NIST `trec_eval` 10.0-rc3 provide the
+external standard-metric cross-check. Two fresh 39-file A-G emissions are
+recursively byte-identical. The locked test contents were not opened, scored,
+or inspected during Phase 3a. See
+`docs/product/reports/hotpotqa-phase-3-development-ablation-report.md` for the
+complete development results and qualifications.
+
+Phase 3b remains a separate one-shot execution of the immutable configuration
+against the sealed test split. It must not retune or use test qrels to change
+configuration. Generated inputs, rankings, and reports remain ignored under
+`target/`.
+
 ## External collections
 
 Schema version 2 evaluation collections keep the manifest, document JSONL,

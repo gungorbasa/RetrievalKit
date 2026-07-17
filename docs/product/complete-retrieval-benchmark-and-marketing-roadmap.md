@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0, 1, and 2 complete; Phase 3 inactive
+Status: active; Phases 0, 1, 2, and 3a complete; Phase 3b pending; Phase 4 inactive
 
 Date: 2026-07-17
 
@@ -395,8 +395,8 @@ cross-checked. A separate clean release-context pipeline now verifies pinned
 and atomically publishes the exact 44-file public layout. Two fresh emissions
 are byte-identical. Phase 2 is complete: the selected HotpotQA adapter was
 built twice, independently validated, production-ingested, compared
-byte-for-byte, and atomically published under ignored local output. Phase 3
-remains inactive.
+byte-for-byte, and atomically published under ignored local output. Phase 3a
+is complete on development data; Phase 3b locked reporting is pending.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -493,10 +493,21 @@ and generated outputs remain untracked under ignored `target/` storage.
 
 ### Phase 3: Run The Quality Ablation
 
-Status: inactive. The Phase 2 exit gate has passed; the exact next task is to
-run the A-G quality ablation, select configuration using development data only,
-freeze it, and then evaluate the locked reporting split without per-query
-tuning or qrels leakage.
+Status: active. Phase 3a completed on 2026-07-17. The pre-registered 36-candidate
+Run C development search selected weighted hybrid alpha `0.2`, vector candidate
+limit `100`, and keyword candidate limit `100`. The configuration is frozen at
+SHA-256
+`ec4757562140b92f298c85341ab64442dfcb07634da500e8abfe291401b95118`.
+Development A-G executed through production-backed retrieval, passed an
+independent full replay, matched pinned `ir_measures==0.4.3` and official NIST
+`trec_eval` for supported metrics, and produced two recursively byte-identical
+39-file roots. The locked test contents were not opened, scored, or inspected.
+See
+`docs/product/reports/hotpotqa-phase-3-development-ablation-report.md`.
+
+Phase 3b remains pending. Its exact task is one separate, one-shot evaluation
+of the sealed test split using the immutable lock, without retuning,
+per-query changes, or test-qrels leakage. Phase 4 remains inactive.
 
 Deliverables:
 

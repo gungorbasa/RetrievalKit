@@ -196,10 +196,20 @@ or inspected during Phase 3a. See
 `docs/product/reports/hotpotqa-phase-3-development-ablation-report.md` for the
 complete development results and qualifications.
 
-Phase 3b remains a separate one-shot execution of the immutable configuration
-against the sealed test split. It must not retune or use test qrels to change
-configuration. Generated inputs, rankings, and reports remain ignored under
-`target/`.
+Phase 3b is complete. The dedicated two-stage locked pipeline sealed two
+byte-identical label-free ranking roots before opening test labels, scored the
+same rankings twice without retrieval, and atomically published one 39-file
+root. A–C executed 297 queries; D–G executed 296 after the single frozen
+ambiguous-seed exclusion. Independent Python recalculation differed by at most
+`1.7763568394002505e-15`; pinned `ir_measures==0.4.3` and official NIST
+`trec_eval` matched all supported per-query and aggregate metrics exactly.
+
+The final root and validation reports remain ignored under
+`target/benchmarks/hotpotqa-phase-3b/`. Do not rerun the sealed command or
+reuse its attempt audits. The independent report can be inspected at
+`target/benchmarks/hotpotqa-phase-3b/independent-validation.json`; the complete
+protocol, metrics, negative outcomes, identities, and attempt disclosures are
+in `docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`.
 
 ## External collections
 

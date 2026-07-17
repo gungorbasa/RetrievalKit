@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phase 0 complete and Phase 1 in progress
+Status: active; Phases 0 and 1 complete, Phase 2 not started
 
 Date: 2026-07-15
 
@@ -381,21 +381,22 @@ Exit gate:
 
 ### Phase 1: Add Graph-Aware Evaluation Artifacts
 
-Status: active from 2026-07-16. Phase 1.1 conformance, Phase 1.2a
+Status: complete on 2026-07-17. Phase 1.1 conformance, Phase 1.2a
 production-backed whole-corpus A-C retrieval, Phase 1.2b production graph
 selection D, and Phase 1.2c production graph-scoped E-G retrieval are complete.
-The qualification-only A-G artifact is deterministic and independently
-cross-checked, including pinned `ir_measures`. Official `trec_eval` and final
-public-manifest assembly remain open, so the Phase 1 exit gate is not complete.
-Phase 2 remains inactive.
+The qualification-only A-G artifact remains deterministic and independently
+cross-checked. A separate clean release-context pipeline now verifies pinned
+`ir_measures` and official NIST `trec_eval`, validates the closed V3 schemas,
+and atomically publishes the exact 44-file public layout. Two fresh emissions
+are byte-identical. Phase 2 remains inactive.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
 outcomes and rebuild all affected downstream artifacts without aborting the
 qualification. The CLI reports 1.2a, 1.2b, and 1.2c separately. Artifact
 finalization enforces the exact 56-file preimage and rechecks a stored index;
-the valid frozen bytes and artifact-set SHA-256 are unchanged. These remain
-qualification-only artifacts, not a public result package or marketing basis.
+the valid frozen bytes and artifact-set SHA-256 are unchanged. Those 56 files
+remain qualification-only and are never mixed into the public result root.
 
 First implementation task (complete): add the checked-in V3 conformance fixture
 and its schema, population-hash, canonical-serialization, and byte-rerun
@@ -416,6 +417,12 @@ the results with an independent Python oracle and pinned `ir_measures`, and
 emit two byte-identical 56-file canonical qualification sets. See
 `docs/product/reports/graph-retrieval-phase-1-graph-scoped-retrieval-report.md`.
 
+Publication slice (complete): pin and checksum official NIST `trec_eval`,
+derive release-context identities and run IDs from a clean executable and Git
+revision, assemble the exact closed public layout, and validate it independently
+including section 4.7 logical-run portability. See
+`docs/product/reports/graph-retrieval-phase-1-publication-report.md`.
+
 Extend evaluation-only tooling; do not add benchmark concerns to production
 Rust APIs or wrappers.
 
@@ -435,6 +442,12 @@ Exit gate:
 
 - repeated executions produce byte-identical evaluation artifacts and identical
   rankings before and after reload
+
+Exit result: PASS. The independent validator confirms the exact 44-file
+inventory, 43 manifest entries, valid A-G executions, byte-identical reruns,
+official metric agreement, persistence equivalence, and cross-context logical
+run mapping. This completes evaluation-artifact Phase 1 only; it is not a
+public quality, performance, device, or marketing claim.
 
 ### Phase 2: Build The First Public Graph Collection Adapter
 

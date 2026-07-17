@@ -395,7 +395,9 @@ fn verify_persisted_database(
 }
 
 fn validate_frozen_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    for (lane, run_id, logical, declared_hash, execution_hash, execution_count) in D_RUNS {
+    for (lane, _qualification_run_id, logical, declared_hash, execution_hash, execution_count) in
+        D_RUNS
+    {
         let run = validated
             .runs
             .iter()
@@ -403,8 +405,7 @@ fn validate_frozen_runs(validated: &ValidatedCollection) -> Result<(), String> {
                 run.configuration["run_letter"] == "d" && run.configuration["seed_lane"] == lane
             })
             .ok_or_else(|| format!("missing frozen D lane '{lane}'"))?;
-        if run.run_id != run_id
-            || run.logical_run_sha256 != logical
+        if run.logical_run_sha256 != logical
             || run.declared_hash() != declared_hash
             || run.execution_hash() != execution_hash
             || run.execution.len() != execution_count

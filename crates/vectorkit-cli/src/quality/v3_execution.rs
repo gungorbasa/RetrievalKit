@@ -1380,7 +1380,7 @@ mod tests {
             .iter_mut()
             .find(|run| run.configuration["run_letter"] == "d")
             .unwrap()
-            .run_id
+            .logical_run_sha256
             .push_str("-invalid");
         let temporary = TemporaryDirectory::new("vectorkit-v3-invalid-finalization").unwrap();
         let output = temporary.path.join("qualification");

@@ -31,19 +31,23 @@ production APIs and wrappers. The implementation-ready Phase 0 contract is
 and selected iPhone 14 Pro Max with iOS 26 or later as the conservative device.
 Its third focused revision passed two fresh isolated implementation-author
 reviews on 2026-07-16, closing the benchmark roadmap's Phase 0. Graph-aware
-evaluation-artifact Phase 1 is active. Its checked-in V3 conformance fixture,
+evaluation-artifact Phase 1 is complete. Its checked-in V3 conformance fixture,
 whole-corpus A-C retrieval, graph-only D selection, and graph-scoped E-G
 retrieval qualifications are complete. Phase 1.2c includes paired metrics,
 combined persistence, an independent Python oracle, pinned `ir_measures`, and
-byte-identical canonical artifact sets. Official `trec_eval` and final public
-manifest assembly remain open, so overall Phase 1 has not exited. This is
-separate from the completed core V1 “Phase 1: Corruption Detection” below.
+byte-identical canonical artifact sets. The publication gate now additionally
+pins official NIST `trec_eval`, derives clean release identities, assembles the
+exact closed 44-file public layout, and validates two byte-identical emissions
+independently. This is separate from the completed core V1 “Phase 1: Corruption
+Detection” below.
 The Phase 1.2c completeness pass additionally serializes all six canonical
 invalid-execution reasons with query/run attribution, reports each Phase 1.2
 slice explicitly in the CLI, and enforces the exact 56-file qualification
 inventory. Repeated valid and invalid outputs are byte-identical; the valid
-artifact hash is unchanged. The next benchmark task is still official
-`trec_eval` plus final public-manifest assembly, not Phase 2 or marketing.
+artifact hash is unchanged. The exact next benchmark task is Phase 2's
+documented selection between HotpotQA and 2WikiMultiHopQA and construction of
+the first public graph collection adapter. No public quality, performance,
+device, or marketing claim has been authorized.
 
 ## Priority Summary
 

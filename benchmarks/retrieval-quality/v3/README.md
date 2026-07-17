@@ -1,9 +1,9 @@
 # VectorKit V3 Retrieval-Quality Fixture
 
-Status: frozen conformance collection; Phase 1.1 and the complete Phase 1.2a,
-1.2b, and 1.2c A-G qualification are complete. The artifacts remain partial
-and non-publication-ready until official `trec_eval` and final public
-`manifest.json` assembly are completed.
+Status: frozen conformance collection; graph-aware evaluation-artifact Phase 1
+is complete. The Phase 1.1 and Phase 1.2a-c qualification artifacts remain
+intentionally partial, while a separate release-context publication pipeline
+now verifies official `trec_eval` and assembles the closed public layout.
 
 This directory is the checked-in synthetic A-J collection defined by
 `docs/product/graph-retrieval-evaluation-contract-v3.md`. Its seven records,
@@ -76,6 +76,25 @@ or unexpected paths, and verifies an existing stored index against a fresh
 rebuild. The valid frozen set has artifact SHA-256
 `ee264e919ab5872fd400354f5aa332993fd55fdedcaab400e6f5ba41619f631c`.
 The qualification marker remains `partial=true` and
-`publication_ready=false`; no final `manifest.json` is emitted. Official
-`trec_eval` and final public-manifest assembly are the next separate Phase 1
-task. These synthetic results are not marketing claims.
+`publication_ready=false`; no final `manifest.json` is emitted into this
+qualification directory. That is intentional: the release-context public
+artifact is assembled into a fresh root only after every gate passes:
+
+```bash
+python3 scripts/quality/bootstrap_v3_trec_eval.py
+
+uv run --python 3.13 --with ir_measures==0.4.3 \
+  python scripts/quality/assemble_v3_publication.py \
+  --collection benchmarks/retrieval-quality/v3 \
+  --executable target/release/vectorkit \
+  --qualification-artifacts target/benchmarks/v3/release-qualification \
+  --output target/benchmarks/v3/publication \
+  --gate-reports target/benchmarks/v3/publication-gates
+```
+
+The resulting public root has exactly 44 files, including a 43-entry
+`manifest.json`, and contains no qualification markers, cross-check reports,
+or intermediate files. See
+`docs/product/reports/graph-retrieval-phase-1-publication-report.md`. Phase 2
+and all public quality, performance, device, and marketing claims remain out of
+scope.

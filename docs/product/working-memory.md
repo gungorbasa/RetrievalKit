@@ -24,7 +24,7 @@ implemented, or superseded by the product spec.
   implementation-author reviews on 2026-07-16: both reproduced the exact A-J
   fixture, population hashes, 15-run matrix, artifact/hash schemas, arithmetic,
   and portability rules without a blocker. Benchmark roadmap Phase 0 is
-  complete and graph-aware evaluation-artifact Phase 1 is active. Phase 1.1
+  complete and graph-aware evaluation-artifact Phase 1 is complete. Phase 1.1
   froze the checked-in V3 conformance fixture, schema, populations, 15-run
   matrix, canonical serialization, and byte-rerun validators. Phase 1.2a
   qualifies production-backed whole-corpus A-C (F32 semantic, I8 semantic, and
@@ -47,10 +47,14 @@ implemented, or superseded by the product spec.
   56-file preimage. Repeated invalid outputs are byte-identical and the valid
   artifact-set SHA-256 remains
   `ee264e919ab5872fd400354f5aa332993fd55fdedcaab400e6f5ba41619f631c`.
-  Keep overall Phase 1 active: official `trec_eval` and final public
-  manifest assembly remain open, so no public graph-retrieval claim is
-  complete. See
-  `docs/product/reports/graph-retrieval-phase-1-graph-scoped-retrieval-report.md`.
+  The publication closure pins official NIST `trec_eval`, derives exact clean
+  release identities and release-context run IDs, assembles the closed 44-file
+  public root, and independently validates two byte-identical emissions plus
+  section 4.7 logical-run portability. See
+  `docs/product/reports/graph-retrieval-phase-1-publication-report.md`. No public
+  graph-retrieval quality, performance, device, or marketing claim is complete.
+  The next exact benchmark task is Phase 2: document the HotpotQA versus
+  2WikiMultiHopQA choice and build the first public graph collection adapter.
 
 ## Active Product Constraints
 

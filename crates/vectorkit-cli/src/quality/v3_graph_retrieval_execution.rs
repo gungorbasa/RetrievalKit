@@ -1538,12 +1538,21 @@ fn read_jsonl(path: &Path) -> Result<Vec<Value>, String> {
 }
 
 fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    for (run_id, logical, lane) in SEMANTIC_RUNS {
+    for (qualification_run_id, logical, lane) in SEMANTIC_RUNS {
+        let letter = if qualification_run_id.starts_with("v3-e-") {
+            "e"
+        } else {
+            "f"
+        };
         let run = validated
             .runs
             .iter()
-            .find(|run| run.run_id == run_id)
-            .ok_or_else(|| format!("missing frozen semantic run '{run_id}'"))?;
+            .find(|run| {
+                run.configuration["run_letter"] == letter && run.configuration["seed_lane"] == lane
+            })
+            .ok_or_else(|| {
+                format!("missing frozen semantic run for letter '{letter}' lane '{lane}'")
+            })?;
         let (declared_hash, execution_hash, execution_count) = match lane {
             "explicit" => (
                 "2ce86656e11a1ddbe0d1710b2413ab7e6c2325271adc2ca5728eedb9b9534a1f",
@@ -1577,12 +1586,14 @@ fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), 
 }
 
 fn validate_frozen_hybrid_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    for (run_id, logical, lane) in HYBRID_RUNS {
+    for (_qualification_run_id, logical, lane) in HYBRID_RUNS {
         let run = validated
             .runs
             .iter()
-            .find(|run| run.run_id == run_id)
-            .ok_or_else(|| format!("missing frozen hybrid run '{run_id}'"))?;
+            .find(|run| {
+                run.configuration["run_letter"] == "g" && run.configuration["seed_lane"] == lane
+            })
+            .ok_or_else(|| format!("missing frozen hybrid run for lane '{lane}'"))?;
         let (declared_hash, execution_hash, execution_count) = match lane {
             "explicit" => (
                 "2ce86656e11a1ddbe0d1710b2413ab7e6c2325271adc2ca5728eedb9b9534a1f",

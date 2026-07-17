@@ -952,6 +952,9 @@ mod tests {
         assert!(output
             .join("graph-retrieval-paired-comparisons.json")
             .is_file());
+        assert!(output
+            .join("graph-retrieval-persistence-validation.json")
+            .is_file());
         assert!(output.join("qualification.json").is_file());
         assert!(!output.join("manifest.json").exists());
         let marker: Value =

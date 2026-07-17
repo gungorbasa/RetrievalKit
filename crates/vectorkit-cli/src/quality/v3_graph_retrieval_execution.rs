@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -110,6 +112,7 @@ const PAIRED_METRICS: [&str; 14] = [
     "supporting_document_recall_at_10",
     "supporting_document_recall_at_5",
 ];
+static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(super) struct GraphRetrievalQualificationResults {
@@ -185,6 +188,18 @@ struct ValidQuery {
     selection_row: Value,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct PersistenceValidation {
+    generation_equal: bool,
+    path_equal: bool,
+    projection_equal: bool,
+    ranking_equal: bool,
+    run_id: String,
+    save_validate_load_equivalent: bool,
+    selection_equal: bool,
+    stable_generation_fingerprint: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Metric {
     status: &'static str,
@@ -225,6 +240,7 @@ pub(super) fn emit_graph_retrieval_qualification(
         .map(|query| (query.query_id.as_str(), query))
         .collect::<BTreeMap<_, _>>();
     let mut runs = Vec::new();
+    let mut persistence = Vec::new();
     let mut fingerprints = BTreeMap::new();
     for run in validated.runs.iter().filter(|run| {
         matches!(
@@ -241,7 +257,7 @@ pub(super) fn emit_graph_retrieval_qualification(
         let (preimage, fingerprint) = retrieval_generation_fingerprint(validated, letter)?;
         fingerprints.insert(fingerprint.clone(), preimage);
         let database = build_graph_retrieval_database(validated, encoding)?;
-        runs.push(execute_run(
+        let (artifacts, validation) = execute_run_with_persistence(
             validated,
             run,
             &database,
@@ -249,9 +265,12 @@ pub(super) fn emit_graph_retrieval_qualification(
             &source_queries,
             &seeds,
             &fingerprint,
-        )?);
+        )?;
+        runs.push(artifacts);
+        persistence.push(validation);
     }
     runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
+    persistence.sort_by(|left, right| left.run_id.cmp(&right.run_id));
     if runs.len() != 9 {
         return Err(format!(
             "V3 Phase 1.2c expected nine E-G runs, actual {}",
@@ -321,7 +340,109 @@ pub(super) fn emit_graph_retrieval_qualification(
         &output.join("graph-retrieval-paired-comparisons.json"),
         &paired,
     )?;
+    write_canonical_json(
+        &output.join("graph-retrieval-persistence-validation.json"),
+        &json!({"runs":persistence,"schema_version":1,"status":"valid"}),
+    )?;
     Ok(results)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_run_with_persistence(
+    validated: &ValidatedCollection,
+    run: &RunIdentity,
+    database: &GraphRetrievalDatabase,
+    inputs: &V3ProductionInputs,
+    source_queries: &BTreeMap<&str, &Query>,
+    seeds: &SeedResolutionSet,
+    fingerprint: &str,
+) -> Result<(RunArtifacts, PersistenceValidation), String> {
+    let before = execute_run(
+        validated,
+        run,
+        database,
+        inputs,
+        source_queries,
+        seeds,
+        fingerprint,
+    )?;
+    let temporary = TemporaryDirectory::new("vectorkit-v3-phase-1-2c-persistence")?;
+    let persisted = temporary.path.join("database");
+    database
+        .save_to_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2c save '{}': {error}", run.run_id))?;
+    GraphRetrievalDatabase::validate_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2c validate '{}': {error}", run.run_id))?;
+    let loaded = GraphRetrievalDatabase::load_from_dir(&persisted)
+        .map_err(|error| format!("V3 Phase 1.2c reload '{}': {error}", run.run_id))?;
+    verify_persisted_database(database, &loaded, run)?;
+    let after = execute_run(
+        validated,
+        run,
+        &loaded,
+        inputs,
+        source_queries,
+        seeds,
+        fingerprint,
+    )?;
+    if before != after {
+        return Err(format!(
+            "V3 Phase 1.2c persistence_mismatch for run '{}'",
+            run.run_id
+        ));
+    }
+    Ok((
+        before,
+        PersistenceValidation {
+            generation_equal: true,
+            path_equal: true,
+            projection_equal: true,
+            ranking_equal: true,
+            run_id: run.run_id.clone(),
+            save_validate_load_equivalent: true,
+            selection_equal: true,
+            stable_generation_fingerprint: fingerprint.to_owned(),
+        },
+    ))
+}
+
+fn verify_persisted_database(
+    before: &GraphRetrievalDatabase,
+    after: &GraphRetrievalDatabase,
+    run: &RunIdentity,
+) -> Result<(), String> {
+    let stable_identities = |database: &GraphRetrievalDatabase| {
+        database
+            .corpus()
+            .chunk_identities()
+            .map(|(identity, chunk_id)| {
+                (
+                    identity.record_id.as_str().to_owned(),
+                    identity.chunk_key.as_str().to_owned(),
+                    chunk_id,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    if before.corpus().corpus_id() != after.corpus().corpus_id()
+        || before.corpus().generation() != after.corpus().generation()
+        || stable_identities(before) != stable_identities(after)
+        || before.retrieval().retrieval().vector_encoding()
+            != after.retrieval().retrieval().vector_encoding()
+        || before.retrieval().retrieval().dimension() != after.retrieval().retrieval().dimension()
+        || before.retrieval().retrieval().metric() != after.retrieval().retrieval().metric()
+        || before.retrieval().retrieval().has_bm25() != after.retrieval().retrieval().has_bm25()
+        || before.graph().schema() != after.graph().schema()
+        || before.graph().build_stats() != after.graph().build_stats()
+        || before.graph().node_count() != after.graph().node_count()
+        || before.graph().edge_count() != after.graph().edge_count()
+    {
+        return Err(format!(
+            "V3 Phase 1.2c reload_mismatch for run '{}'",
+            run.run_id
+        ));
+    }
+    Ok(())
 }
 
 fn metrics_and_paired_artifacts(
@@ -2020,11 +2141,44 @@ fn write_jsonl(path: &Path, rows: &[Value]) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| format!("write '{}': {error}", path.display()))
 }
 
+struct TemporaryDirectory {
+    path: PathBuf,
+}
+
+impl TemporaryDirectory {
+    fn new(prefix: &str) -> Result<Self, String> {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
+            .as_nanos();
+        let counter = TEMPORARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("{prefix}-{}-{nonce}-{counter}", std::process::id()));
+        fs::create_dir(&path).map_err(|error| {
+            format!(
+                "failed to create graph retrieval persistence directory '{}': {error}",
+                path.display()
+            )
+        })?;
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
+    use vectorkit_core::{CorpusId, RecordChunkInput};
+    use vectorkit_graph::GraphError;
+
     use super::*;
+    use crate::quality::v3_graph_input::production_schema;
     use crate::quality::v3_validation::validate;
 
     fn fixture_root() -> PathBuf {
@@ -2089,5 +2243,106 @@ mod tests {
         }
         assert_eq!(valid_executions, 15);
         assert_eq!(exclusions, 6);
+    }
+
+    #[test]
+    fn persisted_e_to_g_runs_recreate_identical_selections_paths_and_rankings() {
+        let validated = validate(&fixture_root()).unwrap();
+        let seeds = resolve_seeds(&validated).unwrap();
+        let inputs = V3ProductionInputs::from_validated(&validated).unwrap();
+        let source_queries = validated
+            .queries
+            .iter()
+            .map(|query| (query.query_id.as_str(), query))
+            .collect::<BTreeMap<_, _>>();
+        for run in validated.runs.iter().filter(|run| {
+            matches!(
+                run.configuration["run_letter"].as_str(),
+                Some("e" | "f" | "g")
+            )
+        }) {
+            let letter = run.configuration["run_letter"].as_str().unwrap();
+            let encoding = match letter {
+                "e" => VectorEncoding::F32,
+                "f" | "g" => VectorEncoding::I8ScalarQuantized,
+                _ => unreachable!(),
+            };
+            let database = build_graph_retrieval_database(&validated, encoding).unwrap();
+            let (_, fingerprint) = retrieval_generation_fingerprint(&validated, letter).unwrap();
+            let (artifacts, persistence) = execute_run_with_persistence(
+                &validated,
+                run,
+                &database,
+                &inputs,
+                &source_queries,
+                &seeds,
+                &fingerprint,
+            )
+            .unwrap();
+            assert_eq!(artifacts.result.status, "valid");
+            assert!(persistence.save_validate_load_equivalent);
+            assert!(persistence.selection_equal);
+            assert!(persistence.path_equal);
+            assert!(persistence.projection_equal);
+            assert!(persistence.ranking_equal);
+        }
+    }
+
+    #[test]
+    fn combined_database_rejects_stale_and_cross_corpus_selections() {
+        let validated = validate(&fixture_root()).unwrap();
+        let seeds = resolve_seeds(&validated).unwrap();
+        let query = validated
+            .queries
+            .iter()
+            .find(|query| query.query_id == "qb")
+            .unwrap();
+        let seed = resolved_seed(&seeds, "explicit", "qb").unwrap();
+        let database = build_graph_retrieval_database(&validated, VectorEncoding::F32).unwrap();
+        let selection = database
+            .graph_query(&production_query(query, seed).unwrap(), None)
+            .unwrap();
+
+        let mut cross_inputs = V3ProductionInputs::from_validated(&validated).unwrap();
+        cross_inputs.corpus_id = CorpusId::new("v3-cross-corpus").unwrap();
+        let cross_database = GraphRetrievalDatabase::build(
+            cross_inputs.build_database(VectorEncoding::F32).unwrap(),
+            production_schema(&validated.graph_schema).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            cross_database.project_candidates(&selection),
+            Err(GraphError::StaleGeneration { .. })
+        ));
+
+        let newer_inputs = V3ProductionInputs::from_validated(&validated).unwrap();
+        let mut newer_retrieval = newer_inputs.build_database(VectorEncoding::F32).unwrap();
+        let replacement = &newer_inputs.records[0];
+        let replacement_chunks = replacement
+            .chunks
+            .iter()
+            .map(|chunk| RecordChunkInput {
+                key: chunk.key.clone(),
+                text: chunk.text.clone(),
+                embedding: vec![1.0, 0.0, 0.0],
+                metadata: chunk.metadata.clone(),
+            })
+            .collect();
+        newer_retrieval
+            .upsert_record(
+                replacement.record.clone(),
+                replacement.inherited_metadata.clone(),
+                replacement_chunks,
+            )
+            .unwrap();
+        let newer_database = GraphRetrievalDatabase::build(
+            newer_retrieval,
+            production_schema(&validated.graph_schema).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            newer_database.project_candidates(&selection),
+            Err(GraphError::StaleGeneration { .. })
+        ));
     }
 }

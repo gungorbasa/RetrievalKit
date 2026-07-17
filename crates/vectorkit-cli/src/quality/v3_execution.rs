@@ -197,8 +197,8 @@ fn execute_run_with_persistence(
         }
     };
     let database = inputs.build_database(encoding)?;
-    let mut before = execute_run(run, inputs, source_queries, validated, &database)?;
-    let repeated = execute_run(run, inputs, source_queries, validated, &database)?;
+    let mut before = execute_run(run, inputs, source_queries, validated, &database, false)?;
+    let repeated = execute_run(run, inputs, source_queries, validated, &database, false)?;
     let mut failures = injected_failures.clone();
     if before != repeated {
         failures.run(run.run_id.clone(), FailureReason::NonDeterministicRanking);
@@ -216,7 +216,7 @@ fn execute_run_with_persistence(
     if verify_persisted_database(&database, &loaded, run).is_err() {
         failures.run(run.run_id.clone(), FailureReason::ReloadMismatch);
     }
-    let after = execute_run(run, inputs, source_queries, validated, &loaded)?;
+    let after = execute_run(run, inputs, source_queries, validated, &loaded, false)?;
     if before != after {
         failures.run(run.run_id.clone(), FailureReason::PersistenceMismatch);
     }
@@ -271,6 +271,7 @@ fn execute_run(
     source_queries: &BTreeMap<&str, &super::v3_schema::Query>,
     validated: &ValidatedCollection,
     database: &RetrievalDatabase,
+    strict_query_errors: bool,
 ) -> Result<RunExecution, String> {
     let letter = run.configuration["run_letter"]
         .as_str()
@@ -328,17 +329,21 @@ fn execute_run(
                 status_reason: None,
             })
         })();
-        queries.push(execution.unwrap_or_else(|_| QueryExecution {
-            candidate_limits,
-            chunk_hits: Vec::new(),
-            duplicate_collapse_count: 0,
-            execution_status: "invalid_execution",
-            filter: source.metadata_filter.clone(),
-            projected_documents: Vec::new(),
-            query_id: query_id.clone(),
-            selection_run_id: None,
-            status_reason: Some(FailureReason::ContractViolation.as_str().to_owned()),
-        }));
+        match execution {
+            Ok(execution) => queries.push(execution),
+            Err(error) if strict_query_errors => return Err(error),
+            Err(_) => queries.push(QueryExecution {
+                candidate_limits,
+                chunk_hits: Vec::new(),
+                duplicate_collapse_count: 0,
+                execution_status: "invalid_execution",
+                filter: source.metadata_filter.clone(),
+                projected_documents: Vec::new(),
+                query_id: query_id.clone(),
+                selection_run_id: None,
+                status_reason: Some(FailureReason::ContractViolation.as_str().to_owned()),
+            }),
+        }
     }
     queries.sort_by(|left, right| left.query_id.cmp(&right.query_id));
     let status = if queries
@@ -652,8 +657,8 @@ pub(super) fn emit_hotpotqa_tuning_search(
                 run.run_id
             ));
         }
-        let before = execute_run(&run, &inputs, &source_queries, validated, &database)?;
-        let repeated = execute_run(&run, &inputs, &source_queries, validated, &database)?;
+        let before = execute_run(&run, &inputs, &source_queries, validated, &database, true)?;
+        let repeated = execute_run(&run, &inputs, &source_queries, validated, &database, true)?;
         if before != repeated {
             return Err(format!(
                 "HotpotQA tuning run '{}' was not deterministic before persistence",
@@ -676,7 +681,7 @@ pub(super) fn emit_hotpotqa_tuning_search(
     let mut summaries = Vec::with_capacity(candidate_runs.len());
     for (candidate, run, before) in candidate_runs {
         verify_persisted_database(&database, &loaded, &run)?;
-        let after = execute_run(&run, &inputs, &source_queries, validated, &loaded)?;
+        let after = execute_run(&run, &inputs, &source_queries, validated, &loaded, true)?;
         if before != after {
             return Err(format!(
                 "HotpotQA tuning run '{}' changed after persistence reload",

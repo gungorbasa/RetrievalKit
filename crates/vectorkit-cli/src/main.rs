@@ -50,8 +50,19 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "quality-v3" => {
             run_quality_v3(rest)
         }
+        [command, subcommand, rest @ ..]
+            if command == "bench" && subcommand == "quality-v3-hotpotqa" =>
+        {
+            run_quality_v3_hotpotqa(rest)
+        }
         _ => Err(CliError::usage()),
     }
+}
+
+fn run_quality_v3_hotpotqa(args: &[String]) -> Result<(), CliError> {
+    let json = quality::v3_hotpotqa::run_cli(args).map_err(CliError::InvalidArgument)?;
+    println!("{json}");
+    Ok(())
 }
 
 fn run_quality_v3(args: &[String]) -> Result<(), CliError> {

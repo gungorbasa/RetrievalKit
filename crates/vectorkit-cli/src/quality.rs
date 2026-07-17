@@ -18,6 +18,7 @@ mod v3_execution_status;
 mod v3_graph_execution;
 mod v3_graph_input;
 mod v3_graph_retrieval_execution;
+pub(crate) mod v3_hotpotqa;
 mod v3_ingestion;
 mod v3_population;
 mod v3_runs;

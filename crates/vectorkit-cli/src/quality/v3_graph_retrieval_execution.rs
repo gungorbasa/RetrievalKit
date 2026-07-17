@@ -1311,7 +1311,7 @@ fn evidence_for_query<'a>(
         .ok_or_else(|| format!("missing evidence judgment for '{query_id}'"))
 }
 
-fn best_evidence(
+pub(super) fn best_evidence(
     documents: &BTreeSet<String>,
     evidence: &EvidenceJudgment,
 ) -> Result<(usize, usize), String> {

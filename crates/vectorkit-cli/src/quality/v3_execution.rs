@@ -8,10 +8,12 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use vectorkit_core::{HybridHit, HybridQuery, RetrievalDatabase, SearchQuery, VectorEncoding};
 
-use super::v3_canonical::{canonical_json_line, write_canonical_json};
+use super::v3_canonical::{canonical_json, canonical_json_line, sha256, write_canonical_json};
 use super::v3_execution_status::{ExecutionFailures, FailureReason};
 use super::v3_ingestion::{ProductionQueryInput, V3ProductionInputs};
-use super::v3_runs::RunIdentity;
+use super::v3_runs::{
+    canonical_runs_with_hybrid_configuration, HybridConfiguration, RunContext, RunIdentity,
+};
 use super::v3_schema::Qrel;
 use super::v3_validation::ValidatedCollection;
 
@@ -594,6 +596,423 @@ fn project_documents(
         });
     }
     (projected, duplicates)
+}
+
+pub(super) fn emit_hotpotqa_tuning_search(
+    validated: &ValidatedCollection,
+    candidates: &[HybridConfiguration],
+    context: &RunContext,
+    search_space_sha256: &str,
+    output: &Path,
+) -> Result<Value, String> {
+    if output.exists() {
+        return Err(format!(
+            "HotpotQA tuning root '{}' already exists; a fresh directory is required",
+            output.display()
+        ));
+    }
+    if candidates.is_empty() {
+        return Err("HotpotQA tuning search space is empty".to_owned());
+    }
+    let parent = output
+        .parent()
+        .ok_or_else(|| format!("HotpotQA tuning root '{}' has no parent", output.display()))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("create HotpotQA tuning parent: {error}"))?;
+    let staging = TemporaryDirectory::new_in(parent, ".hotpotqa-phase-3-tuning-staging")?;
+    let staged_output = &staging.path;
+    fs::create_dir_all(staged_output.join("candidates"))
+        .map_err(|error| format!("create HotpotQA candidate root: {error}"))?;
+
+    let inputs = V3ProductionInputs::from_validated(validated)?;
+    let source_queries = validated
+        .queries
+        .iter()
+        .map(|query| (query.query_id.as_str(), query))
+        .collect::<BTreeMap<_, _>>();
+    let database = inputs.build_database(VectorEncoding::I8ScalarQuantized)?;
+
+    let mut candidate_runs = Vec::with_capacity(candidates.len());
+    let mut seen = BTreeSet::new();
+    for candidate in candidates {
+        let runs = canonical_runs_with_hybrid_configuration(
+            &validated.collection,
+            &validated.queries,
+            &validated.populations,
+            context,
+            *candidate,
+        )?;
+        let run = runs
+            .into_iter()
+            .find(|run| run.configuration["run_letter"] == "c")
+            .ok_or_else(|| "HotpotQA tuning candidate did not produce Run C".to_owned())?;
+        if !seen.insert(run.run_id.clone()) {
+            return Err(format!(
+                "HotpotQA tuning search produced duplicate run ID '{}'",
+                run.run_id
+            ));
+        }
+        let before = execute_run(&run, &inputs, &source_queries, validated, &database)?;
+        let repeated = execute_run(&run, &inputs, &source_queries, validated, &database)?;
+        if before != repeated {
+            return Err(format!(
+                "HotpotQA tuning run '{}' was not deterministic before persistence",
+                run.run_id
+            ));
+        }
+        candidate_runs.push((*candidate, run, before));
+    }
+
+    let temporary = TemporaryDirectory::new("vectorkit-hotpotqa-phase-3-tuning-persistence")?;
+    let persisted = temporary.path.join("database");
+    database
+        .save_to_dir(&persisted)
+        .map_err(|error| format!("HotpotQA tuning database save: {error}"))?;
+    RetrievalDatabase::validate_dir(&persisted)
+        .map_err(|error| format!("HotpotQA tuning database validation: {error}"))?;
+    let loaded = RetrievalDatabase::load_from_dir(&persisted)
+        .map_err(|error| format!("HotpotQA tuning database reload: {error}"))?;
+
+    let mut summaries = Vec::with_capacity(candidate_runs.len());
+    for (candidate, run, before) in candidate_runs {
+        verify_persisted_database(&database, &loaded, &run)?;
+        let after = execute_run(&run, &inputs, &source_queries, validated, &loaded)?;
+        if before != after {
+            return Err(format!(
+                "HotpotQA tuning run '{}' changed after persistence reload",
+                run.run_id
+            ));
+        }
+        if before.status != "valid" || before.queries.len() != run.execution.len() {
+            return Err(format!(
+                "HotpotQA tuning run '{}' has invalid or incomplete execution",
+                run.run_id
+            ));
+        }
+
+        let candidate_output = staged_output.join("candidates").join(&run.run_id);
+        fs::create_dir(&candidate_output)
+            .map_err(|error| format!("create candidate output '{}': {error}", run.run_id))?;
+        let candidate_value = json!({
+            "fusion_alpha":candidate.fusion_alpha,
+            "keyword_candidate_limit":candidate.keyword_candidate_limit,
+            "vector_candidate_limit":candidate.vector_candidate_limit
+        });
+        let metrics = hotpotqa_tuning_metrics(validated, &before)?;
+        let configuration_sha256 = sha256(run.configuration_preimage.as_bytes());
+        write_canonical_json(
+            &candidate_output.join("configuration.json"),
+            &json!({
+                "candidate":candidate_value,
+                "configuration":run.configuration,
+                "configuration_preimage":run.configuration_preimage,
+                "configuration_preimage_sha256":configuration_sha256,
+                "run_id":run.run_id,
+                "schema_version":1
+            }),
+        )?;
+        write_canonical_json(
+            &candidate_output.join("rust-results.json"),
+            &json!({
+                "collection_id":validated.collection.collection_id,
+                "collection_version":validated.collection.collection_version,
+                "runs":[before],
+                "schema_version":3,
+                "seed_resolutions":[]
+            }),
+        )?;
+        fs::write(
+            candidate_output.join("run.trec"),
+            trec(&before, validated.collection.evaluation_depth),
+        )
+        .map_err(|error| format!("write tuning TREC '{}': {error}", run.run_id))?;
+        write_canonical_json(&candidate_output.join("metrics.json"), &metrics)?;
+        write_canonical_json(
+            &candidate_output.join("persistence.json"),
+            &json!({
+                "database_shared_across_registered_candidates":true,
+                "deterministic_repeat_equal":true,
+                "invalid_execution":false,
+                "ranking_equal_after_reload":true,
+                "run_id":run.run_id,
+                "save_validate_load_equivalent":true,
+                "schema_version":1
+            }),
+        )?;
+        let files = tuning_file_inventory(&candidate_output, true)?;
+        write_canonical_json(
+            &candidate_output.join("manifest.json"),
+            &json!({
+                "files":files,
+                "run_id":run.run_id,
+                "schema_version":1,
+                "status":"valid"
+            }),
+        )?;
+        summaries.push(json!({
+            "aggregate":metrics["aggregate"],
+            "candidate":candidate_value,
+            "configuration_preimage_sha256":configuration_sha256,
+            "run_id":run.run_id
+        }));
+    }
+    summaries.sort_by(tuning_candidate_order);
+    let winner = summaries
+        .first()
+        .cloned()
+        .ok_or_else(|| "HotpotQA tuning search produced no winner".to_owned())?;
+    let tie_break_trace = summaries
+        .iter()
+        .enumerate()
+        .map(|(offset, summary)| {
+            json!({
+                "candidate":summary["candidate"],
+                "objective":[
+                    summary["aggregate"]["complete_evidence_recall_at_10"].clone(),
+                    summary["aggregate"]["ndcg_at_10"].clone(),
+                    summary["aggregate"]["map"].clone(),
+                    summary["aggregate"]["recall_at_10"].clone(),
+                    summary["aggregate"]["mrr_at_10"].clone(),
+                    summary["candidate"]["vector_candidate_limit"].as_u64().unwrap()
+                        + summary["candidate"]["keyword_candidate_limit"].as_u64().unwrap(),
+                    summary["candidate"]["vector_candidate_limit"].as_u64().unwrap().max(
+                        summary["candidate"]["keyword_candidate_limit"].as_u64().unwrap()
+                    ),
+                    canonical_json(&summary["candidate"]).expect("candidate is canonicalizable")
+                ],
+                "rank":offset+1,
+                "run_id":summary["run_id"]
+            })
+        })
+        .collect::<Vec<_>>();
+    let provisional = json!({
+        "candidate_count":summaries.len(),
+        "collection_id":validated.collection.collection_id,
+        "development_population_sha256":run_population_hash(validated),
+        "run_c_alone_selected":true,
+        "schema_version":1,
+        "search_space_sha256":search_space_sha256,
+        "selected":winner,
+        "selection_objective":[
+            "complete_evidence_recall_at_10_desc",
+            "ndcg_at_10_desc",
+            "map_desc",
+            "recall_at_10_desc",
+            "mrr_at_10_desc",
+            "total_candidate_count_asc",
+            "maximum_component_candidate_count_asc",
+            "canonical_configuration_bytes_asc"
+        ],
+        "test_results_available":false,
+        "tie_break_trace":tie_break_trace
+    });
+    write_canonical_json(
+        &staged_output.join("selected-configuration-provisional.json"),
+        &provisional,
+    )?;
+    write_canonical_json(
+        &staged_output.join("tuning-summary.json"),
+        &json!({
+            "candidates":summaries,
+            "collection_id":validated.collection.collection_id,
+            "schema_version":1,
+            "search_space_sha256":search_space_sha256,
+            "status":"valid"
+        }),
+    )?;
+    let root_files = tuning_file_inventory(staged_output, false)?;
+    write_canonical_json(
+        &staged_output.join("manifest.json"),
+        &json!({
+            "candidate_count":candidates.len(),
+            "files":root_files,
+            "schema_version":1,
+            "search_space_sha256":search_space_sha256,
+            "status":"valid"
+        }),
+    )?;
+    fs::rename(staged_output, output).map_err(|error| {
+        format!(
+            "atomically publish HotpotQA tuning root '{}' from '{}': {error}",
+            output.display(),
+            staged_output.display()
+        )
+    })?;
+    Ok(provisional)
+}
+
+fn hotpotqa_tuning_metrics(
+    validated: &ValidatedCollection,
+    run: &RunExecution,
+) -> Result<Value, String> {
+    let qrels = qrels_by_query(&validated.qrels);
+    let evidence = validated
+        .evidence
+        .iter()
+        .map(|row| (row.query_id.as_str(), row))
+        .collect::<BTreeMap<_, _>>();
+    let mut sums = BTreeMap::<&'static str, f64>::new();
+    let mut queries = Vec::with_capacity(run.queries.len());
+    for query in &run.queries {
+        let ordinary = query_metrics(
+            &query.projected_documents,
+            qrels
+                .get(query.query_id.as_str())
+                .ok_or_else(|| format!("missing qrels for tuning query '{}'", query.query_id))?,
+        );
+        let evidence_row = evidence.get(query.query_id.as_str()).ok_or_else(|| {
+            format!(
+                "missing evidence judgment for tuning query '{}'",
+                query.query_id
+            )
+        })?;
+        let evidence_5 = tuning_evidence(&query.projected_documents, evidence_row, 5)?;
+        let evidence_10 = tuning_evidence(&query.projected_documents, evidence_row, 10)?;
+        let values = [
+            ("ap", ordinary.ap),
+            ("judged_at_10", ordinary.judged_at_10),
+            ("judged_at_5", ordinary.judged_at_5),
+            ("mrr_at_10", ordinary.mrr_at_10),
+            ("ndcg_at_10", ordinary.ndcg_at_10),
+            ("ndcg_at_5", ordinary.ndcg_at_5),
+            ("precision_at_5", ordinary.precision_at_5),
+            ("recall_at_10", ordinary.recall_at_10),
+            ("recall_at_5", ordinary.recall_at_5),
+            ("success_at_1", ordinary.success_at_1),
+            ("supporting_document_recall_at_5", evidence_5.0),
+            ("supporting_document_recall_at_10", evidence_10.0),
+            ("complete_evidence_recall_at_5", evidence_5.1),
+            ("complete_evidence_recall_at_10", evidence_10.1),
+        ];
+        let metrics = values
+            .iter()
+            .map(|(name, value)| {
+                *sums.entry(name).or_default() += value;
+                ((*name).to_owned(), json!(value))
+            })
+            .collect::<serde_json::Map<_, _>>();
+        queries.push(json!({
+            "candidate_count":query.chunk_hits.len(),
+            "duplicate_collapse_count":query.duplicate_collapse_count,
+            "execution_status":query.execution_status,
+            "metrics":metrics,
+            "query_id":query.query_id
+        }));
+    }
+    let denominator = queries.len() as f64;
+    let mut aggregate = sums
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), json!(value / denominator)))
+        .collect::<serde_json::Map<_, _>>();
+    aggregate.insert("map".to_owned(), aggregate["ap"].clone());
+    Ok(json!({
+        "aggregate":aggregate,
+        "collection_id":validated.collection.collection_id,
+        "collection_version":validated.collection.collection_version,
+        "declared_population_sha256":run_population_hash(validated),
+        "invalid_execution":false,
+        "metric_definition_version":"graph-retrieval-v3-r2",
+        "per_query":queries,
+        "run_id":run.run_id,
+        "schema_version":1,
+        "status":"valid"
+    }))
+}
+
+fn tuning_evidence(
+    documents: &[ProjectedDocument],
+    evidence: &super::v3_schema::EvidenceJudgment,
+    cutoff: usize,
+) -> Result<(f64, f64), String> {
+    let documents = documents
+        .iter()
+        .take(cutoff)
+        .map(|document| document.record_id.clone())
+        .collect::<BTreeSet<_>>();
+    let (matched, required) =
+        super::v3_graph_retrieval_execution::best_evidence(&documents, evidence)?;
+    Ok((
+        matched as f64 / required as f64,
+        f64::from(matched == required),
+    ))
+}
+
+fn run_population_hash(validated: &ValidatedCollection) -> String {
+    super::v3_population::population_hash(&validated.populations.retrieval)
+}
+
+fn tuning_candidate_order(left: &Value, right: &Value) -> std::cmp::Ordering {
+    for name in [
+        "complete_evidence_recall_at_10",
+        "ndcg_at_10",
+        "map",
+        "recall_at_10",
+        "mrr_at_10",
+    ] {
+        let order = right["aggregate"][name]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&left["aggregate"][name].as_f64().unwrap());
+        if !order.is_eq() {
+            return order;
+        }
+    }
+    let limits = |value: &Value| {
+        let vector = value["candidate"]["vector_candidate_limit"]
+            .as_u64()
+            .unwrap();
+        let keyword = value["candidate"]["keyword_candidate_limit"]
+            .as_u64()
+            .unwrap();
+        (vector + keyword, vector.max(keyword))
+    };
+    limits(left).cmp(&limits(right)).then_with(|| {
+        canonical_json(&left["candidate"])
+            .unwrap()
+            .cmp(&canonical_json(&right["candidate"]).unwrap())
+    })
+}
+
+fn tuning_file_inventory(root: &Path, exclude_manifest: bool) -> Result<Vec<Value>, String> {
+    fn collect(root: &Path, directory: &Path, files: &mut Vec<Value>) -> Result<(), String> {
+        for entry in fs::read_dir(directory)
+            .map_err(|error| format!("read tuning directory '{}': {error}", directory.display()))?
+        {
+            let entry = entry.map_err(|error| format!("read tuning entry: {error}"))?;
+            if entry
+                .file_type()
+                .map_err(|error| format!("inspect tuning entry: {error}"))?
+                .is_dir()
+            {
+                collect(root, &entry.path(), files)?;
+            } else {
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .expect("tuning file is beneath root")
+                    .to_str()
+                    .ok_or_else(|| "tuning artifact path is not UTF-8".to_owned())?
+                    .to_owned();
+                let bytes = fs::read(entry.path()).map_err(|error| {
+                    format!("read tuning artifact '{}': {error}", entry.path().display())
+                })?;
+                files.push(json!({"bytes":bytes.len(),"path":relative,"sha256":sha256(&bytes)}));
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    collect(root, root, &mut files)?;
+    if exclude_manifest {
+        files.retain(|entry| entry["path"] != "manifest.json");
+    }
+    files.sort_by(|left, right| {
+        left["path"]
+            .as_str()
+            .unwrap()
+            .cmp(right["path"].as_str().unwrap())
+    });
+    Ok(files)
 }
 
 pub(super) fn emit_qualification(

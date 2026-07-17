@@ -33,12 +33,67 @@ pub(super) struct RunContext {
     pub implementation_revision: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct HybridConfiguration {
+    pub fusion_alpha: f64,
+    pub vector_candidate_limit: usize,
+    pub keyword_candidate_limit: usize,
+}
+
+impl HybridConfiguration {
+    pub(super) const fn phase_1_default() -> Self {
+        Self {
+            fusion_alpha: 0.6,
+            vector_candidate_limit: 8,
+            keyword_candidate_limit: 8,
+        }
+    }
+
+    pub(super) fn validate(self, searchable_chunks: usize) -> Result<Self, String> {
+        let alpha_f32 = self.fusion_alpha as f32;
+        if !self.fusion_alpha.is_finite()
+            || !alpha_f32.is_finite()
+            || !(0.0..=1.0).contains(&alpha_f32)
+        {
+            return Err("weighted-hybrid fusion alpha must be a finite F32 in [0,1]".to_owned());
+        }
+        for (name, value) in [
+            ("vector", self.vector_candidate_limit),
+            ("keyword", self.keyword_candidate_limit),
+        ] {
+            if value == 0 || value > searchable_chunks {
+                return Err(format!(
+                    "weighted-hybrid {name} candidate limit must be in 1..={searchable_chunks}, actual {value}"
+                ));
+            }
+        }
+        Ok(self)
+    }
+}
+
 pub(super) fn canonical_runs(
     collection: &Collection,
     queries: &[Query],
     populations: &Populations,
     context: &RunContext,
 ) -> Result<Vec<RunIdentity>, String> {
+    canonical_runs_with_hybrid_configuration(
+        collection,
+        queries,
+        populations,
+        context,
+        HybridConfiguration::phase_1_default(),
+    )
+}
+
+pub(super) fn canonical_runs_with_hybrid_configuration(
+    collection: &Collection,
+    queries: &[Query],
+    populations: &Populations,
+    context: &RunContext,
+    hybrid: HybridConfiguration,
+) -> Result<Vec<RunIdentity>, String> {
+    let hybrid = hybrid.validate(collection.counts.chunks)?;
     let by_id = queries
         .iter()
         .map(|query| (query.query_id.as_str(), query))
@@ -135,12 +190,12 @@ pub(super) fn canonical_runs(
         };
         let configuration = json!({
             "bm25_policy": if weighted { bm25.clone() } else { Value::Null },
-            "candidate_limits": if weighted { json!({"keyword":8,"vector":8}) } else { json!({"keyword":null,"vector":null}) },
+            "candidate_limits": if weighted { json!({"keyword":hybrid.keyword_candidate_limit,"vector":hybrid.vector_candidate_limit}) } else { json!({"keyword":null,"vector":null}) },
             "collection_id": collection.collection_id,
             "collection_version": collection.collection_version,
             "corpus_id": collection.corpus_id,
             "evaluation_depth": collection.evaluation_depth,
-            "fusion_alpha": if weighted { json!(0.6) } else { Value::Null },
+            "fusion_alpha": if weighted { json!(hybrid.fusion_alpha) } else { Value::Null },
             "graph_schema_sha256": if graph { json!(context.graph_schema_sha256) } else { Value::Null },
             "implementation_revision": context.implementation_revision,
             "metadata_filter_policy_id":"v3-query-filter-ast-v1",

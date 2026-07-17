@@ -126,13 +126,17 @@ pub(super) fn execute(arguments: LockedArguments) -> Result<String, String> {
     let authorization = parse_canonical_value("authorization", &authorization_bytes)?;
     let revision = implementation_revision(&repository)?;
     validate_authorization(&authorization, &lock_hash, &revision, &repository)?;
+    let attempt_number = authorization["attempt_sequence"]
+        .as_u64()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "authorization attempt_sequence must be positive".to_owned())?;
     validate_adapter_and_collection_identity(&collection)?;
 
     create_attempt_audit(
         &attempt_audit,
         &json!({
             "authorization_sha256":authorization_hash,
-            "attempt":1,
+            "attempt":attempt_number,
             "canonical_result_published":false,
             "implementation_revision":revision,
             "schema_version":1,
@@ -147,6 +151,7 @@ pub(super) fn execute(arguments: LockedArguments) -> Result<String, String> {
         &lock_hash,
         hybrid,
         &revision,
+        attempt_number,
     );
     match attempt_result {
         Ok(summary) => {
@@ -154,7 +159,7 @@ pub(super) fn execute(arguments: LockedArguments) -> Result<String, String> {
                 &attempt_audit,
                 &json!({
                     "authorization_sha256":authorization_hash,
-                    "attempt":1,
+                    "attempt":attempt_number,
                     "canonical_result_published":true,
                     "implementation_revision":revision,
                     "output_manifest_sha256":summary["output_manifest_sha256"],
@@ -171,7 +176,7 @@ pub(super) fn execute(arguments: LockedArguments) -> Result<String, String> {
                 &attempt_audit,
                 &json!({
                     "authorization_sha256":authorization_hash,
-                    "attempt":1,
+                    "attempt":attempt_number,
                     "canonical_result_published":false,
                     "failure":error,
                     "implementation_revision":revision,
@@ -193,6 +198,7 @@ fn execute_attempt(
     lock_hash: &str,
     hybrid: HybridConfiguration,
     revision: &Value,
+    attempt_number: u64,
 ) -> Result<Value, String> {
     let parent = output
         .parent()
@@ -269,7 +275,8 @@ fn execute_attempt(
         })?;
         Ok(json!({
             "authorization_sha256":authorization_hash,
-            "attempt_count":1,
+            "attempt_count":attempt_number,
+            "attempt_sequence":attempt_number,
             "mandatory_ranking_rerun_equal":true,
             "mandatory_scoring_rerun_equal":true,
             "output":output,

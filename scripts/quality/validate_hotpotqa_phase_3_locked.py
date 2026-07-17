@@ -90,8 +90,8 @@ def require_fresh_output(path: Path) -> None:
         raise ValidationError(f"refusing to overwrite {path}")
 
 
-def validate_attempt(audit: dict[str, Any]) -> None:
-    if audit.get("attempt") != 1 or audit.get("status") != "passed":
+def validate_attempt(audit: dict[str, Any], expected_attempt: int) -> None:
+    if audit.get("attempt") != expected_attempt or audit.get("status") != "passed":
         raise ValidationError("second unauthorized reporting attempt or failed attempt")
 
 
@@ -349,7 +349,7 @@ def validate(
     if authorization["selected_configuration"]["lock_sha256"] != LOCK_SHA256:
         raise ValidationError("authorization selected-lock mismatch")
     attempt = read_json(attempt_audit_path)
-    validate_attempt(attempt)
+    validate_attempt(attempt, int(authorization["attempt_sequence"]))
     manifest = read_json(artifacts / "manifest.json")
     validate_inventory(artifacts, manifest)
     if manifest["authorization_sha256"] != authorization_digest:

@@ -132,7 +132,7 @@ class LockedValidatorNegativeTests(unittest.TestCase):
     def test_second_unauthorized_reporting_attempt(self) -> None:
         attempt = {"attempt": 2, "status": "passed"}
         with self.assertRaisesRegex(validator.ValidationError, "second unauthorized"):
-            validator.validate_attempt(attempt)
+            validator.validate_attempt(attempt, 1)
 
     def test_partial_artifact_publication(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

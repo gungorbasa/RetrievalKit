@@ -1462,18 +1462,7 @@ fn validate_selection_path_equality_with_d(
                 run.result.run_id
             ));
         }
-        let lane = if run.result.run_id.contains("-explicit-") {
-            "explicit"
-        } else if run.result.run_id.contains("-topic-") {
-            "topic"
-        } else if run.result.run_id.contains("-team-") {
-            "team"
-        } else {
-            return Err(format!(
-                "run '{}' has no recognizable seed lane",
-                run.result.run_id
-            ));
-        };
+        let lane = configured_seed_lane(validated, &run.result.run_id)?;
         let d_run_id = d_run_id(lane)?;
         let d_selections = read_jsonl(
             &output
@@ -1530,6 +1519,18 @@ fn validate_selection_path_equality_with_d(
         "valid"
     };
     Ok(json!({"runs":rows,"schema_version":1,"status":status}))
+}
+
+fn configured_seed_lane<'a>(
+    validated: &'a ValidatedCollection,
+    run_id: &str,
+) -> Result<&'a str, String> {
+    validated
+        .runs
+        .iter()
+        .find(|run| run.run_id == run_id)
+        .and_then(|run| run.configuration["seed_lane"].as_str())
+        .ok_or_else(|| format!("run '{run_id}' has no configured seed lane"))
 }
 
 fn normalized_selection(mut row: Value) -> Result<String, String> {
@@ -2422,6 +2423,22 @@ mod tests {
 
     fn fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../benchmarks/retrieval-quality/v3")
+    }
+
+    #[test]
+    fn configured_seed_lane_supports_collection_defined_lane_names() {
+        let mut validated = validate(&fixture_root()).unwrap();
+        let run = validated
+            .runs
+            .iter_mut()
+            .find(|run| run.configuration["run_letter"] == "e")
+            .unwrap();
+        let run_id = run.run_id.clone();
+        run.configuration["seed_lane"] = json!("hotpotqa-exact-title-v1");
+        assert_eq!(
+            configured_seed_lane(&validated, &run_id).unwrap(),
+            "hotpotqa-exact-title-v1"
+        );
     }
 
     #[test]

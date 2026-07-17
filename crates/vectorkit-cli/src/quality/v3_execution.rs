@@ -589,10 +589,10 @@ pub(super) fn emit_qualification(
     write_canonical_json(
         &staged_output.join("qualification.json"),
         &json!({
-            "artifact_schema":"phase-1.2c-semantic-qualification-v1",
+            "artifact_schema":"phase-1.2c-graph-scoped-qualification-v1",
             "collection_id":validated.collection.collection_id,
             "collection_version":validated.collection.collection_version,
-            "included_run_letters":["a","b","c","d","e","f"],
+            "included_run_letters":["a","b","c","d","e","f","g"],
             "partial":true,
             "publication_ready":false,
             "status":"qualification_only_no_final_manifest"
@@ -954,10 +954,10 @@ mod tests {
             serde_json::from_slice(&fs::read(output.join("qualification.json")).unwrap()).unwrap();
         assert_eq!(marker["partial"], true);
         assert_eq!(marker["publication_ready"], false);
-        assert_eq!(fs::read_dir(output.join("runs")).unwrap().count(), 9);
+        assert_eq!(fs::read_dir(output.join("runs")).unwrap().count(), 12);
         assert_eq!(
             marker["included_run_letters"],
-            json!(["a", "b", "c", "d", "e", "f"])
+            json!(["a", "b", "c", "d", "e", "f", "g"])
         );
     }
 

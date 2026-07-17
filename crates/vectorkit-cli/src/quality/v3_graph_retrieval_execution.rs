@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::Serialize;
 use serde_json::{json, Value};
-use vectorkit_core::{SearchQuery, VectorEncoding};
+use vectorkit_core::{HybridHit, HybridQuery, SearchQuery, VectorEncoding};
 use vectorkit_graph::{
     Direction, GraphPathEdge, GraphQuery, GraphRetrievalDatabase, NodeId, NodeSource, QueryLimits,
     RelationshipType, Traverse, TruncationReason,
@@ -48,6 +48,23 @@ const SEMANTIC_RUNS: [(&str, &str, &str); 6] = [
     (
         "v3-f-graph-semantic-i8-team-cfg-c9fe28bfe8a2",
         "9e3b11888396550e38aafcec9baffdd970c588a838c561cecb3655e66b4b3f77",
+        "team",
+    ),
+];
+const HYBRID_RUNS: [(&str, &str, &str); 3] = [
+    (
+        "v3-g-graph-weighted-i8-explicit-cfg-f5f6dfcae573",
+        "91a780087bce21816e0a71017146d19fdc87e1b0d38b3fea2a02e36254bec0aa",
+        "explicit",
+    ),
+    (
+        "v3-g-graph-weighted-i8-topic-cfg-36c6887ab88d",
+        "1a6c8c0e321bd3b92194ede4257f041eaddcdf2e9e4388bbebb3ad9b006218c2",
+        "topic",
+    ),
+    (
+        "v3-g-graph-weighted-i8-team-cfg-0562c721d6e7",
+        "0f0022104a1921d80f09e302e653a1877ef502d363f70a9dc46dc7c0c0bbcf7a",
         "team",
     ),
 ];
@@ -131,6 +148,7 @@ pub(super) fn emit_graph_retrieval_qualification(
     output: &Path,
 ) -> Result<GraphRetrievalQualificationResults, String> {
     validate_frozen_semantic_runs(validated)?;
+    validate_frozen_hybrid_runs(validated)?;
     let seeds = resolve_seeds(validated)?;
     let inputs = V3ProductionInputs::from_validated(validated)?;
     let source_queries = validated
@@ -140,15 +158,16 @@ pub(super) fn emit_graph_retrieval_qualification(
         .collect::<BTreeMap<_, _>>();
     let mut runs = Vec::new();
     let mut fingerprints = BTreeMap::new();
-    for run in validated
-        .runs
-        .iter()
-        .filter(|run| matches!(run.configuration["run_letter"].as_str(), Some("e" | "f")))
-    {
+    for run in validated.runs.iter().filter(|run| {
+        matches!(
+            run.configuration["run_letter"].as_str(),
+            Some("e" | "f" | "g")
+        )
+    }) {
         let letter = run.configuration["run_letter"].as_str().unwrap();
         let encoding = match letter {
             "e" => VectorEncoding::F32,
-            "f" => VectorEncoding::I8ScalarQuantized,
+            "f" | "g" => VectorEncoding::I8ScalarQuantized,
             _ => unreachable!(),
         };
         let (preimage, fingerprint) = retrieval_generation_fingerprint(validated, letter)?;
@@ -165,9 +184,9 @@ pub(super) fn emit_graph_retrieval_qualification(
         )?);
     }
     runs.sort_by(|left, right| left.result.run_id.cmp(&right.result.run_id));
-    if runs.len() != 6 {
+    if runs.len() != 9 {
         return Err(format!(
-            "V3 Phase 1.2c expected six semantic E/F runs, actual {}",
+            "V3 Phase 1.2c expected nine E-G runs, actual {}",
             runs.len()
         ));
     }
@@ -382,6 +401,45 @@ fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), 
     Ok(())
 }
 
+fn validate_frozen_hybrid_runs(validated: &ValidatedCollection) -> Result<(), String> {
+    for (run_id, logical, lane) in HYBRID_RUNS {
+        let run = validated
+            .runs
+            .iter()
+            .find(|run| run.run_id == run_id)
+            .ok_or_else(|| format!("missing frozen hybrid run '{run_id}'"))?;
+        let (declared_hash, execution_hash, execution_count) = match lane {
+            "explicit" => (
+                "2ce86656e11a1ddbe0d1710b2413ab7e6c2325271adc2ca5728eedb9b9534a1f",
+                "2ce86656e11a1ddbe0d1710b2413ab7e6c2325271adc2ca5728eedb9b9534a1f",
+                2,
+            ),
+            "topic" => (
+                "d9bd478b70d090c4b9543d346a42f300977480baf6f7d65f1c30e3608153a082",
+                "b64c45f1a2bef306eb3daca23aaa916bcbc151fef367325a7160e9520651f24e",
+                2,
+            ),
+            "team" => (
+                "1737e84bdc92ff4adefee6614c6f22d67bd11d97170f28753ea05776050f3c0d",
+                "1737e84bdc92ff4adefee6614c6f22d67bd11d97170f28753ea05776050f3c0d",
+                1,
+            ),
+            _ => unreachable!(),
+        };
+        if run.logical_run_sha256 != logical
+            || run.declared_hash() != declared_hash
+            || run.execution_hash() != execution_hash
+            || run.execution.len() != execution_count
+        {
+            return Err(format!(
+                "frozen hybrid run '{}' identity or population changed",
+                run.run_id
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn execute_run(
     validated: &ValidatedCollection,
     run: &RunIdentity,
@@ -404,6 +462,7 @@ fn execute_run(
             result_rows.push(excluded_result(
                 source,
                 run,
+                candidate_limits(run)?,
                 excluded_reason(validated, lane, query_id)?,
             ));
             continue;
@@ -502,21 +561,6 @@ fn execute_query(
         ));
     }
 
-    let mut request = SearchQuery::new(
-        input.embedding.clone(),
-        database.corpus().active_chunk_count(),
-    );
-    if let Some(filter) = &input.filter {
-        request = request.with_filter(filter.clone());
-    }
-    let hits = database
-        .semantic_search_in_selection(&request, &graph_result)
-        .map_err(|error| {
-            format!(
-                "graph retrieval query '{}': scoped semantic ranking: {error}",
-                query.query_id
-            )
-        })?;
     let allowed = filtered_projection
         .candidates
         .iter()
@@ -527,44 +571,17 @@ fn execute_query(
             )
         })
         .collect::<BTreeSet<_>>();
-    let chunk_hits = hits
-        .into_iter()
-        .enumerate()
-        .map(|(offset, hit)| {
-            let identity = database
-                .corpus()
-                .chunk_identity(hit.chunk_id)
-                .ok_or_else(|| {
-                    format!("scoped semantic returned unknown chunk {}", hit.chunk_id)
-                })?;
-            let stable = (
-                identity.record_id.as_str().to_owned(),
-                identity.chunk_key.as_str().to_owned(),
-            );
-            if !allowed.contains(&stable)
-                || hit.document_id != identity.record_id.as_str()
-                || !hit.score.is_finite()
-            {
-                return Err(format!(
-                    "graph retrieval query '{}': out-of-scope or invalid semantic hit",
-                    query.query_id
-                ));
-            }
-            Ok(ChunkHit {
-                bm25_normalized_score: None,
-                bm25_score: None,
-                chunk_key: stable.1,
-                fusion_score: None,
-                keyword_rank: None,
-                matched_terms: Vec::new(),
-                native_rank: offset + 1,
-                record_id: stable.0,
-                vector_normalized_score: None,
-                vector_rank: Some(offset + 1),
-                vector_score: Some(hit.score),
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    let limits = candidate_limits(run)?;
+    let chunk_hits = match run.configuration["run_letter"].as_str() {
+        Some("e" | "f") => semantic_hits(database, input, &graph_result, &allowed)?,
+        Some("g") => hybrid_hits(database, input, &graph_result, &allowed, limits, run)?,
+        actual => {
+            return Err(format!(
+                "graph retrieval run '{}' has unsupported letter {actual:?}",
+                run.run_id
+            ));
+        }
+    };
     validate_native_hits(&chunk_hits, run, &query.query_id)?;
     let (projected_documents, duplicate_collapse_count) =
         project_documents(&chunk_hits, validated.collection.evaluation_depth);
@@ -641,10 +658,7 @@ fn execute_query(
     });
     Ok(ValidQuery {
         result: QueryExecution {
-            candidate_limits: CandidateLimits {
-                keyword: None,
-                vector: None,
-            },
+            candidate_limits: limits,
             chunk_hits,
             duplicate_collapse_count,
             execution_status: "valid",
@@ -660,12 +674,14 @@ fn execute_query(
     })
 }
 
-fn excluded_result(query: &Query, run: &RunIdentity, reason: String) -> QueryExecution {
+fn excluded_result(
+    query: &Query,
+    run: &RunIdentity,
+    limits: CandidateLimits,
+    reason: String,
+) -> QueryExecution {
     QueryExecution {
-        candidate_limits: CandidateLimits {
-            keyword: None,
-            vector: None,
-        },
+        candidate_limits: limits,
         chunk_hits: Vec::new(),
         duplicate_collapse_count: 0,
         execution_status: "excluded_pre_freeze",
@@ -675,6 +691,181 @@ fn excluded_result(query: &Query, run: &RunIdentity, reason: String) -> QueryExe
         selection_run_id: Some(run.run_id.clone()),
         status_reason: Some(reason),
     }
+}
+
+fn candidate_limits(run: &RunIdentity) -> Result<CandidateLimits, String> {
+    let read = |name: &str| {
+        let value = &run.configuration["candidate_limits"][name];
+        if value.is_null() {
+            Ok(None)
+        } else {
+            value
+                .as_u64()
+                .map(|value| Some(value as usize))
+                .ok_or_else(|| format!("run '{}' has invalid {name} limit", run.run_id))
+        }
+    };
+    Ok(CandidateLimits {
+        keyword: read("keyword")?,
+        vector: read("vector")?,
+    })
+}
+
+fn semantic_hits(
+    database: &GraphRetrievalDatabase,
+    input: &ProductionQueryInput,
+    graph_result: &vectorkit_graph::GraphResult,
+    allowed: &BTreeSet<(String, String)>,
+) -> Result<Vec<ChunkHit>, String> {
+    let mut request = SearchQuery::new(
+        input.embedding.clone(),
+        database.corpus().active_chunk_count(),
+    );
+    if let Some(filter) = &input.filter {
+        request = request.with_filter(filter.clone());
+    }
+    database
+        .semantic_search_in_selection(&request, graph_result)
+        .map_err(|error| {
+            format!(
+                "graph retrieval query '{}': scoped semantic ranking: {error}",
+                input.query_id
+            )
+        })?
+        .into_iter()
+        .enumerate()
+        .map(|(offset, hit)| {
+            let identity = database
+                .corpus()
+                .chunk_identity(hit.chunk_id)
+                .ok_or_else(|| {
+                    format!("scoped semantic returned unknown chunk {}", hit.chunk_id)
+                })?;
+            let stable = (
+                identity.record_id.as_str().to_owned(),
+                identity.chunk_key.as_str().to_owned(),
+            );
+            if !allowed.contains(&stable)
+                || hit.document_id != identity.record_id.as_str()
+                || !hit.score.is_finite()
+            {
+                return Err(format!(
+                    "graph retrieval query '{}': out-of-scope or invalid semantic hit",
+                    input.query_id
+                ));
+            }
+            Ok(ChunkHit {
+                bm25_normalized_score: None,
+                bm25_score: None,
+                chunk_key: stable.1,
+                fusion_score: None,
+                keyword_rank: None,
+                matched_terms: Vec::new(),
+                native_rank: offset + 1,
+                record_id: stable.0,
+                vector_normalized_score: None,
+                vector_rank: Some(offset + 1),
+                vector_score: Some(hit.score),
+            })
+        })
+        .collect()
+}
+
+fn hybrid_hits(
+    database: &GraphRetrievalDatabase,
+    input: &ProductionQueryInput,
+    graph_result: &vectorkit_graph::GraphResult,
+    allowed: &BTreeSet<(String, String)>,
+    limits: CandidateLimits,
+    run: &RunIdentity,
+) -> Result<Vec<ChunkHit>, String> {
+    let vector_limit = limits
+        .vector
+        .ok_or_else(|| format!("run '{}' lacks vector candidate limit", run.run_id))?;
+    let keyword_limit = limits
+        .keyword
+        .ok_or_else(|| format!("run '{}' lacks keyword candidate limit", run.run_id))?;
+    let alpha = run.configuration["fusion_alpha"]
+        .as_f64()
+        .map(|value| value as f32)
+        .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+        .ok_or_else(|| format!("run '{}' has invalid fusion alpha", run.run_id))?;
+    let mut request = HybridQuery::new(
+        input.text.clone(),
+        input.embedding.clone(),
+        vector_limit.saturating_add(keyword_limit),
+    )
+    .with_candidate_limits(vector_limit, keyword_limit)
+    .with_alpha(alpha);
+    if let Some(filter) = &input.filter {
+        request = request.with_filter(filter.clone());
+    }
+    database
+        .hybrid_search_in_selection(&request, graph_result)
+        .map_err(|error| {
+            format!(
+                "graph retrieval query '{}': scoped hybrid ranking: {error}",
+                input.query_id
+            )
+        })?
+        .into_iter()
+        .enumerate()
+        .map(|(offset, hit)| convert_hybrid_hit(database, input, allowed, offset, hit))
+        .collect()
+}
+
+fn convert_hybrid_hit(
+    database: &GraphRetrievalDatabase,
+    input: &ProductionQueryInput,
+    allowed: &BTreeSet<(String, String)>,
+    offset: usize,
+    hit: HybridHit,
+) -> Result<ChunkHit, String> {
+    let identity = database
+        .corpus()
+        .chunk_identity(hit.chunk_id)
+        .ok_or_else(|| format!("scoped hybrid returned unknown chunk {}", hit.chunk_id))?;
+    let stable = (
+        identity.record_id.as_str().to_owned(),
+        identity.chunk_key.as_str().to_owned(),
+    );
+    if !allowed.contains(&stable)
+        || hit.document_id != identity.record_id.as_str()
+        || !hit.score.is_finite()
+        || hit.vector_score.is_some_and(|score| !score.is_finite())
+        || hit.keyword_score.is_some_and(|score| !score.is_finite())
+        || hit
+            .trace
+            .normalized_vector_score
+            .is_some_and(|score| !score.is_finite())
+        || hit
+            .trace
+            .normalized_keyword_score
+            .is_some_and(|score| !score.is_finite())
+        || hit.vector_score.is_some() != hit.trace.normalized_vector_score.is_some()
+        || hit.keyword_score.is_some() != hit.trace.normalized_keyword_score.is_some()
+        || hit.vector_score.is_some() != hit.trace.vector_rank.is_some()
+        || hit.keyword_score.is_some() != hit.trace.keyword_rank.is_some()
+        || (hit.trace.keyword_rank.is_none() && !hit.trace.matched_terms.is_empty())
+    {
+        return Err(format!(
+            "graph retrieval query '{}': invalid scoped hybrid hit or trace",
+            input.query_id
+        ));
+    }
+    Ok(ChunkHit {
+        bm25_normalized_score: hit.trace.normalized_keyword_score,
+        bm25_score: hit.keyword_score,
+        chunk_key: stable.1,
+        fusion_score: Some(hit.score),
+        keyword_rank: hit.trace.keyword_rank,
+        matched_terms: hit.trace.matched_terms,
+        native_rank: offset + 1,
+        record_id: stable.0,
+        vector_normalized_score: hit.trace.normalized_vector_score,
+        vector_rank: hit.trace.vector_rank,
+        vector_score: hit.vector_score,
+    })
 }
 
 fn production_query(query: &Query, seed: &ResolvedSeed) -> Result<GraphQuery, String> {
@@ -750,8 +941,8 @@ fn validate_native_hits(
         }
     }
     for pair in hits.windows(2) {
-        let left_score = pair[0].vector_score.unwrap();
-        let right_score = pair[1].vector_score.unwrap();
+        let left_score = pair[0].fusion_score.or(pair[0].vector_score).unwrap();
+        let right_score = pair[1].fusion_score.or(pair[1].vector_score).unwrap();
         let left_identity = (&pair[0].record_id, &pair[0].chunk_key);
         let right_identity = (&pair[1].record_id, &pair[1].chunk_key);
         if left_score.total_cmp(&right_score).is_lt()
@@ -786,7 +977,7 @@ fn project_documents(
             document_rank: projected.len() + 1,
             native_chunk_rank: hit.native_rank,
             record_id: hit.record_id.clone(),
-            score: hit.vector_score.unwrap(),
+            score: hit.fusion_score.or(hit.vector_score).unwrap(),
         });
     }
     (projected, duplicates)
@@ -910,9 +1101,10 @@ mod tests {
     }
 
     #[test]
-    fn executes_six_frozen_semantic_runs_through_own_combined_databases() {
+    fn executes_nine_frozen_graph_retrieval_runs_through_own_combined_databases() {
         let validated = validate(&fixture_root()).unwrap();
         validate_frozen_semantic_runs(&validated).unwrap();
+        validate_frozen_hybrid_runs(&validated).unwrap();
         let seeds = resolve_seeds(&validated).unwrap();
         let inputs = V3ProductionInputs::from_validated(&validated).unwrap();
         let source_queries = validated
@@ -922,16 +1114,17 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
         let mut valid_executions = 0;
         let mut exclusions = 0;
-        for run in validated
-            .runs
-            .iter()
-            .filter(|run| matches!(run.configuration["run_letter"].as_str(), Some("e" | "f")))
-        {
+        for run in validated.runs.iter().filter(|run| {
+            matches!(
+                run.configuration["run_letter"].as_str(),
+                Some("e" | "f" | "g")
+            )
+        }) {
             let letter = run.configuration["run_letter"].as_str().unwrap();
-            let encoding = if letter == "e" {
-                VectorEncoding::F32
-            } else {
-                VectorEncoding::I8ScalarQuantized
+            let encoding = match letter {
+                "e" => VectorEncoding::F32,
+                "f" | "g" => VectorEncoding::I8ScalarQuantized,
+                _ => unreachable!(),
             };
             let database = build_graph_retrieval_database(&validated, encoding).unwrap();
             let (_, fingerprint) = retrieval_generation_fingerprint(&validated, letter).unwrap();
@@ -954,13 +1147,16 @@ mod tests {
                 .count();
             assert!(artifacts.result.queries.iter().all(|query| {
                 query.execution_status != "valid"
-                    || query
-                        .chunk_hits
-                        .iter()
-                        .all(|hit| hit.vector_score.is_some() && hit.fusion_score.is_none())
+                    || query.chunk_hits.iter().all(|hit| {
+                        if letter == "g" {
+                            hit.fusion_score.is_some()
+                        } else {
+                            hit.vector_score.is_some() && hit.fusion_score.is_none()
+                        }
+                    })
             }));
         }
-        assert_eq!(valid_executions, 10);
-        assert_eq!(exclusions, 4);
+        assert_eq!(valid_executions, 15);
+        assert_eq!(exclusions, 6);
     }
 }

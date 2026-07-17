@@ -13,9 +13,13 @@ import bz2
 import hashlib
 import html
 import json
+import os
 import re
+import struct
+import subprocess
 import sys
 import tarfile
+import tempfile
 import unicodedata
 import urllib.parse
 from collections import Counter, defaultdict
@@ -1076,6 +1080,38 @@ QUANTIZATION_POLICY = {
     "score_expression": "f32_i32_dot_times_query_scale_times_chunk_scale",
     "zero_vector_scale": 0,
 }
+MODEL_REVISION = "c9745ed1d9f207416be6d2e6f8de32d1f16199bf"
+EXPECTED_EMBEDDING_SHA256 = {
+    "corpus": "0dd2c67f457f8a1b075056410102966b8632d0fcf3ff136face0ce247d7653e7",
+    "development": "ad75e5a803158930969c30572cf11857b6f942904f48c867e137f86b2eeb9402",
+    "test": "81f7413fb572bbf5e9391d4d32b64a96fe5b6c8b20c3ecd931e0b26a6b55f96c",
+}
+MODEL_FILES = {
+    "upstream/model/all-minilm-l6-v2-coreml-model": (
+        "AllMiniLML6V2.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "bb7f068c83217c5f4a39b4bad4aa75525847803485b46b7c226454a7d8f5e2fe",
+    ),
+    "upstream/model/all-minilm-l6-v2-coreml-weights": (
+        "AllMiniLML6V2.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "84cbd97f75e18368c9ba9566bb51614f8f7d56f659c171124bf4447cc2145bde",
+    ),
+    "upstream/model/all-minilm-l6-v2-coreml-manifest": (
+        "AllMiniLML6V2.mlpackage/Manifest.json",
+        "e016b09b0886f4716add9817fe1ba040a201681e27bae5f317a34bab30c39afa",
+    ),
+    "upstream/model/all-minilm-l6-v2-conversion-metadata": (
+        "metadata.json",
+        "31367d7310f9d5adcc727bf8f52bfb0bc6c6b31512fa3d83b7d5224cddf59784",
+    ),
+    "upstream/tokenizer/all-minilm-l6-v2-tokenizer": (
+        "tokenizer/tokenizer.json",
+        "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+    ),
+    "upstream/tokenizer/all-minilm-l6-v2-tokenizer-config": (
+        "tokenizer/tokenizer_config.json",
+        "872b6936be955bc3aea75ed599264d865626d68feede7e58b01e378e6332bd74",
+    ),
+}
 
 
 def manifest_input(source_id: str, digest: str) -> dict[str, str]:
@@ -1412,6 +1448,357 @@ def write_collection_files(root: Path, files: Mapping[str, bytes]) -> None:
         path.write_bytes(data)
 
 
+def verify_model(model_dir: Path) -> dict[str, str]:
+    inventory: dict[str, str] = {}
+    for source_id, (relative, expected) in MODEL_FILES.items():
+        path = model_dir / relative
+        if not path.is_file():
+            raise AdapterError(f"missing frozen model/tokenizer file: {path}")
+        actual = file_digest(path)
+        if actual != expected:
+            raise AdapterError(
+                f"model/tokenizer SHA-256 mismatch for {path}: expected {expected}, found {actual}"
+            )
+        inventory[source_id] = actual
+    metadata = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8"))
+    expected_metadata = {
+        "dimension": 384,
+        "inputs": ["input_ids", "attention_mask", "token_type_ids"],
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "normalized": True,
+        "output": "embedding",
+        "passage_prefix": "",
+        "pooling": "mean",
+        "query_prefix": "",
+        "sequence_length": 256,
+        "token_input_shape": [1, "sequence_length"],
+    }
+    for key, value in expected_metadata.items():
+        if metadata.get(key) != value:
+            raise AdapterError(
+                f"frozen model metadata mismatch for {key}: expected {value!r}, found {metadata.get(key)!r}"
+            )
+    tokenizer_config = json.loads(
+        (model_dir / "tokenizer/tokenizer_config.json").read_text(encoding="utf-8")
+    )
+    if (
+        tokenizer_config.get("padding_side") != "right"
+        or tokenizer_config.get("truncation_side") != "right"
+        or tokenizer_config.get("truncation_strategy") != "longest_first"
+        or tokenizer_config.get("tokenizer_class") != "BertTokenizer"
+    ):
+        raise AdapterError("frozen tokenizer configuration policy mismatch")
+    return inventory
+
+
+def find_embedding_python() -> Path:
+    override = os.environ.get("VECTOR_KIT_HOTPOT_EMBEDDING_PYTHON")
+    candidates = [
+        Path(override) if override else None,
+        ROOT / "target/embedding-conversion-venv/bin/python",
+        ROOT / "target/embedding-conversion-venv-py311/bin/python",
+    ]
+    for candidate in candidates:
+        if candidate is not None and candidate.is_file():
+            return candidate
+    raise AdapterError(
+        "frozen Core ML embedding runtime is unavailable; expected "
+        "target/embedding-conversion-venv/bin/python or "
+        "VECTOR_KIT_HOTPOT_EMBEDDING_PYTHON"
+    )
+
+
+def f32(value: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
+def canonical_f32(value: float, numpy_module: Any) -> str:
+    value = f32(value)
+    if not math_isfinite(value):
+        raise AdapterError("embedding contains a non-finite F32 value")
+    if value == 0.0:
+        return "0"
+    number = numpy_module.float32(value)
+    scientific = numpy_module.format_float_scientific(
+        number, unique=True, trim="-", exp_digits=1
+    )
+    significand, exponent_text = scientific.lower().split("e", 1)
+    exponent = int(exponent_text)
+    if -6 <= exponent <= 20:
+        return numpy_module.format_float_positional(number, unique=True, trim="-")
+    return f"{significand}e{exponent}"
+
+
+def math_isfinite(value: float) -> bool:
+    return value == value and value not in {float("inf"), float("-inf")}
+
+
+def validate_embedding_vector(values: Sequence[float], dimension: int = 384) -> None:
+    if len(values) != dimension:
+        raise AdapterError(
+            f"embedding dimension mismatch: expected {dimension}, found {len(values)}"
+        )
+    if not all(math_isfinite(float(value)) for value in values):
+        raise AdapterError("embedding contains a non-finite value")
+    norm = sum(float(value) * float(value) for value in values) ** 0.5
+    if norm != 0.0 and abs(norm - 1.0) > 2e-5:
+        raise AdapterError(f"embedding L2 norm mismatch: expected 1, found {norm}")
+
+
+def embedding_input_rows(
+    corpus: FrozenCorpus, split: SplitArtifacts
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    corpus_rows = [
+        {
+            "chunk_key": "abstract",
+            "record_id": record.record_id,
+            "text": f"{record.title}\n\n{record.text}",
+        }
+        for record in corpus.records
+    ]
+    query_rows = [
+        {"query_id": query["query_id"], "text": query["text"]}
+        for query in split.queries
+    ]
+    return corpus_rows, query_rows
+
+
+def run_embedding_worker(
+    runtime_python: Path,
+    model_dir: Path,
+    rows: Sequence[Mapping[str, str]],
+    kind: str,
+    output: Path,
+) -> dict[str, str]:
+    with tempfile.TemporaryDirectory(prefix="vectorkit-hotpot-embedding-") as temporary:
+        input_path = Path(temporary) / "inputs.jsonl"
+        input_path.write_bytes(jsonl_bytes(rows))
+        command = [
+            str(runtime_python),
+            str(Path(__file__).resolve()),
+            "--embedding-worker",
+            "--embedding-kind",
+            kind,
+            "--embedding-input",
+            str(input_path),
+            "--embedding-output",
+            str(output),
+            "--model-dir",
+            str(model_dir),
+        ]
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise AdapterError(
+            f"embedding worker failed for {kind}: {result.stderr.strip() or result.stdout.strip()}"
+        )
+    try:
+        runtime = json.loads(result.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError) as error:
+        raise AdapterError("embedding worker did not report canonical runtime identity") from error
+    if not output.is_file():
+        raise AdapterError(f"embedding worker did not write {output}")
+    return {str(key): str(value) for key, value in runtime.items()}
+
+
+def embedding_worker(
+    model_dir: Path, input_path: Path, output: Path, kind: str
+) -> None:
+    verify_model(model_dir)
+    try:
+        import coremltools as ct
+        import numpy as np
+        import transformers
+        from transformers import AutoTokenizer
+    except ImportError as error:
+        raise AdapterError(
+            "embedding worker requires coremltools, numpy, and transformers"
+        ) from error
+    if kind not in {"corpus", "query"}:
+        raise AdapterError(f"unknown embedding kind: {kind}")
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_dir / "tokenizer", local_files_only=True
+    )
+    tokenizer.padding_side = "right"
+    tokenizer.truncation_side = "right"
+    packages = sorted(model_dir.glob("*.mlpackage"), key=lambda path: lexical(path.name))
+    if len(packages) != 1:
+        raise AdapterError(
+            f"expected exactly one frozen Core ML package, found {len(packages)}"
+        )
+    model = ct.models.MLModel(str(packages[0]), compute_units=ct.ComputeUnit.ALL)
+    rows = [json.loads(line) for line in input_path.read_bytes().splitlines()]
+    expected_keys = {"chunk_key", "record_id", "text"} if kind == "corpus" else {"query_id", "text"}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("wb") as destination:
+        previous_identity: tuple[str, ...] | None = None
+        for offset, row in enumerate(rows, 1):
+            if not isinstance(row, dict) or set(row) != expected_keys:
+                raise AdapterError(f"embedding input schema mismatch at row {offset}")
+            identity = (
+                (row["record_id"], row["chunk_key"])
+                if kind == "corpus"
+                else (row["query_id"],)
+            )
+            if previous_identity is not None and identity <= previous_identity:
+                raise AdapterError("embedding inputs are not in strict canonical order")
+            previous_identity = identity
+            encoded = tokenizer(
+                row["text"],
+                max_length=256,
+                padding="max_length",
+                truncation="longest_first",
+                return_tensors="np",
+            )
+            token_type_ids = encoded.get("token_type_ids")
+            if token_type_ids is None:
+                token_type_ids = np.zeros_like(encoded["input_ids"])
+            prediction = model.predict(
+                {
+                    "attention_mask": encoded["attention_mask"].astype(np.int32),
+                    "input_ids": encoded["input_ids"].astype(np.int32),
+                    "token_type_ids": token_type_ids.astype(np.int32),
+                }
+            )
+            vector = np.asarray(prediction["embedding"], dtype=np.float32).reshape(-1)
+            if vector.size != 384 or not np.all(np.isfinite(vector)):
+                raise AdapterError(f"invalid model output at embedding row {offset}")
+            norm = np.linalg.norm(vector).astype(np.float32)
+            if norm != np.float32(0):
+                vector = np.asarray(vector / norm, dtype=np.float32)
+            values = [float(value) for value in vector]
+            validate_embedding_vector(values)
+            prefix = (
+                "{\"chunk_key\":"
+                + json.dumps(row["chunk_key"], ensure_ascii=False)
+                + ",\"record_id\":"
+                + json.dumps(row["record_id"], ensure_ascii=False)
+                + ",\"values\":["
+                if kind == "corpus"
+                else "{\"query_id\":"
+                + json.dumps(row["query_id"], ensure_ascii=False)
+                + ",\"values\":["
+            )
+            serialized = ",".join(canonical_f32(value, np) for value in values)
+            destination.write((prefix + serialized + "]}\n").encode("utf-8"))
+            if offset % 100 == 0 or offset == len(rows):
+                print(f"embedded {offset}/{len(rows)} {kind}", file=sys.stderr)
+    runtime = {
+        "compute_units": "ALL",
+        "coremltools": str(ct.__version__),
+        "numpy": str(np.__version__),
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "transformers": str(transformers.__version__),
+    }
+    print(json.dumps(runtime, sort_keys=True, separators=(",", ":")))
+
+
+def embedding_parameters(runtime: Mapping[str, str]) -> dict[str, Any]:
+    runtime_text = ";".join(f"{key}={runtime[key]}" for key in sorted(runtime, key=lexical))
+    return {
+        "dimension": 384,
+        "document_prefix": "",
+        "input_construction": "exact title plus two LF bytes plus exact abstract text",
+        "model_checksum": MODEL_FILES["upstream/model/all-minilm-l6-v2-coreml-model"][1],
+        "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+        "model_output_normalization": "attention-mask mean pooled then F32 L2 normalized",
+        "model_revision": MODEL_REVISION,
+        "pooling": "attention-mask mean pooling",
+        "quantization": QUANTIZATION_POLICY,
+        "query_prefix": "",
+        "runtime": runtime_text,
+        "sequence_length": 256,
+        "tokenizer_id": "local BertTokenizer tokenizer.json",
+        "tokenizer_revision": MODEL_REVISION,
+        "truncation_policy": "batch size 1; right padding; longest-first right truncation",
+    }
+
+
+def validate_embedding_file(
+    data: bytes, expected_identities: Sequence[tuple[str, ...]], kind: str
+) -> None:
+    lines = data.splitlines()
+    if len(lines) != len(expected_identities) or (data and not data.endswith(b"\n")):
+        raise AdapterError(f"{kind} embedding row count/final-LF mismatch")
+    for offset, (line, identity) in enumerate(zip(lines, expected_identities, strict=True), 1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise AdapterError(f"invalid {kind} embedding JSON at row {offset}") from error
+        actual_identity = (
+            (row.get("record_id"), row.get("chunk_key"))
+            if kind == "corpus"
+            else (row.get("query_id"),)
+        )
+        if actual_identity != identity:
+            raise AdapterError(
+                f"{kind} embedding identity mismatch at row {offset}: expected {identity}, found {actual_identity}"
+            )
+        values = row.get("values")
+        if not isinstance(values, list):
+            raise AdapterError(f"{kind} embedding values missing at row {offset}")
+        validate_embedding_vector(values)
+
+
+def generate_frozen_embeddings(
+    corpus: FrozenCorpus,
+    splits: Mapping[str, SplitArtifacts],
+    model_dir: Path,
+    temporary_dir: Path,
+) -> tuple[bytes, dict[str, bytes], dict[str, Any], dict[str, str]]:
+    model_inventory = verify_model(model_dir)
+    runtime_python = find_embedding_python()
+    development_rows = embedding_input_rows(corpus, splits["development"])
+    test_rows = embedding_input_rows(corpus, splits["test"])
+    corpus_inputs = development_rows[0]
+    if corpus_inputs != test_rows[0]:
+        raise AdapterError("corpus embedding inputs differ across collection roots")
+    corpus_output = temporary_dir / "corpus-embeddings.f32.jsonl"
+    development_output = temporary_dir / "development-query-embeddings.f32.jsonl"
+    test_output = temporary_dir / "test-query-embeddings.f32.jsonl"
+    runtime = run_embedding_worker(
+        runtime_python, model_dir, corpus_inputs, "corpus", corpus_output
+    )
+    development_runtime = run_embedding_worker(
+        runtime_python,
+        model_dir,
+        development_rows[1],
+        "query",
+        development_output,
+    )
+    test_runtime = run_embedding_worker(
+        runtime_python, model_dir, test_rows[1], "query", test_output
+    )
+    if runtime != development_runtime or runtime != test_runtime:
+        raise AdapterError("embedding runtime identity changed within one build")
+    corpus_bytes = corpus_output.read_bytes()
+    query_bytes = {
+        "development": development_output.read_bytes(),
+        "test": test_output.read_bytes(),
+    }
+    validate_embedding_file(
+        corpus_bytes,
+        [(row["record_id"], row["chunk_key"]) for row in corpus_inputs],
+        "corpus",
+    )
+    for split_name, rows in (("development", development_rows[1]), ("test", test_rows[1])):
+        validate_embedding_file(
+            query_bytes[split_name],
+            [(row["query_id"],) for row in rows],
+            "query",
+        )
+    actual_hashes = {
+        "corpus": sha256_bytes(corpus_bytes),
+        "development": sha256_bytes(query_bytes["development"]),
+        "test": sha256_bytes(query_bytes["test"]),
+    }
+    if actual_hashes != EXPECTED_EMBEDDING_SHA256:
+        raise AdapterError(
+            "frozen embedding hash mismatch for identical runtime/model/input: "
+            f"expected {EXPECTED_EMBEDDING_SHA256}, found {actual_hashes}"
+        )
+    return corpus_bytes, query_bytes, embedding_parameters(runtime), model_inventory
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cache-dir", type=Path, required=True)
@@ -1422,7 +1809,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def parse_embedding_worker_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--embedding-worker", action="store_true", required=True)
+    parser.add_argument("--embedding-kind", choices=("corpus", "query"), required=True)
+    parser.add_argument("--embedding-input", type=Path, required=True)
+    parser.add_argument("--embedding-output", type=Path, required=True)
+    parser.add_argument("--model-dir", type=Path, required=True)
+    return parser.parse_args()
+
+
 def main() -> None:
+    if "--embedding-worker" in sys.argv[1:]:
+        worker_args = parse_embedding_worker_args()
+        embedding_worker(
+            worker_args.model_dir,
+            worker_args.embedding_input,
+            worker_args.embedding_output,
+            worker_args.embedding_kind,
+        )
+        return
     args = parse_args()
     # Later Phase 2b commits complete canonical emission, embedding, validation,
     # and atomic publication.  Keeping this call live makes Task 1 independently

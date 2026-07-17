@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -304,6 +305,38 @@ class HotpotSourceCorpusTests(unittest.TestCase):
         for entry in header["files"]:
             self.assertEqual(entry["bytes"], len(files[entry["path"]]))
             self.assertEqual(entry["sha256"], hotpot.sha256_bytes(files[entry["path"]]))
+
+    @unittest.skipUnless(
+        (Path(__file__).resolve().parents[2] / "target/embedding-conversion-venv/bin/python").is_file()
+        and (Path(__file__).resolve().parents[2] / "target/embedding-models/all-MiniLM-L6-v2").is_dir(),
+        "frozen local Core ML runtime/model are not materialized",
+    )
+    def test_fixed_coreml_embeddings_are_byte_deterministic(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        runtime_python = root / "target/embedding-conversion-venv/bin/python"
+        model_dir = root / "target/embedding-models/all-MiniLM-L6-v2"
+        rows = [
+            {"query_id": "q1", "text": "Where is Alpha?"},
+            {"query_id": "q2", "text": "Which article links to Beta?"},
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            first = Path(temporary) / "first.jsonl"
+            second = Path(temporary) / "second.jsonl"
+            first_runtime = hotpot.run_embedding_worker(
+                runtime_python, model_dir, rows, "query", first
+            )
+            second_runtime = hotpot.run_embedding_worker(
+                runtime_python, model_dir, rows, "query", second
+            )
+            self.assertEqual(first_runtime, second_runtime)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(
+                hotpot.sha256_bytes(first.read_bytes()),
+                "fc445787e7fb011deea9bac15461192569641f79a0120e45b1c3439cf0645306",
+            )
+            hotpot.validate_embedding_file(
+                first.read_bytes(), [("q1",), ("q2",)], "query"
+            )
 
 
 if __name__ == "__main__":

@@ -1164,6 +1164,109 @@ def derive_generation_fingerprints(
     }
 
 
+def validate_generation_fingerprint_modes(
+    collection_files: dict[str, bytes], runs: list[dict[str, Any]]
+) -> None:
+    """Bind each E-G fingerprint to its exact section 4.4 retrieval preimage."""
+
+    def file_array_hash(paths: list[str]) -> str:
+        return sha256(
+            compact_bytes(
+                [
+                    {"path": path, "sha256": sha256(collection_files[path])}
+                    for path in sorted(paths)
+                ]
+            )
+        )
+
+    collection = json.loads(collection_files["collection.json"])
+    common = {
+        "corpus_id": collection["corpus_id"],
+        "corpus_state_sha256": file_array_hash(
+            ["manifests/chunking.json", "manifests/preprocessing.json", "records.jsonl"]
+        ),
+        "graph_state_sha256": file_array_hash(
+            ["graph-schema.json", "manifests/graph-construction.json"]
+        ),
+        "schema_version": 1,
+    }
+    normalization_hash = sha256(compact_bytes(normalization_policy()))
+    quantization_hash = sha256(compact_bytes(quantization_policy()))
+    bm25_hash = sha256(compact_bytes(bm25_policy()))
+    generated = derive_generation_fingerprints(collection_files, runs)
+
+    cases = [
+        (
+            "e",
+            "f32",
+            None,
+            None,
+            "485f564956610b65f16b7163b69085dad7c1a495aaf99aa44ac98d8aac9a4cef",
+        ),
+        (
+            "f",
+            "i8",
+            None,
+            quantization_hash,
+            "9142876c6ff687ae58d8c86ea25b553a9cde7744f2f91fa1bb2c34cf50a8eb1b",
+        ),
+        (
+            "g",
+            "i8",
+            bm25_hash,
+            quantization_hash,
+            "7b5d71ac2e583b82bef661aa30ed57ea85e3e10b2fbc468fbbdb6689ef35cdb0",
+        ),
+    ]
+    for letter, encoding, bm25_hash_or_none, quantization_hash_or_none, expected in cases:
+        retrieval_preimage = {
+            "bm25_policy_sha256": bm25_hash_or_none,
+            "files": [
+                {
+                    "path": "corpus-embeddings.f32.jsonl",
+                    "sha256": sha256(collection_files["corpus-embeddings.f32.jsonl"]),
+                },
+                {
+                    "path": "manifests/embedding.json",
+                    "sha256": sha256(collection_files["manifests/embedding.json"]),
+                },
+            ],
+            "metric": "cosine",
+            "normalization": "unit_l2",
+            "normalization_policy_sha256": normalization_hash,
+            "quantization_policy_sha256": quantization_hash_or_none,
+            "vector_encoding": encoding,
+        }
+        require(retrieval_preimage["vector_encoding"] == encoding, f"{letter} encoding mismatch")
+        require(
+            (retrieval_preimage["bm25_policy_sha256"] is None) == (letter != "g"),
+            f"{letter} BM25 policy presence mismatch",
+        )
+        require(
+            (retrieval_preimage["quantization_policy_sha256"] is None) == (letter == "e"),
+            f"{letter} quantization policy presence mismatch",
+        )
+        preimage = {
+            **common,
+            "retrieval_state_sha256": sha256(compact_bytes(retrieval_preimage)),
+        }
+        fingerprint = sha256(compact_bytes(preimage))
+        require(fingerprint == expected, f"{letter} generation fingerprint mismatch")
+        expected_run_ids = {
+            run["run_id"] for run in runs if run["configuration"]["run_letter"] == letter
+        }
+        bound_run_ids = {
+            binding["run_id"]
+            for binding in generated["bindings"]
+            if binding["fingerprint"] == expected
+        }
+        require(bound_run_ids == expected_run_ids, f"{letter} fingerprint binding mismatch")
+        require(
+            {"fingerprint": expected, "preimage": preimage} in generated["preimages"],
+            f"{letter} outer generation preimage mismatch",
+        )
+
+
 def validate_normative_fixture() -> None:
     contract = ROOT / "docs/product/graph-retrieval-evaluation-contract-v3.md"
     text = contract.read_text(encoding="utf-8")
@@ -1216,6 +1319,7 @@ def validate_collection(root: Path) -> tuple[dict[str, bytes], list[dict[str, An
         len({row["logical_run_sha256"] for row in runs}) == 15,
         "logical-run hashes are not unique",
     )
+    validate_generation_fingerprint_modes(expected, runs)
     return expected, runs
 
 

@@ -82,9 +82,21 @@ explicit/topic/team, and E-G independently for those same three lanes.
 The four unique D/E/F/G generation fingerprints are:
 
 - graph-only D: `af1434a2db31b7ac356d665feb7554dbb6bc9202dcda1c030a247028905b6ccf`
-- F32 semantic E: `7b5d71ac2e583b82bef661aa30ed57ea85e3e10b2fbc468fbbdb6689ef35cdb0`
+- F32 semantic E: `485f564956610b65f16b7163b69085dad7c1a495aaf99aa44ac98d8aac9a4cef`
 - I8 semantic F: `9142876c6ff687ae58d8c86ea25b553a9cde7744f2f91fa1bb2c34cf50a8eb1b`
-- I8 weighted G: `485f564956610b65f16b7163b69085dad7c1a495aaf99aa44ac98d8aac9a4cef`
+- I8 weighted G: `7b5d71ac2e583b82bef661aa30ed57ea85e3e10b2fbc468fbbdb6689ef35cdb0`
+
+### 2026-07-17 fingerprint-label audit
+
+The earlier derived report reversed the human-readable E and G labels. The
+section 4.4 contract formula, frozen collection bytes, Rust generator, and
+independent Python implementation were already correct; this correction does
+not change the contract or any fingerprint preimage. The audited mapping is E
+F32 semantic `485f...`, F I8 semantic `9142...`, and G I8 weighted hybrid
+`7b5d...`. Focused Rust and Python regressions now reconstruct each exact
+retrieval-state preimage, check encoding and BM25/quantization policy presence,
+hash the canonical inner and outer preimages, and prove that all three lane run
+IDs for each letter bind to the expected fingerprint.
 
 ## Positive and negative validation
 

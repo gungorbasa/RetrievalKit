@@ -572,4 +572,113 @@ mod tests {
             "foundation rerun first differing file 'b.json' at byte offset 2"
         );
     }
+
+    #[test]
+    fn generation_fingerprints_bind_exact_retrieval_modes() {
+        let validated = validate(&fixture_root()).unwrap();
+        let generated = generation_fingerprints(&validated).unwrap();
+        let corpus_state_sha256 = file_array_hash(
+            &validated,
+            &[
+                "manifests/chunking.json",
+                "manifests/preprocessing.json",
+                "records.jsonl",
+            ],
+        )
+        .unwrap();
+        let graph_state_sha256 = file_array_hash(
+            &validated,
+            &["graph-schema.json", "manifests/graph-construction.json"],
+        )
+        .unwrap();
+        let normalization_hash =
+            sha256(canonical_json(&normalization_policy()).unwrap().as_bytes());
+        let quantization_hash = sha256(canonical_json(&quantization_policy()).unwrap().as_bytes());
+        let bm25_hash = sha256(canonical_json(&bm25_policy()).unwrap().as_bytes());
+        let corpus_embeddings_hash = sha256(&validated.bytes["corpus-embeddings.f32.jsonl"]);
+        let embedding_hash = sha256(&validated.bytes["manifests/embedding.json"]);
+
+        for (letter, encoding, uses_bm25, uses_quantization, expected_fingerprint) in [
+            (
+                "e",
+                "f32",
+                false,
+                false,
+                "485f564956610b65f16b7163b69085dad7c1a495aaf99aa44ac98d8aac9a4cef",
+            ),
+            (
+                "f",
+                "i8",
+                false,
+                true,
+                "9142876c6ff687ae58d8c86ea25b553a9cde7744f2f91fa1bb2c34cf50a8eb1b",
+            ),
+            (
+                "g",
+                "i8",
+                true,
+                true,
+                "7b5d71ac2e583b82bef661aa30ed57ea85e3e10b2fbc468fbbdb6689ef35cdb0",
+            ),
+        ] {
+            let retrieval_preimage = json!({
+                "bm25_policy_sha256":if uses_bm25 { json!(bm25_hash) } else { Value::Null },
+                "files":[
+                    {"path":"corpus-embeddings.f32.jsonl","sha256":corpus_embeddings_hash},
+                    {"path":"manifests/embedding.json","sha256":embedding_hash}
+                ],
+                "metric":"cosine",
+                "normalization":"unit_l2",
+                "normalization_policy_sha256":normalization_hash,
+                "quantization_policy_sha256":if uses_quantization { json!(quantization_hash) } else { Value::Null },
+                "vector_encoding":encoding
+            });
+            assert_eq!(retrieval_preimage["vector_encoding"], encoding);
+            assert_eq!(
+                retrieval_preimage["bm25_policy_sha256"].is_null(),
+                !uses_bm25
+            );
+            assert_eq!(
+                retrieval_preimage["quantization_policy_sha256"].is_null(),
+                !uses_quantization
+            );
+
+            let preimage = json!({
+                "corpus_id":validated.collection.corpus_id,
+                "corpus_state_sha256":corpus_state_sha256,
+                "graph_state_sha256":graph_state_sha256,
+                "retrieval_state_sha256":sha256(
+                    canonical_json(&retrieval_preimage).unwrap().as_bytes()
+                ),
+                "schema_version":1
+            });
+            assert_eq!(
+                sha256(canonical_json(&preimage).unwrap().as_bytes()),
+                expected_fingerprint
+            );
+
+            let run_ids = validated
+                .runs
+                .iter()
+                .filter(|run| run.configuration["run_letter"] == letter)
+                .map(|run| run.run_id.as_str())
+                .collect::<BTreeSet<_>>();
+            assert_eq!(run_ids.len(), 3);
+            let bound_run_ids = generated["bindings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|binding| binding["fingerprint"] == expected_fingerprint)
+                .map(|binding| binding["run_id"].as_str().unwrap())
+                .collect::<BTreeSet<_>>();
+            assert_eq!(bound_run_ids, run_ids);
+            assert!(generated["preimages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| {
+                    entry["fingerprint"] == expected_fingerprint && entry["preimage"] == preimage
+                }));
+        }
+    }
 }

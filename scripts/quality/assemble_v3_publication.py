@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -504,6 +505,7 @@ def assemble(
     revision: dict[str, Any],
     environment: dict[str, Any],
     context: dict[str, Any],
+    pre_finalize: Callable[[Path], None] | None = None,
 ) -> dict[str, Any]:
     if output.exists():
         raise ValidationError(f"refusing to overwrite public artifact root '{output}'")
@@ -534,6 +536,8 @@ def assemble(
         )
         if len(regular) != 44 or directories != ["graph-paths", "graph-selections", "runs"]:
             raise ValidationError("final public artifact inventory is not the exact 44-file layout")
+        if pre_finalize is not None:
+            pre_finalize(staging)
         os.replace(staging, output)
     all_files = []
     for path in sorted(path for path in output.rglob("*") if path.is_file()):
@@ -630,6 +634,16 @@ def main() -> int:
         ir_report = validate_v3_ir_measures.validate(collection, qualification, revision)
         ir_path = gate_root / f"{qualification.name}-ir-measures-cross-check.json"
         validate_v3_ir_measures.write_report(ir_path, ir_report)
+        if __package__:
+            from . import validate_v3_publication
+        else:
+            import validate_v3_publication
+
+        def independently_validate(staging: Path) -> None:
+            validate_v3_publication.validate(
+                collection, staging, executable, trec_path, ir_path
+            )
+
         result = assemble(
             collection,
             qualification,
@@ -637,6 +651,7 @@ def main() -> int:
             revision,
             environment,
             context,
+            independently_validate,
         )
         result.update(
             {

@@ -948,6 +948,10 @@ mod tests {
         assert!(output
             .join("graph-retrieval-selection-path-equality.json")
             .is_file());
+        assert!(output.join("graph-retrieval-metrics.json").is_file());
+        assert!(output
+            .join("graph-retrieval-paired-comparisons.json")
+            .is_file());
         assert!(output.join("qualification.json").is_file());
         assert!(!output.join("manifest.json").exists());
         let marker: Value =
@@ -959,6 +963,25 @@ mod tests {
             marker["included_run_letters"],
             json!(["a", "b", "c", "d", "e", "f", "g"])
         );
+        let graph_metrics: Value =
+            serde_json::from_slice(&fs::read(output.join("graph-retrieval-metrics.json")).unwrap())
+                .unwrap();
+        assert_eq!(graph_metrics["runs"].as_array().unwrap().len(), 9);
+        assert_eq!(
+            graph_metrics["paired_comparisons"]
+                .as_array()
+                .unwrap()
+                .len(),
+            9
+        );
+        for run in graph_metrics["runs"].as_array().unwrap() {
+            assert_eq!(run["macro"].as_object().unwrap().len(), 24);
+            assert_eq!(run["micro"].as_object().unwrap().len(), 10);
+            assert_eq!(
+                run["counts"]["declared"].as_u64().unwrap(),
+                run["queries"].as_array().unwrap().len() as u64
+            );
+        }
     }
 
     #[test]

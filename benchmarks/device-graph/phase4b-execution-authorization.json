@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "artifact_type": "phase4b_execution_authorization",
+  "authorized_source_commit": "eb897da6176e701ffe7f13e7b271dbd535e244e0",
+  "branch": "codex/graph-m1-core-foundation",
+  "authorized_at_utc": "2026-07-18T18:30:00Z",
+  "protocol_sha256": "86504e41f972805a79acaed9b6fedea57310c017ce30536971991082a2b5ccdc",
+  "workloads_sha256": "1943b3da59099e1e156789b1acf837026c287745133f4679216be9b165c7d21b",
+  "fixture_registry_sha256": "53bf113d10fb4d5d054c3fa852e89a5d2f5149bd9edc2ab621ae77f55b964e32",
+  "fixture_identities": {
+    "10k-384d-v3": {
+      "fixture_sha256": "8e85cfcb235b60175389fef07f7e4cc6aa68db794686bd12aa1a981d53bd10a4",
+      "manifest_sha256": "fbff45e658a54f50b649a1e6d1eecd24fe93c22ec769364e575de68945e012e9"
+    },
+    "25k-384d-v3": {
+      "fixture_sha256": "4d3cd6087c775e11f5cb9147421115763647e49b0ad97c1889a6a52e933a5ddf",
+      "manifest_sha256": "5e3fbb4230ad09012aff5e48508efd4497390c4973e7edf472278e88bb69d4fb"
+    },
+    "50k-384d-v3": {
+      "fixture_sha256": "fc93eec7c3fdc0b9bdee95a34dc626b98d5bdca0e77c460506d665a5588a9dda",
+      "manifest_sha256": "ba06088e2140b1450e2d52d000b44274804272dd6b6ffa29a69c16f202013db9"
+    },
+    "100k-384d-v3-stress": {
+      "fixture_sha256": "756949033b63d4163b34162466f968f0b24ca355d3f8341aece0424170a86a29",
+      "manifest_sha256": "8d76a9044cf46fbbe17416143b69f3bf53c10726da72d682503b4c707c0fc052"
+    }
+  },
+  "toolchain": {
+    "rustc": "1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "1.92.0 (344c4567c 2025-10-21)",
+    "swift": "6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)",
+    "xcode": "26.6 (17F113)",
+    "iphoneos_sdk": "26.5",
+    "rust_profile": "release optimized",
+    "swift_configuration": "Release"
+  },
+  "products": {
+    "baseline": {
+      "name": "VectorKitIOSBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSBench",
+      "framework": "VectorKitFFI",
+      "app_executable_sha256": "503d144b107e5d818994d13fa9fc60ed644be6b5df8a7250ab53de50bb6c8877",
+      "framework_binary_sha256": "92ed1fd226e0785803ad3d4717efdb1fcbc3d78609ed93c335eb68cdfd68d183",
+      "info_plist_sha256": "4521ffff2956cc9950577943026c31ad3d74d7962c97f4301f667ef6dd90651e",
+      "code_directory_sha256": "3acb495014564ae4021c5bbddee7029342367fa60d158075fd885c23a2b20449",
+      "provisioning_profile_uuid": "68ffe8a4-bc56-43df-b3b0-b02a731b74ed"
+    },
+    "candidate": {
+      "name": "VectorKitIOSGraphBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSGraphBench",
+      "framework": "VectorKitGraphFFI",
+      "app_executable_sha256": "45e3c34d0271d77be9c92509486cf3a7fd85d829e0246f77e20780a89101afb8",
+      "framework_binary_sha256": "aacad12a5c4d7179c38e9e64da1c76adeac45d7f8a88002394233f49881e2999",
+      "info_plist_sha256": "438c4b0e55a9eb120c2f6cd55cae9403f5c9938efbba16798c4c28fef9212210",
+      "code_directory_sha256": "098256d4eb1b02330284eb0ec4253cfff3dd11dec55594ccefefc7156688b5de",
+      "provisioning_profile_uuid": "dac09a84-a557-4109-a6be-adf1ac6ca28a"
+    }
+  },
+  "packaged_resource_sha256": {
+    "social-network-query.json": "af4083550f9633bd2025d39693b3eefdda64020ea464bbb568cf28ff9ca99b00",
+    "social-network-index/bm25.bin": "f0d5bbe735cff83bd7293e9ad0a87d76289dc12286fbe75b0782461f729b1b3f",
+    "social-network-index/chunks.bin": "cf88b77f51b1748eb98bd1d583a0b5520af75a2e6af8fcf5f03260f616f4db5b",
+    "social-network-index/manifest.json": "7e1702d423895b70352143c6a9bd1c0c920331345714af681bcf017ca7bf2f3e",
+    "social-network-index/tombstones.bin": "a62795e55866737db9559202793a02f7fc9f4fa77f6cbd52b2a9f4620581207d",
+    "social-network-index/vectors.vec": "f3e5195bebeef79422e650fe2becec850e280ab5d525d54fb7b5772006bb00fe"
+  },
+  "signing": {
+    "identity": "Apple Development: Gungor Basa (YUAH5EJ32V)",
+    "team_identifier": "456T4LX972",
+    "style": "automatic development provisioning"
+  },
+  "devices": {
+    "iphone17-pro-max": {
+      "marketing_name": "iPhone 17 Pro Max",
+      "core_device_id": "E342200A-C959-5384-A846-24F4163E5722",
+      "product_type": "iPhone18,2",
+      "hardware_model": "V54AP",
+      "os_version": "26.5.1",
+      "os_build": "23F81",
+      "transport": "wired"
+    },
+    "iphone14-pro-max": {
+      "marketing_name": "iPhone 14 Pro Max",
+      "core_device_id": "3D82A3BA-C0B7-527F-BD7F-6AEADBFAC556",
+      "product_type": "iPhone15,3",
+      "hardware_model": "D74AP",
+      "os_version": "26.5",
+      "os_build": "23F77",
+      "transport": "wired"
+    }
+  },
+  "matrix": {
+    "supported_devices": ["iphone17-pro-max", "iphone14-pro-max"],
+    "supported_workloads": ["10k-384d-v3", "25k-384d-v3", "50k-384d-v3"],
+    "stress_devices": ["iphone17-pro-max"],
+    "stress_workloads": ["100k-384d-v3-stress"],
+    "encodings": ["f32", "i8"],
+    "query_categories": ["semantic", "exact_name", "hybrid", "metadata_filter", "graph_1hop", "graph_2hop", "graph_3hop", "graph_filter"],
+    "stages": ["seed_resolution", "traversal", "projection", "filter_intersection", "ranking", "hydration", "end_to_end_total"]
+  },
+  "counts": {
+    "query_warmups_per_category": 100,
+    "query_samples_per_category": 1000,
+    "query_rss_fresh_process_repetitions": 5,
+    "lifecycle_discarded_warmups": 3,
+    "lifecycle_samples": 20,
+    "cold_load_fresh_process_samples": 20,
+    "rss_interval_ms": 1,
+    "graph_free_valid_sessions_per_product_encoding": 3
+  },
+  "deterministic_execution_order": [
+    "install the same baseline and candidate apps on both devices",
+    "per device: supported query sessions in workload, encoding, session order",
+    "per device: supported lifecycle in workload, encoding, operation, warmup/sample order",
+    "per device: graph-free by encoding and session, baseline immediately followed by candidate",
+    "iPhone 17 Pro Max only: stress preflight, query, then lifecycle in encoding order"
+  ],
+  "validity_policy": {
+    "one_scenario_per_fresh_process": true,
+    "physical_device_required": true,
+    "simulator_rejected": true,
+    "release_build_required": true,
+    "thermal_start_end_allowed": ["nominal", "fair"],
+    "low_power_mode_required": false,
+    "foreground_required": true,
+    "network_disabled": true,
+    "power_source_recorded": true,
+    "raw_samples_preserved": true,
+    "sessions_never_pooled": true,
+    "primary_latency": "median of per-session nearest-rank P95",
+    "graph_free_candidate_p95_ratio_max": 1.03,
+    "graph_free_results_identical": true,
+    "graph_free_counters_must_be_zero": true
+  },
+  "invalidation_and_rerun": {
+    "preserve_every_failed_aborted_or_thermally_invalid_attempt": true,
+    "atomic_temp_fsync_replace": true,
+    "rerun_complete_affected_configuration": true,
+    "code_or_binary_change_requires_new_authorization": true,
+    "stale_or_unauthorized_hashes_rejected": true
+  },
+  "stress_classification": {
+    "classification": "stress",
+    "marketing_eligible": false,
+    "supported_v1_capacity_changed": false,
+    "failure_does_not_invalidate_supported_matrix": true,
+    "memory_preflight_is_authoritative": true
+  }
+}

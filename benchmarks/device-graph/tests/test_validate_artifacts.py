@@ -129,6 +129,10 @@ def device_envelope(hashes: dict[str, str]) -> dict[str, object]:
             "thermal_state_start": "nominal",
             "thermal_state_end": "fair",
             "one_scenario_per_fresh_process": True,
+            "low_power_mode": False,
+            "foreground": True,
+            "network_disabled": True,
+            "physical_memory_bytes": 6_000_000_000,
             "process_id": 42,
         },
     }

@@ -29,6 +29,13 @@ query category with 100 excluded warmups and exactly 1,000 measured samples,
 serializes raw stage and direct end-to-end timings, then exits. Run one session
 per fresh app process and preserve the complete stdout JSON atomically.
 
+Lifecycle launches use `--phase4-lifecycle-sample`, `--phase4-sample`, and
+`--phase4-operation`. Supported operations are `prepare`, `build`, `save`,
+`read_only_validation`, `cold_load`, `warm_load`, and `replay`. Every launch
+records raw 1 ms RSS samples and uses the app's isolated Application Support
+directory; `save` always targets a unique sample directory and refuses to
+overwrite prior evidence.
+
 Build the XCFramework first:
 
 ```bash

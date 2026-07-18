@@ -17,7 +17,8 @@ struct GraphBenchmarkView: View {
         .task {
             report = GraphHarnessPreflight.run()
             if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
-                || ProcessInfo.processInfo.arguments.contains("--phase4-query-session") {
+                || ProcessInfo.processInfo.arguments.contains("--phase4-query-session")
+                || ProcessInfo.processInfo.arguments.contains("--phase4-lifecycle-sample") {
                 FileHandle.standardOutput.write(Data("\(report)\n".utf8))
                 exit(report.contains("\"ok\" : true") ? EXIT_SUCCESS : 2)
             }
@@ -113,6 +114,49 @@ private enum GraphHarnessPreflight {
             response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
             return encode(response)
         }
+        if arguments.contains("--phase4-lifecycle-sample") {
+            guard let sampleID = value(after: "--phase4-sample", in: arguments),
+                  let operation = value(after: "--phase4-operation", in: arguments) else {
+                return encode([
+                    "ok": false,
+                    "error": "--phase4-sample and --phase4-operation are required"
+                ])
+            }
+            let persisted = benchmarkSupportDirectory()
+                .appendingPathComponent("persisted", isDirectory: true)
+                .appendingPathComponent(workload, isDirectory: true)
+                .appendingPathComponent(encoding, isDirectory: true)
+            let directory = operation == "save"
+                ? benchmarkSupportDirectory()
+                    .appendingPathComponent("samples", isDirectory: true)
+                    .appendingPathComponent(sampleID.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
+                : persisted
+            let config: [String: Any] = [
+                "workload_id": workload,
+                "encoding": encoding,
+                "sample_id": sampleID,
+                "operation": operation,
+                "directory": directory.path
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
+                  let configJSON = String(data: data, encoding: .utf8) else {
+                return encode(["ok": false, "error": "lifecycle config serialization failed"])
+            }
+            let pointer = configJSON.withCString {
+                vectorkit_phase4_device_lifecycle_sample_json($0)
+            }
+            guard let pointer else {
+                return encode(["ok": false, "error": "lifecycle runner returned null"])
+            }
+            defer { vectorkit_string_free(pointer) }
+            guard let responseData = String(cString: pointer).data(using: .utf8),
+                  var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+                return encode(["ok": false, "error": "lifecycle runner returned malformed JSON"])
+            }
+            response["environment"] = environment
+            response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
+            return encode(response)
+        }
         return encode([
             "ok": true,
             "schema_version": 1,
@@ -187,7 +231,8 @@ private func sysctlString(_ name: String) -> String {
     guard sysctlbyname(name, &value, &size, nil, 0) == 0 else {
         return "unknown"
     }
-    return String(cString: value)
+    let bytes = value.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+    return String(decoding: bytes, as: UTF8.self)
 }
 
 private func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
@@ -216,4 +261,9 @@ private func freeStorageBytes() -> Int64 {
         forKeys: [.volumeAvailableCapacityForImportantUsageKey]
     )
     return values?.volumeAvailableCapacityForImportantUsage ?? -1
+}
+
+private func benchmarkSupportDirectory() -> URL {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    return base.appendingPathComponent("phase4b", isDirectory: true)
 }

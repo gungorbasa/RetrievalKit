@@ -11,6 +11,7 @@ extern "C" {
 // VectorKitGraphFFI, which also contains every base VectorKit FFI symbol.
 uint32_t vectorkit_graph_ffi_abi_version(void);
 char *vectorkit_phase4_device_query_session_json(const char *config_json);
+char *vectorkit_phase4_device_lifecycle_sample_json(const char *config_json);
 
 #define VK_GRAPH_STATUS_INVALID_SCHEMA 100
 #define VK_GRAPH_STATUS_INVALID_IDENTITY 101

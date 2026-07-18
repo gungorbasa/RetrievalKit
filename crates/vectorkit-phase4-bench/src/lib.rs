@@ -19,9 +19,11 @@ use vectorkit_graph::{
 };
 
 mod device;
+mod lifecycle;
 mod measurement;
 
 pub use device::run_device_query_session_json;
+pub use lifecycle::run_device_lifecycle_sample_json;
 
 const DIMENSION: usize = 384;
 const CHUNKS_PER_RECORD: usize = 4;

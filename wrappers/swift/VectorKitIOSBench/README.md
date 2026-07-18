@@ -3,6 +3,25 @@
 This Xcode project runs the Rust FFI benchmark through
 `VectorKitFFI.xcframework`.
 
+Phase 4 uses two separate release products in this project. `VectorKitIOSBench`
+links only `VectorKitFFI` and records zero graph state creations, graph file
+opens, and graph dispatches. `VectorKitIOSGraphBench` links only the aggregate
+`VectorKitGraphFFI` and preflights the frozen workload/encoding,
+fresh-process, stage, lifecycle, RSS, session, device, power, and thermal
+protocol. Runtime flags never turn the graph-linked product into the graph-free
+lane.
+
+Build both release products and inspect their arm64 symbols with:
+
+```bash
+scripts/verify-ios-benchmark-linkage.sh
+```
+
+The graph-capable release launch requires `--phase4-graph-preflight`, one
+`--phase4-workload`, and one `--phase4-encoding f32|i8`. Add
+`--physical-device-required` only in Phase 4b. Simulator output identifies
+itself and cannot satisfy the physical-device contract.
+
 Build the XCFramework first:
 
 ```bash
@@ -44,6 +63,26 @@ To start one preset automatically, add an Xcode scheme launch argument:
 ```text
 --memory-scenario 24k-384d-i8-hybrid-t25
 ```
+
+The release harness also exposes the experimental
+`100k-384d-v3-stress-f32` and `100k-384d-v3-stress-i8` presets for iPhone 17
+Pro Max. They are not V1 product workloads. First run the Phase 4b preflight
+against the closed fixture manifest and Apple M1 Max correctness report:
+
+```bash
+cargo run --release -p vectorkit-cli -- bench phase4 preflight \
+  --manifest target/phase4a-100k/a/manifest.json \
+  --mac-report target/phase4a-100k/mac/mac-correctness-report.json
+```
+
+Only when `safe_to_attempt` is `true`, launch one encoding in a fresh process
+with both `--memory-scenario 100k-384d-v3-stress-i8` and
+`--phase4-100k-preflight-safe`. Use the same fresh-process, thermal, 1 ms RSS
+sampling, five-memory-repetition, and three-final-session protocol as the
+supported workloads. If preflight is unsafe, launch with
+`--phase4-100k-preflight-unsafe`; the harness emits a `stress` row with status
+`not_run_memory_safety` without allocating the index. A 100K row is rejected
+unless it is non-marketing, 384d, exactly 100,000 chunks, and F32 or I8.
 
 Launch-argument runs write the complete JSON report to standard output and exit
 with status `0` on success or `2` when a configured budget is exceeded. This

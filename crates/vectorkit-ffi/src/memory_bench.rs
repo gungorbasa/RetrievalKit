@@ -467,6 +467,9 @@ fn error_response(message: &str) -> String {
 #[serde(default, deny_unknown_fields)]
 struct MemoryBenchmarkConfig {
     scenario_id: String,
+    workload_id: Option<String>,
+    classification: ResultClassification,
+    marketing_eligible: bool,
     chunks: usize,
     dimension: usize,
     #[serde(with = "encoding_json")]
@@ -488,6 +491,9 @@ impl Default for MemoryBenchmarkConfig {
     fn default() -> Self {
         Self {
             scenario_id: "24k-384d-i8-hybrid-t25".to_owned(),
+            workload_id: None,
+            classification: ResultClassification::SupportedProduct,
+            marketing_eligible: false,
             chunks: 24_000,
             dimension: 384,
             encoding: VectorEncoding::I8ScalarQuantized,
@@ -533,8 +539,32 @@ impl MemoryBenchmarkConfig {
                 "sample_interval_ms must be greater than zero".to_owned(),
             ));
         }
+        if (self.workload_id.as_deref() == Some("100k-384d-v3-stress") || self.chunks == 100_000)
+            && (self.workload_id.as_deref() != Some("100k-384d-v3-stress")
+                || self.chunks != 100_000
+                || self.dimension != 384
+                || !matches!(
+                    self.encoding,
+                    VectorEncoding::F32 | VectorEncoding::I8ScalarQuantized
+                )
+                || self.classification != ResultClassification::Stress
+                || self.marketing_eligible)
+        {
+            return Err(MemoryBenchError::InvalidConfig(
+                "100K rows require workload_id '100k-384d-v3-stress', exactly 100000 chunks, 384d F32/I8, classification 'stress', and marketing_eligible false"
+                    .to_owned(),
+            ));
+        }
         self.budgets.validate()
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ResultClassification {
+    #[default]
+    SupportedProduct,
+    Stress,
 }
 
 mod encoding_json {
@@ -615,6 +645,23 @@ struct EnvironmentMetadata {
     os_version: Option<String>,
     build_configuration: Option<String>,
     app_version: Option<String>,
+    device_identifier: Option<String>,
+    physical_device: Option<bool>,
+    simulator: Option<bool>,
+    thermal_state_start: Option<String>,
+    thermal_state_end: Option<String>,
+    power_state: Option<String>,
+    battery_level_start: Option<f64>,
+    battery_level_end: Option<f64>,
+    low_power_mode: Option<bool>,
+    free_storage_bytes: Option<i64>,
+    foreground: Option<bool>,
+    network_disabled: Option<bool>,
+    process_id: Option<u32>,
+    one_scenario_per_fresh_process: Option<bool>,
+    graph_state_creations: Option<u64>,
+    graph_file_opens: Option<u64>,
+    graph_dispatches: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -916,5 +963,24 @@ mod tests {
         let (json, passed) = memory_benchmark_json(r#"{"dimensions":[8,16]}"#);
         assert!(!passed);
         assert!(json.contains("unknown field") || json.contains("dimension"));
+    }
+
+    #[test]
+    fn hundred_k_requires_stress_non_marketing_classification() {
+        for config in [
+            r#"{"scenario_id":"bad","workload_id":"100k-384d-v3-stress","chunks":99999,"dimension":384,"encoding":"i8","classification":"stress"}"#,
+            r#"{"scenario_id":"bad","workload_id":"100k-384d-v3-stress","chunks":100001,"dimension":384,"encoding":"i8","classification":"stress"}"#,
+            r#"{"scenario_id":"bad","workload_id":"100k-384d-v3-stress","chunks":100000,"dimension":384,"encoding":"i8","classification":"supported_product"}"#,
+            r#"{"scenario_id":"bad","workload_id":"100k-384d-v3-stress","chunks":100000,"dimension":384,"encoding":"i8","classification":"stress","marketing_eligible":true}"#,
+        ] {
+            let error = parse_config(config).unwrap_err().to_string();
+            assert!(error.contains("100K rows require"), "{error}");
+        }
+        let valid = parse_config(
+            r#"{"scenario_id":"100k-384d-v3-stress-i8","workload_id":"100k-384d-v3-stress","chunks":100000,"dimension":384,"encoding":"i8","classification":"stress","marketing_eligible":false}"#,
+        )
+        .unwrap();
+        assert_eq!(valid.chunks, 100_000);
+        assert_eq!(valid.classification, ResultClassification::Stress);
     }
 }

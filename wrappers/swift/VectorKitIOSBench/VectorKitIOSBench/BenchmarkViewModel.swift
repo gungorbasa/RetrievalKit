@@ -23,6 +23,17 @@ final class BenchmarkViewModel: ObservableObject {
         else {
             return
         }
+        guard !preset.isStress || ProcessInfo.processInfo.arguments.contains("--phase4-100k-preflight-safe") else {
+            let status = ProcessInfo.processInfo.arguments.contains("--phase4-100k-preflight-unsafe")
+                ? "not_run_memory_safety"
+                : "not_run_preflight_required"
+            let result = stressNotRunJSON(preset: preset, status: status)
+            output = prettyPrintedJSON(result)
+            self.status = status
+            summary = "100K is outside the V1 supported envelope and was not executed: \(status)."
+            writeBenchmarkResultToStandardOutput(result)
+            exit(status == "not_run_memory_safety" ? EXIT_SUCCESS : 3)
+        }
         run(.memory(preset))
     }
 
@@ -36,6 +47,15 @@ final class BenchmarkViewModel: ObservableObject {
                 summary = "A benchmark already ran in this process. Relaunch the app, then run the memory preset first."
                 return
             }
+        }
+        if case .memory(let preset) = mode,
+           preset.isStress,
+           !ProcessInfo.processInfo.arguments.contains("--phase4-100k-preflight-safe") {
+            let result = stressNotRunJSON(preset: preset, status: "not_run_preflight_required")
+            output = prettyPrintedJSON(result)
+            status = "Preflight required"
+            summary = "Run the Phase 4b persisted-size and memory preflight before attempting the experimental 100K workload."
+            return
         }
         memoryScenarioRequiresRelaunch = true
 
@@ -175,6 +195,8 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
     let workload: String
     let tombstoneRatio: Double
 
+    var isStress: Bool { chunks == 100_000 }
+
     var title: String {
         "\(chunks / 1000)K · \(dimension)d · \(encoding.uppercased()) · \(workload == "hybrid" ? "hybrid" : "vector") · t\(Int(tombstoneRatio * 100))"
     }
@@ -186,7 +208,7 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
         #else
         let buildConfiguration = "release"
         #endif
-        var budgets: [String: Any] = [
+        var budgets: [String: Any] = isStress ? [:] : [
             "max_search_p95_ms": chunks <= 24_000 ? 10.0 : 20.0
         ]
         if chunks == 24_000 && dimension == 384 && encoding == "i8" {
@@ -211,14 +233,14 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
             budgets["max_compaction_peak_increase_mib"] = 40.0
         }
 
-        let config: [String: Any] = [
+        var config: [String: Any] = [
             "scenario_id": id,
             "chunks": chunks,
             "dimension": dimension,
             "encoding": encoding,
             "workload": workload,
-            "queries": 50,
-            "warmup_queries": 3,
+            "queries": isStress ? 1_000 : 50,
+            "warmup_queries": isStress ? 100 : 3,
             "top_k": 10,
             "vector_candidates": 50,
             "keyword_candidates": 50,
@@ -229,9 +251,31 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
                 "device_model": device.model,
                 "os_version": "\(device.systemName) \(device.systemVersion)",
                 "build_configuration": buildConfiguration,
-                "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+                "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+                "device_identifier": hardwareIdentifier(),
+                "physical_device": isPhysicalDevice,
+                "simulator": !isPhysicalDevice,
+                "thermal_state_start": thermalStateName(ProcessInfo.processInfo.thermalState),
+                "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
+                "power_state": powerState(device),
+                "battery_level_start": batteryLevel(device),
+                "battery_level_end": batteryLevel(device),
+                "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+                "free_storage_bytes": freeStorageBytes(),
+                "foreground": UIApplication.shared.applicationState == .active,
+                "network_disabled": true,
+                "process_id": Int(ProcessInfo.processInfo.processIdentifier),
+                "one_scenario_per_fresh_process": true,
+                "graph_state_creations": 0,
+                "graph_file_opens": 0,
+                "graph_dispatches": 0
             ]
         ]
+        if isStress {
+            config["workload_id"] = "100k-384d-v3-stress"
+            config["classification"] = "stress"
+            config["marketing_eligible"] = false
+        }
         guard
             let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
             let json = String(data: data, encoding: .utf8)
@@ -269,6 +313,16 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
                 tombstoneRatio: ratio
             ))
         }
+        for encoding in ["f32", "i8"] {
+            presets.append(Self(
+                id: "100k-384d-v3-stress-\(encoding)",
+                chunks: 100_000,
+                dimension: 384,
+                encoding: encoding,
+                workload: "hybrid",
+                tombstoneRatio: 0.01
+            ))
+        }
         return presets
     }()
 
@@ -285,6 +339,78 @@ struct MemoryScenarioPreset: Identifiable, Equatable {
         }
         return all.first { $0.id == id }
     }
+}
+
+private func stressNotRunJSON(preset: MemoryScenarioPreset, status: String) -> String {
+    let row: [String: Any] = [
+        "ok": true,
+        "report": [
+            "schema_version": 1,
+            "workload_id": "100k-384d-v3-stress",
+            "scenario_id": preset.id,
+            "classification": "stress",
+            "marketing_eligible": false,
+            "active_chunks": 100_000,
+            "status": status,
+            "supported_v1_capacity_changed": false
+        ]
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]),
+          let json = String(data: data, encoding: .utf8) else {
+        return "{\"ok\":false,\"error\":\"failed to serialize 100K preflight row\"}"
+    }
+    return json
+}
+
+private var isPhysicalDevice: Bool {
+    #if targetEnvironment(simulator)
+    false
+    #else
+    true
+    #endif
+}
+
+private func hardwareIdentifier() -> String {
+    var systemInfo = utsname()
+    uname(&systemInfo)
+    return withUnsafePointer(to: &systemInfo.machine) { pointer in
+        pointer.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
+    }
+}
+
+private func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
+    switch state {
+    case .nominal: "nominal"
+    case .fair: "fair"
+    case .serious: "serious"
+    case .critical: "critical"
+    @unknown default: "unknown"
+    }
+}
+
+@MainActor
+private func batteryLevel(_ device: UIDevice) -> Double {
+    device.isBatteryMonitoringEnabled = true
+    return Double(device.batteryLevel)
+}
+
+@MainActor
+private func powerState(_ device: UIDevice) -> String {
+    device.isBatteryMonitoringEnabled = true
+    return switch device.batteryState {
+    case .charging: "charging"
+    case .full: "full"
+    case .unplugged: "battery"
+    case .unknown: "unknown"
+    @unknown default: "unknown"
+    }
+}
+
+private func freeStorageBytes() -> Int64 {
+    let values = try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(
+        forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+    )
+    return values?.volumeAvailableCapacityForImportantUsage ?? -1
 }
 
 enum BenchmarkError: Error, CustomStringConvertible {

@@ -16,6 +16,7 @@ use vectorkit_core::{
 };
 use vectorkit_ffi::memory_benchmark_json;
 
+mod phase4;
 mod quality;
 
 const BENCH_FILTER_FIELD: &str = "__bench_filter_bucket";
@@ -54,6 +55,11 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
             if command == "bench" && subcommand == "quality-v3-hotpotqa" =>
         {
             run_quality_v3_hotpotqa(rest)
+        }
+        [command, subcommand, rest @ ..] if command == "bench" && subcommand == "phase4" => {
+            let json = phase4::run_cli(rest).map_err(CliError::InvalidArgument)?;
+            println!("{json}");
+            Ok(())
         }
         _ => Err(CliError::usage()),
     }

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "contract": "docs/product/target-device-graph-benchmark-contract-v1.md",
+  "generator_policy_sha256": "7a86af5b25abfd0922cc9c617f225637627c8a3b91dc67380c6f0568e7a4d807",
+  "artifacts": [
+    {
+      "workload_id": "10k-384d-v3",
+      "classification": "supported_product",
+      "active_records": 2500,
+      "deleted_records": 25,
+      "active_chunks": 10000,
+      "deleted_chunks": 100,
+      "graph_nodes": 12500,
+      "graph_edges": 39000,
+      "fixture_bytes": 17057298,
+      "fixture_sha256": "8e85cfcb235b60175389fef07f7e4cc6aa68db794686bd12aa1a981d53bd10a4",
+      "manifest_bytes": 1104,
+      "manifest_sha256": "fbff45e658a54f50b649a1e6d1eecd24fe93c22ec769364e575de68945e012e9"
+    },
+    {
+      "workload_id": "25k-384d-v3",
+      "classification": "supported_product",
+      "active_records": 6250,
+      "deleted_records": 50,
+      "active_chunks": 25000,
+      "deleted_chunks": 200,
+      "graph_nodes": 31250,
+      "graph_edges": 97500,
+      "fixture_bytes": 42558303,
+      "fixture_sha256": "4d3cd6087c775e11f5cb9147421115763647e49b0ad97c1889a6a52e933a5ddf",
+      "manifest_bytes": 1104,
+      "manifest_sha256": "5e3fbb4230ad09012aff5e48508efd4497390c4973e7edf472278e88bb69d4fb"
+    },
+    {
+      "workload_id": "50k-384d-v3",
+      "classification": "supported_product",
+      "active_records": 12500,
+      "deleted_records": 125,
+      "active_chunks": 50000,
+      "deleted_chunks": 500,
+      "graph_nodes": 62500,
+      "graph_edges": 195000,
+      "fixture_bytes": 85285318,
+      "fixture_sha256": "fc93eec7c3fdc0b9bdee95a34dc626b98d5bdca0e77c460506d665a5588a9dda",
+      "manifest_bytes": 1108,
+      "manifest_sha256": "ba06088e2140b1450e2d52d000b44274804272dd6b6ffa29a69c16f202013db9"
+    },
+    {
+      "workload_id": "100k-384d-v3-stress",
+      "classification": "stress",
+      "active_records": 25000,
+      "deleted_records": 250,
+      "active_chunks": 100000,
+      "deleted_chunks": 1000,
+      "graph_nodes": 125000,
+      "graph_edges": 390000,
+      "fixture_bytes": 170533132,
+      "fixture_sha256": "756949033b63d4163b34162466f968f0b24ca355d3f8341aece0424170a86a29",
+      "manifest_bytes": 1110,
+      "manifest_sha256": "8d76a9044cf46fbbe17416143b69f3bf53c10726da72d682503b4c707c0fc052",
+      "marketing_eligible": false,
+      "supported_v1_capacity_changed": false
+    }
+  ]
+}

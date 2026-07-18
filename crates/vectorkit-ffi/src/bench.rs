@@ -642,12 +642,12 @@ pub(crate) struct BenchmarkReport {
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct RuntimeCapabilities {
-    simsimd: String,
-    aarch64_dotprod: bool,
+    pub(crate) simsimd: String,
+    pub(crate) aarch64_dotprod: bool,
 }
 
 impl RuntimeCapabilities {
-    fn detect() -> Self {
+    pub(crate) fn detect() -> Self {
         Self {
             simsimd: simsimd_capability_summary(),
             aarch64_dotprod: aarch64_dotprod_detected(),

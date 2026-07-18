@@ -22,6 +22,13 @@ The graph-capable release launch requires `--phase4-graph-preflight`, one
 `--physical-device-required` only in Phase 4b. Simulator output identifies
 itself and cannot satisfy the physical-device contract.
 
+A final query session uses `--phase4-query-session`, `--phase4-session`, and
+`--phase4-device-role` with the same workload, encoding, and physical-device
+flags. The graph-only product builds one frozen configuration, runs every
+query category with 100 excluded warmups and exactly 1,000 measured samples,
+serializes raw stage and direct end-to-end timings, then exits. Run one session
+per fresh app process and preserve the complete stdout JSON atomically.
+
 Build the XCFramework first:
 
 ```bash

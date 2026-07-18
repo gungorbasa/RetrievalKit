@@ -657,6 +657,7 @@ dependencies = [
  "vectorkit-core",
  "vectorkit-graph",
  "vectorkit-ingest",
+ "vectorkit-phase4-bench",
 ]
 
 [[package]]

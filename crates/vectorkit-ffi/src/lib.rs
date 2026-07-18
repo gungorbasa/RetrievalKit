@@ -15,10 +15,14 @@ use vectorkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 
 mod bench;
 #[cfg(feature = "graph")]
+mod device_graph_bench;
+#[cfg(feature = "graph")]
 mod graph;
 mod memory_bench;
 
 pub use bench::vectorkit_bench_synthetic_json;
+#[cfg(feature = "graph")]
+pub use device_graph_bench::vectorkit_phase4_device_query_session_json;
 #[cfg(feature = "graph")]
 pub use graph::vectorkit_graph_ffi_abi_version;
 pub use memory_bench::{memory_benchmark_json, vectorkit_bench_memory_json};

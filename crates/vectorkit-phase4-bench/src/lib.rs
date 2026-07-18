@@ -18,7 +18,10 @@ use vectorkit_graph::{
     RecordNodeSchema, RelationshipSchema, RelationshipType, Seed, Traverse,
 };
 
+mod device;
 mod measurement;
+
+pub use device::run_device_query_session_json;
 
 const DIMENSION: usize = 384;
 const CHUNKS_PER_RECORD: usize = 4;

@@ -10,6 +10,7 @@ extern "C" {
 // Returns the graph aggregate ABI version. This symbol exists only in
 // VectorKitGraphFFI, which also contains every base VectorKit FFI symbol.
 uint32_t vectorkit_graph_ffi_abi_version(void);
+char *vectorkit_phase4_device_query_session_json(const char *config_json);
 
 #define VK_GRAPH_STATUS_INVALID_SCHEMA 100
 #define VK_GRAPH_STATUS_INVALID_IDENTITY 101

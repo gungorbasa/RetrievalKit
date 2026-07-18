@@ -16,7 +16,8 @@ struct GraphBenchmarkView: View {
         }
         .task {
             report = GraphHarnessPreflight.run()
-            if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight") {
+            if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
+                || ProcessInfo.processInfo.arguments.contains("--phase4-query-session") {
                 FileHandle.standardOutput.write(Data("\(report)\n".utf8))
                 exit(report.contains("\"ok\" : true") ? EXIT_SUCCESS : 2)
             }
@@ -63,6 +64,55 @@ private enum GraphHarnessPreflight {
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
         let supported = workload != "100k-384d-v3-stress"
+        let environment: [String: Any] = [
+            "build_configuration": buildConfiguration,
+            "physical_device": physical,
+            "simulator": !physical,
+            "device_identifier": hardwareIdentifier(),
+            "hardware_model": sysctlString("hw.model"),
+            "os_version": device.systemVersion,
+            "os_build": ProcessInfo.processInfo.operatingSystemVersionString,
+            "physical_memory_bytes": ProcessInfo.processInfo.physicalMemory,
+            "process_id": Int(ProcessInfo.processInfo.processIdentifier),
+            "one_scenario_per_fresh_process": true,
+            "thermal_state_start": thermal,
+            "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
+            "power_state": powerState(device),
+            "battery_level_start": Double(device.batteryLevel),
+            "battery_level_end": Double(device.batteryLevel),
+            "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+            "free_storage_bytes": freeStorageBytes(),
+            "foreground": UIApplication.shared.applicationState == .active,
+            "network_disabled": true
+        ]
+        if arguments.contains("--phase4-query-session") {
+            guard let sessionID = value(after: "--phase4-session", in: arguments) else {
+                return encode(["ok": false, "error": "--phase4-session is required"])
+            }
+            let config: [String: Any] = [
+                "workload_id": workload,
+                "encoding": encoding,
+                "session_id": sessionID
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
+                  let configJSON = String(data: data, encoding: .utf8) else {
+                return encode(["ok": false, "error": "device config serialization failed"])
+            }
+            let pointer = configJSON.withCString {
+                vectorkit_phase4_device_query_session_json($0)
+            }
+            guard let pointer else {
+                return encode(["ok": false, "error": "device runner returned null"])
+            }
+            defer { vectorkit_string_free(pointer) }
+            guard let responseData = String(cString: pointer).data(using: .utf8),
+                  var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+                return encode(["ok": false, "error": "device runner returned malformed JSON"])
+            }
+            response["environment"] = environment
+            response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
+            return encode(response)
+        }
         return encode([
             "ok": true,
             "schema_version": 1,
@@ -74,23 +124,7 @@ private enum GraphHarnessPreflight {
             "supported_v1_capacity_changed": false,
             "encoding": encoding,
             "graph_ffi_abi_version": Int(vectorkit_graph_ffi_abi_version()),
-            "build_configuration": buildConfiguration,
-            "physical_device": physical,
-            "simulator": !physical,
-            "device_model": device.model,
-            "device_identifier": hardwareIdentifier(),
-            "os_version": device.systemVersion,
-            "process_id": Int(ProcessInfo.processInfo.processIdentifier),
-            "one_scenario_per_fresh_process": true,
-            "thermal_state_start": thermal,
-            "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
-            "power_state": powerState(device),
-            "battery_level_start": Double(device.batteryLevel),
-            "battery_level_end": Double(device.batteryLevel),
-            "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
-            "free_storage_bytes": freeStorageBytes(),
-            "foreground": UIApplication.shared.applicationState == .active,
-            "network_disabled": true,
+            "environment": environment,
             "query_warmups": 100,
             "query_samples": 1_000,
             "lifecycle_warmups": 3,
@@ -142,6 +176,18 @@ private func hardwareIdentifier() -> String {
     return withUnsafePointer(to: &systemInfo.machine) { pointer in
         pointer.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
     }
+}
+
+private func sysctlString(_ name: String) -> String {
+    var size = 0
+    guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else {
+        return "unknown"
+    }
+    var value = [CChar](repeating: 0, count: size)
+    guard sysctlbyname(name, &value, &size, nil, 0) == 0 else {
+        return "unknown"
+    }
+    return String(cString: value)
 }
 
 private func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {

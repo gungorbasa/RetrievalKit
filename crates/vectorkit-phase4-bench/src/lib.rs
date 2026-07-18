@@ -203,7 +203,7 @@ struct ValidationResponse {
     manifest_sha256: String,
 }
 
-pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
+pub fn run_cli(args: &[String]) -> Result<String, String> {
     let (action, rest) = args.split_first().ok_or_else(|| usage().to_owned())?;
     match action.as_str() {
         "generate" => {

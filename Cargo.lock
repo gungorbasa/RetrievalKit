@@ -629,6 +629,7 @@ dependencies = [
  "vectorkit-core",
  "vectorkit-ffi",
  "vectorkit-graph",
+ "vectorkit-phase4-bench",
 ]
 
 [[package]]
@@ -672,6 +673,17 @@ dependencies = [
 [[package]]
 name = "vectorkit-ingest"
 version = "0.1.0"
+
+[[package]]
+name = "vectorkit-phase4-bench"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "vectorkit-core",
+ "vectorkit-graph",
+]
 
 [[package]]
 name = "vectorkit-python"

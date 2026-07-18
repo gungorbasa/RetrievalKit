@@ -69,7 +69,8 @@ private enum GraphHarnessPreflight {
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
         let supported = workload != "100k-384d-v3-stress"
-        let environment: [String: Any] = [
+        let batteryStart = Double(device.batteryLevel)
+        func environment() -> [String: Any] { [
             "build_configuration": buildConfiguration,
             "physical_device": physical,
             "simulator": !physical,
@@ -83,13 +84,13 @@ private enum GraphHarnessPreflight {
             "thermal_state_start": thermal,
             "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
             "power_state": powerState(device),
-            "battery_level_start": Double(device.batteryLevel),
+            "battery_level_start": batteryStart,
             "battery_level_end": Double(device.batteryLevel),
             "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
             "free_storage_bytes": freeStorageBytes(),
             "foreground": UIApplication.shared.applicationState == .active,
             "network_disabled": true
-        ]
+        ] }
         if arguments.contains("--phase4-query-session") {
             guard let sessionID = value(after: "--phase4-session", in: arguments) else {
                 return encode(["ok": false, "error": "--phase4-session is required"])
@@ -114,7 +115,7 @@ private enum GraphHarnessPreflight {
                   var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
                 return encode(["ok": false, "error": "device runner returned malformed JSON"])
             }
-            response["environment"] = environment
+            response["environment"] = environment()
             response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
             return encode(response)
         }
@@ -157,7 +158,7 @@ private enum GraphHarnessPreflight {
                   var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
                 return encode(["ok": false, "error": "lifecycle runner returned malformed JSON"])
             }
-            response["environment"] = environment
+            response["environment"] = environment()
             response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
             return encode(response)
         }
@@ -172,7 +173,7 @@ private enum GraphHarnessPreflight {
             "supported_v1_capacity_changed": false,
             "encoding": encoding,
             "graph_ffi_abi_version": Int(vectorkit_graph_ffi_abi_version()),
-            "environment": environment,
+            "environment": environment(),
             "query_warmups": 100,
             "query_samples": 1_000,
             "lifecycle_warmups": 3,
@@ -203,6 +204,10 @@ private enum GraphHarnessPreflight {
             "session_id": sessionID,
             "product": product
         ]
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let thermalStart = thermalStateName(ProcessInfo.processInfo.thermalState)
+        let batteryStart = Double(device.batteryLevel)
         guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
               let configJSON = String(data: data, encoding: .utf8) else {
             return encode(["ok": false, "error": "graph-free config serialization failed"])
@@ -219,14 +224,19 @@ private enum GraphHarnessPreflight {
             return encode(["ok": false, "error": "graph-free runner returned malformed JSON"])
         }
         response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
-        response["environment"] = physicalEnvironment()
+        response["environment"] = physicalEnvironment(
+            thermalStart: thermalStart,
+            batteryStart: batteryStart
+        )
         return encode(response)
     }
 
-    private static func physicalEnvironment() -> [String: Any] {
+    private static func physicalEnvironment(
+        thermalStart: String,
+        batteryStart: Double
+    ) -> [String: Any] {
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
-        let thermal = thermalStateName(ProcessInfo.processInfo.thermalState)
         return [
             "build_configuration": buildConfiguration,
             "physical_device": isPhysicalDevice,
@@ -238,10 +248,10 @@ private enum GraphHarnessPreflight {
             "physical_memory_bytes": ProcessInfo.processInfo.physicalMemory,
             "process_id": Int(ProcessInfo.processInfo.processIdentifier),
             "one_scenario_per_fresh_process": true,
-            "thermal_state_start": thermal,
+            "thermal_state_start": thermalStart,
             "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
             "power_state": powerState(device),
-            "battery_level_start": Double(device.batteryLevel),
+            "battery_level_start": batteryStart,
             "battery_level_end": Double(device.batteryLevel),
             "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
             "free_storage_bytes": freeStorageBytes(),

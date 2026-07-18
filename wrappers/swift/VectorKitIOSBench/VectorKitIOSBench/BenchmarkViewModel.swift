@@ -124,6 +124,10 @@ final class BenchmarkViewModel: ObservableObject {
             "session_id": sessionID,
             "product": product
         ]
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let thermalStart = graphFreeThermalState(ProcessInfo.processInfo.thermalState)
+        let batteryStart = Double(device.batteryLevel)
         guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
               let configJSON = String(data: data, encoding: .utf8) else {
             return "{\"ok\":false,\"error\":\"graph-free config serialization failed\"}"
@@ -140,7 +144,10 @@ final class BenchmarkViewModel: ObservableObject {
             return "{\"ok\":false,\"error\":\"graph-free runner returned malformed JSON\"}"
         }
         response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
-        response["environment"] = graphFreeEnvironment()
+        response["environment"] = graphFreeEnvironment(
+            thermalStart: thermalStart,
+            batteryStart: batteryStart
+        )
         guard let encoded = try? JSONSerialization.data(
             withJSONObject: response,
             options: [.prettyPrinted, .sortedKeys]
@@ -159,7 +166,7 @@ private func value(after flag: String, in arguments: [String]) -> String? {
 }
 
 @MainActor
-private func graphFreeEnvironment() -> [String: Any] {
+private func graphFreeEnvironment(thermalStart: String, batteryStart: Double) -> [String: Any] {
     let device = UIDevice.current
     device.isBatteryMonitoringEnabled = true
     #if targetEnvironment(simulator)
@@ -183,8 +190,10 @@ private func graphFreeEnvironment() -> [String: Any] {
         "physical_memory_bytes": ProcessInfo.processInfo.physicalMemory,
         "process_id": Int(ProcessInfo.processInfo.processIdentifier),
         "one_scenario_per_fresh_process": true,
-        "thermal_state_start": graphFreeThermalState(ProcessInfo.processInfo.thermalState),
+        "thermal_state_start": thermalStart,
         "thermal_state_end": graphFreeThermalState(ProcessInfo.processInfo.thermalState),
+        "battery_level_start": batteryStart,
+        "battery_level_end": Double(device.batteryLevel),
         "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
         "foreground": UIApplication.shared.applicationState == .active,
         "network_disabled": true

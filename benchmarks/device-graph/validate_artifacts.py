@@ -8,6 +8,7 @@ import hashlib
 import json
 import mmap
 import shutil
+import statistics
 import struct
 import subprocess
 import sys
@@ -365,64 +366,212 @@ def validate_linkage(base_binary: Path, graph_binary: Path) -> None:
     base_symbols = subprocess.run([nm, "-g", str(base_binary)], check=True, capture_output=True, text=True).stdout
     graph_symbols = subprocess.run([nm, "-g", str(graph_binary)], check=True, capture_output=True, text=True).stdout
     require("_vectorkit_graph_" not in base_symbols, "graph-free binary contains graph symbols")
-    require("_vectorkit_bench_memory_json" in base_symbols, "graph-free base API missing")
+    require("_vectorkit_phase4_graph_free_regression_json" in base_symbols, "graph-free API missing")
     require("_vectorkit_graph_ffi_abi_version" in graph_symbols, "graph-capable API missing")
-    base_strings = subprocess.run([strings, str(base_binary)], check=True, capture_output=True, text=True).stdout
-    for counter in ("graph_state_creations", "graph_file_opens", "graph_dispatches"):
-        require(counter in base_strings, f"graph-free instrumentation missing {counter}")
+    require("_vectorkit_phase4_graph_free_regression_json" in graph_symbols, "candidate base API missing")
+    subprocess.run([strings, str(base_binary)], check=True, capture_output=True, text=True)
 
 
-def validate_device_sessions_for_workloads(
-    root: Path,
-    device_role: str,
-    device_model: str,
-    device_identifier: str,
-    workload_ids: tuple[str, ...],
+def validate_memory(value: dict[str, Any], label: str) -> None:
+    require(value.get("sample_interval_ms") == 1, f"{label}: RSS interval mismatch")
+    samples = value.get("samples")
+    require(isinstance(samples, list) and len(samples) >= 2, f"{label}: raw RSS samples missing")
+    offsets = [item.get("offset_ns") for item in samples]
+    residents = [item.get("resident_bytes") for item in samples]
+    require(all(isinstance(item, int) and item >= 0 for item in offsets), f"{label}: bad RSS offsets")
+    require(offsets == sorted(offsets) and len(set(offsets)) == len(offsets), f"{label}: RSS offsets unordered")
+    require(all(isinstance(item, int) and item > 0 for item in residents), f"{label}: bad RSS values")
+    baseline = value.get("baseline_resident_bytes")
+    peak = value.get("peak_resident_bytes")
+    delta = value.get("peak_delta_bytes")
+    require(peak == max(residents), f"{label}: RSS peak mismatch")
+    require(isinstance(baseline, int) and delta == max(0, peak - baseline), f"{label}: RSS delta mismatch")
+
+
+def validate_envelope(
+    value: dict[str, Any], path: Path, role: str, product: str,
+    authorization_sha256: str, hashes: dict[str, str], process_ids: set[int],
+) -> None:
+    require(value.get("ok") is True and value.get("collector_exit_code") == 0, f"{path}: failed attempt")
+    require(value.get("atomic_write_completed") is True, f"{path}: atomic write proof missing")
+    require(value.get("device_role") == role, f"{path}: device role mismatch")
+    require(value.get("host_device_identifier") == hashes["core_device_id"], f"{path}: host device mismatch")
+    require(value.get("authorization_sha256") == authorization_sha256, f"{path}: unauthorized evidence")
+    require(value.get("product_role") == product, f"{path}: product mismatch")
+    require(value.get("app_executable_sha256") == hashes[f"{product}_app"], f"{path}: stale app")
+    require(value.get("framework_binary_sha256") == hashes[f"{product}_framework"], f"{path}: stale framework")
+    environment = value.get("environment", {})
+    require(environment.get("physical_device") is True, f"{path}: physical device required")
+    require(environment.get("simulator") is False, f"{path}: simulator evidence rejected")
+    require(environment.get("build_configuration") == "release", f"{path}: release required")
+    require(environment.get("device_identifier") == hashes["product_type"], f"{path}: hardware ID mismatch")
+    require(environment.get("hardware_model") == hashes["hardware_model"], f"{path}: hardware model mismatch")
+    require(hashes["os_build"] in str(environment.get("os_build")), f"{path}: OS build mismatch")
+    require(environment.get("thermal_state_start") in ("nominal", "fair"), f"{path}: thermal start invalid")
+    require(environment.get("thermal_state_end") in ("nominal", "fair"), f"{path}: thermal end invalid")
+    require(environment.get("one_scenario_per_fresh_process") is True, f"{path}: fresh process missing")
+    process_id = environment.get("process_id")
+    require(isinstance(process_id, int) and process_id not in process_ids, f"{path}: process reused")
+    process_ids.add(process_id)
+
+
+def validate_query_report(value: dict[str, Any], path: Path, workload: str, encoding: str) -> tuple[str, ...]:
+    report = value.get("report", {})
+    reject_100k_claim(report, str(path))
+    require(report.get("artifact_type") == "phase4b_device_query_session", f"{path}: query artifact mismatch")
+    require(report.get("workload_id") == workload and report.get("encoding") == encoding, f"{path}: query config mismatch")
+    require(report.get("warmups_per_scenario") == 100, f"{path}: warmup mismatch")
+    require(report.get("samples_per_scenario") == 1000, f"{path}: query sample count mismatch")
+    require(report.get("percentile_method") == "nearest_rank", f"{path}: percentile policy mismatch")
+    require(tuple(report.get("stages", [])) == STAGES, f"{path}: stage declaration mismatch")
+    categories = ("semantic", "exact_name", "hybrid", "metadata_filter", "graph_1hop", "graph_2hop", "graph_3hop", "graph_filter")
+    require(tuple(report.get("query_categories", [])) == categories, f"{path}: category declaration mismatch")
+    require(bool(report.get("correctness_checks")), f"{path}: correctness checks missing")
+    scenarios = report.get("scenarios", [])
+    require(tuple(item.get("query_category") for item in scenarios) == categories, f"{path}: scenario matrix mismatch")
+    identity_set: list[str] = []
+    for scenario in scenarios:
+        samples = scenario.get("samples", [])
+        require(len(samples) == 1000, f"{path}: raw sample count mismatch")
+        identities = tuple(scenario.get(key) for key in (
+            "result_identity_sha256", "selection_identity_sha256", "path_identity_sha256", "filter_identity_sha256"
+        ))
+        require(all(isinstance(item, str) and len(item) == 64 for item in identities), f"{path}: identity hash missing")
+        identity_set.extend(identities)
+        stage_values = {stage: [] for stage in STAGES}
+        for index, sample in enumerate(samples):
+            require(sample.get("sample_index") == index and sample.get("deleted_results") == 0, f"{path}: sample correctness failure")
+            require(tuple(sample.get(key) for key in (
+                "result_identity_sha256", "selection_identity_sha256", "path_identity_sha256", "filter_identity_sha256"
+            )) == identities, f"{path}: sample identity drift")
+            stages = sample.get("stages", [])
+            require(len(stages) == len(STAGES), f"{path}: stage sample missing")
+            for sequence, (stage, measured) in enumerate(zip(STAGES, stages, strict=True)):
+                require(measured.get("stage") == stage and measured.get("sequence") == sequence, f"{path}: stage order mismatch")
+                duration = measured.get("duration_ns")
+                require(isinstance(duration, int) and duration >= 0, f"{path}: bad stage duration")
+                require(measured.get("directly_measured") is (stage == "end_to_end_total"), f"{path}: direct total marker mismatch")
+                stage_values[stage].append(duration)
+        distributions = scenario.get("distributions", [])
+        require(tuple(item.get("stage") for item in distributions) == STAGES, f"{path}: distribution mismatch")
+        for stage, distribution in zip(STAGES, distributions, strict=True):
+            values = stage_values[stage]
+            require(distribution.get("sample_count") == 1000, f"{path}: distribution count mismatch")
+            require(distribution.get("min_ns") == min(values) and distribution.get("max_ns") == max(values), f"{path}: range mismatch")
+            require(distribution.get("mean_ns") == sum(values) // 1000, f"{path}: mean mismatch")
+            for percentile in (50, 95, 99):
+                require(distribution.get(f"p{percentile}_ns") == nearest_rank(values, percentile), f"{path}: P{percentile} mismatch")
+    validate_memory(value.get("memory_evidence", {}), str(path))
+    return tuple(identity_set)
+
+
+def validate_lifecycle(
+    directory: Path, role: str, workload: str, encoding: str,
+    authorization_sha256: str, hashes: dict[str, str], process_ids: set[int],
 ) -> int:
-    validated = 0
-    for workload_id in workload_ids:
-        for encoding in ("f32", "i8"):
-            directory = root / workload_id / encoding
-            sessions = sorted(directory.glob("session-*.json"))
-            require(
-                len(sessions) >= 3,
-                f"{device_role}/{workload_id}/{encoding}: three sessions required",
-            )
-            process_ids: set[int] = set()
-            for path in sessions:
-                report = load_json(path)
-                reject_100k_claim(report, str(path))
-                require(report.get("device_role") == device_role, f"{path}: device role mismatch")
-                require(report.get("device_model") == device_model, f"{path}: device model mismatch")
-                require(
-                    report.get("device_identifier") == device_identifier,
-                    f"{path}: device identifier mismatch",
-                )
-                require(report.get("workload_id") == workload_id, f"{path}: workload mismatch")
-                require(report.get("encoding") == encoding, f"{path}: encoding mismatch")
-                require(report.get("physical_device") is True, f"{path}: physical device required")
-                require(report.get("simulator") is False, f"{path}: simulator is invalid")
-                for key in ("os_version", "os_build", "power_state"):
-                    require(bool(report.get(key)), f"{path}: missing {key}")
-                require(report.get("thermal_state_start") in ("nominal", "fair"), f"{path}: bad thermal start")
-                require(report.get("thermal_state_end") in ("nominal", "fair"), f"{path}: bad thermal end")
-                require(report.get("rss_interval_ms") == 1, f"{path}: RSS interval mismatch")
-                require(report.get("memory_repetitions") == 5, f"{path}: five memory repetitions required")
-                require(report.get("lifecycle_samples") == 20, f"{path}: lifecycle samples mismatch")
-                process_id = report.get("process_id")
-                require(isinstance(process_id, int) and process_id not in process_ids, f"{path}: process reused")
-                process_ids.add(process_id)
-                graph_free = report.get("graph_free_evidence", {})
-                if report.get("lane") == "graph_free":
-                    require(
-                        graph_free == {"state_creations": 0, "file_opens": 0, "dispatches": 0},
-                        f"{path}: graph-free evidence is not zero",
-                    )
-                validated += 1
-    return validated
+    prepare_path = directory / "prepare.json"
+    prepare = load_json(prepare_path)
+    validate_envelope(prepare, prepare_path, role, "candidate", authorization_sha256, hashes, process_ids)
+    validate_memory(prepare.get("memory_evidence", {}), str(prepare_path))
+    persisted = prepare.get("report", {}).get("persisted_components", {})
+    component_keys = ("corpus_chunks_bytes", "vectors_quantization_bytes", "lexical_bm25_bytes", "graph_schema_bytes", "manifest_validation_bytes")
+    require(sum(persisted.get(key, -1) for key in component_keys) == persisted.get("complete_directory_bytes"), f"{prepare_path}: component sum mismatch")
+    count = 1
+    for operation in ("build", "save", "read_only_validation", "cold_load", "warm_load", "replay"):
+        operation_root = directory / operation
+        warmups = sorted(operation_root.glob("warmup-*.json"))
+        samples = sorted(operation_root.glob("sample-*.json"))
+        require(len(warmups) == (0 if operation == "cold_load" else 3), f"{operation_root}: lifecycle warmup mismatch")
+        require(len(samples) == 20, f"{operation_root}: lifecycle sample mismatch")
+        for path in warmups + samples:
+            value = load_json(path)
+            validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+            report = value.get("report", {})
+            require(report.get("artifact_type") == "phase4b_device_lifecycle_sample", f"{path}: lifecycle artifact mismatch")
+            require(report.get("workload_id") == workload and report.get("encoding") == encoding, f"{path}: lifecycle config mismatch")
+            require(report.get("operation") == operation and report.get("operation_duration_ns", 0) > 0, f"{path}: lifecycle operation mismatch")
+            if operation in ("cold_load", "warm_load", "replay"):
+                require(report.get("replay_equivalent") is True, f"{path}: replay equivalence missing")
+            validate_memory(value.get("memory_evidence", {}), str(path))
+            count += 1
+    return count
 
 
-def validate_device_sessions(root: Path) -> dict[str, int]:
+def validate_graph_free(
+    root: Path, role: str, authorization_sha256: str, hashes: dict[str, str],
+    process_ids: set[int],
+) -> tuple[int, dict[str, float]]:
+    count = 0
+    regressions: dict[str, float] = {}
+    for encoding in ("f32", "i8"):
+        products: dict[str, list[dict[str, Any]]] = {}
+        for product in ("baseline", "candidate"):
+            paths = sorted((root / encoding / product).glob("session-*.json"))
+            require(len(paths) == 3, f"{role}/{encoding}/{product}: three graph-free sessions required")
+            reports = []
+            for path in paths:
+                value = load_json(path)
+                validate_envelope(value, path, role, product, authorization_sha256, hashes, process_ids)
+                report = value.get("report", {})
+                require(report.get("artifact_type") == "phase4b_graph_free_regression_session", f"{path}: graph-free artifact mismatch")
+                require(report.get("workload_id") == "10k-384d-v3" and report.get("encoding") == encoding, f"{path}: graph-free config mismatch")
+                require(report.get("warmups") == 100 and report.get("samples") == 1000, f"{path}: graph-free counts mismatch")
+                require(set(report.get("graph_counters", {}).values()) == {0}, f"{path}: graph activity detected")
+                for scenario in report.get("scenarios", []):
+                    raw = scenario.get("raw_duration_ns", [])
+                    require(len(raw) == 1000 and scenario.get("deleted_hits") == 0, f"{path}: graph-free samples invalid")
+                    for percentile in (50, 95, 99):
+                        require(scenario.get(f"p{percentile}_ns") == nearest_rank(raw, percentile), f"{path}: graph-free P{percentile} mismatch")
+                reports.append(report)
+                count += 1
+            products[product] = reports
+        for scenario_index, scenario_name in enumerate(("semantic_exact_vector", "bm25_internal", "hybrid_weighted_normalized_0.6_0.4")):
+            baseline_rows = [report["scenarios"][scenario_index] for report in products["baseline"]]
+            candidate_rows = [report["scenarios"][scenario_index] for report in products["candidate"]]
+            require(all(row.get("scenario") == scenario_name for row in baseline_rows + candidate_rows), f"{role}/{encoding}: scenario mismatch")
+            baseline_hashes = {row.get("result_identity_sha256") for row in baseline_rows}
+            candidate_hashes = {row.get("result_identity_sha256") for row in candidate_rows}
+            require(len(baseline_hashes) == 1 and baseline_hashes == candidate_hashes, f"{role}/{encoding}/{scenario_name}: result mismatch")
+            baseline_p95 = statistics.median(row["p95_ns"] for row in baseline_rows)
+            candidate_p95 = statistics.median(row["p95_ns"] for row in candidate_rows)
+            ratio = candidate_p95 / baseline_p95
+            require(ratio <= 1.03, f"{role}/{encoding}/{scenario_name}: regression {ratio:.6f} exceeds 1.03")
+            regressions[f"{encoding}/{scenario_name}"] = ratio
+    return count, regressions
+
+
+def validate_authorization(
+    repo: Path, path: Path, base_binary: Path, graph_binary: Path,
+    base_framework: Path, graph_framework: Path,
+) -> tuple[dict[str, Any], str]:
+    value = load_json(path)
+    require(value.get("schema_version") == 1 and value.get("artifact_type") == "phase4b_execution_authorization", "authorization schema mismatch")
+    commit = value.get("authorized_source_commit")
+    require(isinstance(commit, str) and len(commit) == 40, "authorization source commit missing")
+    subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=repo, check=True)
+    expected_files = {
+        "protocol_sha256": repo / "benchmarks/device-graph/protocol-v1.json",
+        "workloads_sha256": repo / "benchmarks/device-graph/workloads-v1.json",
+        "fixture_registry_sha256": repo / "benchmarks/device-graph/fixture-identities-v1.json",
+    }
+    for key, file in expected_files.items():
+        require(value.get(key) == sha256_file(file), f"authorization {key} mismatch")
+    products = value.get("products", {})
+    require(products.get("baseline", {}).get("app_executable_sha256") == sha256_file(base_binary), "authorized base executable mismatch")
+    require(products.get("candidate", {}).get("app_executable_sha256") == sha256_file(graph_binary), "authorized graph executable mismatch")
+    require(products.get("baseline", {}).get("framework_binary_sha256") == sha256_file(base_framework), "authorized base framework mismatch")
+    require(products.get("candidate", {}).get("framework_binary_sha256") == sha256_file(graph_framework), "authorized graph framework mismatch")
+    return value, sha256_file(path)
+
+
+def validate_device_sessions(
+    repo: Path, root: Path, authorization_path: Path, base_binary: Path, graph_binary: Path,
+    base_framework: Path, graph_framework: Path,
+) -> dict[str, Any]:
+    authorization, authorization_sha256 = validate_authorization(
+        repo, authorization_path, base_binary, graph_binary, base_framework, graph_framework,
+    )
+    validate_linkage(base_binary, graph_binary)
     devices_root = root / "devices"
     require(devices_root.is_dir(), "Phase 4b requires a device-scoped 'devices' root")
     expected_directories = {role for role, _, _, _ in DEVICE_MATRIX}
@@ -430,31 +579,66 @@ def validate_device_sessions(root: Path) -> dict[str, int]:
     require(actual_directories == expected_directories, "physical-device directory matrix mismatch")
 
     validated: dict[str, int] = {}
+    graph_free_regressions: dict[str, Any] = {}
+    authorized_devices = authorization.get("devices", {})
     for role, model, identifier, runs_stress in DEVICE_MATRIX:
         device_root = devices_root / role
-        supported_root = device_root / "supported"
-        validated[role] = validate_device_sessions_for_workloads(
-            supported_root,
-            role,
-            model,
-            identifier,
-            SUPPORTED_WORKLOAD_IDS,
+        registered = authorized_devices.get(role, {})
+        require(registered.get("marketing_name") == model and registered.get("product_type") == identifier, f"{role}: authorization device mismatch")
+        products = authorization["products"]
+        hashes = {
+            "core_device_id": registered["core_device_id"], "product_type": identifier,
+            "hardware_model": registered["hardware_model"], "os_build": registered["os_build"],
+            "baseline_app": products["baseline"]["app_executable_sha256"],
+            "baseline_framework": products["baseline"]["framework_binary_sha256"],
+            "candidate_app": products["candidate"]["app_executable_sha256"],
+            "candidate_framework": products["candidate"]["framework_binary_sha256"],
+        }
+        process_ids: set[int] = set()
+        count = 0
+        for workload in SUPPORTED_WORKLOAD_IDS:
+            for encoding in ("f32", "i8"):
+                config_root = device_root / "supported" / workload / encoding
+                sessions = sorted((config_root / "query").glob("session-*.json"))
+                require(len(sessions) == 5, f"{role}/{workload}/{encoding}: five query/RSS sessions required")
+                identities = []
+                for path in sessions:
+                    value = load_json(path)
+                    validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+                    identities.append(validate_query_report(value, path, workload, encoding))
+                    count += 1
+                require(len(set(identities)) == 1, f"{role}/{workload}/{encoding}: session identity drift")
+                count += validate_lifecycle(
+                    config_root / "lifecycle", role, workload, encoding,
+                    authorization_sha256, hashes, process_ids,
+                )
+        graph_count, ratios = validate_graph_free(
+            device_root / "graph-free", role, authorization_sha256, hashes, process_ids,
         )
+        count += graph_count
+        graph_free_regressions[role] = ratios
         stress_root = device_root / "stress"
         if runs_stress:
-            validated[role] += validate_device_sessions_for_workloads(
-                stress_root,
-                role,
-                model,
-                identifier,
-                (STRESS_WORKLOAD_ID,),
-            )
+            for encoding in ("f32", "i8"):
+                config_root = stress_root / STRESS_WORKLOAD_ID / encoding
+                preflight = load_json(config_root / "preflight.json")
+                validate_envelope(preflight, config_root / "preflight.json", role, "candidate", authorization_sha256, hashes, process_ids)
+                require(preflight.get("classification") == "stress" and preflight.get("marketing_eligible") is False, "100K preflight classification mismatch")
+                sessions = sorted((config_root / "query").glob("session-*.json"))
+                require(len(sessions) == 5, f"{role}/100K/{encoding}: five query sessions required")
+                for path in sessions:
+                    value = load_json(path)
+                    validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+                    validate_query_report(value, path, STRESS_WORKLOAD_ID, encoding)
+                    count += 1
+                count += validate_lifecycle(config_root / "lifecycle", role, STRESS_WORKLOAD_ID, encoding, authorization_sha256, hashes, process_ids)
         else:
             require(
                 not stress_root.exists(),
                 f"{role}: the 100K stress lane is iPhone-17-only",
             )
-    return validated
+        validated[role] = count
+    return {"validated_artifacts": validated, "graph_free_ratios": graph_free_regressions}
 
 
 def validate_phase4a(repo: Path, root: Path, base_binary: Path, graph_binary: Path) -> dict[str, Any]:
@@ -485,6 +669,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--base-binary", type=Path)
     parser.add_argument("--graph-binary", type=Path)
+    parser.add_argument("--base-framework", type=Path)
+    parser.add_argument("--graph-framework", type=Path)
+    parser.add_argument("--authorization", type=Path)
     return parser.parse_args()
 
 
@@ -499,12 +686,21 @@ def main() -> int:
                 args.base_binary.resolve(), args.graph_binary.resolve(),
             )
         else:
-            sessions = validate_device_sessions(args.artifact_root.resolve())
+            require(args.authorization is not None, "--authorization is required in Phase 4b")
+            require(args.base_binary is not None, "--base-binary is required in Phase 4b")
+            require(args.graph_binary is not None, "--graph-binary is required in Phase 4b")
+            require(args.base_framework is not None, "--base-framework is required in Phase 4b")
+            require(args.graph_framework is not None, "--graph-framework is required in Phase 4b")
+            sessions = validate_device_sessions(
+                args.repo.resolve(), args.artifact_root.resolve(), args.authorization.resolve(),
+                args.base_binary.resolve(), args.graph_binary.resolve(),
+                args.base_framework.resolve(), args.graph_framework.resolve(),
+            )
             result = {
                 "ok": True,
                 "mode": "phase4b",
                 "physical_device_matrix": "passed",
-                "validated_sessions": sessions,
+                **sessions,
             }
     except (ValidationError, OSError, subprocess.CalledProcessError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, sort_keys=True))

@@ -158,8 +158,17 @@ struct MemorySampler {
 impl MemorySampler {
     fn start() -> Self {
         let stop = Arc::new(AtomicBool::new(false));
-        let samples = Arc::new(Mutex::new(Vec::new()));
         let baseline = ProcessMemorySnapshot::current().map(ProcessMemorySnapshot::resident_bytes);
+        let samples = Arc::new(Mutex::new(
+            baseline
+                .map(|resident_bytes| {
+                    vec![MemorySample {
+                        offset_ns: 0,
+                        resident_bytes,
+                    }]
+                })
+                .unwrap_or_default(),
+        ));
         let started = Instant::now();
         let thread_stop = Arc::clone(&stop);
         let thread_samples = Arc::clone(&samples);

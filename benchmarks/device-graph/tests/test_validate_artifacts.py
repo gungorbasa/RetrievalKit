@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -57,88 +56,82 @@ class ValidatorTests(unittest.TestCase):
             with self.subTest(), self.assertRaises(validator.ValidationError):
                 validator.validate_staged_report(mutation, workload)
 
-    def test_device_sessions_require_three_thermal_valid_fresh_processes(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            write_device_matrix(root)
-            counts = validator.validate_device_sessions(root)
-            self.assertEqual(counts, {"iphone17-pro-max": 24, "iphone14-pro-max": 18})
-            broken = (
-                root / "devices" / "iphone14-pro-max" / "supported"
-                / "10k-384d-v3" / "f32" / "session-0.json"
-            )
-            value = json.loads(broken.read_text(encoding="utf-8"))
-            value["thermal_state_end"] = "critical"
-            broken.write_text(json.dumps(value), encoding="utf-8")
-            with self.assertRaises(validator.ValidationError):
-                validator.validate_device_sessions(root)
+    def test_memory_validation_recomputes_peak_and_delta(self) -> None:
+        memory = {
+            "sample_interval_ms": 1,
+            "baseline_resident_bytes": 100,
+            "peak_resident_bytes": 140,
+            "peak_delta_bytes": 40,
+            "samples": [
+                {"offset_ns": 1, "resident_bytes": 110},
+                {"offset_ns": 2, "resident_bytes": 140},
+            ],
+        }
+        validator.validate_memory(memory, "valid")
+        for mutation in (
+            {"sample_interval_ms": 2},
+            {"peak_resident_bytes": 139},
+            {"peak_delta_bytes": 39},
+        ):
+            with self.subTest(mutation=mutation), self.assertRaises(validator.ValidationError):
+                validator.validate_memory(memory | mutation, "invalid")
 
-    def test_device_matrix_does_not_require_100k_on_iphone14(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            write_device_matrix(root)
-            validator.validate_device_sessions(root)
-            self.assertFalse((root / "devices" / "iphone14-pro-max" / "stress").exists())
-
-    def test_device_matrix_rejects_100k_on_iphone14(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            write_device_matrix(root)
-            (root / "devices" / "iphone14-pro-max" / "stress").mkdir()
-            with self.assertRaisesRegex(validator.ValidationError, "iPhone-17-only"):
-                validator.validate_device_sessions(root)
-
-    def test_device_matrix_rejects_missing_or_wrong_device(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            write_device_matrix(root)
-            missing = root / "devices" / "iphone14-pro-max"
-            missing.rename(root / "devices" / "wrong-device")
-            with self.assertRaisesRegex(validator.ValidationError, "directory matrix"):
-                validator.validate_device_sessions(root)
-
-
-def write_device_matrix(root: Path) -> None:
-    for role, model, identifier, runs_stress in validator.DEVICE_MATRIX:
-        workloads = validator.SUPPORTED_WORKLOAD_IDS + (
-            (validator.STRESS_WORKLOAD_ID,) if runs_stress else ()
+    def test_envelope_rejects_simulator_thermal_and_stale_binary(self) -> None:
+        hashes = {
+            "core_device_id": "core", "product_type": "iPhone15,3",
+            "hardware_model": "D74AP", "os_build": "23F77",
+            "candidate_app": "a" * 64, "candidate_framework": "b" * 64,
+        }
+        value = device_envelope(hashes)
+        validator.validate_envelope(
+            value, Path("artifact.json"), "iphone14-pro-max", "candidate", "c" * 64,
+            hashes, set(),
         )
-        for workload in workloads:
-            lane = "stress" if workload == validator.STRESS_WORKLOAD_ID else "supported"
-            for encoding in ("f32", "i8"):
-                directory = root / "devices" / role / lane / workload / encoding
-                directory.mkdir(parents=True)
-                for session in range(3):
-                    value = {
-                        "device_role": role,
-                        "workload_id": workload,
-                        "encoding": encoding,
-                        "classification": "stress" if "100k" in workload else "supported_product",
-                        "marketing_eligible": False,
-                        "supported_v1_capacity_changed": False,
-                        "physical_device": True,
-                        "simulator": False,
-                        "device_model": model,
-                        "device_identifier": identifier,
-                        "os_version": "26.5",
-                        "os_build": "23F77",
-                        "power_state": "battery",
-                        "thermal_state_start": "nominal",
-                        "thermal_state_end": "fair",
-                        "rss_interval_ms": 1,
-                        "memory_repetitions": 5,
-                        "lifecycle_samples": 20,
-                        "process_id": session + 1,
-                        "lane": "graph_free",
-                        "graph_free_evidence": {
-                            "state_creations": 0,
-                            "file_opens": 0,
-                            "dispatches": 0,
-                        },
-                    }
-                    (directory / f"session-{session}.json").write_text(
-                        json.dumps(value), encoding="utf-8"
-                    )
+        mutations = []
+        simulated = json.loads(json.dumps(value))
+        simulated["environment"]["physical_device"] = False
+        mutations.append(simulated)
+        thermal = json.loads(json.dumps(value))
+        thermal["environment"]["thermal_state_end"] = "critical"
+        mutations.append(thermal)
+        mutations.append(value | {"app_executable_sha256": "d" * 64})
+        for mutation in mutations:
+            with self.subTest(), self.assertRaises(validator.ValidationError):
+                validator.validate_envelope(
+                    mutation, Path("bad.json"), "iphone14-pro-max", "candidate", "c" * 64,
+                    hashes, set(),
+                )
+
+    def test_phase4b_matrix_keeps_stress_iphone17_only(self) -> None:
+        self.assertTrue(validator.DEVICE_MATRIX[0][3])
+        self.assertFalse(validator.DEVICE_MATRIX[1][3])
+        self.assertEqual(validator.SUPPORTED_WORKLOAD_IDS, validator.WORKLOAD_IDS[:3])
+
+
+def device_envelope(hashes: dict[str, str]) -> dict[str, object]:
+    return {
+        "ok": True,
+        "collector_exit_code": 0,
+        "atomic_write_completed": True,
+        "device_role": "iphone14-pro-max",
+        "host_device_identifier": hashes["core_device_id"],
+        "authorization_sha256": "c" * 64,
+        "product_role": "candidate",
+        "app_executable_sha256": hashes["candidate_app"],
+        "framework_binary_sha256": hashes["candidate_framework"],
+        "environment": {
+            "physical_device": True,
+            "simulator": False,
+            "build_configuration": "release",
+            "device_identifier": hashes["product_type"],
+            "hardware_model": hashes["hardware_model"],
+            "os_build": f"Version 26.5 (Build {hashes['os_build']})",
+            "thermal_state_start": "nominal",
+            "thermal_state_end": "fair",
+            "one_scenario_per_fresh_process": True,
+            "process_id": 42,
+        },
+    }
 
 
 def staged_report() -> dict[str, object]:

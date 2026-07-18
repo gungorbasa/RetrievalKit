@@ -19,8 +19,10 @@ implemented, or superseded by the product spec.
   `docs/product/complete-retrieval-benchmark-and-marketing-roadmap.md`.
 - The implementation-ready graph evaluation V3 contract is in
   `docs/product/graph-retrieval-evaluation-contract-v3.md`. The owner approved
-  it and selected iPhone 14 Pro Max with iOS 26 or later as the conservative
-  physical device. The third focused revision passed two fresh isolated
+  it and originally selected iPhone 14 Pro Max as a conservative physical
+  device. The 2026-07-18 Phase 4 scope amendment makes iPhone 17 Pro Max the
+  sole required current device; older-device qualification is optional future
+  work. The third focused revision passed two fresh isolated
   implementation-author reviews on 2026-07-16: both reproduced the exact A-J
   fixture, population hashes, 15-run matrix, artifact/hash schemas, arithmetic,
   and portability rules without a blocker. Benchmark roadmap Phase 0 is
@@ -90,7 +92,10 @@ implemented, or superseded by the product spec.
   and independent validation, Apple M1 Max F32/I8 correctness and
   persistence/replay, staged instrumentation, memory estimation, isolated iOS
   harness builds, and linkage checks pass. Phase 4b physical-device execution
-  is next. The 100K row is diagnostic, must remain labeled `stress`, and does
+  is active on iPhone 17 Pro Max. The supported query matrix is complete with
+  30 thermally valid sessions across 10K/25K/50K F32/I8. Lifecycle,
+  graph-free, and eligible stress evidence remain. The 100K row is diagnostic,
+  must remain labeled `stress`, and does
   not change the V1
   fewer-than-50K capacity envelope. See
   `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.

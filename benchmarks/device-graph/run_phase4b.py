@@ -18,7 +18,6 @@ from typing import Any
 
 DEVICES = {
     "iphone17-pro-max": "E342200A-C959-5384-A846-24F4163E5722",
-    "iphone14-pro-max": "3D82A3BA-C0B7-527F-BD7F-6AEADBFAC556",
 }
 SUPPORTED = ("10k-384d-v3", "25k-384d-v3", "50k-384d-v3")
 STRESS = "100k-384d-v3-stress"

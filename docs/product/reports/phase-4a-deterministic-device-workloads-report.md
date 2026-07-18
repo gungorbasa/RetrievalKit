@@ -143,11 +143,11 @@ HotpotQA/V3 checks, `git diff --check`, and the clean-worktree check.
 
 Build the frozen release `VectorKitFFI` and `VectorKitGraphFFI` XCFrameworks and
 the two isolated iOS products once; execute the 10K/25K/50K F32/I8 supported
-matrix on physical iPhone 17 Pro Max and the contract-required conservative
-iPhone 14 Pro Max lanes, plus the preflight-authorized 100K stress lane on
-iPhone 17 Pro Max only; use one scenario per fresh process, 100 warmups and
-1,000 query samples, 20 lifecycle samples, five 1 ms RSS repetitions, and three
+matrix on physical iPhone 17 Pro Max, plus the preflight-authorized 100K stress
+lane on iPhone 17 Pro Max only; use one scenario per fresh process, 100 warmups
+and 1,000 query samples, 20 lifecycle samples, five 1 ms RSS repetitions, and three
 thermally valid final sessions; retain raw stage/total, lifecycle,
 component-size, correctness, linkage, graph-free, device, power, and thermal
 evidence; then run the standalone validator in `--mode phase4b`. Do not pool
 sessions or convert the 100K stress row into a support or marketing claim.
+Amendment 1 later made older-device qualification optional future work.

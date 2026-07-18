@@ -33,10 +33,10 @@ class CollectorTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["sample"], 2)
             self.assertEqual([item.name for item in path.parent.iterdir()], [path.name])
 
-    def test_stress_scope_is_not_available_on_iphone14(self) -> None:
+    def test_collection_scope_is_iphone17_only(self) -> None:
         self.assertEqual(
-            collector.DEVICES["iphone14-pro-max"],
-            "3D82A3BA-C0B7-527F-BD7F-6AEADBFAC556",
+            collector.DEVICES,
+            {"iphone17-pro-max": "E342200A-C959-5384-A846-24F4163E5722"},
         )
         self.assertEqual(collector.STRESS, "100k-384d-v3-stress")
         self.assertNotIn("100k-384d-v3-stress", collector.SUPPORTED)

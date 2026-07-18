@@ -27,8 +27,10 @@ complete semantic, hybrid, and graph-scoped retrieval package is maintained in
 quality, target-device, external-baseline, and claim gates are additional to
 the core V1 engineering phases below; benchmark-only code must remain outside
 production APIs and wrappers. The implementation-ready Phase 0 contract is
-`docs/product/graph-retrieval-evaluation-contract-v3.md`. The owner approved it
-and selected iPhone 14 Pro Max with iOS 26 or later as the conservative device.
+`docs/product/graph-retrieval-evaluation-contract-v3.md`. The original owner
+decision selected iPhone 14 Pro Max as a conservative device; the 2026-07-18
+Phase 4 scope amendment makes iPhone 17 Pro Max the sole required current
+device and leaves older-device qualification optional.
 Its third focused revision passed two fresh isolated implementation-author
 reviews on 2026-07-16, closing the benchmark roadmap's Phase 0. Graph-aware
 evaluation-artifact Phase 1 is complete. Its checked-in V3 conformance fixture,
@@ -69,7 +71,9 @@ supported-product target-device graph workloads and the separately classified
 Apple M1 Max F32/I8 correctness and persistence/replay, staged instrumentation,
 device-size/memory preflight, isolated iOS harness/linkage checks, and the
 standalone artifact validator pass. Phase 4 is active and Phase 4b
-physical-device execution is pending. The 100K row is diagnostic, does not
+iPhone 17 physical-device execution is in progress. Its 10K/25K/50K F32/I8
+query matrix has 30 thermally valid sessions; lifecycle, graph-free, and
+eligible stress evidence remain. The 100K row is diagnostic, does not
 change the fewer-than-50K V1 capacity envelope, and cannot authorize a public
 quality, performance, device, support, or marketing claim. See
 `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.

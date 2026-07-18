@@ -4,7 +4,7 @@ Status: Phase 0 complete; approved implementation contract; Phase 1 active
 
 Date: 2026-07-15
 
-Last revised: 2026-07-16
+Last revised: 2026-07-18 (Phase 4 device-scope annotation only)
 
 This document is the normative Phase 0 contract for graph-aware retrieval
 evaluation. It refines the Phase 0 section of
@@ -15,6 +15,12 @@ policies; see
 `docs/product/reports/graph-retrieval-phase-0-independent-review.md`. The third
 focused revision passed two fresh isolated implementation-author reviews on
 2026-07-16 under section 12. Phase 1 is authorized.
+
+Phase 4 device-scope note: the later
+`target-device-graph-benchmark-contract-v1-amendment-1.md` supersedes the
+conservative-device execution requirement for the current Phase 4b gate.
+iPhone 17 Pro Max is now the sole required device; iPhone 14 Pro Max remains an
+optional future qualification target. No V3 quality input or identity changes.
 
 The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, and **MAY** are
 normative. “Document” in evaluation formulas means a canonical record and is
@@ -1960,6 +1966,11 @@ runtime. Do not infer those capabilities from the marketing model name. Until
 the first qualifying run records them, they are pending performance evidence,
 not an unresolved Phase 0 product decision.
 
+That 2026-07-15 selection is retained as historical rationale. On 2026-07-18,
+the repository owner removed it from the current required gate through
+`target-device-graph-benchmark-contract-v1-amendment-1.md`. These conservative
+device requirements apply only if a future amendment reactivates that target.
+
 ### 9.2 Workloads
 
 Define immutable `10k-384d-v3`, `25k-384d-v3`, and `50k-384d-v3` workloads
@@ -2145,14 +2156,17 @@ workload.
 
 ### 11.3 Recorded owner decisions
 
-On 2026-07-15, the repository owner:
+The repository owner:
 
-1. approved the complete-retrieval benchmark roadmap and this contract as the
-   Phase 0 implementation sources of truth; and
-2. selected iPhone 14 Pro Max with iOS 26 or later as the conservative physical
-   device. Its runtime hardware identifier, RAM class, and vector capabilities
-   remain measurements required by section 9.1 before publishing performance
-   results.
+1. on 2026-07-15, approved the complete-retrieval benchmark roadmap and this
+   contract as the Phase 0 implementation sources of truth;
+2. on 2026-07-15, selected iPhone 14 Pro Max with iOS 26 or later as the
+   conservative physical device. Its runtime hardware identifier, RAM class,
+   and vector capabilities remain measurements required by section 9.1 before
+   publishing performance results; and
+3. on 2026-07-18, removed iPhone 14 Pro Max from the current Phase 4b gate.
+   iPhone 17 Pro Max is the sole required device, and older-device qualification
+   is optional future work governed by a new explicit amendment.
 
 HotpotQA versus 2WikiMultiHopQA remains a Phase 2 adapter decision, not an
 unresolved Phase 0 contract decision.
@@ -2213,7 +2227,7 @@ calculations without a blocker. The Phase 0 gate is closed.
 | Explicit graph-seed contract | Section 6.1 | Resolved |
 | Derived graph-seed contract | Section 6.2 | Resolved |
 | Headline iPhone | Section 9.1: iPhone 17 Pro Max | Resolved |
-| Conservative older-device target | Section 9.1 and recorded owner decision 2 | iPhone 14 Pro Max, iOS 26+ |
+| Conservative older-device target | Section 9.1 and recorded owner decisions 2-3 | Optional future work; removed from the current Phase 4b gate |
 | Two implementations identify the same valid queries | Sections 3.6-3.8, 5.1, 6.2, 7.2, 8, and the normative A-J fixture below define tasks, global/lane exclusions, exact populations, alias provenance, resolver coverage, and lock sequence | Passed independently twice on 2026-07-16 |
 | Two implementations calculate the same metrics and artifacts | Sections 2, 3.8, 4, 5, and the fixture below define zero-row bytes, exact escaping/arithmetic, stage ownership, normalization/BM25 traces, projection exhaustion, exact manifests/results, invalid-run attribution, hashes, portability projection, and both section 5.7 examples | Passed independently twice on 2026-07-16 |
 

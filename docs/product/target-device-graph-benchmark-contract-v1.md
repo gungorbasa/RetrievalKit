@@ -1,7 +1,7 @@
 # Target-Device Graph Benchmark Contract V1
 
-Status: frozen Phase 4 contract; Phase 4a implementation and qualification in
-progress; physical-device execution is prohibited until Phase 4b
+Status: frozen Phase 4 contract; device scope amended by
+`target-device-graph-benchmark-contract-v1-amendment-1.md`
 
 Date frozen: 2026-07-18
 
@@ -10,6 +10,10 @@ graph benchmarks. It specializes the device and performance requirements in
 section 9 of the previously frozen Graph Retrieval Evaluation Contract V3
 without changing any V3 quality population, query, judgment, ranking, metric,
 or artifact identity.
+
+Amendment 1, approved on 2026-07-18, makes iPhone 17 Pro Max the sole required
+Phase 4b device. iPhone 14 Pro Max is optional future qualification and does
+not block the current gate.
 
 ## 1. Scope and classification
 
@@ -164,9 +168,9 @@ cannot satisfy a physical-device rule.
 The 100K lane first consumes the qualified Mac persisted sizes and conservative
 peak estimate. If either exceeds the declared device safety budget, the
 iPhone 17 Pro Max row must be `not_run_memory_safety`; repeated unsafe attempts
-are forbidden. If safe, it may run one encoding per fresh process. iPhone 14
-Pro Max is not required to run 100K. Every 100K outcome remains `stress` and
-non-marketing.
+are forbidden. If safe, it may run one encoding per fresh process. Optional
+future devices are not required to run 100K. Every 100K outcome remains
+`stress` and non-marketing.
 
 ## 7. Isolated release iOS harnesses
 
@@ -209,7 +213,8 @@ fields and validates:
 Validator unit tests must include positive fixtures and negative mutations for
 each rule family. Phase 4a accepts development/simulator preflight artifacts
 where physical-device evidence is not yet required; Phase 4b validation
-requires the complete physical-device matrix.
+requires the complete physical-device matrix selected by the active scope
+amendment, currently iPhone 17 Pro Max only.
 
 ## 9. Frozen-artifact non-regression
 
@@ -230,9 +235,9 @@ generated data remains ignored.
 
 After Phase 4a passes and only under a new explicit authorization, build the
 frozen release XCFrameworks and the two isolated iOS products once; execute the
-10K/25K/50K F32/I8 supported matrix on physical iPhone 17 Pro Max and the
-required conservative iPhone 14 Pro Max lanes, plus the preflight-authorized
-100K stress lane on iPhone 17 Pro Max only; use one scenario per fresh process,
+10K/25K/50K F32/I8 supported matrix on physical iPhone 17 Pro Max, plus the
+preflight-authorized 100K stress lane on iPhone 17 Pro Max only; use one
+scenario per fresh process,
 100 warmups and 1,000 query samples, 20 lifecycle samples, five 1 ms RSS
 repetitions, and three thermally valid final sessions; retain linkage,
 graph-free, device/power/thermal, component-size, correctness, and raw-sample

@@ -78,13 +78,13 @@ class ValidatorTests(unittest.TestCase):
 
     def test_envelope_rejects_simulator_thermal_and_stale_binary(self) -> None:
         hashes = {
-            "core_device_id": "core", "product_type": "iPhone15,3",
-            "hardware_model": "D74AP", "os_build": "23F77",
+            "core_device_id": "core", "product_type": "iPhone18,2",
+            "hardware_model": "V54AP", "os_build": "23F81",
             "candidate_app": "a" * 64, "candidate_framework": "b" * 64,
         }
         value = device_envelope(hashes)
         validator.validate_envelope(
-            value, Path("artifact.json"), "iphone14-pro-max", "candidate", "c" * 64,
+            value, Path("artifact.json"), "iphone17-pro-max", "candidate", "c" * 64,
             hashes, set(),
         )
         mutations = []
@@ -98,13 +98,15 @@ class ValidatorTests(unittest.TestCase):
         for mutation in mutations:
             with self.subTest(), self.assertRaises(validator.ValidationError):
                 validator.validate_envelope(
-                    mutation, Path("bad.json"), "iphone14-pro-max", "candidate", "c" * 64,
+                    mutation, Path("bad.json"), "iphone17-pro-max", "candidate", "c" * 64,
                     hashes, set(),
                 )
 
-    def test_phase4b_matrix_keeps_stress_iphone17_only(self) -> None:
-        self.assertTrue(validator.DEVICE_MATRIX[0][3])
-        self.assertFalse(validator.DEVICE_MATRIX[1][3])
+    def test_phase4b_matrix_is_iphone17_only(self) -> None:
+        self.assertEqual(
+            validator.DEVICE_MATRIX,
+            (("iphone17-pro-max", "iPhone 17 Pro Max", "iPhone18,2", True),),
+        )
         self.assertEqual(validator.SUPPORTED_WORKLOAD_IDS, validator.WORKLOAD_IDS[:3])
 
 
@@ -113,7 +115,7 @@ def device_envelope(hashes: dict[str, str]) -> dict[str, object]:
         "ok": True,
         "collector_exit_code": 0,
         "atomic_write_completed": True,
-        "device_role": "iphone14-pro-max",
+        "device_role": "iphone17-pro-max",
         "host_device_identifier": hashes["core_device_id"],
         "authorization_sha256": "c" * 64,
         "product_role": "candidate",

@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–3 and Phase 4a complete; Phase 4b device execution pending
+Status: active; Phases 0–3 and Phase 4a complete; Phase 4b iPhone 17 execution in progress
 
 Date: 2026-07-17
 
@@ -364,8 +364,10 @@ Status: complete on 2026-07-16.
 Approved contract:
 
 - `docs/product/graph-retrieval-evaluation-contract-v3.md`
-- Status: approved; iPhone 14 Pro Max with iOS 26 or later is the conservative
-  device. After two failed clarification rounds, the third focused revision
+- Status: approved; iPhone 14 Pro Max was originally selected as the
+  conservative device, but the 2026-07-18 Phase 4 scope amendment makes
+  iPhone 17 Pro Max the sole current required device. After two failed
+  clarification rounds, the third focused revision
   passed two fresh isolated implementation-author reviews. Both reproduced the
   normative A-J fixture, all population hashes, exact artifact/hash schemas,
   and both worked examples without a blocker.
@@ -554,7 +556,10 @@ determinism, independent validation, Apple M1 Max F32/I8 correctness and
 persistence/replay, staged instrumentation, memory preflight, and isolated
 release iOS harness/linkage checks. See
 `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
-Phase 4b physical-device execution is pending.
+Phase 4b iPhone 17 physical-device execution is in progress. The supported
+query matrix is complete with 30 thermally valid sessions; lifecycle,
+graph-free, and eligible stress evidence remain. Older-device qualification is
+optional future work and does not block this gate.
 
 Deliverables:
 

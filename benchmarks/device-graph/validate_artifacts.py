@@ -26,7 +26,6 @@ SUPPORTED_WORKLOAD_IDS = WORKLOAD_IDS[:3]
 STRESS_WORKLOAD_ID = WORKLOAD_IDS[3]
 DEVICE_MATRIX = (
     ("iphone17-pro-max", "iPhone 17 Pro Max", "iPhone18,2", True),
-    ("iphone14-pro-max", "iPhone 14 Pro Max", "iPhone15,3", False),
 )
 STAGES = (
     "seed_resolution",

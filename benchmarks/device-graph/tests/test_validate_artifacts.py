@@ -60,39 +60,85 @@ class ValidatorTests(unittest.TestCase):
     def test_device_sessions_require_three_thermal_valid_fresh_processes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for workload in validator.WORKLOAD_IDS:
-                for encoding in ("f32", "i8"):
-                    directory = root / workload / encoding
-                    directory.mkdir(parents=True)
-                    for session in range(3):
-                        value = {
-                            "workload_id": workload,
-                            "classification": "stress" if "100k" in workload else "supported_product",
-                            "marketing_eligible": False,
-                            "supported_v1_capacity_changed": False,
-                            "physical_device": True,
-                            "simulator": False,
-                            "device_model": "iPhone",
-                            "device_identifier": "iPhone18,2",
-                            "os_version": "26.5",
-                            "power_state": "battery",
-                            "thermal_state_start": "nominal",
-                            "thermal_state_end": "fair",
-                            "rss_interval_ms": 1,
-                            "memory_repetitions": 5,
-                            "lifecycle_samples": 20,
-                            "process_id": session + 1,
-                            "lane": "graph_free",
-                            "graph_free_evidence": {"state_creations": 0, "file_opens": 0, "dispatches": 0},
-                        }
-                        (directory / f"session-{session}.json").write_text(json.dumps(value), encoding="utf-8")
-            validator.validate_device_sessions(root)
-            broken = root / "10k-384d-v3" / "f32" / "session-0.json"
+            write_device_matrix(root)
+            counts = validator.validate_device_sessions(root)
+            self.assertEqual(counts, {"iphone17-pro-max": 24, "iphone14-pro-max": 18})
+            broken = (
+                root / "devices" / "iphone14-pro-max" / "supported"
+                / "10k-384d-v3" / "f32" / "session-0.json"
+            )
             value = json.loads(broken.read_text(encoding="utf-8"))
             value["thermal_state_end"] = "critical"
             broken.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(validator.ValidationError):
                 validator.validate_device_sessions(root)
+
+    def test_device_matrix_does_not_require_100k_on_iphone14(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_device_matrix(root)
+            validator.validate_device_sessions(root)
+            self.assertFalse((root / "devices" / "iphone14-pro-max" / "stress").exists())
+
+    def test_device_matrix_rejects_100k_on_iphone14(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_device_matrix(root)
+            (root / "devices" / "iphone14-pro-max" / "stress").mkdir()
+            with self.assertRaisesRegex(validator.ValidationError, "iPhone-17-only"):
+                validator.validate_device_sessions(root)
+
+    def test_device_matrix_rejects_missing_or_wrong_device(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_device_matrix(root)
+            missing = root / "devices" / "iphone14-pro-max"
+            missing.rename(root / "devices" / "wrong-device")
+            with self.assertRaisesRegex(validator.ValidationError, "directory matrix"):
+                validator.validate_device_sessions(root)
+
+
+def write_device_matrix(root: Path) -> None:
+    for role, model, identifier, runs_stress in validator.DEVICE_MATRIX:
+        workloads = validator.SUPPORTED_WORKLOAD_IDS + (
+            (validator.STRESS_WORKLOAD_ID,) if runs_stress else ()
+        )
+        for workload in workloads:
+            lane = "stress" if workload == validator.STRESS_WORKLOAD_ID else "supported"
+            for encoding in ("f32", "i8"):
+                directory = root / "devices" / role / lane / workload / encoding
+                directory.mkdir(parents=True)
+                for session in range(3):
+                    value = {
+                        "device_role": role,
+                        "workload_id": workload,
+                        "encoding": encoding,
+                        "classification": "stress" if "100k" in workload else "supported_product",
+                        "marketing_eligible": False,
+                        "supported_v1_capacity_changed": False,
+                        "physical_device": True,
+                        "simulator": False,
+                        "device_model": model,
+                        "device_identifier": identifier,
+                        "os_version": "26.5",
+                        "os_build": "23F77",
+                        "power_state": "battery",
+                        "thermal_state_start": "nominal",
+                        "thermal_state_end": "fair",
+                        "rss_interval_ms": 1,
+                        "memory_repetitions": 5,
+                        "lifecycle_samples": 20,
+                        "process_id": session + 1,
+                        "lane": "graph_free",
+                        "graph_free_evidence": {
+                            "state_creations": 0,
+                            "file_opens": 0,
+                            "dispatches": 0,
+                        },
+                    }
+                    (directory / f"session-{session}.json").write_text(
+                        json.dumps(value), encoding="utf-8"
+                    )
 
 
 def staged_report() -> dict[str, object]:

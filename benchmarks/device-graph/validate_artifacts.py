@@ -21,6 +21,12 @@ WORKLOAD_IDS = (
     "50k-384d-v3",
     "100k-384d-v3-stress",
 )
+SUPPORTED_WORKLOAD_IDS = WORKLOAD_IDS[:3]
+STRESS_WORKLOAD_ID = WORKLOAD_IDS[3]
+DEVICE_MATRIX = (
+    ("iphone17-pro-max", "iPhone 17 Pro Max", "iPhone18,2", True),
+    ("iphone14-pro-max", "iPhone 14 Pro Max", "iPhone15,3", False),
+)
 STAGES = (
     "seed_resolution",
     "traversal",
@@ -366,19 +372,37 @@ def validate_linkage(base_binary: Path, graph_binary: Path) -> None:
         require(counter in base_strings, f"graph-free instrumentation missing {counter}")
 
 
-def validate_device_sessions(root: Path) -> None:
-    for workload_id in WORKLOAD_IDS:
+def validate_device_sessions_for_workloads(
+    root: Path,
+    device_role: str,
+    device_model: str,
+    device_identifier: str,
+    workload_ids: tuple[str, ...],
+) -> int:
+    validated = 0
+    for workload_id in workload_ids:
         for encoding in ("f32", "i8"):
             directory = root / workload_id / encoding
             sessions = sorted(directory.glob("session-*.json"))
-            require(len(sessions) >= 3, f"{workload_id}/{encoding}: three sessions required")
+            require(
+                len(sessions) >= 3,
+                f"{device_role}/{workload_id}/{encoding}: three sessions required",
+            )
             process_ids: set[int] = set()
             for path in sessions:
                 report = load_json(path)
                 reject_100k_claim(report, str(path))
+                require(report.get("device_role") == device_role, f"{path}: device role mismatch")
+                require(report.get("device_model") == device_model, f"{path}: device model mismatch")
+                require(
+                    report.get("device_identifier") == device_identifier,
+                    f"{path}: device identifier mismatch",
+                )
+                require(report.get("workload_id") == workload_id, f"{path}: workload mismatch")
+                require(report.get("encoding") == encoding, f"{path}: encoding mismatch")
                 require(report.get("physical_device") is True, f"{path}: physical device required")
                 require(report.get("simulator") is False, f"{path}: simulator is invalid")
-                for key in ("device_model", "device_identifier", "os_version", "power_state"):
+                for key in ("os_version", "os_build", "power_state"):
                     require(bool(report.get(key)), f"{path}: missing {key}")
                 require(report.get("thermal_state_start") in ("nominal", "fair"), f"{path}: bad thermal start")
                 require(report.get("thermal_state_end") in ("nominal", "fair"), f"{path}: bad thermal end")
@@ -394,6 +418,43 @@ def validate_device_sessions(root: Path) -> None:
                         graph_free == {"state_creations": 0, "file_opens": 0, "dispatches": 0},
                         f"{path}: graph-free evidence is not zero",
                     )
+                validated += 1
+    return validated
+
+
+def validate_device_sessions(root: Path) -> dict[str, int]:
+    devices_root = root / "devices"
+    require(devices_root.is_dir(), "Phase 4b requires a device-scoped 'devices' root")
+    expected_directories = {role for role, _, _, _ in DEVICE_MATRIX}
+    actual_directories = {path.name for path in devices_root.iterdir() if path.is_dir()}
+    require(actual_directories == expected_directories, "physical-device directory matrix mismatch")
+
+    validated: dict[str, int] = {}
+    for role, model, identifier, runs_stress in DEVICE_MATRIX:
+        device_root = devices_root / role
+        supported_root = device_root / "supported"
+        validated[role] = validate_device_sessions_for_workloads(
+            supported_root,
+            role,
+            model,
+            identifier,
+            SUPPORTED_WORKLOAD_IDS,
+        )
+        stress_root = device_root / "stress"
+        if runs_stress:
+            validated[role] += validate_device_sessions_for_workloads(
+                stress_root,
+                role,
+                model,
+                identifier,
+                (STRESS_WORKLOAD_ID,),
+            )
+        else:
+            require(
+                not stress_root.exists(),
+                f"{role}: the 100K stress lane is iPhone-17-only",
+            )
+    return validated
 
 
 def validate_phase4a(repo: Path, root: Path, base_binary: Path, graph_binary: Path) -> dict[str, Any]:
@@ -438,8 +499,13 @@ def main() -> int:
                 args.base_binary.resolve(), args.graph_binary.resolve(),
             )
         else:
-            validate_device_sessions(args.artifact_root.resolve())
-            result = {"ok": True, "mode": "phase4b", "physical_device_matrix": "passed"}
+            sessions = validate_device_sessions(args.artifact_root.resolve())
+            result = {
+                "ok": True,
+                "mode": "phase4b",
+                "physical_device_matrix": "passed",
+                "validated_sessions": sessions,
+            }
     except (ValidationError, OSError, subprocess.CalledProcessError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, sort_keys=True))
         return 1

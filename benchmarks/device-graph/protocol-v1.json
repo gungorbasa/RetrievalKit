@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "contract": "docs/product/target-device-graph-benchmark-contract-v1.md",
+  "build": {"swift":"release","rust":"optimized","embedding_included":false},
+  "query": {"warmups":100,"samples":1000,"raw_unit":"integer_nanoseconds","percentile":"nearest_rank","percentiles":[0.5,0.95,0.99]},
+  "stages": ["seed_resolution","traversal","projection","filter_intersection","ranking","hydration","end_to_end_total"],
+  "lifecycle": {"warmups":3,"samples":20,"cold_load_fresh_process_samples":20,"operations":["build","save","read_only_validation","cold_load","warm_load","reload_equivalence"]},
+  "memory": {"rss_interval_ms":1,"fresh_process_repetitions":5,"phases":["build","save","load","validation","query","maintenance"]},
+  "sessions": {"minimum_final":3,"gate":"median_session_p95","pool_sessions":false},
+  "process": {"one_scenario_per_fresh_process":true,"serious_or_critical_thermal_invalid":true},
+  "harnesses": {"graph_free_framework":"VectorKitFFI","graph_framework":"VectorKitGraphFFI","separate_products":true}
+}

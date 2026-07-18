@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "contract": "docs/product/target-device-graph-benchmark-contract-v1.md",
+  "dimension": 384,
+  "chunks_per_record": 4,
+  "deleted_chunks_per_complete_10k": 100,
+  "top_k": 10,
+  "source_embedding_encoding": "f32_little_endian",
+  "runtime_encodings": ["f32", "i8"],
+  "query_categories": [
+    "semantic",
+    "exact_name",
+    "hybrid",
+    "metadata_filter",
+    "graph_1hop",
+    "graph_2hop",
+    "graph_3hop",
+    "graph_filter"
+  ],
+  "workloads": [
+    {"id":"10k-384d-v3","classification":"supported_product","active_records":2500,"deleted_records":25,"active_chunks":10000,"deleted_chunks":100,"graph_nodes":12500,"graph_edges":39000},
+    {"id":"25k-384d-v3","classification":"supported_product","active_records":6250,"deleted_records":50,"active_chunks":25000,"deleted_chunks":200,"graph_nodes":31250,"graph_edges":97500},
+    {"id":"50k-384d-v3","classification":"supported_product","active_records":12500,"deleted_records":125,"active_chunks":50000,"deleted_chunks":500,"graph_nodes":62500,"graph_edges":195000},
+    {"id":"100k-384d-v3-stress","classification":"stress","active_records":25000,"deleted_records":250,"active_chunks":100000,"deleted_chunks":1000,"graph_nodes":125000,"graph_edges":390000,"marketing_eligible":false,"supported_v1_capacity_changed":false}
+  ]
+}

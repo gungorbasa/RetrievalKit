@@ -1976,6 +1976,15 @@ Additional 768d rows are optional and separately named. Workloads execute
 offline with precomputed embeddings. A model-inclusive benchmark is a distinct
 end-to-end profile and MUST report embedding separately.
 
+Phase 4 addendum (2026-07-18): the later frozen
+`docs/product/target-device-graph-benchmark-contract-v1.md` adds the diagnostic
+`100k-384d-v3-stress` lane and makes the Phase 4 workload and device protocol
+normative. That addendum does not change this V3 contract's quality
+populations, inputs, judgments, rankings, metrics, sealed results, or artifact
+identities. The 100K lane is outside the V1 fewer-than-50K capacity envelope
+and cannot create a support, product-gate, quality, latency, or marketing
+claim.
+
 ### 9.3 Builds, sampling, and percentiles
 
 - Use release Swift code and optimized Rust/XCFramework code with assertions

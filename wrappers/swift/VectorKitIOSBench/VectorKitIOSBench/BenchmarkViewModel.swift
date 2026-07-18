@@ -14,6 +14,7 @@ final class BenchmarkViewModel: ObservableObject {
 
     func runLaunchScenarioIfPresent() async {
         if ProcessInfo.processInfo.arguments.contains("--phase4-graph-free-regression") {
+            UIApplication.shared.isIdleTimerDisabled = true
             let result = await runGraphFreeRegression()
             writeBenchmarkResultToStandardOutput(result)
             exit(responseSucceeded(result) ? EXIT_SUCCESS : 2)

@@ -15,6 +15,9 @@ struct GraphBenchmarkView: View {
                 .padding()
         }
         .task {
+            if isAutomatedBenchmarkLaunch {
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
             report = await GraphHarnessPreflight.run()
             if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
                 || ProcessInfo.processInfo.arguments.contains("--phase4-query-session")
@@ -25,6 +28,14 @@ struct GraphBenchmarkView: View {
             }
         }
     }
+}
+
+private var isAutomatedBenchmarkLaunch: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("--phase4-graph-preflight")
+        || arguments.contains("--phase4-query-session")
+        || arguments.contains("--phase4-lifecycle-sample")
+        || arguments.contains("--phase4-graph-free-regression")
 }
 
 @MainActor

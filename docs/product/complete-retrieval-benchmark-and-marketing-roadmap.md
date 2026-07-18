@@ -1,6 +1,6 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–3 complete; Phase 4 inactive
+Status: active; Phases 0–3 and Phase 4a complete; Phase 4b device execution pending
 
 Date: 2026-07-17
 
@@ -396,7 +396,10 @@ and atomically publishes the exact 44-file public layout. Two fresh emissions
 are byte-identical. Phase 2 is complete: the selected HotpotQA adapter was
 built twice, independently validated, production-ingested, compared
 byte-for-byte, and atomically published under ignored local output. Phase 3 is
-complete on development and locked test data; Phase 4 remains inactive.
+complete on development and locked test data. Phase 4 is active. Phase 4a's
+full four-workload implementation, Apple M1 Max qualification, isolated iOS
+harnesses, and independent validation are complete; Phase 4b physical-device
+execution remains pending.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -544,13 +547,19 @@ device-performance claim.
 
 ### Phase 4: Add Target-Device Graph Benchmarks
 
-Status: inactive. The exact next task is to pre-register and implement the
-deterministic 10K, 25K, and 50K target-device fixtures and staged/end-to-end
-measurement protocol before any device execution.
+Status: active. Phase 4a pre-registered and implemented the deterministic 10K,
+25K, and 50K supported-product workloads plus the separately classified
+`100k-384d-v3-stress` workload. All four passed two-generation byte
+determinism, independent validation, Apple M1 Max F32/I8 correctness and
+persistence/replay, staged instrumentation, memory preflight, and isolated
+release iOS harness/linkage checks. See
+`docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
+Phase 4b physical-device execution is pending.
 
 Deliverables:
 
 - deterministic 10K, 25K, and 50K device fixtures
+- experimental 100K stress fixture, reported separately from the product gate
 - staged and end-to-end P50/P95/P99 latency
 - cold open, save, validation, memory, and component-size measurements
 - F32/I8 and graph-free/graph-enabled comparisons

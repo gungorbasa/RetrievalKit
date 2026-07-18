@@ -83,9 +83,17 @@ implemented, or superseded by the product spec.
   matched exactly. Three attempts are disclosed, with no result root from the
   two failed evaluator attempts. See
   `docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Benchmark
-  Phase 3 is complete. Phase 4 remains inactive; the exact next task is to
-  pre-register and implement deterministic 10K/25K/50K target-device graph
-  fixtures and the staged/end-to-end measurement protocol before device runs.
+  Phase 3 is complete. Phase 4 is active and Phase 4a is complete:
+  deterministic 10K/25K/50K supported-product workloads and
+  `100k-384d-v3-stress` share one frozen
+  generator/policy; all four fixture/manifest pairs reproduce byte-identically,
+  and independent validation, Apple M1 Max F32/I8 correctness and
+  persistence/replay, staged instrumentation, memory estimation, isolated iOS
+  harness builds, and linkage checks pass. Phase 4b physical-device execution
+  is next. The 100K row is diagnostic, must remain labeled `stress`, and does
+  not change the V1
+  fewer-than-50K capacity envelope. See
+  `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
 
 ## Active Product Constraints
 

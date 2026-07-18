@@ -227,6 +227,12 @@ JavaScript, and Kotlin remain out of scope until separately authorized.
 
 The first product version is optimized for fewer than 50K chunks.
 
+The benchmark-only `100k-384d-v3-stress` workload is experimental scaling
+evidence outside this supported envelope. It does not create a product,
+support, quality, latency, or marketing claim; it does not affect the
+10K/25K/50K product gate; and it does not authorize ANN/HNSW. Any future
+capacity expansion requires a separate product-spec decision.
+
 V1 goal:
 
 ```text

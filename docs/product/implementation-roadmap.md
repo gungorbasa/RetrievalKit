@@ -63,10 +63,16 @@ byte-identical label-free rankings before opening labels, reproduced the
 scored root, passed independent and pinned external metric checks, and
 published the 39-file canonical root without retuning. See
 `docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Benchmark
-Phase 3 is complete. Phase 4 device work remains inactive; its exact next task
-is to pre-register and implement deterministic 10K/25K/50K target-device graph
-fixtures and the staged/end-to-end measurement protocol. No public quality,
-performance, device, or marketing claim has been authorized.
+Phase 3 is complete. Phase 4a now implements deterministic 10K/25K/50K
+supported-product target-device graph workloads and the separately classified
+`100k-384d-v3-stress` workload. Byte determinism, independent validation,
+Apple M1 Max F32/I8 correctness and persistence/replay, staged instrumentation,
+device-size/memory preflight, isolated iOS harness/linkage checks, and the
+standalone artifact validator pass. Phase 4 is active and Phase 4b
+physical-device execution is pending. The 100K row is diagnostic, does not
+change the fewer-than-50K V1 capacity envelope, and cannot authorize a public
+quality, performance, device, support, or marketing claim. See
+`docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
 
 ## Priority Summary
 

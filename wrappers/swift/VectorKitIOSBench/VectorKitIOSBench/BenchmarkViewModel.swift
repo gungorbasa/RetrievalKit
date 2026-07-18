@@ -12,9 +12,9 @@ final class BenchmarkViewModel: ObservableObject {
 
     let memoryPresets = MemoryScenarioPreset.all
 
-    func runLaunchScenarioIfPresent() {
+    func runLaunchScenarioIfPresent() async {
         if ProcessInfo.processInfo.arguments.contains("--phase4-graph-free-regression") {
-            let result = runGraphFreeRegression()
+            let result = await runGraphFreeRegression()
             writeBenchmarkResultToStandardOutput(result)
             exit(responseSucceeded(result) ? EXIT_SUCCESS : 2)
         }
@@ -108,7 +108,7 @@ final class BenchmarkViewModel: ObservableObject {
         }
     }
 
-    private func runGraphFreeRegression() -> String {
+    private func runGraphFreeRegression() async -> String {
         let arguments = ProcessInfo.processInfo.arguments
         guard let encoding = value(after: "--phase4-encoding", in: arguments),
               ["f32", "i8"].contains(encoding),
@@ -132,14 +132,12 @@ final class BenchmarkViewModel: ObservableObject {
               let configJSON = String(data: data, encoding: .utf8) else {
             return "{\"ok\":false,\"error\":\"graph-free config serialization failed\"}"
         }
-        let pointer = configJSON.withCString {
-            vectorkit_phase4_graph_free_regression_json($0)
-        }
-        guard let pointer else {
+        guard let runnerResponse = await Task.detached(priority: .userInitiated, operation: {
+            invokeGraphFreeRegression(configJSON)
+        }).value else {
             return "{\"ok\":false,\"error\":\"graph-free runner returned null\"}"
         }
-        defer { vectorkit_string_free(pointer) }
-        guard let responseData = String(cString: pointer).data(using: .utf8),
+        guard let responseData = runnerResponse.data(using: .utf8),
               var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
             return "{\"ok\":false,\"error\":\"graph-free runner returned malformed JSON\"}"
         }
@@ -156,6 +154,17 @@ final class BenchmarkViewModel: ObservableObject {
         }
         return String(decoding: encoded, as: UTF8.self)
     }
+}
+
+private func invokeGraphFreeRegression(_ configJSON: String) -> String? {
+    let pointer = configJSON.withCString {
+        vectorkit_phase4_graph_free_regression_json($0)
+    }
+    guard let pointer else {
+        return nil
+    }
+    defer { vectorkit_string_free(pointer) }
+    return String(cString: pointer)
 }
 
 private func value(after flag: String, in arguments: [String]) -> String? {

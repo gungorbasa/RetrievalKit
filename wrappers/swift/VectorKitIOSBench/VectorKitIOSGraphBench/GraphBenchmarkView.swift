@@ -15,7 +15,7 @@ struct GraphBenchmarkView: View {
                 .padding()
         }
         .task {
-            report = GraphHarnessPreflight.run()
+            report = await GraphHarnessPreflight.run()
             if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
                 || ProcessInfo.processInfo.arguments.contains("--phase4-query-session")
                 || ProcessInfo.processInfo.arguments.contains("--phase4-lifecycle-sample")
@@ -31,14 +31,14 @@ struct GraphBenchmarkView: View {
 private enum GraphHarnessPreflight {
     private static var didRun = false
 
-    static func run() -> String {
+    static func run() async -> String {
         guard !didRun else {
             return encode(["ok": false, "error": "one scenario per fresh process is required"])
         }
         didRun = true
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--phase4-graph-free-regression") {
-            return graphFreeRegression(arguments: arguments)
+            return await graphFreeRegression(arguments: arguments)
         }
         guard let workload = value(after: "--phase4-workload", in: arguments),
               ["10k-384d-v3", "25k-384d-v3", "50k-384d-v3", "100k-384d-v3-stress"].contains(workload),
@@ -104,14 +104,12 @@ private enum GraphHarnessPreflight {
                   let configJSON = String(data: data, encoding: .utf8) else {
                 return encode(["ok": false, "error": "device config serialization failed"])
             }
-            let pointer = configJSON.withCString {
-                vectorkit_phase4_device_query_session_json($0)
-            }
-            guard let pointer else {
+            guard let runnerResponse = await Task.detached(priority: .userInitiated, operation: {
+                invokeDeviceQuery(configJSON)
+            }).value else {
                 return encode(["ok": false, "error": "device runner returned null"])
             }
-            defer { vectorkit_string_free(pointer) }
-            guard let responseData = String(cString: pointer).data(using: .utf8),
+            guard let responseData = runnerResponse.data(using: .utf8),
                   var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
                 return encode(["ok": false, "error": "device runner returned malformed JSON"])
             }
@@ -147,14 +145,12 @@ private enum GraphHarnessPreflight {
                   let configJSON = String(data: data, encoding: .utf8) else {
                 return encode(["ok": false, "error": "lifecycle config serialization failed"])
             }
-            let pointer = configJSON.withCString {
-                vectorkit_phase4_device_lifecycle_sample_json($0)
-            }
-            guard let pointer else {
+            guard let runnerResponse = await Task.detached(priority: .userInitiated, operation: {
+                invokeLifecycleSample(configJSON)
+            }).value else {
                 return encode(["ok": false, "error": "lifecycle runner returned null"])
             }
-            defer { vectorkit_string_free(pointer) }
-            guard let responseData = String(cString: pointer).data(using: .utf8),
+            guard let responseData = runnerResponse.data(using: .utf8),
                   var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
                 return encode(["ok": false, "error": "lifecycle runner returned malformed JSON"])
             }
@@ -188,7 +184,7 @@ private enum GraphHarnessPreflight {
         ])
     }
 
-    private static func graphFreeRegression(arguments: [String]) -> String {
+    private static func graphFreeRegression(arguments: [String]) async -> String {
         guard let encoding = value(after: "--phase4-encoding", in: arguments),
               ["f32", "i8"].contains(encoding),
               let sessionID = value(after: "--phase4-session", in: arguments),
@@ -212,14 +208,12 @@ private enum GraphHarnessPreflight {
               let configJSON = String(data: data, encoding: .utf8) else {
             return encode(["ok": false, "error": "graph-free config serialization failed"])
         }
-        let pointer = configJSON.withCString {
-            vectorkit_phase4_graph_free_regression_json($0)
-        }
-        guard let pointer else {
+        guard let runnerResponse = await Task.detached(priority: .userInitiated, operation: {
+            invokeGraphFreeRegression(configJSON)
+        }).value else {
             return encode(["ok": false, "error": "graph-free runner returned null"])
         }
-        defer { vectorkit_string_free(pointer) }
-        guard let responseData = String(cString: pointer).data(using: .utf8),
+        guard let responseData = runnerResponse.data(using: .utf8),
               var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
             return encode(["ok": false, "error": "graph-free runner returned malformed JSON"])
         }
@@ -273,6 +267,30 @@ private enum GraphHarnessPreflight {
         }
         return String(decoding: data, as: UTF8.self)
     }
+}
+
+private func invokeDeviceQuery(_ configJSON: String) -> String? {
+    invokeFFI(configJSON, vectorkit_phase4_device_query_session_json)
+}
+
+private func invokeLifecycleSample(_ configJSON: String) -> String? {
+    invokeFFI(configJSON, vectorkit_phase4_device_lifecycle_sample_json)
+}
+
+private func invokeGraphFreeRegression(_ configJSON: String) -> String? {
+    invokeFFI(configJSON, vectorkit_phase4_graph_free_regression_json)
+}
+
+private func invokeFFI(
+    _ configJSON: String,
+    _ function: (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
+) -> String? {
+    let pointer = configJSON.withCString { function($0) }
+    guard let pointer else {
+        return nil
+    }
+    defer { vectorkit_string_free(pointer) }
+    return String(cString: pointer)
 }
 
 private var buildConfiguration: String {

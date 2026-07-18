@@ -95,7 +95,7 @@ struct BenchmarkView: View {
         }
         .navigationViewStyle(.stack)
         .task {
-            model.runLaunchScenarioIfPresent()
+            await model.runLaunchScenarioIfPresent()
         }
     }
 }

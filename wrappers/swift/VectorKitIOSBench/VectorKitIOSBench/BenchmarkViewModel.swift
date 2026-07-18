@@ -13,6 +13,11 @@ final class BenchmarkViewModel: ObservableObject {
     let memoryPresets = MemoryScenarioPreset.all
 
     func runLaunchScenarioIfPresent() {
+        if ProcessInfo.processInfo.arguments.contains("--phase4-graph-free-regression") {
+            let result = runGraphFreeRegression()
+            writeBenchmarkResultToStandardOutput(result)
+            exit(responseSucceeded(result) ? EXIT_SUCCESS : 2)
+        }
         guard
             !memoryScenarioRequiresRelaunch,
             let flagIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--memory-scenario"),
@@ -101,6 +106,119 @@ final class BenchmarkViewModel: ObservableObject {
 
             isRunning = false
         }
+    }
+
+    private func runGraphFreeRegression() -> String {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let encoding = value(after: "--phase4-encoding", in: arguments),
+              ["f32", "i8"].contains(encoding),
+              let sessionID = value(after: "--phase4-session", in: arguments),
+              let product = value(after: "--phase4-product", in: arguments),
+              ["baseline", "candidate"].contains(product) else {
+            return prettyPrintedJSON(
+                "{\"ok\":false,\"error\":\"encoding, session, and baseline/candidate product are required\"}"
+            )
+        }
+        let config: [String: Any] = [
+            "encoding": encoding,
+            "session_id": sessionID,
+            "product": product
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
+              let configJSON = String(data: data, encoding: .utf8) else {
+            return "{\"ok\":false,\"error\":\"graph-free config serialization failed\"}"
+        }
+        let pointer = configJSON.withCString {
+            vectorkit_phase4_graph_free_regression_json($0)
+        }
+        guard let pointer else {
+            return "{\"ok\":false,\"error\":\"graph-free runner returned null\"}"
+        }
+        defer { vectorkit_string_free(pointer) }
+        guard let responseData = String(cString: pointer).data(using: .utf8),
+              var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            return "{\"ok\":false,\"error\":\"graph-free runner returned malformed JSON\"}"
+        }
+        response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
+        response["environment"] = graphFreeEnvironment()
+        guard let encoded = try? JSONSerialization.data(
+            withJSONObject: response,
+            options: [.prettyPrinted, .sortedKeys]
+        ) else {
+            return "{\"ok\":false,\"error\":\"graph-free response serialization failed\"}"
+        }
+        return String(decoding: encoded, as: UTF8.self)
+    }
+}
+
+private func value(after flag: String, in arguments: [String]) -> String? {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+        return nil
+    }
+    return arguments[index + 1]
+}
+
+@MainActor
+private func graphFreeEnvironment() -> [String: Any] {
+    let device = UIDevice.current
+    device.isBatteryMonitoringEnabled = true
+    #if targetEnvironment(simulator)
+    let physical = false
+    #else
+    let physical = true
+    #endif
+    #if DEBUG
+    let configuration = "debug"
+    #else
+    let configuration = "release"
+    #endif
+    return [
+        "build_configuration": configuration,
+        "physical_device": physical,
+        "simulator": !physical,
+        "device_identifier": graphFreeHardwareIdentifier(),
+        "hardware_model": graphFreeSysctlString("hw.model"),
+        "os_version": device.systemVersion,
+        "os_build": ProcessInfo.processInfo.operatingSystemVersionString,
+        "physical_memory_bytes": ProcessInfo.processInfo.physicalMemory,
+        "process_id": Int(ProcessInfo.processInfo.processIdentifier),
+        "one_scenario_per_fresh_process": true,
+        "thermal_state_start": graphFreeThermalState(ProcessInfo.processInfo.thermalState),
+        "thermal_state_end": graphFreeThermalState(ProcessInfo.processInfo.thermalState),
+        "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+        "foreground": UIApplication.shared.applicationState == .active,
+        "network_disabled": true
+    ]
+}
+
+private func graphFreeHardwareIdentifier() -> String {
+    var systemInfo = utsname()
+    uname(&systemInfo)
+    return withUnsafePointer(to: &systemInfo.machine) { pointer in
+        pointer.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
+    }
+}
+
+private func graphFreeSysctlString(_ name: String) -> String {
+    var size = 0
+    guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else {
+        return "unknown"
+    }
+    var value = [CChar](repeating: 0, count: size)
+    guard sysctlbyname(name, &value, &size, nil, 0) == 0 else {
+        return "unknown"
+    }
+    let bytes = value.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+    return String(decoding: bytes, as: UTF8.self)
+}
+
+private func graphFreeThermalState(_ state: ProcessInfo.ThermalState) -> String {
+    switch state {
+    case .nominal: "nominal"
+    case .fair: "fair"
+    case .serious: "serious"
+    case .critical: "critical"
+    @unknown default: "unknown"
     }
 }
 

@@ -370,6 +370,13 @@ char *vectorkit_bench_synthetic_json(const char *config_json);
  */
 char *vectorkit_bench_memory_json(const char *config_json);
 
+/**
+ * Runs one isolated Phase 4b graph-free regression session against the base
+ * retrieval APIs. This symbol intentionally has no graph dependency and is
+ * present in both the base and graph aggregate products.
+ */
+char *vectorkit_phase4_graph_free_regression_json(const char *config_json);
+
 // Frees a string returned by VectorKit FFI.
 void vectorkit_string_free(char *ptr);
 

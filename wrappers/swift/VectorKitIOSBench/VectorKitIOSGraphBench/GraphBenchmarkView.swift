@@ -18,7 +18,8 @@ struct GraphBenchmarkView: View {
             report = GraphHarnessPreflight.run()
             if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
                 || ProcessInfo.processInfo.arguments.contains("--phase4-query-session")
-                || ProcessInfo.processInfo.arguments.contains("--phase4-lifecycle-sample") {
+                || ProcessInfo.processInfo.arguments.contains("--phase4-lifecycle-sample")
+                || ProcessInfo.processInfo.arguments.contains("--phase4-graph-free-regression") {
                 FileHandle.standardOutput.write(Data("\(report)\n".utf8))
                 exit(report.contains("\"ok\" : true") ? EXIT_SUCCESS : 2)
             }
@@ -36,6 +37,9 @@ private enum GraphHarnessPreflight {
         }
         didRun = true
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--phase4-graph-free-regression") {
+            return graphFreeRegression(arguments: arguments)
+        }
         guard let workload = value(after: "--phase4-workload", in: arguments),
               ["10k-384d-v3", "25k-384d-v3", "50k-384d-v3", "100k-384d-v3-stress"].contains(workload),
               let encoding = value(after: "--phase4-encoding", in: arguments),
@@ -181,6 +185,69 @@ private enum GraphHarnessPreflight {
                 "ranking", "hydration", "end_to_end_total"
             ]
         ])
+    }
+
+    private static func graphFreeRegression(arguments: [String]) -> String {
+        guard let encoding = value(after: "--phase4-encoding", in: arguments),
+              ["f32", "i8"].contains(encoding),
+              let sessionID = value(after: "--phase4-session", in: arguments),
+              let product = value(after: "--phase4-product", in: arguments),
+              product == "candidate" else {
+            return encode([
+                "ok": false,
+                "error": "encoding, session, and candidate product are required"
+            ])
+        }
+        let config: [String: Any] = [
+            "encoding": encoding,
+            "session_id": sessionID,
+            "product": product
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]),
+              let configJSON = String(data: data, encoding: .utf8) else {
+            return encode(["ok": false, "error": "graph-free config serialization failed"])
+        }
+        let pointer = configJSON.withCString {
+            vectorkit_phase4_graph_free_regression_json($0)
+        }
+        guard let pointer else {
+            return encode(["ok": false, "error": "graph-free runner returned null"])
+        }
+        defer { vectorkit_string_free(pointer) }
+        guard let responseData = String(cString: pointer).data(using: .utf8),
+              var response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            return encode(["ok": false, "error": "graph-free runner returned malformed JSON"])
+        }
+        response["device_role"] = value(after: "--phase4-device-role", in: arguments) ?? "unregistered"
+        response["environment"] = physicalEnvironment()
+        return encode(response)
+    }
+
+    private static func physicalEnvironment() -> [String: Any] {
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let thermal = thermalStateName(ProcessInfo.processInfo.thermalState)
+        return [
+            "build_configuration": buildConfiguration,
+            "physical_device": isPhysicalDevice,
+            "simulator": !isPhysicalDevice,
+            "device_identifier": hardwareIdentifier(),
+            "hardware_model": sysctlString("hw.model"),
+            "os_version": device.systemVersion,
+            "os_build": ProcessInfo.processInfo.operatingSystemVersionString,
+            "physical_memory_bytes": ProcessInfo.processInfo.physicalMemory,
+            "process_id": Int(ProcessInfo.processInfo.processIdentifier),
+            "one_scenario_per_fresh_process": true,
+            "thermal_state_start": thermal,
+            "thermal_state_end": thermalStateName(ProcessInfo.processInfo.thermalState),
+            "power_state": powerState(device),
+            "battery_level_start": Double(device.batteryLevel),
+            "battery_level_end": Double(device.batteryLevel),
+            "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+            "free_storage_bytes": freeStorageBytes(),
+            "foreground": UIApplication.shared.applicationState == .active,
+            "network_disabled": true
+        ]
     }
 
     private static func value(after flag: String, in arguments: [String]) -> String? {

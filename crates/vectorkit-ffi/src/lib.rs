@@ -19,6 +19,7 @@ mod device_graph_bench;
 #[cfg(feature = "graph")]
 mod graph;
 mod memory_bench;
+mod phase4_graph_free;
 
 pub use bench::vectorkit_bench_synthetic_json;
 #[cfg(feature = "graph")]
@@ -28,6 +29,7 @@ pub use device_graph_bench::{
 #[cfg(feature = "graph")]
 pub use graph::vectorkit_graph_ffi_abi_version;
 pub use memory_bench::{memory_benchmark_json, vectorkit_bench_memory_json};
+pub use phase4_graph_free::vectorkit_phase4_graph_free_regression_json;
 
 const VK_STATUS_OK: i32 = 0;
 const VK_STATUS_INVALID_ARGUMENT: i32 = 1;

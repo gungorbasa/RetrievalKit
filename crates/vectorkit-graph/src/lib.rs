@@ -17,8 +17,8 @@ pub use builder::GraphBuildStats;
 pub use error::{GraphError, Result};
 pub use persistence::GraphDatabaseFileSizes;
 pub use query::{
-    CancellationToken, GraphMatch, GraphQuery, GraphQueryTrace, GraphResult, QueryLimits, Seed,
-    Traverse, TruncationReason,
+    CancellationToken, GraphExecutionTimings, GraphMatch, GraphQuery, GraphQueryTrace, GraphResult,
+    QueryLimits, Seed, Traverse, TruncationReason,
 };
 pub use schema::{
     Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphSchema,
@@ -31,7 +31,7 @@ pub use storage::{
 };
 
 use builder::build_graph;
-use query::execute;
+use query::{execute, execute_with_timings};
 use storage::GraphStorage;
 
 /// Schema-driven graph state derived from one canonical corpus generation.
@@ -141,6 +141,21 @@ impl GraphEngine {
         cancellation: Option<&CancellationToken>,
     ) -> Result<GraphResult> {
         execute(
+            &self.storage,
+            corpus.corpus_id().clone(),
+            corpus.generation(),
+            query,
+            cancellation,
+        )
+    }
+
+    pub fn query_with_timings(
+        &self,
+        corpus: &CorpusIndex,
+        query: &GraphQuery,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<(GraphResult, GraphExecutionTimings)> {
+        execute_with_timings(
             &self.storage,
             corpus.corpus_id().clone(),
             corpus.generation(),
@@ -395,6 +410,15 @@ impl GraphRetrievalDatabase {
     ) -> Result<GraphResult> {
         self.graph
             .query(self.retrieval.corpus(), query, cancellation)
+    }
+
+    pub fn graph_query_with_timings(
+        &self,
+        query: &GraphQuery,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<(GraphResult, GraphExecutionTimings)> {
+        self.graph
+            .query_with_timings(self.retrieval.corpus(), query, cancellation)
     }
 
     pub fn project_candidates(&self, result: &GraphResult) -> Result<ProjectedScope> {

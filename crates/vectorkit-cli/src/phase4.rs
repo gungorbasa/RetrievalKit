@@ -7,15 +7,18 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vectorkit_core::{
-    ChunkIdentity, ChunkKey, CorpusId, FieldName, Filter, HybridQuery, IndexConfig, KeywordQuery,
-    Metadata, Record, RecordChunkInput, RecordId, RecordType, RecordValue, RetrievalConfiguration,
-    RetrievalDatabase, SearchQuery, VectorEncoding, VectorMetric,
+    ChunkIdentity, ChunkKey, CorpusId, ExactVectorIndex, FieldName, Filter, HybridQuery,
+    IndexConfig, KeywordQuery, Metadata, Record, RecordChunkInput, RecordId, RecordType,
+    RecordValue, RetrievalConfiguration, RetrievalDatabase, SearchQuery, VectorEncoding,
+    VectorMetric,
 };
 use vectorkit_graph::{
     Cardinality, ChunkNodeSchema, Direction, DuplicateReferencePolicy, FieldPath,
     GraphRetrievalDatabase, GraphSchema, MissingTargetPolicy, NodeId, NodeType, QueryLimits,
     RecordNodeSchema, RelationshipSchema, RelationshipType, Seed, Traverse,
 };
+
+mod measurement;
 
 const DIMENSION: usize = 384;
 const CHUNKS_PER_RECORD: usize = 4;
@@ -247,12 +250,19 @@ pub(crate) fn run_cli(args: &[String]) -> Result<String, String> {
                 safe_storage_mib,
             )?)
         }
+        "measure-stages" => {
+            let workload = WorkloadSpec::parse(required_flag(rest, "--workload")?)?;
+            let input = PathBuf::from(required_flag(rest, "--input")?);
+            let output = PathBuf::from(required_flag(rest, "--output")?);
+            reject_unknown_flags(rest, &["--workload", "--input", "--output"])?;
+            pretty(&measurement::run(workload, &input, &output)?)
+        }
         _ => Err(usage().to_owned()),
     }
 }
 
 fn usage() -> &'static str {
-    "usage: vectorkit bench phase4 <generate|validate|mac-correctness|preflight> ..."
+    "usage: vectorkit bench phase4 <generate|validate|mac-correctness|measure-stages|preflight> ..."
 }
 
 fn required_flag<'a>(args: &'a [String], flag: &str) -> Result<&'a str, String> {
@@ -795,6 +805,7 @@ struct EncodingCorrectnessReport {
     persisted_total_bytes: u64,
     persisted_retrieval_bytes: u64,
     persisted_graph_bytes: u64,
+    persisted_components: PersistedComponents,
     loaded_payload_estimate_bytes: u64,
     estimated_peak_memory_bytes: u64,
     stages: Vec<StageResult>,
@@ -804,7 +815,18 @@ struct EncodingCorrectnessReport {
 #[derive(Debug, Serialize, Deserialize)]
 struct StageResult {
     stage: String,
-    elapsed_milliseconds: u128,
+    elapsed_nanoseconds: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedComponents {
+    corpus_chunks_bytes: u64,
+    vectors_quantization_bytes: u64,
+    lexical_bm25_bytes: u64,
+    graph_schema_bytes: u64,
+    manifest_validation_bytes: u64,
+    complete_directory_bytes: u64,
+    component_sum_matches_directory: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -926,17 +948,58 @@ fn run_encoding_correctness(
     let started = Instant::now();
     let loaded = GraphRetrievalDatabase::load_from_dir(&persisted)
         .map_err(|error| format!("failed to reload {label} database: {error}"))?;
+    stages.push(stage("cold_load", started));
+    let started = Instant::now();
     validate_database_shape(&loaded, spec, encoding)?;
     let reloaded_checks = validate_database_behavior(&loaded, spec)?;
     if checks != reloaded_checks {
         return Err(format!("{label} reload correctness check set changed"));
     }
-    stages.push(stage("reload_and_correctness", started));
+    stages.push(stage("cold_load_replay", started));
+    drop(loaded);
+
+    let started = Instant::now();
+    let warm_loaded = GraphRetrievalDatabase::load_from_dir(&persisted)
+        .map_err(|error| format!("failed to warm-reload {label} database: {error}"))?;
+    stages.push(stage("warm_load", started));
+    let started = Instant::now();
+    validate_database_shape(&warm_loaded, spec, encoding)?;
+    let warm_checks = validate_database_behavior(&warm_loaded, spec)?;
+    if checks != warm_checks {
+        return Err(format!("{label} warm reload correctness check set changed"));
+    }
+    stages.push(stage("warm_load_replay", started));
 
     let persisted_total_bytes = directory_size(&persisted)?;
     let retrieval_directory = active_capability_directory(&persisted)?.join("retrieval");
     let persisted_retrieval_bytes = directory_size(&retrieval_directory)?;
     let persisted_graph_bytes = graph_sizes.schema_bytes + graph_sizes.graph_bytes;
+    let retrieval_sizes = ExactVectorIndex::persisted_file_sizes(&retrieval_directory)
+        .map_err(|error| format!("failed to account {label} persisted components: {error}"))?;
+    let corpus_chunks_bytes = retrieval_sizes
+        .chunks_bytes
+        .saturating_add(retrieval_sizes.records_bytes)
+        .saturating_add(retrieval_sizes.tombstones_bytes);
+    let vectors_quantization_bytes = retrieval_sizes.vectors_bytes;
+    let lexical_bm25_bytes = retrieval_sizes.bm25_bytes;
+    let graph_schema_bytes = persisted_graph_bytes;
+    let known_components = corpus_chunks_bytes
+        .saturating_add(vectors_quantization_bytes)
+        .saturating_add(lexical_bm25_bytes)
+        .saturating_add(graph_schema_bytes);
+    let manifest_validation_bytes = persisted_total_bytes
+        .checked_sub(known_components)
+        .ok_or_else(|| "persisted component accounting exceeds complete directory".to_owned())?;
+    let component_sum = known_components.saturating_add(manifest_validation_bytes);
+    let persisted_components = PersistedComponents {
+        corpus_chunks_bytes,
+        vectors_quantization_bytes,
+        lexical_bm25_bytes,
+        graph_schema_bytes,
+        manifest_validation_bytes,
+        complete_directory_bytes: persisted_total_bytes,
+        component_sum_matches_directory: component_sum == persisted_total_bytes,
+    };
     let estimated_peak_memory_bytes = estimate_peak_memory(
         loaded_payload_estimate,
         persisted_graph_bytes,
@@ -948,6 +1011,7 @@ fn run_encoding_correctness(
         persisted_total_bytes,
         persisted_retrieval_bytes,
         persisted_graph_bytes,
+        persisted_components,
         loaded_payload_estimate_bytes: loaded_payload_estimate,
         estimated_peak_memory_bytes,
         stages,
@@ -1323,28 +1387,37 @@ fn next_hop_query(
     seed_index: usize,
     hops: usize,
 ) -> Result<vectorkit_graph::GraphResult, String> {
-    let query = vectorkit_graph::GraphQuery::new(Seed::NodeIds(vec![record_node(seed_index)?]))
-        .traverse(Traverse {
-            relationship: RelationshipType::new("Next").map_err(|error| error.to_string())?,
-            direction: Direction::Outgoing,
-            min_hops: hops,
-            max_hops: hops,
-        })
-        .with_limits(QueryLimits {
-            max_hops: 8,
-            max_visited: 128,
-            max_results: 16,
-            max_working_bytes: 1024 * 1024,
-        });
+    let query = next_hop_graph_query(seed_index, hops)?;
     database
         .graph_query(&query, None)
         .map_err(|error| format!("graph query failed: {error}"))
 }
 
+fn next_hop_graph_query(
+    seed_index: usize,
+    hops: usize,
+) -> Result<vectorkit_graph::GraphQuery, String> {
+    Ok(
+        vectorkit_graph::GraphQuery::new(Seed::NodeIds(vec![record_node(seed_index)?]))
+            .traverse(Traverse {
+                relationship: RelationshipType::new("Next").map_err(|error| error.to_string())?,
+                direction: Direction::Outgoing,
+                min_hops: hops,
+                max_hops: hops,
+            })
+            .with_limits(QueryLimits {
+                max_hops: 8,
+                max_visited: 128,
+                max_results: 16,
+                max_working_bytes: 1024 * 1024,
+            }),
+    )
+}
+
 fn stage(name: &str, started: Instant) -> StageResult {
     StageResult {
         stage: name.to_owned(),
-        elapsed_milliseconds: started.elapsed().as_millis(),
+        elapsed_nanoseconds: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
     }
 }
 

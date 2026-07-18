@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use vectorkit_core::{CorpusId, GenerationId};
@@ -105,6 +106,17 @@ pub struct GraphQueryTrace {
     pub diagnostics: usize,
 }
 
+/// Non-overlapping graph execution stages for benchmark and trace consumers.
+///
+/// These timings intentionally exclude query construction, projection,
+/// filtering, ranking, and hydration. Callers that need a complete total must
+/// measure around their entire composed operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphExecutionTimings {
+    pub seed_resolution_ns: u64,
+    pub traversal_ns: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphResult {
     pub corpus_id: CorpusId,
@@ -145,8 +157,22 @@ pub(crate) fn execute(
     query: &GraphQuery,
     cancellation: Option<&CancellationToken>,
 ) -> Result<GraphResult> {
+    execute_with_timings(storage, corpus_id, generation, query, cancellation)
+        .map(|(result, _)| result)
+}
+
+pub(crate) fn execute_with_timings(
+    storage: &GraphStorage,
+    corpus_id: CorpusId,
+    generation: GenerationId,
+    query: &GraphQuery,
+    cancellation: Option<&CancellationToken>,
+) -> Result<(GraphResult, GraphExecutionTimings)> {
     validate_query(query)?;
+    let seed_started = Instant::now();
     let seeds = resolve_seeds(storage, &query.seed)?;
+    let seed_resolution_ns = elapsed_ns(seed_started);
+    let traversal_started = Instant::now();
     let seed_count = seeds.len();
     let mut queue = VecDeque::new();
     let mut visited = BTreeSet::new();
@@ -281,13 +307,24 @@ pub(crate) fn execute(
         result_count: matches.len(),
         diagnostics: storage.diagnostics.len(),
     };
-    Ok(GraphResult {
+    let result = GraphResult {
         corpus_id,
         generation,
         matches,
         truncated,
         trace,
-    })
+    };
+    Ok((
+        result,
+        GraphExecutionTimings {
+            seed_resolution_ns,
+            traversal_ns: elapsed_ns(traversal_started),
+        },
+    ))
+}
+
+fn elapsed_ns(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 fn materialize_path(storage: &GraphStorage, path: &[u32]) -> Vec<GraphPathEdge> {

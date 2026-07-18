@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "artifact_type": "phase4b_execution_authorization",
+  "authorized_source_commit": "cb8747742d391a9d4b8d66db9d0d23ecc240d7dc",
+  "branch": "codex/graph-m1-core-foundation",
+  "authorized_at_utc": "2026-07-18T19:43:00Z",
+  "inherits_frozen_policy_from_authorization_sha256": "4edeb5655bdb32671151a8423b6502c76ea7d6a55c1628db4e847e241463c0bf",
+  "prior_attempts": [
+    {
+      "authorization_sha256": "38cc6f2662d55c80452ba00bd25073d5018814589c61b31f6ee01f838f8a71f2",
+      "artifact_root": "target/phase4b/device-results-1b34ff7",
+      "status": "invalidated_and_preserved",
+      "failure": "0x8BADF00D scene-create watchdog",
+      "reuse_as_final_evidence": false
+    },
+    {
+      "authorization_sha256": "4edeb5655bdb32671151a8423b6502c76ea7d6a55c1628db4e847e241463c0bf",
+      "artifact_root": "target/phase4b/device-results-v2-3118697",
+      "status": "invalidated_and_preserved",
+      "failure": "screen idle suspension and CoreDevice console loss",
+      "reuse_as_final_evidence": false
+    }
+  ],
+  "protocol_sha256": "86504e41f972805a79acaed9b6fedea57310c017ce30536971991082a2b5ccdc",
+  "workloads_sha256": "1943b3da59099e1e156789b1acf837026c287745133f4679216be9b165c7d21b",
+  "fixture_registry_sha256": "53bf113d10fb4d5d054c3fa852e89a5d2f5149bd9edc2ab621ae77f55b964e32",
+  "fixture_identities": {
+    "10k-384d-v3": {"fixture_sha256":"8e85cfcb235b60175389fef07f7e4cc6aa68db794686bd12aa1a981d53bd10a4","manifest_sha256":"fbff45e658a54f50b649a1e6d1eecd24fe93c22ec769364e575de68945e012e9"},
+    "25k-384d-v3": {"fixture_sha256":"4d3cd6087c775e11f5cb9147421115763647e49b0ad97c1889a6a52e933a5ddf","manifest_sha256":"5e3fbb4230ad09012aff5e48508efd4497390c4973e7edf472278e88bb69d4fb"},
+    "50k-384d-v3": {"fixture_sha256":"fc93eec7c3fdc0b9bdee95a34dc626b98d5bdca0e77c460506d665a5588a9dda","manifest_sha256":"ba06088e2140b1450e2d52d000b44274804272dd6b6ffa29a69c16f202013db9"},
+    "100k-384d-v3-stress": {"fixture_sha256":"756949033b63d4163b34162466f968f0b24ca355d3f8341aece0424170a86a29","manifest_sha256":"8d76a9044cf46fbbe17416143b69f3bf53c10726da72d682503b4c707c0fc052"}
+  },
+  "toolchain": {
+    "rustc": "1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "1.92.0 (344c4567c 2025-10-21)",
+    "swift": "6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)",
+    "xcode": "26.6 (17F113)",
+    "iphoneos_sdk": "26.5",
+    "rust_profile": "release optimized",
+    "swift_configuration": "Release"
+  },
+  "products": {
+    "baseline": {
+      "name": "VectorKitIOSBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSBench",
+      "framework": "VectorKitFFI",
+      "app_executable_sha256": "220d81769476ee2d46dca6e1fca3a43f6b51f858a46769edd22965f42e250125",
+      "framework_binary_sha256": "92ed1fd226e0785803ad3d4717efdb1fcbc3d78609ed93c335eb68cdfd68d183",
+      "info_plist_sha256": "4521ffff2956cc9950577943026c31ad3d74d7962c97f4301f667ef6dd90651e",
+      "code_directory_sha256": "35d0cc9631f65a21ca636f5d51f0e1388db0888fbc4debf45c9d73902941e6a0"
+    },
+    "candidate": {
+      "name": "VectorKitIOSGraphBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSGraphBench",
+      "framework": "VectorKitGraphFFI",
+      "app_executable_sha256": "f8a8850610bde7c0d0464861c51d3ac4df3b068de7da19aef4da05d49f615a84",
+      "framework_binary_sha256": "aacad12a5c4d7179c38e9e64da1c76adeac45d7f8a88002394233f49881e2999",
+      "info_plist_sha256": "438c4b0e55a9eb120c2f6cd55cae9403f5c9938efbba16798c4c28fef9212210",
+      "code_directory_sha256": "3b273f9bc85d8aa80f627b203e9e2a27c2796fb5f6e3a047bee0a51fc6eb317b"
+    }
+  },
+  "signing": {
+    "identity": "Apple Development: Gungor Basa (YUAH5EJ32V)",
+    "team_identifier": "456T4LX972",
+    "style": "automatic development provisioning"
+  },
+  "devices": {
+    "iphone17-pro-max": {"marketing_name":"iPhone 17 Pro Max","core_device_id":"E342200A-C959-5384-A846-24F4163E5722","product_type":"iPhone18,2","hardware_model":"V54AP","os_version":"26.5.1","os_build":"23F81","transport":"wired"},
+    "iphone14-pro-max": {"marketing_name":"iPhone 14 Pro Max","core_device_id":"3D82A3BA-C0B7-527F-BD7F-6AEADBFAC556","product_type":"iPhone15,3","hardware_model":"D74AP","os_version":"26.5","os_build":"23F77","transport":"wired","execution_status":"deferred_by_user"}
+  },
+  "current_execution_scope": {
+    "devices": ["iphone17-pro-max"],
+    "iphone14_deferred_not_removed": true,
+    "overall_phase4b_pass_possible": false
+  },
+  "matrix": {
+    "supported_workloads": ["10k-384d-v3", "25k-384d-v3", "50k-384d-v3"],
+    "stress_workloads": ["100k-384d-v3-stress"],
+    "encodings": ["f32", "i8"],
+    "query_categories": ["semantic", "exact_name", "hybrid", "metadata_filter", "graph_1hop", "graph_2hop", "graph_3hop", "graph_filter"],
+    "stages": ["seed_resolution", "traversal", "projection", "filter_intersection", "ranking", "hydration", "end_to_end_total"]
+  },
+  "counts": {
+    "query_warmups_per_category": 100,
+    "query_samples_per_category": 1000,
+    "query_rss_fresh_process_repetitions": 5,
+    "lifecycle_discarded_warmups": 3,
+    "lifecycle_samples": 20,
+    "cold_load_fresh_process_samples": 20,
+    "rss_interval_ms": 1,
+    "graph_free_valid_sessions_per_product_encoding": 3
+  },
+  "validity_policy": {
+    "one_scenario_per_fresh_process": true,
+    "physical_device_required": true,
+    "release_build_required": true,
+    "thermal_start_end_allowed": ["nominal", "fair"],
+    "foreground_required": true,
+    "automated_launch_disables_idle_timer": true,
+    "manual_app_launch_is_not_benchmark_evidence": true,
+    "network_disabled": true,
+    "sessions_never_pooled": true,
+    "graph_free_candidate_p95_ratio_max": 1.03,
+    "graph_free_counters_must_be_zero": true
+  },
+  "invalidation_and_rerun": {
+    "preserve_every_failed_aborted_or_thermally_invalid_attempt": true,
+    "atomic_temp_fsync_replace": true,
+    "rerun_complete_iphone17_matrix_under_v3": true,
+    "stale_or_unauthorized_hashes_rejected": true
+  },
+  "stress_classification": {
+    "classification": "stress",
+    "marketing_eligible": false,
+    "supported_v1_capacity_changed": false,
+    "failure_does_not_invalidate_supported_matrix": true
+  }
+}

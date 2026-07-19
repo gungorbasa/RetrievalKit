@@ -100,6 +100,27 @@ implemented, or superseded by the product spec.
   fewer-than-50K capacity envelope. See
   `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
 
+  Owner-approved Phase 4b reporting variance (2026-07-19): retain the current
+  iPhone 17 evidence without rerunning solely because the device moved within
+  iOS 26 from 26.5.1 (`23F81`) to 26.5.2 (`23F84`). The 30 supported query
+  sessions and 10K/F32 lifecycle prepare artifact were captured on `23F81`;
+  the three 10K/F32 build warmups and 20 measured build samples were captured
+  on `23F84`. The final report must disclose this split explicitly. Do not
+  rewrite the immutable v3 authorization hash or relabel artifact provenance.
+
+  Owner-approved Phase 4b lifecycle-reporting decision (2026-07-19): retain
+  the frozen harness behavior for `save` and `read_only_validation` operations.
+  Their artifacts prove the operation through successful persistence or
+  read-only directory validation plus persisted-component accounting, and
+  therefore serialize `correctness_checks` as `null`. `prepare`, `build`,
+  `cold_load`, `warm_load`, and `replay` continue to record the applicable
+  behavioral correctness checks, with load/replay operations also requiring
+  replay equivalence. The independent validator already enforces these
+  operation-specific rules. Do not rebuild, reauthorize, or rerun existing
+  evidence solely to repeat all 11 behavioral checks in every save or
+  read-only-validation artifact. Disclose this distinction in the final Phase
+  4b report.
+
 ## Active Product Constraints
 
 - VectorKit is local-first retrieval for mobile/desktop, with iOS/macOS as the

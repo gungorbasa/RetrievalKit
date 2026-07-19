@@ -12,6 +12,7 @@ import plistlib
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -142,6 +143,9 @@ class Collector:
     def __init__(self, args: argparse.Namespace) -> None:
         self.root = args.artifact_root.resolve()
         self.authorization_path = args.authorization.resolve()
+        self.cooling_pause_seconds = args.cooling_pause_seconds
+        if self.cooling_pause_seconds < 0:
+            raise CollectorError("--cooling-pause-seconds cannot be negative")
         self.authorization = json.loads(self.authorization_path.read_text(encoding="utf-8"))
         self.authorization_sha256 = sha256_file(self.authorization_path)
         self.lineage = self.authorization.get("evidence_lineage")
@@ -258,6 +262,8 @@ class Collector:
             atomic_json(rejected, response)
             raise CollectorError(f"{scenario_id} failed; evidence preserved at {rejected}")
         atomic_json(destination, response)
+        if self.cooling_pause_seconds > 0:
+            time.sleep(self.cooling_pause_seconds)
         return response
 
     def query_matrix(self, device_role: str, stress: bool = False) -> None:
@@ -363,6 +369,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--graph-app", type=Path, required=True)
     parser.add_argument("--base-framework", type=Path, required=True)
     parser.add_argument("--graph-framework", type=Path, required=True)
+    parser.add_argument("--cooling-pause-seconds", type=float, default=0)
     return parser.parse_args()
 
 

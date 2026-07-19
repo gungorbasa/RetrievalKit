@@ -62,6 +62,7 @@ class CollectorTests(unittest.TestCase):
             instance.root = root
             instance.authorization_sha256 = "4" * 64
             instance.lineage = None
+            instance.cooling_pause_seconds = 0
             item = collector.Product(
                 role="candidate",
                 app=root / "app",

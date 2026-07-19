@@ -137,6 +137,15 @@ implemented, or superseded by the product spec.
   It binds source commit `9201410f88648743574801dced76bb5b551eb1f9`,
   base executable `f96b69c5...cae5a9`, graph executable
   `6b6ac8a3...bd97c`, and the unchanged v3 framework binaries.
+  The v4 apps were installed in place and the blocked 10K/F32
+  `read_only_validation` lane is now complete: three warmups and 20 measured
+  launches all report foreground execution, unique process IDs, successful
+  directory validation, and the v4 authorization hash. The canonical
+  path/SHA-256 set for these 23 artifacts is
+  `0567349fd68661cdbd84415c76ef31531f00336a66aaef5937fee6c4187866ad`.
+  Measured operation durations ranged from 125,176,208 to 129,478,458 ns
+  (median 127,407,646 ns). Remaining lifecycle, graph-free, and stress lanes
+  still require execution and final split-lineage validation.
 
 ## Active Product Constraints
 

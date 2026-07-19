@@ -557,9 +557,12 @@ persistence/replay, staged instrumentation, memory preflight, and isolated
 release iOS harness/linkage checks. See
 `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
 Phase 4b iPhone 17 physical-device execution is in progress. The supported
-query matrix is complete with 30 thermally valid sessions; lifecycle,
-graph-free, and eligible stress evidence remain. Older-device qualification is
-optional future work and does not block this gate.
+query matrix is complete with 30 thermally valid sessions. The foreground-gated
+v4 harness has also completed all 23 `10k-384d-v3`/F32
+`read_only_validation` launches without rewriting the 77 accepted v3
+artifacts. Other lifecycle, graph-free, and eligible stress evidence remain.
+Older-device qualification is optional future work and does not block this
+gate.
 
 Deliverables:
 

@@ -245,11 +245,19 @@ class Collector:
         if completed.returncode != 0:
             response["ok"] = False
             response["collector_error"] = completed.stderr.strip()[-4_000:]
-        atomic_json(destination, response)
         if response.get("ok") is not True:
-            rejected = self.root / "rejected" / device_role / destination.relative_to(self.root)
+            relative = destination.relative_to(self.root)
+            attempt = started.strftime("%Y%m%dT%H%M%S.%fZ")
+            rejected = (
+                self.root
+                / "rejected"
+                / device_role
+                / relative.parent
+                / f"{relative.stem}.attempt-{attempt}{relative.suffix}"
+            )
             atomic_json(rejected, response)
-            raise CollectorError(f"{scenario_id} failed; evidence preserved at {destination}")
+            raise CollectorError(f"{scenario_id} failed; evidence preserved at {rejected}")
+        atomic_json(destination, response)
         return response
 
     def query_matrix(self, device_role: str, stress: bool = False) -> None:

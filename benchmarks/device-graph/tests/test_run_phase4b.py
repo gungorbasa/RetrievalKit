@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MODULE_PATH = Path(__file__).parents[1] / "run_phase4b.py"
 SPEC = importlib.util.spec_from_file_location("phase4_collector", MODULE_PATH)
@@ -53,6 +54,35 @@ class CollectorTests(unittest.TestCase):
         )
         self.assertEqual(first, "10k-384d-v3-f32-save-warmup-00")
         self.assertEqual(len({first, second, third}), 3)
+
+    def test_failed_launch_is_preserved_only_under_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            instance = collector.Collector.__new__(collector.Collector)
+            instance.root = root
+            instance.authorization_sha256 = "4" * 64
+            instance.lineage = None
+            item = collector.Product(
+                role="candidate",
+                app=root / "app",
+                bundle_id="dev.vectorkit.test",
+                executable_sha256="a" * 64,
+                framework_sha256="b" * 64,
+            )
+            destination = root / "devices" / "iphone17-pro-max" / "sample.json"
+            completed = collector.subprocess.CompletedProcess(
+                args=[], returncode=2, stdout='{"ok":false,"error":"thermal"}', stderr=""
+            )
+            with mock.patch.object(collector.subprocess, "run", return_value=completed):
+                with self.assertRaises(collector.CollectorError):
+                    instance.launch(
+                        "iphone17-pro-max", item, [], destination, "thermal-sample"
+                    )
+            self.assertFalse(destination.exists())
+            rejected = list((root / "rejected").rglob("*.json"))
+            self.assertEqual(len(rejected), 1)
+            self.assertIn("sample.attempt-", rejected[0].name)
+            self.assertFalse(rejected[0].is_relative_to(root / "devices"))
 
     def test_resume_reuses_only_authorized_prior_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

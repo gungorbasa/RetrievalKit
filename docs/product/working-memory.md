@@ -131,6 +131,12 @@ implemented, or superseded by the product spec.
   Use v4 only for unfinished paths, validate both authorization and executable
   identities, and update the apps in place without erasing persisted state.
   See `docs/product/target-device-graph-benchmark-contract-v1-amendment-2.md`.
+  Authorization v4 is
+  `benchmarks/device-graph/phase4b-execution-authorization-v4.json`, SHA-256
+  `4f7aab9657bb836e4e434cd701e70ed55dc2cd1adfd4b4d4ec46178f1d76702f`.
+  It binds source commit `9201410f88648743574801dced76bb5b551eb1f9`,
+  base executable `f96b69c5...cae5a9`, graph executable
+  `6b6ac8a3...bd97c`, and the unchanged v3 framework binaries.
 
 ## Active Product Constraints
 

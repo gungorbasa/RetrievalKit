@@ -27,6 +27,30 @@ swiftc \
 target/phase4b/foreground-gate-tests/ForegroundExecutionGateTests
 ```
 
+Phase 4b resumed after the foreground fix uses authorization v4 while
+preserving the completed v3 paths in the same artifact root. Install the v4
+apps as an in-place update; never uninstall them or erase Application Support.
+The collector verifies the complete 77-file v3 set before it can resume and
+skips those files without rewriting them. A final split-lineage validation
+must provide both binary generations:
+
+```bash
+python3 benchmarks/device-graph/validate_artifacts.py \
+  --mode phase4b \
+  --repo . \
+  --artifact-root target/phase4b/device-results-v3-02b8971 \
+  --authorization benchmarks/device-graph/phase4b-execution-authorization-v4.json \
+  --base-binary target/phase4b/final-9201410/Build/Products/Release-iphoneos/VectorKitIOSBench.app/VectorKitIOSBench \
+  --graph-binary target/phase4b/final-9201410/Build/Products/Release-iphoneos/VectorKitIOSGraphBench.app/VectorKitIOSGraphBench \
+  --base-framework target/apple/VectorKitFFI.xcframework/ios-arm64/VectorKitFFI.framework/VectorKitFFI \
+  --graph-framework target/apple/VectorKitGraphFFI.xcframework/ios-arm64/VectorKitGraphFFI.framework/VectorKitGraphFFI \
+  --prior-authorization benchmarks/device-graph/phase4b-execution-authorization-v3.json \
+  --prior-base-binary target/phase4b/final-cb87477/Build/Products/Release-iphoneos/VectorKitIOSBench.app/VectorKitIOSBench \
+  --prior-graph-binary target/phase4b/final-cb87477/Build/Products/Release-iphoneos/VectorKitIOSGraphBench.app/VectorKitIOSGraphBench \
+  --prior-base-framework target/apple/VectorKitFFI.xcframework/ios-arm64/VectorKitFFI.framework/VectorKitFFI \
+  --prior-graph-framework target/apple/VectorKitGraphFFI.xcframework/ios-arm64/VectorKitGraphFFI.framework/VectorKitGraphFFI
+```
+
 Build both release products and inspect their arm64 symbols with:
 
 ```bash

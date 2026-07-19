@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "artifact_type": "phase4b_execution_authorization",
+  "authorized_source_commit": "9201410f88648743574801dced76bb5b551eb1f9",
+  "branch": "codex/graph-m1-core-foundation",
+  "authorized_at_utc": "2026-07-19T18:26:00Z",
+  "inherits_frozen_policy_from_authorization_sha256": "9bc321b7b4ca6970870243a8df0709b9914911b278234bbff229ec1e9fba1240",
+  "source_change_scope": {
+    "evaluation_harness_only": true,
+    "foreground_gate_timeout_seconds": 30,
+    "foreground_wait_precedes_measured_work": true,
+    "rust_retrieval_or_graph_change": false,
+    "ffi_change": false,
+    "public_wrapper_change": false
+  },
+  "evidence_lineage": {
+    "prior_authorization_sha256": "9bc321b7b4ca6970870243a8df0709b9914911b278234bbff229ec1e9fba1240",
+    "preserved_path_patterns": [
+      "devices/iphone17-pro-max/supported/*/*/query/session-*.json",
+      "devices/iphone17-pro-max/supported/10k-384d-v3/f32/lifecycle/prepare.json",
+      "devices/iphone17-pro-max/supported/10k-384d-v3/f32/lifecycle/build/*.json",
+      "devices/iphone17-pro-max/supported/10k-384d-v3/f32/lifecycle/save/*.json"
+    ],
+    "preserved_artifact_count": 77,
+    "preserved_artifact_set_sha256": "a7d021e0b45fbd2a722482af44428335eac0d8ab188032676c4643e051e7a9dc",
+    "prior_allowed_os_builds": ["23F81", "23F84"],
+    "preserve_prior_artifact_bytes": true,
+    "current_authorization_covers_unmatched_required_paths": true
+  },
+  "rejected_foreground_attempts": {
+    "authorization_sha256": "9bc321b7b4ca6970870243a8df0709b9914911b278234bbff229ec1e9fba1240",
+    "operation": "read_only_validation",
+    "attempt_count": 3,
+    "status": "rejected_and_preserved",
+    "promotion_allowed": false
+  },
+  "protocol_sha256": "86504e41f972805a79acaed9b6fedea57310c017ce30536971991082a2b5ccdc",
+  "workloads_sha256": "1943b3da59099e1e156789b1acf837026c287745133f4679216be9b165c7d21b",
+  "fixture_registry_sha256": "53bf113d10fb4d5d054c3fa852e89a5d2f5149bd9edc2ab621ae77f55b964e32",
+  "fixture_identities": {
+    "10k-384d-v3": {"fixture_sha256":"8e85cfcb235b60175389fef07f7e4cc6aa68db794686bd12aa1a981d53bd10a4","manifest_sha256":"fbff45e658a54f50b649a1e6d1eecd24fe93c22ec769364e575de68945e012e9"},
+    "25k-384d-v3": {"fixture_sha256":"4d3cd6087c775e11f5cb9147421115763647e49b0ad97c1889a6a52e933a5ddf","manifest_sha256":"5e3fbb4230ad09012aff5e48508efd4497390c4973e7edf472278e88bb69d4fb"},
+    "50k-384d-v3": {"fixture_sha256":"fc93eec7c3fdc0b9bdee95a34dc626b98d5bdca0e77c460506d665a5588a9dda","manifest_sha256":"ba06088e2140b1450e2d52d000b44274804272dd6b6ffa29a69c16f202013db9"},
+    "100k-384d-v3-stress": {"fixture_sha256":"756949033b63d4163b34162466f968f0b24ca355d3f8341aece0424170a86a29","manifest_sha256":"8d76a9044cf46fbbe17416143b69f3bf53c10726da72d682503b4c707c0fc052"}
+  },
+  "toolchain": {
+    "rustc": "1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "1.92.0 (344c4567c 2025-10-21)",
+    "swift": "6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)",
+    "xcode": "26.6 (17F113)",
+    "iphoneos_sdk": "26.5",
+    "rust_profile": "release optimized",
+    "swift_configuration": "Release"
+  },
+  "products": {
+    "baseline": {
+      "name": "VectorKitIOSBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSBench",
+      "framework": "VectorKitFFI",
+      "app_executable_sha256": "f96b69c5344575ecd3262715e5e26c703a0c9d3443fccfda9a65fbf372cae5a9",
+      "framework_binary_sha256": "92ed1fd226e0785803ad3d4717efdb1fcbc3d78609ed93c335eb68cdfd68d183",
+      "info_plist_sha256": "4521ffff2956cc9950577943026c31ad3d74d7962c97f4301f667ef6dd90651e",
+      "code_directory_sha256": "f913b3151691207d9d93dab7f6a8f9da91faf8b972d07a10ebf977477a5696b6"
+    },
+    "candidate": {
+      "name": "VectorKitIOSGraphBench",
+      "bundle_identifier": "dev.vectorkit.VectorKitIOSGraphBench",
+      "framework": "VectorKitGraphFFI",
+      "app_executable_sha256": "6b6ac8a336243207726773c70bb9a2c4cacb51125737496029fb020e97bbd97c",
+      "framework_binary_sha256": "aacad12a5c4d7179c38e9e64da1c76adeac45d7f8a88002394233f49881e2999",
+      "info_plist_sha256": "438c4b0e55a9eb120c2f6cd55cae9403f5c9938efbba16798c4c28fef9212210",
+      "code_directory_sha256": "a38b0b7b1652d28e45436b2d76707422e67ef6f3ff3918c4731b6667e0550ca2"
+    }
+  },
+  "signing": {
+    "identity": "Apple Development: Gungor Basa (YUAH5EJ32V)",
+    "team_identifier": "456T4LX972",
+    "style": "automatic development provisioning"
+  },
+  "devices": {
+    "iphone17-pro-max": {"marketing_name":"iPhone 17 Pro Max","core_device_id":"E342200A-C959-5384-A846-24F4163E5722","product_type":"iPhone18,2","hardware_model":"V54AP","os_version":"26.5.2","os_build":"23F84","transport":"wired"}
+  },
+  "current_execution_scope": {
+    "devices": ["iphone17-pro-max"],
+    "overall_phase4b_pass_possible_when_matrix_complete": true
+  },
+  "matrix": {
+    "supported_workloads": ["10k-384d-v3", "25k-384d-v3", "50k-384d-v3"],
+    "stress_workloads": ["100k-384d-v3-stress"],
+    "encodings": ["f32", "i8"],
+    "query_categories": ["semantic", "exact_name", "hybrid", "metadata_filter", "graph_1hop", "graph_2hop", "graph_3hop", "graph_filter"],
+    "stages": ["seed_resolution", "traversal", "projection", "filter_intersection", "ranking", "hydration", "end_to_end_total"]
+  },
+  "counts": {
+    "query_warmups_per_category": 100,
+    "query_samples_per_category": 1000,
+    "query_rss_fresh_process_repetitions": 5,
+    "lifecycle_discarded_warmups": 3,
+    "lifecycle_samples": 20,
+    "cold_load_fresh_process_samples": 20,
+    "rss_interval_ms": 1,
+    "graph_free_valid_sessions_per_product_encoding": 3
+  },
+  "validity_policy": {
+    "one_scenario_per_fresh_process": true,
+    "physical_device_required": true,
+    "release_build_required": true,
+    "thermal_start_end_allowed": ["nominal", "fair"],
+    "foreground_required": true,
+    "foreground_gate_required": true,
+    "foreground_gate_timeout_seconds": 30,
+    "foreground_wait_excluded_from_measurement": true,
+    "automated_launch_disables_idle_timer": true,
+    "manual_app_launch_is_not_benchmark_evidence": true,
+    "network_disabled": true,
+    "sessions_never_pooled": true,
+    "graph_free_candidate_p95_ratio_max": 1.03,
+    "graph_free_counters_must_be_zero": true
+  },
+  "invalidation_and_rerun": {
+    "preserve_every_failed_aborted_or_thermally_invalid_attempt": true,
+    "atomic_temp_fsync_replace": true,
+    "preserve_authorized_v3_paths": true,
+    "resume_unfinished_paths_under_v4": true,
+    "stale_or_unauthorized_hashes_rejected": true
+  },
+  "stress_classification": {
+    "classification": "stress",
+    "marketing_eligible": false,
+    "supported_v1_capacity_changed": false,
+    "failure_does_not_invalidate_supported_matrix": true
+  }
+}

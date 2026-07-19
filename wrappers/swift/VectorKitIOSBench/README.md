@@ -11,6 +11,22 @@ fresh-process, stage, lifecycle, RSS, session, device, power, and thermal
 protocol. Runtime flags never turn the graph-linked product into the graph-free
 lane.
 
+Every automated launch waits until UIKit reports the app as active before it
+enters the benchmark runner. The wait is bounded at 30 seconds, occurs before
+any measured FFI operation or timer starts, and fails closed without emitting
+benchmark evidence if the app never reaches the foreground. Manual launches
+do not use this gate. The Foundation-only gate has a deterministic standalone
+test that can be run with:
+
+```bash
+mkdir -p target/phase4b/foreground-gate-tests
+swiftc \
+  wrappers/swift/VectorKitIOSBench/Shared/ForegroundExecutionGate.swift \
+  benchmarks/device-graph/tests/ForegroundExecutionGateTests.swift \
+  -o target/phase4b/foreground-gate-tests/ForegroundExecutionGateTests
+target/phase4b/foreground-gate-tests/ForegroundExecutionGateTests
+```
+
 Build both release products and inspect their arm64 symbols with:
 
 ```bash

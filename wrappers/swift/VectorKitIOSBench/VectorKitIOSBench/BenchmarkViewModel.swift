@@ -13,7 +13,25 @@ final class BenchmarkViewModel: ObservableObject {
     let memoryPresets = MemoryScenarioPreset.all
 
     func runLaunchScenarioIfPresent() async {
-        if ProcessInfo.processInfo.arguments.contains("--phase4-graph-free-regression") {
+        let arguments = ProcessInfo.processInfo.arguments
+        let isAutomatedBenchmarkLaunch = arguments.contains("--phase4-graph-free-regression")
+            || arguments.contains("--memory-scenario")
+        guard isAutomatedBenchmarkLaunch else {
+            return
+        }
+        guard await ForegroundExecutionGate.waitUntilActive(
+            isActive: { UIApplication.shared.applicationState == .active }
+        ) else {
+            let result = """
+            {"ok":false,"error":"automated benchmark did not reach foreground before timeout","foreground":false,"foreground_wait_outside_measurement":true}
+            """
+            output = result
+            status = "Foreground timeout"
+            summary = "The automated benchmark never reached the foreground."
+            writeBenchmarkResultToStandardOutput(result)
+            exit(2)
+        }
+        if arguments.contains("--phase4-graph-free-regression") {
             UIApplication.shared.isIdleTimerDisabled = true
             let result = await runGraphFreeRegression()
             writeBenchmarkResultToStandardOutput(result)
@@ -21,16 +39,16 @@ final class BenchmarkViewModel: ObservableObject {
         }
         guard
             !memoryScenarioRequiresRelaunch,
-            let flagIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--memory-scenario"),
-            ProcessInfo.processInfo.arguments.indices.contains(flagIndex + 1),
+            let flagIndex = arguments.firstIndex(of: "--memory-scenario"),
+            arguments.indices.contains(flagIndex + 1),
             let preset = MemoryScenarioPreset.find(
-                id: ProcessInfo.processInfo.arguments[flagIndex + 1]
+                id: arguments[flagIndex + 1]
             )
         else {
             return
         }
-        guard !preset.isStress || ProcessInfo.processInfo.arguments.contains("--phase4-100k-preflight-safe") else {
-            let status = ProcessInfo.processInfo.arguments.contains("--phase4-100k-preflight-unsafe")
+        guard !preset.isStress || arguments.contains("--phase4-100k-preflight-safe") else {
+            let status = arguments.contains("--phase4-100k-preflight-unsafe")
                 ? "not_run_memory_safety"
                 : "not_run_preflight_required"
             let result = stressNotRunJSON(preset: preset, status: status)

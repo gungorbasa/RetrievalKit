@@ -16,6 +16,8 @@
 		01A000000000000000000008 /* GraphBenchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000008 /* GraphBenchApp.swift */; };
 		01A000000000000000000009 /* GraphBenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000009 /* GraphBenchmarkView.swift */; };
 		01A00000000000000000000A /* VectorKitGraphFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000A /* VectorKitGraphFFI.xcframework */; };
+		01A00000000000000000000C /* ForegroundExecutionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000C /* ForegroundExecutionGate.swift */; };
+		01A00000000000000000000D /* ForegroundExecutionGate.swift in Graph Sources */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000C /* ForegroundExecutionGate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +32,7 @@
 		01B000000000000000000009 /* GraphBenchmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphBenchmarkView.swift; sourceTree = "<group>"; };
 		01B00000000000000000000A /* VectorKitGraphFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = VectorKitGraphFFI.xcframework; path = ../../../target/apple/VectorKitGraphFFI.xcframework; sourceTree = "<group>"; };
 		01B00000000000000000000B /* VectorKitIOSGraphBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VectorKitIOSGraphBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		01B00000000000000000000C /* ForegroundExecutionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundExecutionGate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +60,7 @@
 			children = (
 				01D000000000000000000002 /* VectorKitIOSBench */,
 				01D000000000000000000005 /* VectorKitIOSGraphBench */,
+				01D000000000000000000006 /* Shared */,
 				01B000000000000000000004 /* VectorKitFFI.xcframework */,
 				01B00000000000000000000A /* VectorKitGraphFFI.xcframework */,
 				01D000000000000000000003 /* Products */,
@@ -90,6 +94,14 @@
 				01B000000000000000000009 /* GraphBenchmarkView.swift */,
 			);
 			path = VectorKitIOSGraphBench;
+			sourceTree = "<group>";
+		};
+		01D000000000000000000006 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				01B00000000000000000000C /* ForegroundExecutionGate.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		01D000000000000000000004 /* Resources */ = {
@@ -194,6 +206,7 @@
 				01A000000000000000000001 /* VectorKitIOSBenchApp.swift in Sources */,
 				01A000000000000000000002 /* BenchmarkView.swift in Sources */,
 				01A000000000000000000003 /* BenchmarkViewModel.swift in Sources */,
+				01A00000000000000000000C /* ForegroundExecutionGate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -203,6 +216,7 @@
 			files = (
 				01A000000000000000000008 /* GraphBenchApp.swift in Sources */,
 				01A000000000000000000009 /* GraphBenchmarkView.swift in Sources */,
+				01A00000000000000000000D /* ForegroundExecutionGate.swift in Graph Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

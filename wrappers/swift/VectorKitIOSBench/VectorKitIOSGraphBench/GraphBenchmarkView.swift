@@ -17,6 +17,13 @@ struct GraphBenchmarkView: View {
         .task {
             if isAutomatedBenchmarkLaunch {
                 UIApplication.shared.isIdleTimerDisabled = true
+                guard await ForegroundExecutionGate.waitUntilActive(
+                    isActive: { UIApplication.shared.applicationState == .active }
+                ) else {
+                    report = foregroundTimeoutResponse()
+                    FileHandle.standardOutput.write(Data("\(report)\n".utf8))
+                    exit(2)
+                }
             }
             report = await GraphHarnessPreflight.run()
             if ProcessInfo.processInfo.arguments.contains("--phase4-graph-preflight")
@@ -28,6 +35,22 @@ struct GraphBenchmarkView: View {
             }
         }
     }
+}
+
+private func foregroundTimeoutResponse() -> String {
+    let value: [String: Any] = [
+        "ok": false,
+        "error": "automated benchmark did not reach foreground before timeout",
+        "foreground": false,
+        "foreground_wait_outside_measurement": true
+    ]
+    guard let data = try? JSONSerialization.data(
+        withJSONObject: value,
+        options: [.prettyPrinted, .sortedKeys]
+    ) else {
+        return "{\"ok\":false,\"error\":\"foreground timeout serialization failed\"}"
+    }
+    return String(decoding: data, as: UTF8.self)
 }
 
 private var isAutomatedBenchmarkLaunch: Bool {

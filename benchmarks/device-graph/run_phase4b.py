@@ -46,6 +46,22 @@ class CollectorError(RuntimeError):
     pass
 
 
+def lifecycle_sample_id(
+    workload: str,
+    encoding: str,
+    operation: str,
+    sample_kind: str,
+    sample: int,
+) -> str:
+    """Return a device-global identity for a lifecycle launch.
+
+    The graph app stores save samples in one Application Support directory,
+    so the launch identity must include the configuration even though host
+    artifacts are already separated by workload and encoding.
+    """
+    return f"{workload}-{encoding}-{operation}-{sample_kind}-{sample:02}"
+
+
 @dataclass(frozen=True)
 class Product:
     role: str
@@ -291,7 +307,9 @@ class Collector:
                 for operation in LIFECYCLE_OPERATIONS:
                     warmup_count = 0 if operation == "cold_load" else 3
                     for sample in range(warmup_count):
-                        sample_id = f"{operation}-warmup-{sample:02}"
+                        sample_id = lifecycle_sample_id(
+                            workload, encoding, operation, "warmup", sample
+                        )
                         self.launch(
                             device_role, self.graph,
                             common + ["--phase4-operation", operation, "--phase4-sample", sample_id],
@@ -299,7 +317,9 @@ class Collector:
                             f"{device_role}/{workload}/{encoding}/{sample_id}",
                         )
                     for sample in range(20):
-                        sample_id = f"{operation}-sample-{sample:02}"
+                        sample_id = lifecycle_sample_id(
+                            workload, encoding, operation, "sample", sample
+                        )
                         self.launch(
                             device_role, self.graph,
                             common + ["--phase4-operation", operation, "--phase4-sample", sample_id],

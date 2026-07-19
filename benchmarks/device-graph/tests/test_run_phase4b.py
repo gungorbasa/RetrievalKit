@@ -41,6 +41,19 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(collector.STRESS, "100k-384d-v3-stress")
         self.assertNotIn("100k-384d-v3-stress", collector.SUPPORTED)
 
+    def test_lifecycle_sample_ids_are_unique_across_configurations(self) -> None:
+        first = collector.lifecycle_sample_id(
+            "10k-384d-v3", "f32", "save", "warmup", 0
+        )
+        second = collector.lifecycle_sample_id(
+            "10k-384d-v3", "i8", "save", "warmup", 0
+        )
+        third = collector.lifecycle_sample_id(
+            "25k-384d-v3", "f32", "save", "warmup", 0
+        )
+        self.assertEqual(first, "10k-384d-v3-f32-save-warmup-00")
+        self.assertEqual(len({first, second, third}), 3)
+
     def test_resume_reuses_only_authorized_prior_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -16,6 +16,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from authorization_lineage import (  # noqa: E402
+    LineageError,
+    is_preserved_v3_path,
+    validate_lineage,
+)
+
 WORKLOAD_IDS = (
     "10k-384d-v3",
     "25k-384d-v3",
@@ -122,6 +132,25 @@ class Workload:
     deleted_chunks: int
     graph_nodes: int
     graph_edges: int
+
+
+@dataclass(frozen=True)
+class EvidenceAuthorization:
+    authorization_sha256: str
+    hashes: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class AuthorizationResolver:
+    artifact_root: Path
+    current: EvidenceAuthorization
+    prior: EvidenceAuthorization | None = None
+
+    def context_for(self, path: Path) -> EvidenceAuthorization:
+        relative_path = path.relative_to(self.artifact_root).as_posix()
+        if self.prior is not None and is_preserved_v3_path(relative_path):
+            return self.prior
+        return self.current
 
 
 class BinaryReader:
@@ -389,13 +418,17 @@ def validate_memory(value: dict[str, Any], label: str) -> None:
 
 def validate_envelope(
     value: dict[str, Any], path: Path, role: str, product: str,
-    authorization_sha256: str, hashes: dict[str, str], process_ids: set[int],
+    authorization: EvidenceAuthorization, process_ids: set[int],
 ) -> None:
+    hashes = authorization.hashes
     require(value.get("ok") is True and value.get("collector_exit_code") == 0, f"{path}: failed attempt")
     require(value.get("atomic_write_completed") is True, f"{path}: atomic write proof missing")
     require(value.get("device_role") == role, f"{path}: device role mismatch")
     require(value.get("host_device_identifier") == hashes["core_device_id"], f"{path}: host device mismatch")
-    require(value.get("authorization_sha256") == authorization_sha256, f"{path}: unauthorized evidence")
+    require(
+        value.get("authorization_sha256") == authorization.authorization_sha256,
+        f"{path}: unauthorized evidence",
+    )
     require(value.get("product_role") == product, f"{path}: product mismatch")
     require(value.get("app_executable_sha256") == hashes[f"{product}_app"], f"{path}: stale app")
     require(value.get("framework_binary_sha256") == hashes[f"{product}_framework"], f"{path}: stale framework")
@@ -405,7 +438,11 @@ def validate_envelope(
     require(environment.get("build_configuration") == "release", f"{path}: release required")
     require(environment.get("device_identifier") == hashes["product_type"], f"{path}: hardware ID mismatch")
     require(environment.get("hardware_model") == hashes["hardware_model"], f"{path}: hardware model mismatch")
-    require(hashes["os_build"] in str(environment.get("os_build")), f"{path}: OS build mismatch")
+    allowed_os_builds = hashes.get("allowed_os_builds", (hashes["os_build"],))
+    require(
+        any(build in str(environment.get("os_build")) for build in allowed_os_builds),
+        f"{path}: OS build mismatch",
+    )
     require(environment.get("thermal_state_start") in ("nominal", "fair"), f"{path}: thermal start invalid")
     require(environment.get("thermal_state_end") in ("nominal", "fair"), f"{path}: thermal end invalid")
     require(environment.get("one_scenario_per_fresh_process") is True, f"{path}: fresh process missing")
@@ -470,11 +507,18 @@ def validate_query_report(value: dict[str, Any], path: Path, workload: str, enco
 
 def validate_lifecycle(
     directory: Path, role: str, workload: str, encoding: str,
-    authorization_sha256: str, hashes: dict[str, str], process_ids: set[int],
+    authorizations: AuthorizationResolver, process_ids: set[int],
 ) -> int:
     prepare_path = directory / "prepare.json"
     prepare = load_json(prepare_path)
-    validate_envelope(prepare, prepare_path, role, "candidate", authorization_sha256, hashes, process_ids)
+    validate_envelope(
+        prepare,
+        prepare_path,
+        role,
+        "candidate",
+        authorizations.context_for(prepare_path),
+        process_ids,
+    )
     validate_memory(prepare.get("memory_evidence", {}), str(prepare_path))
     persisted = prepare.get("report", {}).get("persisted_components", {})
     component_keys = ("corpus_chunks_bytes", "vectors_quantization_bytes", "lexical_bm25_bytes", "graph_schema_bytes", "manifest_validation_bytes")
@@ -488,7 +532,14 @@ def validate_lifecycle(
         require(len(samples) == 20, f"{operation_root}: lifecycle sample mismatch")
         for path in warmups + samples:
             value = load_json(path)
-            validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+            validate_envelope(
+                value,
+                path,
+                role,
+                "candidate",
+                authorizations.context_for(path),
+                process_ids,
+            )
             report = value.get("report", {})
             require(report.get("artifact_type") == "phase4b_device_lifecycle_sample", f"{path}: lifecycle artifact mismatch")
             require(report.get("workload_id") == workload and report.get("encoding") == encoding, f"{path}: lifecycle config mismatch")
@@ -501,8 +552,7 @@ def validate_lifecycle(
 
 
 def validate_graph_free(
-    root: Path, role: str, authorization_sha256: str, hashes: dict[str, str],
-    process_ids: set[int],
+    root: Path, role: str, authorizations: AuthorizationResolver, process_ids: set[int],
 ) -> tuple[int, dict[str, float]]:
     count = 0
     regressions: dict[str, float] = {}
@@ -514,7 +564,14 @@ def validate_graph_free(
             reports = []
             for path in paths:
                 value = load_json(path)
-                validate_envelope(value, path, role, product, authorization_sha256, hashes, process_ids)
+                validate_envelope(
+                    value,
+                    path,
+                    role,
+                    product,
+                    authorizations.context_for(path),
+                    process_ids,
+                )
                 report = value.get("report", {})
                 require(report.get("artifact_type") == "phase4b_graph_free_regression_session", f"{path}: graph-free artifact mismatch")
                 require(report.get("workload_id") == "10k-384d-v3" and report.get("encoding") == encoding, f"{path}: graph-free config mismatch")
@@ -570,10 +627,36 @@ def validate_authorization(
 def validate_device_sessions(
     repo: Path, root: Path, authorization_path: Path, base_binary: Path, graph_binary: Path,
     base_framework: Path, graph_framework: Path,
+    prior_authorization_path: Path | None = None,
+    prior_base_binary: Path | None = None,
+    prior_graph_binary: Path | None = None,
+    prior_base_framework: Path | None = None,
+    prior_graph_framework: Path | None = None,
 ) -> dict[str, Any]:
     authorization, authorization_sha256 = validate_authorization(
         repo, authorization_path, base_binary, graph_binary, base_framework, graph_framework,
     )
+    prior_authorization: dict[str, Any] | None = None
+    prior_authorization_sha256: str | None = None
+    if authorization.get("evidence_lineage") is not None:
+        require(prior_authorization_path is not None, "lineage requires --prior-authorization")
+        require(prior_base_binary is not None, "lineage requires --prior-base-binary")
+        require(prior_graph_binary is not None, "lineage requires --prior-graph-binary")
+        require(prior_base_framework is not None, "lineage requires --prior-base-framework")
+        require(prior_graph_framework is not None, "lineage requires --prior-graph-framework")
+        prior_authorization, prior_authorization_sha256 = validate_authorization(
+            repo,
+            prior_authorization_path,
+            prior_base_binary,
+            prior_graph_binary,
+            prior_base_framework,
+            prior_graph_framework,
+        )
+        validate_linkage(prior_base_binary, prior_graph_binary)
+        try:
+            validate_lineage(authorization, prior_authorization_sha256, root)
+        except LineageError as error:
+            raise ValidationError(str(error)) from error
     validate_linkage(base_binary, graph_binary)
     devices_root = root / "devices"
     require(devices_root.is_dir(), "Phase 4b requires a device-scoped 'devices' root")
@@ -589,7 +672,7 @@ def validate_device_sessions(
         registered = authorized_devices.get(role, {})
         require(registered.get("marketing_name") == model and registered.get("product_type") == identifier, f"{role}: authorization device mismatch")
         products = authorization["products"]
-        hashes = {
+        current_hashes = {
             "core_device_id": registered["core_device_id"], "product_type": identifier,
             "hardware_model": registered["hardware_model"], "os_build": registered["os_build"],
             "baseline_app": products["baseline"]["app_executable_sha256"],
@@ -597,6 +680,31 @@ def validate_device_sessions(
             "candidate_app": products["candidate"]["app_executable_sha256"],
             "candidate_framework": products["candidate"]["framework_binary_sha256"],
         }
+        current_context = EvidenceAuthorization(authorization_sha256, current_hashes)
+        prior_context = None
+        if prior_authorization is not None and prior_authorization_sha256 is not None:
+            prior_registered = prior_authorization.get("devices", {}).get(role, {})
+            require(
+                prior_registered.get("marketing_name") == model
+                and prior_registered.get("product_type") == identifier,
+                f"{role}: prior authorization device mismatch",
+            )
+            prior_products = prior_authorization["products"]
+            prior_hashes = {
+                "core_device_id": prior_registered["core_device_id"],
+                "product_type": identifier,
+                "hardware_model": prior_registered["hardware_model"],
+                "os_build": prior_registered["os_build"],
+                "allowed_os_builds": tuple(
+                    authorization["evidence_lineage"]["prior_allowed_os_builds"]
+                ),
+                "baseline_app": prior_products["baseline"]["app_executable_sha256"],
+                "baseline_framework": prior_products["baseline"]["framework_binary_sha256"],
+                "candidate_app": prior_products["candidate"]["app_executable_sha256"],
+                "candidate_framework": prior_products["candidate"]["framework_binary_sha256"],
+            }
+            prior_context = EvidenceAuthorization(prior_authorization_sha256, prior_hashes)
+        authorizations = AuthorizationResolver(root, current_context, prior_context)
         process_ids: set[int] = set()
         count = 0
         for workload in SUPPORTED_WORKLOAD_IDS:
@@ -607,16 +715,23 @@ def validate_device_sessions(
                 identities = []
                 for path in sessions:
                     value = load_json(path)
-                    validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+                    validate_envelope(
+                        value,
+                        path,
+                        role,
+                        "candidate",
+                        authorizations.context_for(path),
+                        process_ids,
+                    )
                     identities.append(validate_query_report(value, path, workload, encoding))
                     count += 1
                 require(len(set(identities)) == 1, f"{role}/{workload}/{encoding}: session identity drift")
                 count += validate_lifecycle(
                     config_root / "lifecycle", role, workload, encoding,
-                    authorization_sha256, hashes, process_ids,
+                    authorizations, process_ids,
                 )
         graph_count, ratios = validate_graph_free(
-            device_root / "graph-free", role, authorization_sha256, hashes, process_ids,
+            device_root / "graph-free", role, authorizations, process_ids,
         )
         count += graph_count
         graph_free_regressions[role] = ratios
@@ -625,16 +740,37 @@ def validate_device_sessions(
             for encoding in ("f32", "i8"):
                 config_root = stress_root / STRESS_WORKLOAD_ID / encoding
                 preflight = load_json(config_root / "preflight.json")
-                validate_envelope(preflight, config_root / "preflight.json", role, "candidate", authorization_sha256, hashes, process_ids)
+                validate_envelope(
+                    preflight,
+                    config_root / "preflight.json",
+                    role,
+                    "candidate",
+                    authorizations.context_for(config_root / "preflight.json"),
+                    process_ids,
+                )
                 require(preflight.get("classification") == "stress" and preflight.get("marketing_eligible") is False, "100K preflight classification mismatch")
                 sessions = sorted((config_root / "query").glob("session-*.json"))
                 require(len(sessions) == 5, f"{role}/100K/{encoding}: five query sessions required")
                 for path in sessions:
                     value = load_json(path)
-                    validate_envelope(value, path, role, "candidate", authorization_sha256, hashes, process_ids)
+                    validate_envelope(
+                        value,
+                        path,
+                        role,
+                        "candidate",
+                        authorizations.context_for(path),
+                        process_ids,
+                    )
                     validate_query_report(value, path, STRESS_WORKLOAD_ID, encoding)
                     count += 1
-                count += validate_lifecycle(config_root / "lifecycle", role, STRESS_WORKLOAD_ID, encoding, authorization_sha256, hashes, process_ids)
+                count += validate_lifecycle(
+                    config_root / "lifecycle",
+                    role,
+                    STRESS_WORKLOAD_ID,
+                    encoding,
+                    authorizations,
+                    process_ids,
+                )
         else:
             require(
                 not stress_root.exists(),
@@ -675,6 +811,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-framework", type=Path)
     parser.add_argument("--graph-framework", type=Path)
     parser.add_argument("--authorization", type=Path)
+    parser.add_argument("--prior-authorization", type=Path)
+    parser.add_argument("--prior-base-binary", type=Path)
+    parser.add_argument("--prior-graph-binary", type=Path)
+    parser.add_argument("--prior-base-framework", type=Path)
+    parser.add_argument("--prior-graph-framework", type=Path)
     return parser.parse_args()
 
 
@@ -698,6 +839,11 @@ def main() -> int:
                 args.repo.resolve(), args.artifact_root.resolve(), args.authorization.resolve(),
                 args.base_binary.resolve(), args.graph_binary.resolve(),
                 args.base_framework.resolve(), args.graph_framework.resolve(),
+                args.prior_authorization.resolve() if args.prior_authorization else None,
+                args.prior_base_binary.resolve() if args.prior_base_binary else None,
+                args.prior_graph_binary.resolve() if args.prior_graph_binary else None,
+                args.prior_base_framework.resolve() if args.prior_base_framework else None,
+                args.prior_graph_framework.resolve() if args.prior_graph_framework else None,
             )
             result = {
                 "ok": True,

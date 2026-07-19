@@ -41,6 +41,31 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(collector.STRESS, "100k-384d-v3-stress")
         self.assertNotIn("100k-384d-v3-stress", collector.SUPPORTED)
 
+    def test_resume_reuses_only_authorized_prior_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            instance = collector.Collector.__new__(collector.Collector)
+            instance.root = root
+            instance.authorization_sha256 = "4" * 64
+            instance.lineage = {"prior_authorization_sha256": "3" * 64}
+            preserved = root / (
+                "devices/iphone17-pro-max/supported/10k-384d-v3/f32/"
+                "query/session-00.json"
+            )
+            collector.atomic_json(preserved, {"authorization_sha256": "3" * 64})
+            self.assertEqual(
+                instance.reusable_evidence(preserved)["authorization_sha256"],
+                "3" * 64,
+            )
+
+            unfinished = root / (
+                "devices/iphone17-pro-max/supported/10k-384d-v3/f32/"
+                "lifecycle/read_only_validation/warmup-00.json"
+            )
+            collector.atomic_json(unfinished, {"authorization_sha256": "3" * 64})
+            with self.assertRaises(collector.CollectorError):
+                instance.reusable_evidence(unfinished)
+
 
 if __name__ == "__main__":
     unittest.main()

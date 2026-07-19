@@ -121,6 +121,17 @@ implemented, or superseded by the product spec.
   read-only-validation artifact. Disclose this distinction in the final Phase
   4b report.
 
+  Owner-approved Phase 4b foreground/lineage decision (2026-07-19): after
+  three preserved `read_only_validation` attempts completed while UIKit still
+  reported background state, add a bounded pre-measure foreground gate to both
+  isolated benchmark apps and reauthorize them as v4. Preserve the 77 accepted
+  v3 query/prepare/build/save artifacts byte-for-byte under their original
+  authorization. Their closed artifact-set SHA-256 is
+  `a7d021e0b45fbd2a722482af44428335eac0d8ab188032676c4643e051e7a9dc`.
+  Use v4 only for unfinished paths, validate both authorization and executable
+  identities, and update the apps in place without erasing persisted state.
+  See `docs/product/target-device-graph-benchmark-contract-v1-amendment-2.md`.
+
 ## Active Product Constraints
 
 - VectorKit is local-first retrieval for mobile/desktop, with iOS/macOS as the

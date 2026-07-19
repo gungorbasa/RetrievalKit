@@ -83,9 +83,10 @@ class ValidatorTests(unittest.TestCase):
             "candidate_app": "a" * 64, "candidate_framework": "b" * 64,
         }
         value = device_envelope(hashes)
+        authorization = validator.EvidenceAuthorization("c" * 64, hashes)
         validator.validate_envelope(
-            value, Path("artifact.json"), "iphone17-pro-max", "candidate", "c" * 64,
-            hashes, set(),
+            value, Path("artifact.json"), "iphone17-pro-max", "candidate",
+            authorization, set(),
         )
         mutations = []
         simulated = json.loads(json.dumps(value))
@@ -98,9 +99,29 @@ class ValidatorTests(unittest.TestCase):
         for mutation in mutations:
             with self.subTest(), self.assertRaises(validator.ValidationError):
                 validator.validate_envelope(
-                    mutation, Path("bad.json"), "iphone17-pro-max", "candidate", "c" * 64,
-                    hashes, set(),
+                    mutation, Path("bad.json"), "iphone17-pro-max", "candidate",
+                    authorization, set(),
                 )
+
+    def test_authorization_resolver_uses_prior_only_for_frozen_v3_paths(self) -> None:
+        root = Path("/artifacts")
+        current = validator.EvidenceAuthorization("4" * 64, {})
+        prior = validator.EvidenceAuthorization("3" * 64, {})
+        resolver = validator.AuthorizationResolver(root, current, prior)
+        prior_path = root / (
+            "devices/iphone17-pro-max/supported/25k-384d-v3/i8/"
+            "query/session-04.json"
+        )
+        current_path = root / (
+            "devices/iphone17-pro-max/supported/10k-384d-v3/f32/"
+            "lifecycle/read_only_validation/warmup-00.json"
+        )
+        self.assertIs(resolver.context_for(prior_path), prior)
+        self.assertIs(resolver.context_for(current_path), current)
+        self.assertIs(
+            validator.AuthorizationResolver(root, current).context_for(prior_path),
+            current,
+        )
 
     def test_phase4b_matrix_is_iphone17_only(self) -> None:
         self.assertEqual(

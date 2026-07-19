@@ -16,6 +16,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from authorization_lineage import (  # noqa: E402
+    LineageError,
+    is_preserved_v3_path,
+    validate_lineage,
+)
+
 DEVICES = {
     "iphone17-pro-max": "E342200A-C959-5384-A846-24F4163E5722",
 }
@@ -118,6 +128,15 @@ class Collector:
         self.authorization_path = args.authorization.resolve()
         self.authorization = json.loads(self.authorization_path.read_text(encoding="utf-8"))
         self.authorization_sha256 = sha256_file(self.authorization_path)
+        self.lineage = self.authorization.get("evidence_lineage")
+        if self.lineage is not None:
+            prior_sha256 = self.lineage.get("prior_authorization_sha256")
+            if not isinstance(prior_sha256, str):
+                raise CollectorError("authorization lineage is missing its prior hash")
+            try:
+                validate_lineage(self.authorization, prior_sha256, self.root)
+            except LineageError as error:
+                raise CollectorError(str(error)) from error
         self.base = product(args.base_app.resolve(), args.base_framework.resolve(), "baseline")
         self.graph = product(args.graph_app.resolve(), args.graph_framework.resolve(), "candidate")
         expected = self.authorization.get("products", {})
@@ -127,6 +146,38 @@ class Collector:
                 raise CollectorError(f"{item.role} executable differs from authorization")
             if registered.get("framework_binary_sha256") != item.framework_sha256:
                 raise CollectorError(f"{item.role} framework differs from authorization")
+
+    def reusable_evidence(self, destination: Path) -> dict[str, Any] | None:
+        if not destination.exists():
+            return None
+        try:
+            value = json.loads(destination.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise CollectorError(f"existing evidence is unreadable: {destination}") from error
+        if not isinstance(value, dict):
+            raise CollectorError(f"existing evidence is not a JSON object: {destination}")
+
+        relative_path = destination.relative_to(self.root).as_posix()
+        evidence_authorization = value.get("authorization_sha256")
+        if evidence_authorization == self.authorization_sha256:
+            environment = value.get("environment", {})
+            if (
+                value.get("ok") is True
+                and value.get("collector_exit_code") == 0
+                and value.get("atomic_write_completed") is True
+                and environment.get("foreground") is True
+            ):
+                return value
+            raise CollectorError(f"existing current-authorization evidence is invalid: {destination}")
+
+        prior_sha256 = (
+            self.lineage.get("prior_authorization_sha256")
+            if isinstance(self.lineage, dict)
+            else None
+        )
+        if evidence_authorization == prior_sha256 and is_preserved_v3_path(relative_path):
+            return value
+        raise CollectorError(f"existing evidence is outside the authorized lineage: {destination}")
 
     def install(self) -> None:
         for device in DEVICES.values():
@@ -146,6 +197,9 @@ class Collector:
         scenario_id: str,
         timeout: int = 3_600,
     ) -> dict[str, Any]:
+        reusable = self.reusable_evidence(destination)
+        if reusable is not None:
+            return reusable
         device = DEVICES[device_role]
         command = [
             "xcrun", "devicectl", "device", "process", "launch", "--quiet", "--console",
@@ -303,7 +357,13 @@ def main() -> int:
                 raise CollectorError("100K stress is iPhone-17-only")
             collector.query_matrix(args.device_role, stress=True)
             collector.lifecycle_matrix(args.device_role, stress=True)
-    except (CollectorError, OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+    except (
+        CollectorError,
+        LineageError,
+        OSError,
+        subprocess.SubprocessError,
+        json.JSONDecodeError,
+    ) as error:
         print(json.dumps({"ok": False, "error": str(error)}, sort_keys=True), file=sys.stderr)
         return 1
     return 0

@@ -70,10 +70,19 @@ graph edges, query specifications, and expected graph paths.
 The development split is `phase5-development-v1`. It may be used only for
 adapter correctness and ANN configuration checks. The final local comparison
 split is `phase5-mac-comparison-v1`; it has different seeds and must not change
-after any result from that split is inspected. The frozen USearch parameters
-are connectivity `16`, build expansion `128`, search expansion `128`, F32
-storage, one build thread, and one search thread. Phase 5 has no per-workload or
-per-query tuning.
+after any result from that split is inspected. The final frozen USearch
+parameters are connectivity `16`, build expansion `128`, search expansion
+`512`, F32 storage, one build thread, and one search thread. Phase 5 has no
+per-workload or per-query tuning.
+
+Contract revision 2 was frozen before the final split was run. Revision 1 used
+search expansion `128`; the development-only workload produced mean Recall@10
+of `0.9875`, below the unchanged `0.99` gate. Revision 2 therefore increases
+only search expansion to `512`. The failed development artifact is preserved as
+diagnostic evidence but is not comparison evidence. Connectivity, build
+expansion, storage, thread count, workload definitions, final seeds, and the
+recall gate did not change. No final-split result was inspected before this
+revision was committed.
 
 The final workload IDs are `10k-384d-v1`, `25k-384d-v1`, and
 `50k-384d-v1`. The 50K row is boundary benchmark evidence only and does not

@@ -27,12 +27,12 @@ swiftc \
 target/phase4b/foreground-gate-tests/ForegroundExecutionGateTests
 ```
 
-Phase 4b resumed after the foreground fix uses authorization v4 while
-preserving the completed v3 paths in the same artifact root. Install the v4
-apps as an in-place update; never uninstall them or erase Application Support.
-The collector verifies the complete 77-file v3 set before it can resume and
-skips those files without rewriting them. A final split-lineage validation
-must provide both binary generations:
+Phase 4b resumed after the foreground fix under authorization v4 while
+preserving the completed v3 paths in the same artifact root. That collection
+is now closed. Do not install, launch, or resume either physical-device
+benchmark for Phase 4b. Final split-lineage validation supplies both historical
+binary generations plus the validation-only device-safety cancellation
+authorization:
 
 ```bash
 python3 benchmarks/device-graph/validate_artifacts.py \
@@ -48,7 +48,8 @@ python3 benchmarks/device-graph/validate_artifacts.py \
   --prior-base-binary target/phase4b/final-cb87477/Build/Products/Release-iphoneos/VectorKitIOSBench.app/VectorKitIOSBench \
   --prior-graph-binary target/phase4b/final-cb87477/Build/Products/Release-iphoneos/VectorKitIOSGraphBench.app/VectorKitIOSGraphBench \
   --prior-base-framework target/apple/VectorKitFFI.xcframework/ios-arm64/VectorKitFFI.framework/VectorKitFFI \
-  --prior-graph-framework target/apple/VectorKitGraphFFI.xcframework/ios-arm64/VectorKitGraphFFI.framework/VectorKitGraphFFI
+  --prior-graph-framework target/apple/VectorKitGraphFFI.xcframework/ios-arm64/VectorKitGraphFFI.framework/VectorKitGraphFFI \
+  --stress-cancellation-authorization benchmarks/device-graph/phase4b-device-safety-cancellation-authorization-v1.json
 ```
 
 Build both release products and inspect their arm64 symbols with:
@@ -118,10 +119,12 @@ To start one preset automatically, add an Xcode scheme launch argument:
 --memory-scenario 24k-384d-i8-hybrid-t25
 ```
 
-The release harness also exposes the experimental
+The release harness contains the historical experimental
 `100k-384d-v3-stress-f32` and `100k-384d-v3-stress-i8` presets for iPhone 17
-Pro Max. They are not V1 product workloads. First run the Phase 4b preflight
-against the closed fixture manifest and Apple M1 Max correctness report:
+Pro Max. They are not V1 product workloads. Phase 4b execution of those presets
+was permanently canceled for device safety under Contract V1 Amendment 3. Do
+not run the preflight or either preset for the closed qualification. The
+following describes the historical, pre-cancellation protocol only:
 
 ```bash
 cargo run --release -p vectorkit-cli -- bench phase4 preflight \

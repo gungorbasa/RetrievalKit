@@ -1,9 +1,9 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–3 and Phase 4a complete; Phase 4b supported-product
-device qualification passed, full contract incomplete after stress cancellation
+Status: active; Phases 0–4 complete; Phase 4b closed under the device-safety
+terminal-outcome amendment; Phase 5 not started
 
-Date: 2026-07-17
+Date: 2026-07-20
 
 ## Purpose
 
@@ -399,12 +399,13 @@ and atomically publishes the exact 44-file public layout. Two fresh emissions
 are byte-identical. Phase 2 is complete: the selected HotpotQA adapter was
 built twice, independently validated, production-ingested, compared
 byte-for-byte, and atomically published under ignored local output. Phase 3 is
-complete on development and locked test data. Phase 4 is active. Phase 4a's
+complete on development and locked test data. Phase 4 is complete. Phase 4a's
 full four-workload implementation, Apple M1 Max qualification, isolated iOS
-harnesses, and independent validation are complete; Phase 4b supported-product
-physical-device qualification passes, but the full contract remains incomplete
-after owner cancellation of the 100K diagnostic lane for excessive device
-heat.
+harnesses, and independent validation are complete. Phase 4b supported-product
+physical-device qualification passes. After owner cancellation of the 100K
+diagnostic lane for excessive device heat, Contract V1 Amendment 3 closes that
+lane as `not_run_device_safety` through a separate validation-only
+authorization. This is not a 100K benchmark result or claim.
 
 The Phase 1.2c completeness review is also closed. Classified execution
 failures now serialize canonical query-local or run-wide `invalid_execution`
@@ -552,7 +553,7 @@ device-performance claim.
 
 ### Phase 4: Add Target-Device Graph Benchmarks
 
-Status: active. Phase 4a pre-registered and implemented the deterministic 10K,
+Status: complete on 2026-07-20. Phase 4a pre-registered and implemented the deterministic 10K,
 25K, and 50K supported-product workloads plus the separately classified
 `100k-384d-v3-stress` workload. All four passed two-generation byte
 determinism, independent validation, Apple M1 Max F32/I8 correctness and
@@ -566,8 +567,12 @@ rewriting the 77 accepted v3 artifacts. All 12 graph-free baseline/candidate
 sessions also pass the identity, zero-graph-counter, and maximum `1.03`
 median-P95 ratio gates. The owner permanently canceled eligible 100K stress
 execution after excessive device heat. The supported-product result is PASS,
-but the full frozen validator result is incomplete because stress preflight is
-absent. See
+and Amendment 3 defines the distinct terminal outcome
+`not_run_device_safety`. With cancellation authorization SHA-256
+`926cfa543889cabbedf591d9de3e98d5bfe57886e0a31baa0595bf88e6785e07`,
+the validator reports supported `passed`, graph-free `passed`, stress
+`not_run_device_safety`, and amended Phase 4b closeout `passed`. Without that
+authorization, missing stress evidence continues to fail closed. See
 `docs/product/reports/phase-4b-device-qualification-report.md`.
 Older-device qualification is optional future work and does not block this
 gate.
@@ -590,6 +595,8 @@ Exit gate:
   budgets
 
 ### Phase 5: Build External Reference Implementations
+
+Status: not started.
 
 Deliverables:
 

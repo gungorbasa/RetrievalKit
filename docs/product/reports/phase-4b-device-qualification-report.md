@@ -1,9 +1,9 @@
 # Phase 4b Physical-Device Qualification Report
 
 Date: 2026-07-20
-Status: supported-product qualification passed; full Phase 4b contract
-incomplete because the 100K diagnostic stress lane was canceled for device
-safety
+Status: Phase 4b closeout passed under Contract V1 Amendments 1-3;
+supported-product qualification passed and the 100K diagnostic lane terminated
+as `not_run_device_safety`
 
 ## Current result
 
@@ -19,12 +19,32 @@ replay samples preserve behavioral equivalence.
 The supported canonical sorted path/SHA-256 set contains 846 files and hashes
 to `f62a0e69c320b5b37d446c96d37f53693ea9e6e4ea2a238a1bffdff06636c93a`.
 The standalone Phase 4b validator accepts the complete supported and graph-free
-matrices and stops only at the absent stress preflight. The 100K diagnostic
-lane was permanently canceled at the owner's direction after the physical
-device became excessively hot. Under the frozen contract, 100K cannot satisfy
-or fail the supported-product gate, so the supported-product result is PASS.
-The same contract requires eligible stress evidence for a full Phase 4b
-validator result, so the full contract result is incomplete rather than PASS.
+matrices. The 100K diagnostic lane was permanently canceled at the owner's
+direction after the physical device became excessively hot. Contract V1
+Amendment 3 adds the distinct terminal outcome `not_run_device_safety` without
+changing the original complete-evidence path. With the explicit cancellation
+authorization supplied, the amended closeout result is:
+
+```text
+supported_product_qualification: passed
+graph_free_qualification: passed
+stress_outcome: not_run_device_safety
+phase4b_closeout: passed
+```
+
+Without that authorization, the validator continues to fail closed at the
+absent F32 stress preflight. The cancellation is not a stress benchmark PASS
+and creates no support, performance, quality, latency, product, capacity, or
+marketing claim.
+
+Amendment 3 is
+`docs/product/target-device-graph-benchmark-contract-v1-amendment-3.md`,
+SHA-256
+`656c6065c95e7ea85928dacb81eaca423b5ddbfb827b45bf13b31798dd958133`.
+The validation-only cancellation authorization is
+`benchmarks/device-graph/phase4b-device-safety-cancellation-authorization-v1.json`,
+SHA-256
+`926cfa543889cabbedf591d9de3e98d5bfe57886e0a31baa0595bf88e6785e07`.
 
 ## Device and evidence lineage
 
@@ -151,9 +171,20 @@ stress result and cannot be promoted, relabeled, or used for support or
 marketing.
 
 This cancellation does not change the V1 fewer-than-50K product boundary or
-the supported 10K/25K/50K result. It does prevent the frozen full Phase 4b
-validator from returning PASS: after accepting the supported and graph-free
-evidence, it fails closed because the F32 stress preflight is absent.
+the supported 10K/25K/50K result. The original complete-stress validation path
+still requires every eligible F32/I8 file. Amendment 3 supplies a mutually
+exclusive validation-only terminal path: the accepted stress tree must be
+empty, the cancellation authorization must bind the v4 execution authorization
+and Amendment 3 identities, and all preserved partial files must verify only
+under the declared rejected directory.
+
+The cancellation manifest SHA-256 is
+`7ec3ace45e50efbb5581fce231edb61d5695e44fa27a9ae81599ae6dcad537c0`.
+Its five-entry canonical original-path/SHA-256 set hashes to
+`4f10af25f57cb405e85febeb8feb98eba0313b38d10e757b4e52950611ae1b68`.
+The validator independently confirms that no accepted stress file, symlink, or
+other non-directory entry exists and that the rejected cancellation directory
+contains exactly the manifest plus the five declared partial files.
 
 ## Rejected and canceled evidence
 
@@ -173,22 +204,30 @@ side identity.
 No rejected artifact was promoted or relabeled. Cooling pauses were used
 between fresh processes and are excluded from measured durations.
 
-## Verification at this milestone
+## Final verification
 
-- 15 standalone device-tool Python tests pass.
+- 21 standalone device-tool Python tests pass, including complete stress,
+  authorized cancellation, unauthorized missing evidence, malformed
+  cancellation, partial accepted evidence, and prohibited-claim cases.
 - Python compilation and Ruff pass for `benchmarks/device-graph`.
 - The standalone Swift foreground-gate test passes.
 - `cargo fmt --all --check` and the eight `vectorkit-phase4-bench` tests pass.
 - Isolated iOS release linkage and all authorized app/framework hashes pass.
 - Independent inventory confirms 846 accepted supported artifacts and 846
   unique process IDs.
-- The split-lineage validator accepts supported and graph-free evidence and
-  fails closed at the intentionally absent stress preflight.
+- The split-lineage validator reports supported-product qualification
+  `passed`, graph-free qualification `passed`, stress outcome
+  `not_run_device_safety`, and Phase 4b closeout `passed` when the exact
+  cancellation authorization is supplied.
+- The same validator still fails closed at the intentionally absent F32 stress
+  preflight when the cancellation authorization is omitted.
 - The accepted stress tree contains zero files; the five partial stress files
   and cancellation manifest are preserved only as rejected evidence.
 
-Supported-product physical-device qualification is complete and passes. Full
-Phase 4b contract qualification remains incomplete because the diagnostic
-100K lane was canceled; it must not be reported as a full validator PASS. No
-production Rust, FFI, Swift API, frozen fixture, workload, threshold, support
-boundary, or marketing classification changed.
+Supported-product physical-device qualification is complete and passes.
+Phase 4b is closed under active Amendments 1-3 with the 100K lane explicitly
+classified `not_run_device_safety`. This closeout must not be reported as a
+100K execution or benchmark PASS. No production Rust, FFI, Swift API, frozen
+fixture, workload, threshold, support boundary, prior authorization identity,
+accepted artifact, or marketing classification changed. No physical-device
+benchmark was installed, launched, resumed, or executed for this amendment.

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "artifact_type": "phase4b_device_safety_cancellation_authorization",
+  "authorized_at_utc": "2026-07-20T19:09:26Z",
+  "authorized_by": "repository_owner",
+  "authorization_scope": "validation_only",
+  "contract_amendment": {
+    "path": "docs/product/target-device-graph-benchmark-contract-v1-amendment-3.md",
+    "sha256": "656c6065c95e7ea85928dacb81eaca423b5ddbfb827b45bf13b31798dd958133"
+  },
+  "execution_authorization_sha256": "4f7aab9657bb836e4e434cd701e70ed55dc2cd1adfd4b4d4ec46178f1d76702f",
+  "device_role": "iphone17-pro-max",
+  "workload_id": "100k-384d-v3-stress",
+  "terminal_outcome": "not_run_device_safety",
+  "classification": "stress",
+  "reason_category": "excessive_device_heat",
+  "further_device_execution_authorized": false,
+  "accepted_evidence": {
+    "supported_artifact_count": 846,
+    "supported_artifact_set_sha256": "f62a0e69c320b5b37d446c96d37f53693ea9e6e4ea2a238a1bffdff06636c93a",
+    "graph_free_artifact_count": 12,
+    "graph_free_artifact_set_sha256": "6ea55b935ea79933f1ec64d77e88438682d2ae613c7fc0c92c863d58e91f4f3a",
+    "stress_artifact_count": 0
+  },
+  "rejected_evidence": {
+    "directory": "rejected/iphone17-pro-max/canceled-by-user/20260720T190926Z",
+    "cancellation_manifest_sha256": "7ec3ace45e50efbb5581fce231edb61d5695e44fa27a9ae81599ae6dcad537c0",
+    "preserved_partial_artifact_count": 5,
+    "preserved_partial_artifact_set_sha256": "4f10af25f57cb405e85febeb8feb98eba0313b38d10e757b4e52950611ae1b68",
+    "promotion_allowed": false,
+    "count_as_accepted": false
+  },
+  "claim_eligibility": {
+    "support": false,
+    "performance": false,
+    "quality": false,
+    "latency": false,
+    "product": false,
+    "marketing": false,
+    "supported_v1_capacity_changed": false
+  }
+}

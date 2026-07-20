@@ -85,15 +85,15 @@ implemented, or superseded by the product spec.
   matched exactly. Three attempts are disclosed, with no result root from the
   two failed evaluator attempts. See
   `docs/product/reports/hotpotqa-phase-3-locked-reporting-report.md`. Benchmark
-  Phase 3 is complete. Phase 4 is active and Phase 4a is complete:
+  Phase 3 is complete. Phase 4a and Phase 4b are complete:
   deterministic 10K/25K/50K supported-product workloads and
   `100k-384d-v3-stress` share one frozen
   generator/policy; all four fixture/manifest pairs reproduce byte-identically,
   and independent validation, Apple M1 Max F32/I8 correctness and
   persistence/replay, staged instrumentation, memory estimation, isolated iOS
   harness builds, and linkage checks pass. Phase 4b physical-device execution
-  is closed on iPhone 17 Pro Max with a supported-product PASS and an
-  incomplete full-contract result. The supported query matrix is complete with
+  is closed on iPhone 17 Pro Max with a supported-product PASS. The supported
+  query matrix is complete with
   30 thermally valid sessions across 10K/25K/50K F32/I8, and all 816 supported
   lifecycle artifacts are complete with unique process IDs, valid thermal and
   foreground boundaries, operation-specific correctness, exact component
@@ -102,9 +102,11 @@ implemented, or superseded by the product spec.
   maximum `1.03` median-P95 ratio gates. The owner permanently canceled the
   eligible 100K diagnostic stress lane after reporting excessive device heat;
   the accepted stress tree is empty and the five partial F32 artifacts are
-  preserved only as timestamped rejected evidence. The frozen validator
-  therefore passes the supported and graph-free matrices and fails closed at
-  the absent stress preflight. See
+  preserved only as timestamped rejected evidence. Contract V1 Amendment 3
+  defines the validation-only terminal outcome `not_run_device_safety` while
+  retaining complete F32/I8 stress evidence as the normal alternative. The
+  validator passes the amended closeout only with the exact cancellation
+  authorization; without it, the absent F32 preflight still fails closed. See
   `docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row
   is diagnostic,
   must remain labeled `stress`, and does
@@ -114,10 +116,19 @@ implemented, or superseded by the product spec.
 
   Owner-directed Phase 4b stress cancellation (2026-07-20): do not resume the
   `100k-384d-v3-stress` physical-device lane. The user stopped it permanently
-  because the iPhone became excessively hot. This leaves the supported-product
-  qualification passed but the full Phase 4b contract incomplete; do not
-  report a full validator PASS and do not change the frozen contract, support
-  boundary, or marketing classification to conceal the missing stress lane.
+  because the iPhone became excessively hot. Amendment 3 is SHA-256
+  `656c6065c95e7ea85928dacb81eaca423b5ddbfb827b45bf13b31798dd958133`.
+  The validation-only cancellation authorization is SHA-256
+  `926cfa543889cabbedf591d9de3e98d5bfe57886e0a31baa0595bf88e6785e07`.
+  It binds v4 unchanged, the 846 supported artifacts at
+  `f62a0e69c320b5b37d446c96d37f53693ea9e6e4ea2a238a1bffdff06636c93a`,
+  the 12 graph-free artifacts at
+  `6ea55b935ea79933f1ec64d77e88438682d2ae613c7fc0c92c863d58e91f4f3a`,
+  zero accepted stress artifacts, and the five partial files only as rejected
+  evidence. The result is supported `passed`, graph-free `passed`, stress
+  `not_run_device_safety`, and amended Phase 4b closeout `passed`. Never
+  describe this as a 100K execution or benchmark PASS, and do not change the
+  support boundary or marketing classification.
 
   Owner-approved Phase 4b reporting variance (2026-07-19): retain the current
   iPhone 17 evidence without rerunning solely because the device moved within
@@ -163,8 +174,9 @@ implemented, or superseded by the product spec.
   path/SHA-256 set for these 23 artifacts is
   `0567349fd68661cdbd84415c76ef31531f00336a66aaef5937fee6c4187866ad`.
   Measured operation durations ranged from 125,176,208 to 129,478,458 ns
-  (median 127,407,646 ns). Remaining lifecycle, graph-free, and stress lanes
-  still require execution and final split-lineage validation.
+  (median 127,407,646 ns). The remaining supported lifecycle and graph-free
+  lanes later completed under v4; the stress lane reached the separate terminal
+  safety outcome described above.
 
 ## Active Product Constraints
 
@@ -645,6 +657,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
+Phase 4b is closed under the device-safety amendment. Do not begin Phase 5 or
+resume any physical-device stress benchmark without a new explicit owner task.
 The active production slice is physical-device memory-budget validation. The
 isolated Rust/FFI and iOS harness is implemented, and iPhone 17 Pro Max budgets
 are checked in for 24K × 384d/768d I8 hybrid plus the 50K × 384d extended tier.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import mmap
@@ -13,7 +14,7 @@ import struct
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -71,6 +72,28 @@ CHECKS = (
     "persistence_reload_policy:passed",
 )
 MAGIC = b"VECTORKIT-PHASE4-V1\0"
+CANCELLATION_AMENDMENT_PATH = (
+    "docs/product/target-device-graph-benchmark-contract-v1-amendment-3.md"
+)
+CANCELLATION_ARTIFACT_TYPE = (
+    "phase4b_device_safety_cancellation_authorization"
+)
+CANCELLATION_OUTCOME = "not_run_device_safety"
+DEVICE_SAFETY_REASON_CATEGORIES = {
+    "excessive_device_heat",
+    "battery_safety",
+    "hardware_safety",
+    "operator_safety",
+}
+CLAIM_ELIGIBILITY_KEYS = {
+    "support",
+    "performance",
+    "quality",
+    "latency",
+    "product",
+    "marketing",
+    "supported_v1_capacity_changed",
+}
 
 
 class ValidationError(RuntimeError):
@@ -80,6 +103,17 @@ class ValidationError(RuntimeError):
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValidationError(message)
+
+
+def require_exact_keys(
+    value: dict[str, Any], expected: set[str], label: str
+) -> None:
+    actual = set(value)
+    require(
+        actual == expected,
+        f"{label}: field set mismatch; missing={sorted(expected - actual)}, "
+        f"unknown={sorted(actual - expected)}",
+    )
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -118,8 +152,38 @@ def reject_100k_claim(value: dict[str, Any], label: str) -> None:
         value.get("supported_v1_capacity_changed", False) is False,
         f"{label}: 100K cannot change supported capacity",
     )
-    for key in ("support_classification", "product_classification", "claim_classification"):
+    for key in (
+        "support_classification",
+        "performance_classification",
+        "quality_classification",
+        "latency_classification",
+        "product_classification",
+        "claim_classification",
+        "marketing_classification",
+    ):
         require(key not in value, f"{label}: 100K cannot contain {key}")
+
+
+def canonical_artifact_entries(root: Path, directory: Path) -> list[dict[str, str]]:
+    require(directory.is_dir(), f"accepted evidence directory is missing: {directory}")
+    return [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256_file(path),
+        }
+        for path in sorted(directory.rglob("*"))
+        if path.is_file() and not path.is_symlink()
+    ]
+
+
+def artifact_set_sha256(entries: list[dict[str, str]]) -> str:
+    payload = json.dumps(
+        entries,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -624,6 +688,393 @@ def validate_authorization(
     return value, sha256_file(path)
 
 
+def validate_complete_stress(
+    stress_root: Path,
+    role: str,
+    authorizations: AuthorizationResolver,
+    process_ids: set[int],
+) -> int:
+    count = 0
+    for encoding in ("f32", "i8"):
+        config_root = stress_root / STRESS_WORKLOAD_ID / encoding
+        preflight_path = config_root / "preflight.json"
+        preflight = load_json(preflight_path)
+        validate_envelope(
+            preflight,
+            preflight_path,
+            role,
+            "candidate",
+            authorizations.context_for(preflight_path),
+            process_ids,
+        )
+        reject_100k_claim(preflight, str(preflight_path))
+        require(
+            preflight.get("classification") == "stress"
+            and preflight.get("marketing_eligible") is False,
+            "100K preflight classification mismatch",
+        )
+        count += 1
+        sessions = sorted((config_root / "query").glob("session-*.json"))
+        require(
+            len(sessions) == 5,
+            f"{role}/100K/{encoding}: five query sessions required",
+        )
+        for path in sessions:
+            value = load_json(path)
+            validate_envelope(
+                value,
+                path,
+                role,
+                "candidate",
+                authorizations.context_for(path),
+                process_ids,
+            )
+            validate_query_report(value, path, STRESS_WORKLOAD_ID, encoding)
+            count += 1
+        count += validate_lifecycle(
+            config_root / "lifecycle",
+            role,
+            STRESS_WORKLOAD_ID,
+            encoding,
+            authorizations,
+            process_ids,
+        )
+    return count
+
+
+def _safe_relative_directory(root: Path, relative: str, label: str) -> Path:
+    require(isinstance(relative, str) and bool(relative), f"{label}: path missing")
+    pure = PurePosixPath(relative)
+    require(not pure.is_absolute() and ".." not in pure.parts, f"{label}: unsafe path")
+    resolved_root = root.resolve()
+    resolved = (resolved_root / Path(*pure.parts)).resolve()
+    require(resolved.is_relative_to(resolved_root), f"{label}: path escapes artifact root")
+    return resolved
+
+
+def validate_device_safety_cancellation(
+    repo: Path,
+    root: Path,
+    path: Path,
+    execution_authorization_sha256: str,
+    role: str,
+) -> dict[str, Any]:
+    authorization = load_json(path)
+    require_exact_keys(
+        authorization,
+        {
+            "schema_version",
+            "artifact_type",
+            "authorized_at_utc",
+            "authorized_by",
+            "authorization_scope",
+            "contract_amendment",
+            "execution_authorization_sha256",
+            "device_role",
+            "workload_id",
+            "terminal_outcome",
+            "classification",
+            "reason_category",
+            "further_device_execution_authorized",
+            "accepted_evidence",
+            "rejected_evidence",
+            "claim_eligibility",
+        },
+        "device-safety cancellation authorization",
+    )
+    require(authorization.get("schema_version") == 1, "cancellation schema mismatch")
+    require(
+        authorization.get("artifact_type") == CANCELLATION_ARTIFACT_TYPE,
+        "cancellation artifact type mismatch",
+    )
+    require(
+        authorization.get("authorized_by") == "repository_owner"
+        and authorization.get("authorization_scope") == "validation_only",
+        "cancellation authority or scope mismatch",
+    )
+    timestamp = authorization.get("authorized_at_utc")
+    require(
+        isinstance(timestamp, str) and timestamp.endswith("Z"),
+        "cancellation timestamp must be UTC",
+    )
+    try:
+        dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValidationError("cancellation timestamp is malformed") from error
+
+    amendment = authorization.get("contract_amendment")
+    require(isinstance(amendment, dict), "cancellation amendment identity missing")
+    require_exact_keys(amendment, {"path", "sha256"}, "cancellation amendment")
+    require(
+        amendment.get("path") == CANCELLATION_AMENDMENT_PATH,
+        "cancellation amendment path mismatch",
+    )
+    amendment_path = repo / CANCELLATION_AMENDMENT_PATH
+    require(
+        amendment.get("sha256") == sha256_file(amendment_path),
+        "cancellation amendment SHA-256 mismatch",
+    )
+    require(
+        authorization.get("execution_authorization_sha256")
+        == execution_authorization_sha256,
+        "cancellation execution-authorization identity mismatch",
+    )
+    require(authorization.get("device_role") == role, "cancellation device mismatch")
+    reject_100k_claim(authorization, "device-safety cancellation authorization")
+    require(
+        authorization.get("workload_id") == STRESS_WORKLOAD_ID
+        and authorization.get("terminal_outcome") == CANCELLATION_OUTCOME
+        and authorization.get("classification") == "stress",
+        "cancellation workload or terminal outcome mismatch",
+    )
+    require(
+        isinstance(authorization.get("reason_category"), str)
+        and authorization.get("reason_category")
+        in DEVICE_SAFETY_REASON_CATEGORIES,
+        "cancellation reason category mismatch",
+    )
+    require(
+        authorization.get("further_device_execution_authorized") is False,
+        "cancellation must forbid further device execution",
+    )
+
+    claims = authorization.get("claim_eligibility")
+    require(isinstance(claims, dict), "cancellation claim policy missing")
+    require_exact_keys(claims, CLAIM_ELIGIBILITY_KEYS, "cancellation claim policy")
+    require(
+        all(value is False for value in claims.values()),
+        "device-safety cancellation cannot create claims",
+    )
+
+    accepted = authorization.get("accepted_evidence")
+    require(isinstance(accepted, dict), "cancellation accepted-evidence identity missing")
+    require_exact_keys(
+        accepted,
+        {
+            "supported_artifact_count",
+            "supported_artifact_set_sha256",
+            "graph_free_artifact_count",
+            "graph_free_artifact_set_sha256",
+            "stress_artifact_count",
+        },
+        "cancellation accepted evidence",
+    )
+    supported_entries = canonical_artifact_entries(
+        root, root / "devices" / role / "supported"
+    )
+    graph_free_entries = canonical_artifact_entries(
+        root, root / "devices" / role / "graph-free"
+    )
+    require(
+        accepted.get("supported_artifact_count") == len(supported_entries)
+        and accepted.get("supported_artifact_set_sha256")
+        == artifact_set_sha256(supported_entries),
+        "cancellation supported-evidence identity mismatch",
+    )
+    require(
+        accepted.get("graph_free_artifact_count") == len(graph_free_entries)
+        and accepted.get("graph_free_artifact_set_sha256")
+        == artifact_set_sha256(graph_free_entries),
+        "cancellation graph-free-evidence identity mismatch",
+    )
+    require(
+        accepted.get("stress_artifact_count") == 0,
+        "cancellation must authorize zero accepted stress artifacts",
+    )
+    accepted_stress_root = root / "devices" / role / "stress"
+    if accepted_stress_root.exists():
+        require(
+            accepted_stress_root.is_dir() and not accepted_stress_root.is_symlink(),
+            "accepted stress root must be a real directory",
+        )
+        non_directories = [
+            item
+            for item in accepted_stress_root.rglob("*")
+            if item.is_symlink() or not item.is_dir()
+        ]
+        require(
+            not non_directories,
+            "device-safety cancellation requires an empty accepted stress tree",
+        )
+
+    rejected = authorization.get("rejected_evidence")
+    require(isinstance(rejected, dict), "cancellation rejected-evidence identity missing")
+    require_exact_keys(
+        rejected,
+        {
+            "directory",
+            "cancellation_manifest_sha256",
+            "preserved_partial_artifact_count",
+            "preserved_partial_artifact_set_sha256",
+            "promotion_allowed",
+            "count_as_accepted",
+        },
+        "cancellation rejected evidence",
+    )
+    require(
+        rejected.get("promotion_allowed") is False
+        and rejected.get("count_as_accepted") is False,
+        "rejected stress evidence cannot be promoted or accepted",
+    )
+    relative_rejected = rejected.get("directory")
+    rejected_root = _safe_relative_directory(
+        root, relative_rejected, "cancellation rejected evidence"
+    )
+    required_prefix = PurePosixPath("rejected") / role / "canceled-by-user"
+    require(
+        PurePosixPath(relative_rejected).is_relative_to(required_prefix),
+        "cancellation evidence must remain below rejected/canceled-by-user",
+    )
+    manifest_path = rejected_root / "cancellation.json"
+    require(
+        rejected.get("cancellation_manifest_sha256") == sha256_file(manifest_path),
+        "cancellation manifest SHA-256 mismatch",
+    )
+    manifest = load_json(manifest_path)
+    require_exact_keys(
+        manifest,
+        {
+            "canceled_at_utc",
+            "classification",
+            "device_role",
+            "marketing_eligible",
+            "reason",
+            "accepted_stress_artifacts_after_cancellation",
+            "preserved_files",
+            "workload_id",
+        },
+        "rejected cancellation manifest",
+    )
+    reject_100k_claim(manifest, "rejected cancellation manifest")
+    require(
+        manifest.get("canceled_at_utc") == timestamp
+        and manifest.get("device_role") == role
+        and manifest.get("accepted_stress_artifacts_after_cancellation") == 0,
+        "cancellation manifest scope or timestamp mismatch",
+    )
+    require(
+        isinstance(manifest.get("reason"), str) and bool(manifest["reason"].strip()),
+        "cancellation manifest reason is missing",
+    )
+    preserved = manifest.get("preserved_files")
+    require(isinstance(preserved, list), "cancellation preserved-file list missing")
+    require(
+        all(isinstance(item, dict) for item in preserved),
+        "cancellation preserved-file entry malformed",
+    )
+    for item in preserved:
+        require_exact_keys(item, {"original_path", "sha256"}, "preserved partial artifact")
+        require(
+            isinstance(item.get("original_path"), str),
+            "preserved partial artifact original path is malformed",
+        )
+        digest = item.get("sha256")
+        require(
+            isinstance(digest, str)
+            and len(digest) == 64
+            and all(character in "0123456789abcdef" for character in digest),
+            "preserved partial artifact SHA-256 is malformed",
+        )
+    preserved = sorted(preserved, key=lambda item: item["original_path"])
+    require(
+        rejected.get("preserved_partial_artifact_count") == len(preserved),
+        "preserved partial artifact count mismatch",
+    )
+    require(
+        rejected.get("preserved_partial_artifact_set_sha256")
+        == hashlib.sha256(
+            json.dumps(
+                preserved,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "preserved partial artifact-set SHA-256 mismatch",
+    )
+    expected_original_prefix = (
+        PurePosixPath("devices") / role / "stress" / STRESS_WORKLOAD_ID
+    )
+    declared_paths: set[str] = set()
+    expected_files = {manifest_path.resolve()}
+    for item in preserved:
+        original = item["original_path"]
+        require(isinstance(original, str), "preserved original path missing")
+        pure_original = PurePosixPath(original)
+        require(
+            not pure_original.is_absolute()
+            and ".." not in pure_original.parts
+            and pure_original.is_relative_to(expected_original_prefix),
+            "preserved partial artifact has an invalid original path",
+        )
+        require(original not in declared_paths, "duplicate preserved partial artifact")
+        declared_paths.add(original)
+        preserved_path = (rejected_root / Path(*pure_original.parts)).resolve()
+        require(
+            preserved_path.is_relative_to(rejected_root.resolve()),
+            "preserved partial artifact escapes rejected directory",
+        )
+        require(
+            item.get("sha256") == sha256_file(preserved_path),
+            "preserved partial artifact SHA-256 mismatch",
+        )
+        expected_files.add(preserved_path)
+    actual_files = {
+        item.resolve()
+        for item in rejected_root.rglob("*")
+        if item.is_file() and not item.is_symlink()
+    }
+    require(
+        not any(item.is_symlink() for item in rejected_root.rglob("*")),
+        "cancellation rejected directory cannot contain symlinks",
+    )
+    require(
+        all(item.is_dir() or item.is_file() for item in rejected_root.rglob("*")),
+        "cancellation rejected directory contains a special file",
+    )
+    require(
+        actual_files == expected_files,
+        "cancellation rejected directory contains missing or undeclared files",
+    )
+
+    return {
+        "terminal_outcome": CANCELLATION_OUTCOME,
+        "classification": "stress",
+        "accepted_artifact_count": 0,
+        "authorization_sha256": sha256_file(path),
+        "claim_eligible": False,
+    }
+
+
+def validate_stress_outcome(
+    repo: Path,
+    root: Path,
+    stress_root: Path,
+    role: str,
+    authorizations: AuthorizationResolver,
+    process_ids: set[int],
+    execution_authorization_sha256: str,
+    cancellation_authorization_path: Path | None,
+) -> dict[str, Any]:
+    if cancellation_authorization_path is None:
+        count = validate_complete_stress(
+            stress_root, role, authorizations, process_ids
+        )
+        return {
+            "terminal_outcome": "completed",
+            "classification": "stress",
+            "accepted_artifact_count": count,
+            "claim_eligible": False,
+        }
+    return validate_device_safety_cancellation(
+        repo,
+        root,
+        cancellation_authorization_path,
+        execution_authorization_sha256,
+        role,
+    )
+
+
 def validate_device_sessions(
     repo: Path, root: Path, authorization_path: Path, base_binary: Path, graph_binary: Path,
     base_framework: Path, graph_framework: Path,
@@ -632,6 +1083,7 @@ def validate_device_sessions(
     prior_graph_binary: Path | None = None,
     prior_base_framework: Path | None = None,
     prior_graph_framework: Path | None = None,
+    stress_cancellation_authorization_path: Path | None = None,
 ) -> dict[str, Any]:
     authorization, authorization_sha256 = validate_authorization(
         repo, authorization_path, base_binary, graph_binary, base_framework, graph_framework,
@@ -665,7 +1117,10 @@ def validate_device_sessions(
     require(actual_directories == expected_directories, "physical-device directory matrix mismatch")
 
     validated: dict[str, int] = {}
+    accepted_stress_artifacts: dict[str, int] = {}
     graph_free_regressions: dict[str, Any] = {}
+    stress_outcomes: dict[str, dict[str, Any]] = {}
+    accepted_artifact_identities: dict[str, dict[str, Any]] = {}
     authorized_devices = authorization.get("devices", {})
     for role, model, identifier, runs_stress in DEVICE_MATRIX:
         device_root = devices_root / role
@@ -737,47 +1192,57 @@ def validate_device_sessions(
         graph_free_regressions[role] = ratios
         stress_root = device_root / "stress"
         if runs_stress:
-            for encoding in ("f32", "i8"):
-                config_root = stress_root / STRESS_WORKLOAD_ID / encoding
-                preflight = load_json(config_root / "preflight.json")
-                validate_envelope(
-                    preflight,
-                    config_root / "preflight.json",
-                    role,
-                    "candidate",
-                    authorizations.context_for(config_root / "preflight.json"),
-                    process_ids,
-                )
-                require(preflight.get("classification") == "stress" and preflight.get("marketing_eligible") is False, "100K preflight classification mismatch")
-                sessions = sorted((config_root / "query").glob("session-*.json"))
-                require(len(sessions) == 5, f"{role}/100K/{encoding}: five query sessions required")
-                for path in sessions:
-                    value = load_json(path)
-                    validate_envelope(
-                        value,
-                        path,
-                        role,
-                        "candidate",
-                        authorizations.context_for(path),
-                        process_ids,
-                    )
-                    validate_query_report(value, path, STRESS_WORKLOAD_ID, encoding)
-                    count += 1
-                count += validate_lifecycle(
-                    config_root / "lifecycle",
-                    role,
-                    STRESS_WORKLOAD_ID,
-                    encoding,
-                    authorizations,
-                    process_ids,
-                )
+            stress_outcome = validate_stress_outcome(
+                repo,
+                root,
+                stress_root,
+                role,
+                authorizations,
+                process_ids,
+                authorization_sha256,
+                stress_cancellation_authorization_path,
+            )
+            stress_outcomes[role] = stress_outcome
+            stress_count = stress_outcome["accepted_artifact_count"]
+            accepted_stress_artifacts[role] = stress_count
+            count += stress_count
         else:
             require(
                 not stress_root.exists(),
                 f"{role}: the 100K stress lane is iPhone-17-only",
             )
+        supported_entries = canonical_artifact_entries(
+            root, device_root / "supported"
+        )
+        graph_free_entries = canonical_artifact_entries(
+            root, device_root / "graph-free"
+        )
+        accepted_artifact_identities[role] = {
+            "supported": {
+                "artifact_count": len(supported_entries),
+                "artifact_set_sha256": artifact_set_sha256(supported_entries),
+            },
+            "graph_free": {
+                "artifact_count": len(graph_free_entries),
+                "artifact_set_sha256": artifact_set_sha256(graph_free_entries),
+            },
+        }
         validated[role] = count
-    return {"validated_artifacts": validated, "graph_free_ratios": graph_free_regressions}
+    terminal_outcomes = {
+        outcome["terminal_outcome"] for outcome in stress_outcomes.values()
+    }
+    require(len(terminal_outcomes) == 1, "stress terminal outcomes differ by device")
+    return {
+        "phase4b_closeout": "passed",
+        "supported_product_qualification": "passed",
+        "graph_free_qualification": "passed",
+        "stress_outcome": terminal_outcomes.pop(),
+        "stress_outcomes": stress_outcomes,
+        "accepted_stress_artifacts": accepted_stress_artifacts,
+        "validated_artifacts": validated,
+        "accepted_artifact_identities": accepted_artifact_identities,
+        "graph_free_ratios": graph_free_regressions,
+    }
 
 
 def validate_phase4a(repo: Path, root: Path, base_binary: Path, graph_binary: Path) -> dict[str, Any]:
@@ -816,6 +1281,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prior-graph-binary", type=Path)
     parser.add_argument("--prior-base-framework", type=Path)
     parser.add_argument("--prior-graph-framework", type=Path)
+    parser.add_argument("--stress-cancellation-authorization", type=Path)
     return parser.parse_args()
 
 
@@ -844,11 +1310,13 @@ def main() -> int:
                 args.prior_graph_binary.resolve() if args.prior_graph_binary else None,
                 args.prior_base_framework.resolve() if args.prior_base_framework else None,
                 args.prior_graph_framework.resolve() if args.prior_graph_framework else None,
+                args.stress_cancellation_authorization.resolve()
+                if args.stress_cancellation_authorization
+                else None,
             )
             result = {
                 "ok": True,
                 "mode": "phase4b",
-                "physical_device_matrix": "passed",
                 **sessions,
             }
     except (ValidationError, OSError, subprocess.CalledProcessError) as error:

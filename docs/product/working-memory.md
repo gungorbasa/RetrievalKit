@@ -96,8 +96,10 @@ implemented, or superseded by the product spec.
   30 thermally valid sessions across 10K/25K/50K F32/I8, and all 816 supported
   lifecycle artifacts are complete with unique process IDs, valid thermal and
   foreground boundaries, operation-specific correctness, exact component
-  accounting, and load/replay equivalence. Graph-free and eligible stress
-  evidence remain. See
+  accounting, and load/replay equivalence. All 12 graph-free
+  baseline/candidate sessions now pass
+  identical-result, zero-graph-counter, and maximum `1.03` median-P95 ratio
+  gates; eligible stress evidence remains. See
   `docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row
   is diagnostic,
   must remain labeled `stress`, and does

@@ -559,8 +559,9 @@ release iOS harness/linkage checks. See
 Phase 4b iPhone 17 physical-device execution is in progress. The supported
 query matrix is complete with 30 thermally valid sessions, and all 816
 supported lifecycle artifacts are complete across 10K/25K/50K F32/I8 without
-rewriting the 77 accepted v3 artifacts. Graph-free and eligible stress evidence
-remain. See
+rewriting the 77 accepted v3 artifacts. All 12 graph-free baseline/candidate
+sessions also pass the identity, zero-graph-counter, and maximum `1.03`
+median-P95 ratio gates. Eligible stress evidence remains. See
 `docs/product/reports/phase-4b-device-qualification-report.md`.
 Older-device qualification is optional future work and does not block this
 gate.

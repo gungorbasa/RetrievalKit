@@ -75,7 +75,8 @@ iPhone 17 physical-device execution is in progress. Its 10K/25K/50K F32/I8
 query matrix has 30 thermally valid sessions, and its complete 816-artifact
 supported lifecycle matrix passes independent inventory and split-lineage
 validation while preserving the accepted v3 query/prepare/build/save bytes.
-Graph-free and eligible stress evidence remain. See
+All 12 graph-free sessions pass identical-result, zero-counter, and maximum
+`1.03` median-P95 ratio gates. Eligible stress evidence remains. See
 `docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row is
 diagnostic, does not
 change the fewer-than-50K V1 capacity envelope, and cannot authorize a public

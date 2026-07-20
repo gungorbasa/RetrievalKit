@@ -1,8 +1,8 @@
 # Phase 4b Physical-Device Qualification Report
 
 Date: 2026-07-20
-Status: active; supported query and lifecycle evidence complete; graph-free and
-100K stress evidence pending
+Status: active; supported and graph-free evidence complete; 100K stress
+evidence pending
 
 ## Current result
 
@@ -17,9 +17,9 @@ replay samples preserve behavioral equivalence.
 
 The supported canonical sorted path/SHA-256 set contains 846 files and hashes
 to `f62a0e69c320b5b37d446c96d37f53693ea9e6e4ea2a238a1bffdff06636c93a`.
-The standalone Phase 4b validator accepts the complete supported matrix and
-currently stops only because graph-free evidence has not yet been collected.
-This is not the final Phase 4b qualification result.
+The standalone Phase 4b validator accepts the complete supported and graph-free
+matrices and currently stops only because stress preflight evidence has not yet
+been collected. This is not the final Phase 4b qualification result.
 
 ## Device and evidence lineage
 
@@ -105,6 +105,31 @@ Save and read-only-validation artifacts intentionally serialize
 plus component accounting. Prepare, load, and replay artifacts retain the 11
 behavioral checks, and load/replay operations require replay equivalence.
 
+## Graph-free regression
+
+All 12 required sessions are complete: baseline and graph-linked candidate
+products, F32 and I8, three fresh-process sessions per product/encoding. Every
+session has 100 discarded warmups and 1,000 measured samples for exact,
+internal BM25, and weighted hybrid retrieval. Result identities match between
+products and all graph-query, visited-node, traversed-edge, and projected-
+candidate counters are zero.
+
+The graph-free canonical sorted path/SHA-256 set contains 12 files and hashes
+to `6ea55b935ea79933f1ec64d77e88438682d2ae613c7fc0c92c863d58e91f4f3a`.
+The gate uses the ratio between candidate and baseline median session P95.
+
+| Encoding | Scenario | Baseline median P95 ns | Candidate median P95 ns | Ratio | Result |
+|---|---|---:|---:|---:|---|
+| F32 | exact | 528,625 | 529,959 | 1.002524 | pass |
+| F32 | internal BM25 | 310,667 | 307,667 | 0.990343 | pass |
+| F32 | weighted hybrid | 864,542 | 861,750 | 0.996771 | pass |
+| I8 | exact | 96,459 | 96,958 | 1.005173 | pass |
+| I8 | internal BM25 | 307,500 | 301,792 | 0.981437 | pass |
+| I8 | weighted hybrid | 434,666 | 442,875 | 1.018886 | pass |
+
+Every ratio is below the frozen maximum of `1.03`. The largest measured ratio
+is I8 weighted hybrid at `1.018886`.
+
 ## Rejected attempts so far
 
 The raw root preserves 27 rejected JSON files representing 25 distinct
@@ -130,10 +155,10 @@ between fresh processes and are excluded from measured durations.
 - Isolated iOS release linkage and all authorized app/framework hashes pass.
 - Independent inventory confirms 846 accepted supported artifacts and 846
   unique process IDs.
-- The split-lineage validator accepts supported evidence and stops at the
-  missing graph-free lane.
+- The split-lineage validator accepts supported and graph-free evidence and
+  stops at the missing stress preflight.
 
-Graph-free regression, the diagnostic 100K stress lane, final split-lineage
-validation, and final independent calculations remain. No production Rust,
-FFI, Swift API, frozen fixture, workload, threshold, support boundary, or
-marketing classification changed.
+The diagnostic 100K stress lane, final split-lineage validation, and final
+independent calculations remain. No production Rust, FFI, Swift API, frozen
+fixture, workload, threshold, support boundary, or marketing classification
+changed.

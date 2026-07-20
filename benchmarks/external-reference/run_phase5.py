@@ -449,7 +449,8 @@ def main() -> int:
     scratch = ROOT / "target" / "phase5-external-scratch" / config["config_id"]
     reset_directory(scratch)
     environment = runtime_environment(ROOT)
-    environment["benchmark_python"] = str(arguments.python.resolve())
+    benchmark_python = arguments.python.absolute()
+    environment["benchmark_python"] = str(benchmark_python)
     environment["config_profile"] = config["profile"]
     environment["embedding_included"] = False
     environment["source_tree_dirty_before_run"] = bool(
@@ -467,7 +468,7 @@ def main() -> int:
         for system_id in systems:
             adapters.append(
                 run_worker(
-                    arguments.python.resolve(),
+                    benchmark_python,
                     system_id,
                     workload,
                     config["measurement"],

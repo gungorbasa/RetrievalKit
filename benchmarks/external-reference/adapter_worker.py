@@ -990,6 +990,7 @@ def main() -> int:
     request = json.loads(arguments.request.read_text())
     system_id = str(request["system_id"])
     data = generate_workload(request["workload"])
+    Path(request["scratch_root"]).mkdir(parents=True, exist_ok=True)
     try:
         runner = RUNNERS[system_id]
         result = runner(data, request)

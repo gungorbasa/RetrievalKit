@@ -1,8 +1,9 @@
 # Phase 4b Physical-Device Qualification Report
 
 Date: 2026-07-20
-Status: active; supported and graph-free evidence complete; 100K stress
-evidence pending
+Status: supported-product qualification passed; full Phase 4b contract
+incomplete because the 100K diagnostic stress lane was canceled for device
+safety
 
 ## Current result
 
@@ -18,8 +19,12 @@ replay samples preserve behavioral equivalence.
 The supported canonical sorted path/SHA-256 set contains 846 files and hashes
 to `f62a0e69c320b5b37d446c96d37f53693ea9e6e4ea2a238a1bffdff06636c93a`.
 The standalone Phase 4b validator accepts the complete supported and graph-free
-matrices and currently stops only because stress preflight evidence has not yet
-been collected. This is not the final Phase 4b qualification result.
+matrices and stops only at the absent stress preflight. The 100K diagnostic
+lane was permanently canceled at the owner's direction after the physical
+device became excessively hot. Under the frozen contract, 100K cannot satisfy
+or fail the supported-product gate, so the supported-product result is PASS.
+The same contract requires eligible stress evidence for a full Phase 4b
+validator result, so the full contract result is incomplete rather than PASS.
 
 ## Device and evidence lineage
 
@@ -130,18 +135,40 @@ The gate uses the ratio between candidate and baseline median session P95.
 Every ratio is below the frozen maximum of `1.03`. The largest measured ratio
 is I8 weighted hybrid at `1.018886`.
 
-## Rejected attempts so far
+## 100K diagnostic stress cancellation
 
-The raw root preserves 27 rejected JSON files representing 25 distinct
-attempts: 11 serious-thermal attempts, seven locked-device launch denials,
-three foreground-false attempts, two other no-JSON launch/transport attempts,
-one CoreDevice disconnect, and one save-directory collision. The collision
-exposed a host-collector naming bug; the collector now uses
-configuration-scoped device sample IDs. It also writes each failed attempt to
-a unique rejected path without occupying an accepted destination. One
+The owner permanently stopped `100k-384d-v3-stress` after reporting that the
+device was becoming excessively hot. The collector and benchmark application
+were stopped, and no VectorKit benchmark process remained on the device. No
+further 100K execution is authorized by this qualification.
+
+The accepted stress tree is empty. Five partial F32 files—one preflight and
+four query sessions—were moved without byte changes to timestamped
+`canceled-by-user` rejected evidence together with a cancellation manifest and
+their original-path/SHA-256 inventory. No F32 lifecycle, I8 preflight, I8
+query, or I8 lifecycle artifact was accepted. These partial files are not a
+stress result and cannot be promoted, relabeled, or used for support or
+marketing.
+
+This cancellation does not change the V1 fewer-than-50K product boundary or
+the supported 10K/25K/50K result. It does prevent the frozen full Phase 4b
+validator from returning PASS: after accepting the supported and graph-free
+evidence, it fails closed because the F32 stress preflight is absent.
+
+## Rejected and canceled evidence
+
+The raw rejected tree preserves 35 JSON records. Six belong to the owner-
+directed stress cancellation: the cancellation manifest plus the five partial
+stress files moved from the accepted tree. The other 29 records preserve
+failed attempts, cooling diagnostics, and quarantined evidence, including
+serious-thermal outcomes, locked-device launch denials, foreground-false and
+no-JSON/transport failures, a CoreDevice disconnect, and a save-directory
+collision. The collision exposed a host-collector naming bug; the collector
+now uses configuration-scoped device sample IDs and writes each failed attempt
+to a unique rejected path without occupying an accepted destination. One
 initially accepted 25K/I8 save sample ended in serious thermal state; the
-independent audit quarantined it and reran only that v4 path with a new
-device-side identity.
+independent audit quarantined it and reran only that v4 path with a new device-
+side identity.
 
 No rejected artifact was promoted or relabeled. Cooling pauses were used
 between fresh processes and are excluded from measured durations.
@@ -156,9 +183,12 @@ between fresh processes and are excluded from measured durations.
 - Independent inventory confirms 846 accepted supported artifacts and 846
   unique process IDs.
 - The split-lineage validator accepts supported and graph-free evidence and
-  stops at the missing stress preflight.
+  fails closed at the intentionally absent stress preflight.
+- The accepted stress tree contains zero files; the five partial stress files
+  and cancellation manifest are preserved only as rejected evidence.
 
-The diagnostic 100K stress lane, final split-lineage validation, and final
-independent calculations remain. No production Rust, FFI, Swift API, frozen
-fixture, workload, threshold, support boundary, or marketing classification
-changed.
+Supported-product physical-device qualification is complete and passes. Full
+Phase 4b contract qualification remains incomplete because the diagnostic
+100K lane was canceled; it must not be reported as a full validator PASS. No
+production Rust, FFI, Swift API, frozen fixture, workload, threshold, support
+boundary, or marketing classification changed.

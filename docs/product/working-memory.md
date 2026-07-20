@@ -92,20 +92,32 @@ implemented, or superseded by the product spec.
   and independent validation, Apple M1 Max F32/I8 correctness and
   persistence/replay, staged instrumentation, memory estimation, isolated iOS
   harness builds, and linkage checks pass. Phase 4b physical-device execution
-  is active on iPhone 17 Pro Max. The supported query matrix is complete with
+  is closed on iPhone 17 Pro Max with a supported-product PASS and an
+  incomplete full-contract result. The supported query matrix is complete with
   30 thermally valid sessions across 10K/25K/50K F32/I8, and all 816 supported
   lifecycle artifacts are complete with unique process IDs, valid thermal and
   foreground boundaries, operation-specific correctness, exact component
   accounting, and load/replay equivalence. All 12 graph-free
-  baseline/candidate sessions now pass
-  identical-result, zero-graph-counter, and maximum `1.03` median-P95 ratio
-  gates; eligible stress evidence remains. See
+  baseline/candidate sessions pass identical-result, zero-graph-counter, and
+  maximum `1.03` median-P95 ratio gates. The owner permanently canceled the
+  eligible 100K diagnostic stress lane after reporting excessive device heat;
+  the accepted stress tree is empty and the five partial F32 artifacts are
+  preserved only as timestamped rejected evidence. The frozen validator
+  therefore passes the supported and graph-free matrices and fails closed at
+  the absent stress preflight. See
   `docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row
   is diagnostic,
   must remain labeled `stress`, and does
   not change the V1
   fewer-than-50K capacity envelope. See
   `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
+
+  Owner-directed Phase 4b stress cancellation (2026-07-20): do not resume the
+  `100k-384d-v3-stress` physical-device lane. The user stopped it permanently
+  because the iPhone became excessively hot. This leaves the supported-product
+  qualification passed but the full Phase 4b contract incomplete; do not
+  report a full validator PASS and do not change the frozen contract, support
+  boundary, or marketing classification to conceal the missing stress lane.
 
   Owner-approved Phase 4b reporting variance (2026-07-19): retain the current
   iPhone 17 evidence without rerunning solely because the device moved within

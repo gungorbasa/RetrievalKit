@@ -93,8 +93,13 @@ implemented, or superseded by the product spec.
   persistence/replay, staged instrumentation, memory estimation, isolated iOS
   harness builds, and linkage checks pass. Phase 4b physical-device execution
   is active on iPhone 17 Pro Max. The supported query matrix is complete with
-  30 thermally valid sessions across 10K/25K/50K F32/I8. Lifecycle,
-  graph-free, and eligible stress evidence remain. The 100K row is diagnostic,
+  30 thermally valid sessions across 10K/25K/50K F32/I8, and all 816 supported
+  lifecycle artifacts are complete with unique process IDs, valid thermal and
+  foreground boundaries, operation-specific correctness, exact component
+  accounting, and load/replay equivalence. Graph-free and eligible stress
+  evidence remain. See
+  `docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row
+  is diagnostic,
   must remain labeled `stress`, and does
   not change the V1
   fewer-than-50K capacity envelope. See

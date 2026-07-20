@@ -72,11 +72,12 @@ Apple M1 Max F32/I8 correctness and persistence/replay, staged instrumentation,
 device-size/memory preflight, isolated iOS harness/linkage checks, and the
 standalone artifact validator pass. Phase 4 is active and Phase 4b
 iPhone 17 physical-device execution is in progress. Its 10K/25K/50K F32/I8
-query matrix has 30 thermally valid sessions. The v4 foreground-gated harness
-also completed the 10K/F32 `read_only_validation` lane with three warmups and
-20 measured fresh-process samples while preserving the accepted v3
-query/prepare/build/save bytes. Other lifecycle, graph-free, and eligible
-stress evidence remain. The 100K row is diagnostic, does not
+query matrix has 30 thermally valid sessions, and its complete 816-artifact
+supported lifecycle matrix passes independent inventory and split-lineage
+validation while preserving the accepted v3 query/prepare/build/save bytes.
+Graph-free and eligible stress evidence remain. See
+`docs/product/reports/phase-4b-device-qualification-report.md`. The 100K row is
+diagnostic, does not
 change the fewer-than-50K V1 capacity envelope, and cannot authorize a public
 quality, performance, device, support, or marketing claim. See
 `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.

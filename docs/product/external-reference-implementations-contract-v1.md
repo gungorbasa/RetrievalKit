@@ -235,6 +235,12 @@ independently:
 - enforces every unsupported/non-equivalent feature classification; and
 - rejects prohibited interpretations or any device/100K Phase 4 evidence.
 
+Validator `result` reports artifact integrity, while `benchmark_acceptance`
+reports the independently recomputed benchmark gate outcome. A coherent recall
+miss therefore validates with `result: PASS` and
+`benchmark_acceptance: failed`; changing a gate or acceptance label without
+matching raw evidence is rejected.
+
 Tests include unit, integration, determinism, and negative mutations for
 hashes, inventory, percentiles, recall, deleted IDs, result identity, capability
 classification, timing boundary, persistence accounting, and path traversal.

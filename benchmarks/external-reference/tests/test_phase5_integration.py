@@ -137,6 +137,53 @@ class Phase5IntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "feature parity differs"):
             validate(root)
 
+    def test_honest_recall_gate_failure_is_validated(self) -> None:
+        root = self.copy_root("honest-recall-failure")
+        results_path = root / "raw-results.jsonl"
+        results = [json.loads(line) for line in results_path.read_text().splitlines()]
+        selected = [
+            value
+            for value in results
+            if value["system_id"] == "usearch_hnsw"
+            and value["query_id"] == "q-0000"
+        ]
+        oracle = next(
+            value
+            for value in results
+            if value["system_id"] == "numpy_f32_oracle"
+            and value["operation_id"] == "exact_unfiltered"
+            and value["query_id"] == "q-0000"
+        )
+        replacement = next(
+            f"chunk-{ordinal:08d}"
+            for ordinal in range(256)
+            if f"chunk-{ordinal:08d}" not in oracle["result_ids"]
+            and f"chunk-{ordinal:08d}" not in selected[0]["result_ids"]
+        )
+        for value in selected:
+            value["result_ids"][-1] = replacement
+            value["result_identity_sha256"] = sha256_bytes(
+                canonical(value["result_ids"])
+            )
+        results_path.write_bytes(
+            b"".join(canonical(value) + b"\n" for value in results)
+        )
+        summary = json.loads((root / "summary.json").read_text())
+        row = next(
+            value
+            for value in summary["rows"]
+            if value["system_id"] == "usearch_hnsw"
+        )
+        row["gates"]["mean_recall_at_10"] = 0.975
+        row["gates"]["recall_gate_passed"] = False
+        row["acceptance"] = "failed"
+        summary["overall_acceptance"] = "failed"
+        canonical_file(root / "summary.json", summary)
+        self.rehash(root)
+        report = validate(root)
+        self.assertEqual(report["result"], "PASS")
+        self.assertEqual(report["benchmark_acceptance"], "failed")
+
     def test_unknown_inventory_entry_is_rejected(self) -> None:
         root = self.copy_root("mutated-inventory")
         (root / "unknown.json").write_text("{}\n")

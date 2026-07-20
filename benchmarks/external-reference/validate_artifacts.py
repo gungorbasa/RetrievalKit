@@ -396,6 +396,22 @@ def validate_results(
                     if actual != expected:
                         raise ValidationError("exact result differs from oracle")
 
+    row_acceptance = []
+    for row in summary["rows"]:
+        gate_values = [
+            value for value in row["gates"].values() if isinstance(value, bool)
+        ]
+        accepted = row["status"] == "success" and all(gate_values)
+        if row["system_id"] == "numpy_f32_oracle":
+            accepted = row["status"] == "success"
+        expected = "passed" if accepted else "failed"
+        if row["acceptance"] != expected:
+            raise ValidationError("row acceptance differs from recomputed gates")
+        row_acceptance.append(accepted)
+    expected_overall = "passed" if all(row_acceptance) else "failed"
+    if summary["overall_acceptance"] != expected_overall:
+        raise ValidationError("overall acceptance differs from recomputed rows")
+
 
 def validate_measurements(
     config: dict[str, Any], measurements: list[dict[str, Any]], summary: dict[str, Any]
@@ -529,11 +545,10 @@ def validate(root: Path) -> dict[str, Any]:
     validate_feature_parity(feature_parity, failures)
     validate_measurements(config, measurements, summary)
     validate_results(config, results, summary)
-    if summary["overall_acceptance"] != "passed":
-        raise ValidationError("Phase 5 acceptance did not pass")
     return {
         "artifact_set_sha256": manifest["artifact_set_sha256"],
         "artifact_type": "phase5_independent_validation",
+        "benchmark_acceptance": summary["overall_acceptance"],
         "failure_count": sum(
             value["classification"] == "adapter_failure" for value in failures
         ),

@@ -1,0 +1,1 @@
+{"canonical_platform":{"architecture":"arm64","os":"macOS","python":"CPython 3.12.13"},"dependencies":{"numpy":"2.5.1","sqlite-vec":"0.1.9","usearch":"2.26.0"},"schema_version":1,"tools":{"cargo":"record_at_runtime","rustc":"record_at_runtime","swift":"record_at_runtime","uv":"0.9.27"}}

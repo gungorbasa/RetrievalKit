@@ -374,15 +374,18 @@ def run_usearch(data: WorkloadData, request: dict[str, Any]) -> dict[str, Any]:
     load_started = time.perf_counter_ns()
     loaded = Index.restore(index_path, view=False)
     result["load_ns"] = time.perf_counter_ns() - load_started
+    replayed = Index.restore(index_path, view=False)
+    for restored in [loaded, replayed]:
+        restored.expansion_search = int(ann["expansion_search"])
     measurement = request["measurement"]
     result["operations"].append(
         measured_operation(
             data,
             "ann_unfiltered",
-            lambda value: query_on(index, value),
+            lambda value: query_on(loaded, value),
             warmups=int(measurement["warmups"]),
             sample_count=int(measurement["samples"]),
-            replay=lambda value: query_on(loaded, value),
+            replay=lambda value: query_on(replayed, value),
         )
     )
     result["operations"].append(

@@ -1,7 +1,7 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–4 complete; Phase 4b closed under the device-safety
-terminal-outcome amendment; Phase 5 not started
+Status: active; Phases 0–5 complete; Phase 4b closed under the device-safety
+terminal-outcome amendment; Phase 6 not started
 
 Date: 2026-07-20
 
@@ -596,7 +596,11 @@ Exit gate:
 
 ### Phase 5: Build External Reference Implementations
 
-Status: not started.
+Status: complete. The exact and custom-application lanes passed. The final ANN
+rows honestly failed the frozen Recall@10 gate and are excluded from latency
+comparison. The 10-file final evidence root passes independent integrity
+validation with `benchmark_acceptance: failed`; see
+`docs/product/reports/phase-5-external-reference-implementations-report.md`.
 
 Deliverables:
 

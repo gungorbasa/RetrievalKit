@@ -89,7 +89,12 @@ diagnostic, does not
 change the fewer-than-50K V1 capacity envelope, and cannot authorize a public
 quality, performance, device, support, or marketing claim. See
 `docs/product/reports/phase-4a-deterministic-device-workloads-report.md`.
-Phase 5 has not begun.
+Benchmark Phase 5 external reference implementations are complete. The exact
+and custom-application lanes passed; frozen USearch ANN recall missed its final
+gate and its latency is not comparison evidence. The independent validator
+passes the 10-file root while preserving `benchmark_acceptance: failed`. See
+`docs/product/reports/phase-5-external-reference-implementations-report.md`.
+This does not begin the separate release-and-distribution Phase 5 below.
 
 ## Priority Summary
 

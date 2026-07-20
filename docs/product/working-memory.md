@@ -657,8 +657,17 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
-Phase 4b is closed under the device-safety amendment. Do not begin Phase 5 or
+Phase 4b is closed under the device-safety amendment. Benchmark Phase 5 external
+reference implementations are complete. Do not begin benchmark Phase 6 or
 resume any physical-device stress benchmark without a new explicit owner task.
+The final Phase 5 root contains 10 files, 5,100 timing rows, and 1,200 result
+rows at artifact-set SHA-256
+`1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`.
+Artifact integrity passes, while benchmark acceptance remains failed because
+USearch Recall@10 was 0.965/0.850/0.775 at 10K/25K/50K, below the frozen 0.99
+gate. Its latency is retained but prohibited from comparisons. VectorKit and
+sqlite-vec exact rows and both graph-application rows passed. See
+`docs/product/reports/phase-5-external-reference-implementations-report.md`.
 The active production slice is physical-device memory-budget validation. The
 isolated Rust/FFI and iOS harness is implemented, and iPhone 17 Pro Max budgets
 are checked in for 24K × 384d/768d I8 hybrid plus the 50K × 384d extended tier.

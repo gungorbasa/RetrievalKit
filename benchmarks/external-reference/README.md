@@ -94,7 +94,10 @@ The standalone validator does not import the runner, adapter worker, or shared
 benchmark helpers. It enforces the closed ten-file inventory, canonical JSON,
 hashes, generator replay, result identities, exact equality, ANN recall,
 percentiles, persistence accounting, unsupported operations, and prohibited
-device/capacity interpretations.
+device/capacity interpretations. `result` describes artifact integrity;
+`benchmark_acceptance` separately reports whether every benchmark gate passed.
+An honest recall miss can therefore validate without becoming an accepted
+latency comparison.
 
 ## Tests
 
@@ -135,6 +138,14 @@ Unsupported operations and failed attempts remain in `failures.jsonl`.
 Generated vectors and indexes are reproducible scratch inputs and are not part
 of the published result root. Their deterministic identities are recorded in
 `input-manifests.json`.
+
+The checked-in final evidence is in `artifacts/mac-comparison-v1`, with the
+validator output beside it in `artifacts/mac-comparison-v1-validation.json`.
+Its artifact-set SHA-256 is
+`1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`.
+See
+[`docs/product/reports/phase-5-external-reference-implementations-report.md`](../../docs/product/reports/phase-5-external-reference-implementations-report.md)
+for results, limitations, and prohibited interpretations.
 
 ## Licenses and upstream references
 

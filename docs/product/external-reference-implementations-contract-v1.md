@@ -40,6 +40,7 @@ change a public Rust, Swift, Python, or FFI API.
 | System ID | Version | Role | License | Selection reason |
 | --- | --- | --- | --- | --- |
 | `vectorkit_f32_exact` | source commit recorded per run | product exact reference | repository MIT | measures the production exact engine without adding an adapter to production code |
+| `vectorkit_graph_app` | source commit recorded per run | product complete-application reference | repository MIT | measures production graph selection and scoped retrieval in a process isolated from the graph-free Python distribution |
 | `numpy_f32_oracle` | `2.5.1` | independent exact identities and recall | BSD-3-Clause and bundled compatible licenses | mature independent dense-array implementation; excluded from comparative timing |
 | `sqlite_vec_exact` | `0.1.9` | embedded brute-force exact reference | MIT OR Apache-2.0 | small embedded C/SQLite engine with cosine distance, metadata columns, deletion, and persistence |
 | `usearch_hnsw` | `2.26.0` | embedded ANN reference | Apache-2.0 | mature cross-platform HNSW with explicit connectivity/build/search expansion and persistence |
@@ -55,7 +56,7 @@ Linux x86-64/aarch64 and Windows x86-64 may reproduce dependency-supported
 lanes, but their output is a distinct environment and must not be pooled with
 the canonical Mac run. Swift and Rust tool versions are recorded because the
 VectorKit wheels are built from this repository, but no Swift/device harness is
-used by Phase 5.
+used by Phase 5. Maturin `1.14.1` is the pinned local VectorKit wheel builder.
 
 ## 3. Workloads, splits, and identities
 
@@ -248,4 +249,3 @@ Phase 5 does not authorize:
 - changing the fewer-than-50K V1 boundary;
 - adding ANN/HNSW to production VectorKit; or
 - installing, launching, resuming, or executing a physical-device benchmark.
-

@@ -26,7 +26,7 @@ VectorKit's tokenizer, BM25, normalization, and fusion.
 
 ## Supported build environment
 
-Canonical local measurements use Apple Silicon macOS and CPython `3.12.13`.
+Canonical local measurements use Apple Silicon macOS and CPython `3.12.12`.
 The pinned external packages also publish wheels for several Linux and Windows
 targets, but output from another platform is a separate environment and cannot
 be pooled with the checked Mac result.
@@ -148,4 +148,3 @@ of the published result root. Their deterministic identities are recorded in
 
 No upstream source is vendored. Exact versions and distribution hashes are in
 `requirements.lock.txt`.
-

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VENV_DIR="$ROOT_DIR/target/phase5-external-venv"
 WHEEL_DIR="$ROOT_DIR/target/phase5-external-wheels"
-PYTHON_VERSION="3.12.13"
+PYTHON_VERSION="3.12.12"
 MATURIN_VERSION="1.14.1"
 
 require_tool() {
@@ -75,4 +75,3 @@ print("vectorkit-graph", importlib.metadata.version("vectorkit-graph"))
 PY
 
 echo "Phase 5 environment ready: $VENV_DIR"
-

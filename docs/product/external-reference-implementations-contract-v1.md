@@ -51,7 +51,7 @@ stability. That risk is why the exact package version, wheel hashes, runtime
 extension version, and SQL schema are captured. No sqlite-vec experimental ANN
 prerelease is used.
 
-The canonical measured platform is Apple Silicon macOS with CPython `3.12.13`.
+The canonical measured platform is Apple Silicon macOS with CPython `3.12.12`.
 Linux x86-64/aarch64 and Windows x86-64 may reproduce dependency-supported
 lanes, but their output is a distinct environment and must not be pooled with
 the canonical Mac run. Swift and Rust tool versions are recorded because the

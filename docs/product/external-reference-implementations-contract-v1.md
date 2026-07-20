@@ -199,10 +199,11 @@ manifest.json
 All JSON is UTF-8, sorted-key, compact canonical JSON followed by one LF. JSONL
 applies that rule independently to every line and sorts rows by their declared
 identity tuple. Non-finite numbers are forbidden. Durations and byte counts are
-integers. `checksums.json` contains the exact nine-file preimage excluding
-itself and `manifest.json`; `manifest.json` binds the contract, configuration,
-source revision, file inventory, and canonical sorted path/SHA-256 artifact-set
-identity. Paths are relative, normalized, and may not escape the root.
+integers. `checksums.json` contains the exact eight-file preimage excluding
+itself and `manifest.json`; `manifest.json` binds those eight files plus
+`checksums.json`, the contract, configuration, source revision, and canonical
+sorted path/SHA-256 artifact-set identity. Paths are relative, normalized, and
+may not escape the root.
 
 Timing samples are intentionally environment-dependent, so complete result
 roots are not expected to be byte-identical across executions. Input manifests,

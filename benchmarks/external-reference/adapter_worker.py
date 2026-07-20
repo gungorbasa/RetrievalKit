@@ -287,13 +287,13 @@ def run_sqlite_vec_exact(data: WorkloadData, request: dict[str, Any]) -> dict[st
             rows = database.execute(
                 "select rowid, distance from vec_chunks "
                 "where embedding match ? and k = ? and tenant = ? "
-                "order by distance, rowid",
+                "order by distance",
                 (data.queries[query_index].tobytes(), TOP_K, spec.tenant),
             ).fetchall()
         else:
             rows = database.execute(
                 "select rowid, distance from vec_chunks "
-                "where embedding match ? and k = ? order by distance, rowid",
+                "where embedding match ? and k = ? order by distance",
                 (data.queries[query_index].tobytes(), TOP_K),
             ).fetchall()
         return [stable_chunk_id(int(row[0]) - 1) for row in rows], [

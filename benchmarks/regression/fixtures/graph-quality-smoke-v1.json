@@ -1,0 +1,159 @@
+{
+  "corpus_id": "phase7-graph-quality-smoke-v1",
+  "dimension": 3,
+  "fixture_id": "graph-quality-smoke-v1",
+  "license": {
+    "external_source": false,
+    "redistribution_status": "original synthetic fixture with no copied dataset or device content"
+  },
+  "mutations": {
+    "delete_record_id": "deleted-topic",
+    "dimension_mismatch_embedding": [
+      1.0,
+      0.0
+    ],
+    "replace_record_id": "replacement",
+    "replacement_chunk": {
+      "embedding": [
+        0.0,
+        0.2,
+        0.8
+      ],
+      "key": "body",
+      "metadata": {},
+      "text": "replacement current durable evidence"
+    }
+  },
+  "quality": {
+    "candidate_required_records": [
+      "beta",
+      "gamma"
+    ],
+    "qrels": {
+      "q-evidence": [
+        "beta",
+        "gamma"
+      ]
+    },
+    "top_k": 3
+  },
+  "records": [
+    {
+      "chunk": {
+        "embedding": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "alpha semantic anchor"
+      },
+      "fields": {
+        "related_id": "beta",
+        "title": "Alpha"
+      },
+      "id": "alpha",
+      "metadata": {
+        "tenant": "red"
+      }
+    },
+    {
+      "chunk": {
+        "embedding": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "battery graph evidence primary"
+      },
+      "fields": {
+        "related_id": "gamma",
+        "title": "Beta"
+      },
+      "id": "beta",
+      "metadata": {
+        "tenant": "blue"
+      }
+    },
+    {
+      "chunk": {
+        "embedding": [
+          0.0,
+          0.8,
+          0.2
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "battery supporting evidence secondary"
+      },
+      "fields": {
+        "title": "Gamma"
+      },
+      "id": "gamma",
+      "metadata": {
+        "tenant": "blue"
+      }
+    },
+    {
+      "chunk": {
+        "embedding": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "unrelated semantic distractor"
+      },
+      "fields": {
+        "title": "Distractor"
+      },
+      "id": "distractor",
+      "metadata": {
+        "tenant": "red"
+      }
+    },
+    {
+      "chunk": {
+        "embedding": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "deleted forbidden result"
+      },
+      "fields": {
+        "title": "Deleted"
+      },
+      "id": "deleted-topic",
+      "metadata": {
+        "tenant": "red"
+      }
+    },
+    {
+      "chunk": {
+        "embedding": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "key": "body",
+        "metadata": {},
+        "text": "obsolete superseded evidence"
+      },
+      "fields": {
+        "title": "Replacement"
+      },
+      "id": "replacement",
+      "metadata": {
+        "tenant": "green"
+      }
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,565 @@
+{
+  "baseline_id": "phase7-baselines-v1",
+  "contract_id": "vectorkit-regression-gates-v1",
+  "gates": [
+    {
+      "baseline": "graph-quality-smoke-v1",
+      "claim_impact": "deterministic exact, lexical, hybrid result identity",
+      "evidence_paths": [
+        "benchmarks/regression/fixtures/expected-observation-v1.json"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-IDENTITY",
+      "metric": "result_identity_match",
+      "owner": "retrieval-core",
+      "platform_requirements": "any supported CI host; no timing gate",
+      "rebaseline_rules": "new contract version and reviewed fixture identity change",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": true
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "graph-quality-smoke-v1",
+      "claim_impact": "stable tie and score ordering",
+      "evidence_paths": [
+        "benchmarks/regression/fixtures/expected-observation-v1.json"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-ORDERING",
+      "metric": "stable_order_match",
+      "owner": "retrieval-core",
+      "platform_requirements": "any supported CI host; no timing gate",
+      "rebaseline_rules": "ordering policy change requires product documentation and new fixture identity",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": true
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "zero correctness violations",
+      "claim_impact": "deleted, superseded, and invalid-dimension exclusion",
+      "evidence_paths": [
+        "crates/vectorkit-graph/tests/regression_gates.rs"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-EXCLUSIONS",
+      "metric": "exclusion_violation_count",
+      "owner": "retrieval-core",
+      "platform_requirements": "any supported CI host",
+      "rebaseline_rules": "not rebaselinable; correctness invariant",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "zero filter mismatches",
+      "claim_impact": "metadata-filter correctness",
+      "evidence_paths": [
+        "crates/vectorkit-graph/tests/regression_gates.rs"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-FILTERING",
+      "metric": "filter_mismatches",
+      "owner": "retrieval-core",
+      "platform_requirements": "any supported CI host",
+      "rebaseline_rules": "not rebaselinable; correctness invariant",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "zero replay divergences",
+      "claim_impact": "save, validate, load, and replay equivalence",
+      "evidence_paths": [
+        "crates/vectorkit-graph/tests/regression_gates.rs"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-PERSISTENCE",
+      "metric": "replay_divergences",
+      "owner": "persistence",
+      "platform_requirements": "writable temporary directory",
+      "rebaseline_rules": "not rebaselinable; equivalence invariant",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "zero selection mismatches and one invalid-scope rejection",
+      "claim_impact": "graph selection, projection, scoped ranking, empty and invalid scope behavior",
+      "evidence_paths": [
+        "crates/vectorkit-graph/tests/regression_gates.rs"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-GRAPH-SCOPE",
+      "metric": "graph_scope_violation_count",
+      "owner": "graph-core",
+      "platform_requirements": "any supported CI host",
+      "rebaseline_rules": "graph semantics change requires new product contract and fixture",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "perfect synthetic judgments",
+      "claim_impact": "quality smoke, candidate recall, and complete evidence",
+      "evidence_paths": [
+        "benchmarks/regression/fixtures/graph-quality-smoke-v1.json"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-QUALITY-SMOKE",
+      "metric": "quality_smoke_minimum",
+      "owner": "benchmark-owners",
+      "platform_requirements": "any supported CI host; deterministic arithmetic",
+      "rebaseline_rules": "new fixture version and reviewed judgments",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 1.0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "Phase 4b graph-free zero activity",
+      "claim_impact": "graph-free dispatch isolation",
+      "evidence_paths": [
+        "crates/vectorkit-ffi/src/phase4_graph_free.rs"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-GRAPH-FREE",
+      "metric": "graph_free_activity_count",
+      "owner": "ffi-and-packaging",
+      "platform_requirements": "base graph-free product",
+      "rebaseline_rules": "not rebaselinable; capability isolation invariant",
+      "required_inputs": [
+        "graph-quality-smoke-v1"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "Phase 7 static manifest",
+      "claim_impact": "schema, inventory, hash, and deterministic artifact integrity",
+      "evidence_paths": [
+        "benchmarks/regression/manifest-v1.json"
+      ],
+      "failure_severity": "blocks_pr",
+      "gate_id": "P7-PR-ARTIFACT-INTEGRITY",
+      "metric": "artifact_integrity_violation_count",
+      "owner": "benchmark-owners",
+      "platform_requirements": "any supported CI host",
+      "rebaseline_rules": "reviewed static change plus regenerated manifest and hashes",
+      "required_inputs": [
+        "phase7-static-artifacts"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "pull_request"
+    },
+    {
+      "baseline": "Phase 6 scoped HotpotQA quality",
+      "claim_impact": "P6-QUALITY-001",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-NDCG10",
+      "metric": "ndcg_at_10",
+      "owner": "benchmark-owners",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "reviewed old/new quality evidence and regenerated hashes",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1",
+        "minilm-c9745ed1",
+        "pinned-evaluators"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 0.9279094336065143
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 scoped HotpotQA quality",
+      "claim_impact": "P6-QUALITY-002",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-RECALL10",
+      "metric": "recall_at_10",
+      "owner": "benchmark-owners",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "reviewed old/new quality evidence and regenerated hashes",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1",
+        "minilm-c9745ed1",
+        "pinned-evaluators"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 0.9577702702702703
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 scoped HotpotQA quality",
+      "claim_impact": "P6-QUALITY-002",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/graph-retrieval-metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-COMPLETE-EVIDENCE",
+      "metric": "complete_evidence_recall_at_10",
+      "owner": "benchmark-owners",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "reviewed old/new quality evidence and regenerated hashes",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1",
+        "minilm-c9745ed1",
+        "pinned-evaluators"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 0.9222972972972973
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 scoped HotpotQA candidate quality",
+      "claim_impact": "P6-QUALITY-003",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/graph-retrieval-metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-CANDIDATE-RECALL",
+      "metric": "candidate_recall",
+      "owner": "graph-core",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "reviewed old/new candidate evidence and regenerated hashes",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 0.9679054054054054
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 scoped HotpotQA candidate quality",
+      "claim_impact": "P6-QUALITY-003",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/graph-retrieval-metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-CANDIDATE-COMPLETE",
+      "metric": "candidate_complete_evidence",
+      "owner": "graph-core",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "reviewed old/new candidate evidence and regenerated hashes",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 0.9425675675675675
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 zero empty scopes",
+      "claim_impact": "P6-QUALITY-003",
+      "evidence_paths": [
+        "target/benchmarks/hotpotqa-phase-3b/locked-reporting/graph-retrieval-metrics.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-EMPTY-SCOPE",
+      "metric": "empty_scope_count",
+      "owner": "graph-core",
+      "platform_requirements": "controlled self-hosted runner; pinned external inputs",
+      "rebaseline_rules": "population or seed-policy change requires new contract",
+      "required_inputs": [
+        "hotpotqa-locked-test-v1"
+      ],
+      "threshold": {
+        "operator": "lte",
+        "value": 0
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 5 exact oracle agreement",
+      "claim_impact": "P6-MAC-CORRECTNESS-001",
+      "evidence_paths": [
+        "benchmarks/external-reference/artifacts/mac-comparison-v1/raw-results.jsonl"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-EXTERNAL-CORRECTNESS",
+      "metric": "external_exact_recall_at_10",
+      "owner": "benchmark-owners",
+      "platform_requirements": "controlled Apple Silicon Mac; pinned external dependencies",
+      "rebaseline_rules": "not below exact agreement; dependency change requires new evidence",
+      "required_inputs": [
+        "phase5-pinned-environment"
+      ],
+      "threshold": {
+        "operator": "gte",
+        "value": 1.0
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "byte-identical full artifact roots",
+      "claim_impact": "reproducible quality and benchmark evidence",
+      "evidence_paths": [
+        "target/benchmarks/phase7/full/root-a",
+        "target/benchmarks/phase7/full/root-b"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-TWO-ROOT-DETERMINISM",
+      "metric": "two_root_byte_identity",
+      "owner": "benchmark-owners",
+      "platform_requirements": "two fresh empty output roots",
+      "rebaseline_rules": "not rebaselinable without serialization contract version",
+      "required_inputs": [
+        "full-evaluation-inputs"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": true
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 6 publication package PASS",
+      "claim_impact": "all Phase 6 claims and publication eligibility",
+      "evidence_paths": [
+        "benchmarks/publication/artifacts/phase6-publication-v1/manifest.json"
+      ],
+      "failure_severity": "blocks_scheduled",
+      "gate_id": "P7-FULL-PHASE6-VALIDATION",
+      "metric": "phase6_claim_validation",
+      "owner": "benchmark-owners",
+      "platform_requirements": "all frozen Phase 3–5 evidence roots provisioned",
+      "rebaseline_rules": "new publication contract and reviewed claim register",
+      "required_inputs": [
+        "phase3-root",
+        "phase4b-root",
+        "phase5-root"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": true
+      },
+      "tier": "scheduled_full"
+    },
+    {
+      "baseline": "Phase 4b supported-product qualification",
+      "claim_impact": "P6-DEVICE-001",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/supported"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-SUPPORTED-MATRIX",
+      "metric": "supported_matrix_complete",
+      "owner": "release-owner",
+      "platform_requirements": "iPhone 17 Pro Max; 10K/25K/50K; F32/I8; release; foreground; nominal/fair thermal; Low Power Mode off; network isolated; fresh processes",
+      "rebaseline_rules": "new owner authorization and complete controlled evidence",
+      "required_inputs": [
+        "owner-authorization",
+        "supported-device-evidence"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": true
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "bound controlled-platform P50/P95/P99 values",
+      "claim_impact": "P6-DEVICE-001 latency qualifiers",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/supported"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-LATENCY",
+      "metric": "maximum_query_or_lifecycle_percentile_ratio",
+      "owner": "benchmark-owners",
+      "platform_requirements": "exact controlled platform and sample policy in baselines-v1.json",
+      "rebaseline_rules": "reviewed old/new P50/P95/P99 evidence; generic CI remains diagnostic",
+      "required_inputs": [
+        "controlled-performance-observation"
+      ],
+      "threshold": {
+        "operator": "lte",
+        "value": 1.1
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "Phase 4b graph-free ratio gate",
+      "claim_impact": "graph-free performance envelope and dispatch isolation",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/graph-free"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-GRAPH-FREE-RATIO",
+      "metric": "maximum_graph_free_median_p95_ratio",
+      "owner": "ffi-and-packaging",
+      "platform_requirements": "separate baseline and graph-linked release products; three sessions each",
+      "rebaseline_rules": "explicit reviewed controlled comparison; maximum cannot change after failure",
+      "required_inputs": [
+        "graph-free-controlled-evidence"
+      ],
+      "threshold": {
+        "operator": "lte",
+        "value": 1.03
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "Phase 4 device safety memory budget",
+      "claim_impact": "supported device memory safety",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/supported"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-MEMORY",
+      "metric": "peak_process_memory_bytes",
+      "owner": "release-owner",
+      "platform_requirements": "five fresh-process 1 ms RSS repetitions per scenario",
+      "rebaseline_rules": "safety budget change requires owner approval and new device evidence",
+      "required_inputs": [
+        "supported-device-memory-evidence"
+      ],
+      "threshold": {
+        "operator": "lte",
+        "value": 1610612736
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "Phase 4b persisted component and total bytes",
+      "claim_impact": "supported persisted-size envelope",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/supported"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-PERSISTED-SIZE",
+      "metric": "maximum_persisted_component_or_total_ratio",
+      "owner": "persistence",
+      "platform_requirements": "exact non-overlapping component accounting for all supported rows",
+      "rebaseline_rules": "reviewed storage-format evidence and regenerated baseline identity",
+      "required_inputs": [
+        "supported-device-persistence-evidence"
+      ],
+      "threshold": {
+        "operator": "lte",
+        "value": 1.05
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "Phase 4b lifecycle correctness",
+      "claim_impact": "build, save, validation, cold/warm load, and replay guarantees",
+      "evidence_paths": [
+        "target/phase4b/device-results/devices/iphone17-pro-max/supported"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-LIFECYCLE",
+      "metric": "lifecycle_violation_count",
+      "owner": "persistence",
+      "platform_requirements": "fresh process, release build, authorized device and complete operation matrix",
+      "rebaseline_rules": "not rebaselinable for correctness; protocol changes require new contract",
+      "required_inputs": [
+        "supported-device-lifecycle-evidence"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "permanent Phase 4b safety cancellation",
+      "claim_impact": "P6-DEVICE-SAFETY-001 and P6-PROHIBITED-004",
+      "evidence_paths": [
+        "benchmarks/device-graph/phase4b-device-safety-cancellation-authorization-v1.json"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-NO-100K",
+      "metric": "physical_device_100k_violation_count",
+      "owner": "release-owner",
+      "platform_requirements": "100K option absent; zero accepted stress artifacts",
+      "rebaseline_rules": "not rebaselinable under this contract",
+      "required_inputs": [
+        "owner-authorization"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "release"
+    },
+    {
+      "baseline": "complete Phase 6 claim qualifiers",
+      "claim_impact": "release claim eligibility",
+      "evidence_paths": [
+        "benchmarks/publication/artifacts/phase6-publication-v1/claim-register.json"
+      ],
+      "failure_severity": "blocks_release",
+      "gate_id": "P7-RELEASE-CLAIMS",
+      "metric": "claim_policy_violation_count",
+      "owner": "release-owner",
+      "platform_requirements": "hardware, OS, toolchain, source revision, sample count, and baseline named",
+      "rebaseline_rules": "new publication contract and reviewed evidence",
+      "required_inputs": [
+        "release-observation",
+        "phase6-claim-register"
+      ],
+      "threshold": {
+        "operator": "eq",
+        "value": 0
+      },
+      "tier": "release"
+    }
+  ],
+  "registry_id": "phase7-gate-registry-v1",
+  "schema_version": 1
+}

@@ -1,0 +1,23 @@
+{
+  "artifact_inventory_valid": true,
+  "candidate_complete_evidence": 1.0,
+  "candidate_recall": 1.0,
+  "complete_evidence_recall_at_3": 1.0,
+  "deleted_hits": 0,
+  "dimension_mismatch_rejected": true,
+  "filter_mismatches": 0,
+  "graph_candidates_projected": 0,
+  "graph_edges_traversed": 0,
+  "graph_nodes_visited": 0,
+  "graph_queries": 0,
+  "graph_selection_mismatches": 0,
+  "invalid_scope_rejections": 1,
+  "ndcg_at_3": 1.0,
+  "outdated_hits": 0,
+  "recall_at_3": 1.0,
+  "replay_divergences": 0,
+  "result_identity_match": true,
+  "schema_valid": true,
+  "stable_order_match": true,
+  "unexpected_empty_scope_count": 0
+}

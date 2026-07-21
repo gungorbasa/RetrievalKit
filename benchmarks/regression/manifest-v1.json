@@ -1,0 +1,43 @@
+{
+  "artifact_id": "phase7-regression-static-v1",
+  "baseline_sha256": "338bf2231a9b9c841515fb7018b2be7014993a71964e9e4876244f90173bd34d",
+  "canonical_artifact_set_sha256": "95d834282fc1e5e45fc90259aa8f0c8dfb254bb5c6a369499dde90d1857c0099",
+  "contract_sha256": "8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd",
+  "files": [
+    {
+      "path": "baselines-v1.json",
+      "sha256": "338bf2231a9b9c841515fb7018b2be7014993a71964e9e4876244f90173bd34d"
+    },
+    {
+      "path": "contract-v1.json",
+      "sha256": "8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd"
+    },
+    {
+      "path": "fixtures/expected-observation-v1.json",
+      "sha256": "ce55ed64bfbe12f5aa903686cbad8839f048d806520c319223e8b4f8be976fcd"
+    },
+    {
+      "path": "fixtures/graph-quality-smoke-v1.json",
+      "sha256": "79c37a1f1abf026d28e784454f1eb3410ad24e3abbfc0e33347b3e6a0da164a4"
+    },
+    {
+      "path": "gate-registry-v1.json",
+      "sha256": "ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384"
+    },
+    {
+      "path": "result-schema-v1.json",
+      "sha256": "47a7cc56b290d0249b7bee76b511d90af8ba58422f074b20ef7678209c5ac4de"
+    }
+  ],
+  "fixture_sha256": "79c37a1f1abf026d28e784454f1eb3410ad24e3abbfc0e33347b3e6a0da164a4",
+  "inventory": [
+    "baselines-v1.json",
+    "contract-v1.json",
+    "fixtures/expected-observation-v1.json",
+    "fixtures/graph-quality-smoke-v1.json",
+    "gate-registry-v1.json",
+    "result-schema-v1.json"
+  ],
+  "registry_sha256": "ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384",
+  "schema_version": 1
+}

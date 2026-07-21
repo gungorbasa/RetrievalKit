@@ -1,0 +1,53 @@
+{
+  "artifact_inventory": [
+    "baselines-v1.json",
+    "contract-v1.json",
+    "fixtures/expected-observation-v1.json",
+    "fixtures/graph-quality-smoke-v1.json",
+    "gate-registry-v1.json",
+    "result-schema-v1.json"
+  ],
+  "canonicalization": {
+    "artifact_set": "sha256 of sorted UTF-8 '<relative-path>\\t<sha256>\\n' lines; manifest excluded",
+    "json": "UTF-8, sorted keys, two-space indent, finite numbers, one trailing LF",
+    "markdown": "UTF-8, LF newlines, one trailing LF",
+    "symlinks": "forbidden"
+  },
+  "contract_id": "vectorkit-regression-gates-v1",
+  "failure_semantics": {
+    "failed": "blocking regression or invalid evidence",
+    "infrastructure_error": "failed",
+    "not_provisioned": "allowed only for scheduled_full or release; never pass",
+    "passed": "all required gates evaluated and passed"
+  },
+  "frozen_on": "2026-07-21",
+  "physical_device_commands_authorized": false,
+  "rebaseline_policy": {
+    "automatic": false,
+    "required_review_fields": [
+      "old_values",
+      "new_values",
+      "rationale",
+      "controlled_evidence",
+      "source_revision",
+      "platform_toolchain",
+      "sample_count",
+      "claim_impact",
+      "regenerated_hashes"
+    ]
+  },
+  "result_statuses": [
+    "passed",
+    "failed",
+    "not_provisioned"
+  ],
+  "schema_version": 1,
+  "tiers": [
+    "pull_request",
+    "scheduled_full",
+    "release"
+  ],
+  "unsupported_physical_device_workloads": [
+    "100k-384d-v3-stress"
+  ]
+}

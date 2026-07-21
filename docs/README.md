@@ -21,6 +21,8 @@ Current implementation source of truth:
   compact-index footprint and retrieval-speed analysis
 - [`product/release-process.md`](product/release-process.md) for the guarded
   combined Swift/Python `v0.1.0` release-candidate workflow
+- [`product/reports/v0.1.0-release-candidate-report.md`](product/reports/v0.1.0-release-candidate-report.md)
+  for the qualified artifact identities, verification, and remaining blockers
 
 ## Research
 

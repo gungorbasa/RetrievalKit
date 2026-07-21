@@ -12,7 +12,7 @@ let baseBinary: Target = useLocalArtifacts
   : .binaryTarget(
     name: "VectorKitFFI",
     url: "\(releaseBase)/VectorKitFFI.xcframework.zip",
-    checksum: "9c4a05595c9872907f53a34f602bc2d7008d3d4679768bd33c094bae8aaa1c06"
+    checksum: "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"
   )
 
 let graphBinary: Target = useLocalArtifacts
@@ -20,7 +20,7 @@ let graphBinary: Target = useLocalArtifacts
   : .binaryTarget(
     name: "VectorKitGraphFFI",
     url: "\(releaseBase)/VectorKitGraphFFI.xcframework.zip",
-    checksum: "941f5724f94c181a89e26ad5bd285a234a24c0771d8e5531ebc4f88c3eaeaa3f"
+    checksum: "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"
   )
 
 let package = Package(

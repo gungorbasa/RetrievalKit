@@ -21,6 +21,7 @@ def load(name: str, path: Path):
 validator = load("release_validator", REPO / "scripts/release/validate_release.py")
 canonical_zip = load("canonical_zip", REPO / "scripts/release/canonical_zip.py")
 compare_artifacts = load("compare_artifacts", REPO / "scripts/release/compare_artifacts.py")
+canonicalize_wheel = load("canonicalize_wheel", REPO / "scripts/release/canonicalize_wheel.py")
 
 
 class ReleaseTests(unittest.TestCase):
@@ -86,6 +87,21 @@ class ReleaseTests(unittest.TestCase):
             (second / "artifact").write_bytes(b"b")
             with self.assertRaisesRegex(ValueError, "bytes differ"):
                 compare_artifacts.compare(first, second)
+
+    def test_wheel_canonicalization_remaps_checkout_and_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = root / "vectorkit-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+            sbom_name = "vectorkit-0.1.0.dist-info/sboms/test.json"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(sbom_name, '{"ref":"path+file://' + root.resolve().as_posix() + '/crates/vectorkit-core#0.1.0"}')
+                archive.writestr("vectorkit-0.1.0.dist-info/RECORD", "")
+            canonicalize_wheel.canonicalize(root, wheel)
+            first = wheel.read_bytes()
+            canonicalize_wheel.canonicalize(root, wheel)
+            self.assertEqual(first, wheel.read_bytes())
+            with zipfile.ZipFile(wheel) as archive:
+                self.assertIn(b"path+file:///workspace/crates/", archive.read(sbom_name))
 
 
 if __name__ == "__main__":

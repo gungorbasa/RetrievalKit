@@ -8,8 +8,8 @@
     "architectures": ["arm64"],
     "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
     "artifacts": {
-      "VectorKitFFI.xcframework.zip": {"swiftpm_checksum": "9c4a05595c9872907f53a34f602bc2d7008d3d4679768bd33c094bae8aaa1c06"},
-      "VectorKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "941f5724f94c181a89e26ad5bd285a234a24c0771d8e5531ebc4f88c3eaeaa3f"}
+      "VectorKitFFI.xcframework.zip": {"swiftpm_checksum": "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"},
+      "VectorKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"}
     },
     "products": ["VectorKit", "VectorKitIngest", "VectorKitGraph", "EmbeddingKit", "VectorKitPipeline"],
     "native_aggregate_rule": "link exactly one of VectorKitFFI or VectorKitGraphFFI; the graph aggregate includes base symbols"

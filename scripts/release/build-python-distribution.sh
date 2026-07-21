@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/target/release-python-wheels}"
 DISTRIBUTION="${1:-}"
+export CARGO_INCREMENTAL=0
+export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT_DIR=/workspace"
+unset RUSTFLAGS
 
 case "$DISTRIBUTION" in
   vectorkit)
@@ -48,6 +51,7 @@ done < <(find "$BUILD_DIR" -maxdepth 1 -name '*.whl' -type f | sort)
 WHEEL="${WHEELS[0]}"
 [[ "$(basename "$WHEEL")" == *"-$PYTHON_TAG-"* ]] || { echo "wheel has unexpected Python tag: $WHEEL" >&2; exit 1; }
 [[ "$(basename "$WHEEL")" == *"macosx"*"arm64.whl" ]] || { echo "wheel is not macOS arm64: $WHEEL" >&2; exit 1; }
+python3 "$ROOT_DIR/scripts/release/canonicalize_wheel.py" --repo "$ROOT_DIR" "$WHEEL"
 
 "$PYTHON_BIN" -m venv --clear "$SMOKE_VENV"
 "$SMOKE_VENV/bin/python" -m pip install --disable-pip-version-check "$WHEEL"

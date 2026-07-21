@@ -170,6 +170,11 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
         observed.add((normalized, tag))
         with zipfile.ZipFile(path) as wheel:
             require(any(item.endswith(".dist-info/RECORD") for item in wheel.namelist()), f"wheel RECORD missing: {name}")
+            sboms = [item for item in wheel.namelist() if ".dist-info/sboms/" in item]
+            require(len(sboms) == 1, f"wheel SBOM inventory mismatch: {name}")
+            sbom_bytes = wheel.read(sboms[0])
+            require(b"path+file:///workspace/" in sbom_bytes, f"wheel SBOM lacks canonical source paths: {name}")
+            require(b"path+file:///private/" not in sbom_bytes, f"wheel SBOM leaks checkout paths: {name}")
     expected = {(distribution, tag) for distribution in config["python"]["distributions"] for tag in config["python"]["implementations"]}
     require(observed == expected, f"Python wheel matrix mismatch: missing={sorted(expected - observed)}, extra={sorted(observed - expected)}")
 

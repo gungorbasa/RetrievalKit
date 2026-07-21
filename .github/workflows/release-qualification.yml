@@ -1,0 +1,62 @@
+name: Manual Release Qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      observation_path:
+        description: Repository-local path to pre-collected 10K/25K/50K F32/I8 evidence summary
+        required: true
+        type: string
+      authorization_path:
+        description: Repository-local path to explicit owner release authorization
+        required: true
+        type: string
+      owner_authorized:
+        description: I authorize validation of pre-collected supported-device evidence
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase7-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-qualification:
+    name: Validate supported physical-device release evidence
+    if: inputs.owner_authorized
+    runs-on: [self-hosted, macOS, ARM64, vectorkit-controlled]
+    timeout-minutes: 120
+    env:
+      AUTHORIZATION_PATH: ${{ inputs.authorization_path }}
+      OBSERVATION_PATH: ${{ inputs.observation_path }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate explicit authorization scope
+        run: |
+          python3 benchmarks/regression/validate_release_authorization.py \
+            --authorization "$AUTHORIZATION_PATH" \
+            --observation "$OBSERVATION_PATH"
+
+      - name: Validate pre-collected release evidence
+        run: |
+          python3 benchmarks/regression/run_gates.py \
+            --tier release \
+            --observation "$OBSERVATION_PATH" \
+            --output target/phase7-release-result
+          python3 benchmarks/regression/validate_gates.py \
+            --repo . \
+            --result-root target/phase7-release-result
+
+      - name: Preserve accepted or rejected release evidence summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          if-no-files-found: error
+          name: phase7-release-qualification-${{ github.run_id }}
+          path: target/phase7-release-result
+          retention-days: 90

@@ -1,0 +1,63 @@
+name: Scheduled Full Regression Gates
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      observation_path:
+        description: Repository-local path to the hash-pinned full observation
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase7-full-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-regression:
+    name: Full quality and benchmark validation
+    runs-on: [self-hosted, macOS, ARM64, vectorkit-controlled]
+    timeout-minutes: 180
+    env:
+      DISPATCH_OBSERVATION: ${{ inputs.observation_path }}
+      SCHEDULED_OBSERVATION: ${{ vars.VECTORKIT_PHASE7_FULL_OBSERVATION }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate static gate definitions
+        run: python3 benchmarks/regression/validate_gates.py --repo .
+
+      - name: Evaluate provisioned full observation
+        run: |
+          observation="$DISPATCH_OBSERVATION"
+          if [ -z "$observation" ]; then
+            observation="$SCHEDULED_OBSERVATION"
+          fi
+          if [ -n "$observation" ]; then
+            python3 benchmarks/regression/run_gates.py \
+              --tier scheduled_full \
+              --observation "$observation" \
+              --output target/phase7-full-result
+          else
+            python3 benchmarks/regression/run_gates.py \
+              --tier scheduled_full \
+              --output target/phase7-full-result
+          fi
+
+      - name: Independently validate full result
+        if: always()
+        run: python3 benchmarks/regression/validate_gates.py --repo . --result-root target/phase7-full-result
+
+      - name: Preserve machine-readable full evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          if-no-files-found: error
+          name: phase7-full-regression-${{ github.run_id }}
+          path: target/phase7-full-result
+          retention-days: 30

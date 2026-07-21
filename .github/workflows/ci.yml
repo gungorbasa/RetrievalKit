@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -14,6 +15,7 @@ jobs:
   rust-and-quality:
     name: Rust and retrieval quality
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -44,9 +46,16 @@ jobs:
             --fixture benchmarks/retrieval-quality/v2/fixture.json \
             --iterations 5
 
+      - name: Run Phase 7 graph-quality smoke gate
+        run: cargo test --locked -p vectorkit-graph --test regression_gates
+
+      - name: Run Phase 7 deterministic registry gates
+        run: scripts/benchmarks/run-phase7-pr.sh
+
   python:
     name: Python wrapper
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -67,6 +76,7 @@ jobs:
   apple:
     name: Apple XCFramework and Swift
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

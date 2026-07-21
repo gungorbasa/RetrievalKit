@@ -6,6 +6,18 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- The `v0.1.0` combined Swift/Python release-candidate implementation is the
+  active distribution slice. The root README is an evidence-led product page
+  whose numeric observations are mapped to permitted Phase 6 claim IDs and
+  mutation-tested in CI. The root Swift package exposes five products with
+  separate base/graph remote aggregates; macOS arm64 Python targets CPython
+  3.10–3.14. Release tooling produces canonical XCFramework archives, a closed
+  wheel matrix, checksums, SPDX SBOM, and provenance, then validates two-root
+  determinism and fresh consumers. Publication is fail-closed until the owner
+  adds a root license/notices, reconciles Python metadata, provisions passing
+  Phase 7 scheduled/release results for the release revision, authorizes claim
+  handling, and approves a signed tag. No publication or device command is part
+  of this slice. See `docs/product/release-process.md`.
 - Benchmark Phase 7 is complete. Contract V1 and the 26-gate registry freeze
   deterministic PR correctness/integrity, provisioned full-quality, and
   controlled release-performance gates. The checked-in synthetic fixture has

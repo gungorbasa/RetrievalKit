@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")"
 HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_ffi.h"
 GRAPH_HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_graph_ffi.h"
 BUILD_DIR="$ROOT_DIR/target/apple"
@@ -113,7 +114,7 @@ framework_info_plist() {
   <key>CFBundlePackageType</key>
   <string>FMWK</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>$VERSION</string>
   <key>CFBundleVersion</key>
   <string>1</string>
 </dict>

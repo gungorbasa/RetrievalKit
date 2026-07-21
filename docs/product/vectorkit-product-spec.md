@@ -2,14 +2,16 @@
 
 ## Product Summary
 
-Build a local-first retrieval SDK for mobile and desktop apps. The first target is iOS/macOS with a Rust core and Swift wrapper.
+Build a local-first retrieval SDK for mobile and desktop apps. The first public
+targets are iOS/macOS through Swift and macOS arm64 through Python, backed by
+one Rust core.
 
 The SDK must provide fast, correct local retrieval over app-owned documents without requiring a vector database server.
 
 Primary positioning:
 
 ```text
-Fast private local RAG for Swift apps.
+Fast, private retrieval for edge AI.
 ```
 
 VectorKit is not a general vector database. It is a local retrieval engine with a developer-friendly SDK.
@@ -64,6 +66,7 @@ V1 must include:
 
 - Rust retrieval core.
 - Swift wrapper.
+- Python wrapper with capability parity.
 - Local persistent index.
 - Exact vector search.
 - BM25 lexical scoring as the internal lexical component of hybrid search.

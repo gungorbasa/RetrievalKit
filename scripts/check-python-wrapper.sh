@@ -98,6 +98,7 @@ PY
     "$check_python" -m ruff check .
     "$check_python" -m mypy
     "$check_python" -m pytest
+    "$check_python" examples/database_quickstart.py
   )
 
   if [[ "$SKIP_WHEEL" -eq 0 ]]; then

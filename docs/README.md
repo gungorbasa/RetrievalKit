@@ -19,6 +19,8 @@ Current implementation source of truth:
   for the original 12-query baseline
 - [`product/size-speed-report.md`](product/size-speed-report.md) for the current
   compact-index footprint and retrieval-speed analysis
+- [`product/release-process.md`](product/release-process.md) for the guarded
+  combined Swift/Python `v0.1.0` release-candidate workflow
 
 ## Research
 

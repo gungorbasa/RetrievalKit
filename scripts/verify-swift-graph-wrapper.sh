@@ -57,6 +57,7 @@ check_quickstart() {
 }
 
 check_quickstart "$ROOT_DIR/wrappers/swift/VectorKit" VectorKitRetrievalQuickstart 'retrieval=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/VectorKit" VectorKitDatabaseQuickstart 'local-first'
 check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphQuickstart 'graph=rust'
 check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphRetrievalQuickstart 'combined=rust'
 echo "Swift base/graph linkage and conformance verification passed"

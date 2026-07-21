@@ -1,8 +1,8 @@
 # Python Agent Guidance
 
-Python is an internal developer wrapper target for VectorKit before the public
-Swift wrapper is finalized. Read this file before creating or modifying Python
-code.
+Python is a public V1 wrapper target released with Swift, initially as macOS
+arm64 wheels for CPython 3.10–3.14. Read this file before creating or modifying
+Python code.
 
 ## Role of the Python Wrapper
 
@@ -12,8 +12,8 @@ code.
   quantization, and trace generation belong in the Rust core.
 - Prefer less Python and more Rust. Python should mainly validate inputs,
   convert Python objects into Rust calls, and return Rust-produced results.
-- Treat Python as a developer and testing surface unless the product spec is
-  explicitly updated to make it a public V1 target.
+- Treat Python API, error, persistence, and behavior compatibility as a public
+  release surface while keeping the implementation a thin Rust wrapper.
 - Do not add server, dashboard, sync, ANN, or database behavior through Python.
 
 ## Package Shape

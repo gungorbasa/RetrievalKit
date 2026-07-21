@@ -295,11 +295,12 @@ delay packaging the already-tested V1 SDK.
 
 ## Phase 5: Release and Distribution
 
-Status: a manual-only verification workflow is checked in for Rust, V2
-retrieval quality, Python, the Apple XCFramework build, and Swift tests. It does
-not run on pushes or pull requests. Automatic CI, artifact uploads, release
-checksums, tag automation, and the remote Swift binary target are intentionally
-deferred until VectorKit is ready to release.
+Status: the combined `v0.1.0` Swift/Python release-candidate surface, automatic
+PR CI, remote Swift binary manifest, macOS arm64 wheel matrix, deterministic
+bundle metadata, checksums, SBOM, provenance, governance documents, and guarded
+publication workflows are implemented. External publication remains blocked
+on the owner-approved license/notices, provisioned Phase 7 scheduled/release
+gates, release-revision claim authorization, a signed tag, and owner approval.
 
 Goal: make VectorKit installable without cloning the repository or manually
 building Rust artifacts.
@@ -310,8 +311,8 @@ Work:
   tests, and persistence compatibility fixtures.
 - Build versioned Apple XCFramework release artifacts with checksums.
 - Switch the public Swift package to a tagged binary target.
-- Build and smoke-test Python wheels for supported macOS, Linux, and Windows
-  targets if Python remains a release target.
+- Build and smoke-test both Python distributions for CPython 3.10–3.14 on
+  macOS arm64. Other operating systems remain future work.
 - Add release automation, signed tags, changelog checks, and migration notes.
 - Add `LICENSE`, `CONTRIBUTING`, security policy, and issue templates.
 - Publish hosted API and getting-started documentation.

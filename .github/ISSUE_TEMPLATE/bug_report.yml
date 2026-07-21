@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible VectorKit defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include private corpora, secrets, device captures, or vulnerability details. Use the private security channel for security reports.
+  - type: input
+    id: revision
+    attributes:
+      label: Version or revision
+      placeholder: v0.1.0 or full Git commit
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - Rust core
+        - Swift base
+        - Swift graph
+        - Python base
+        - Python graph
+        - Build or release tooling
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Hardware, OS, architecture, toolchain, and build mode.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include deterministic inputs and exact commands when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

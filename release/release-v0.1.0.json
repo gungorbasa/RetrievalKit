@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "tag": "v0.1.0",
+  "status": "preview_release_candidate",
+  "repository": "https://github.com/gungorbasa/VectorKit",
+  "apple": {
+    "architectures": ["arm64"],
+    "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
+    "artifacts": {
+      "VectorKitFFI.xcframework.zip": {"swiftpm_checksum": "9c4a05595c9872907f53a34f602bc2d7008d3d4679768bd33c094bae8aaa1c06"},
+      "VectorKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "941f5724f94c181a89e26ad5bd285a234a24c0771d8e5531ebc4f88c3eaeaa3f"}
+    },
+    "products": ["VectorKit", "VectorKitIngest", "VectorKitGraph", "EmbeddingKit", "VectorKitPipeline"],
+    "native_aggregate_rule": "link exactly one of VectorKitFFI or VectorKitGraphFFI; the graph aggregate includes base symbols"
+  },
+  "python": {
+    "platform": "macosx_arm64",
+    "implementations": ["cp310", "cp311", "cp312", "cp313", "cp314"],
+    "distributions": ["vectorkit", "vectorkit-graph"],
+    "co_installation": "unsupported; one native capability distribution per process"
+  },
+  "phase6_claims": {
+    "mapping": "benchmarks/publication/readme-claims-v1.json",
+    "source_revision": "9c784d2f11b91bb907150aa1b6046880ff89fde6",
+    "expires_on": "2027-07-21",
+    "release_revision_transfer": false
+  },
+  "publication_blockers": [
+    "owner-approved root LICENSE and notices",
+    "Python MIT metadata reconciled with the chosen root license",
+    "Phase 7 scheduled and release gates provisioned and passing for the release revision",
+    "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
+    "signed v0.1.0 tag and owner release approval"
+  ]
+}

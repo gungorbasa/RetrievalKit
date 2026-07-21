@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "readme": "README.md",
+  "claim_register": "benchmarks/publication/artifacts/phase6-publication-v1/claim-register.json",
+  "claim_register_sha256": "f0fc222ace0caacff5fc5f6c857bdbc6f76b86010cf193df8930c3ffcab97aaa",
+  "source_revision": "9c784d2f11b91bb907150aa1b6046880ff89fde6",
+  "expires_on": "2027-07-21",
+  "claims": {
+    "P6-MAC-EXACT-001": ["exact F32", "384-dimensional", "P50", "unfiltered", "sqlite-vec `0.1.9`", "Apple M1 Max", "macOS 26.5.2", "100 measured queries", "20 warmups", "embedding was excluded", "7.17×", "7.60×", "7.29×", "10K", "25K", "50K", "`9c784d2`"],
+    "P6-MAC-EXACT-002": ["filter", "P50", "10.38×", "9.08×", "8.43×", "10K", "25K", "50K", "sqlite-vec `0.1.9`", "Apple M1 Max", "exact F32", "embedding was excluded", "`9c784d2`"],
+    "P6-MAC-CORRECTNESS-001": ["exact F32", "sqlite-vec `0.1.9`", "identity", "filtering", "deletion", "determinism", "reload", "10K", "25K", "50K", "frozen workload"],
+    "P6-QUALITY-001": ["frozen 296-query", "HotpotQA", "weighted-I8", "NDCG@10", "0.858036", "0.927909", "121 wins", "157 ties", "18 losses", "not a universal graph winner", "not", "latency"],
+    "P6-QUALITY-002": ["frozen 296-query", "weighted-I8", "Recall@10", "0.871622", "0.957770", "complete-evidence recall@10", "0.743243", "0.922297", "Sixteen queries lost"],
+    "P6-QUALITY-003": ["mean per-query", "972.65×", "96.79% candidate recall", "94.26% candidate complete evidence", "296 valid graph queries", "zero empty scopes", "not a retrieval-latency speedup", "not perfect"],
+    "P6-DEVICE-001": ["physical iPhone 17 Pro Max", "`iPhone18,2`", "`V54AP`", "10K", "25K", "50K", "F32/I8", "six graph-free", "1.03", "iOS 26.5.1 (23F81)", "iOS 26.5.2 (23F84)", "embedding excluded", "not a claim about other hardware"],
+    "P6-DEVICE-SAFETY-001": ["100K", "`not_run_device_safety`", "zero accepted stress artifacts", "not eligible for support", "performance", "latency", "quality", "product", "marketing"]
+  }
+}

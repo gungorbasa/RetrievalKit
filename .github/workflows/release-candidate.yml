@@ -1,0 +1,135 @@
+name: Manual v0.1.0 Release Candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate source and publication blockers
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Validate source metadata and historical claims
+        run: |
+          python3 benchmarks/publication/validate_readme.py --repo .
+          python3 scripts/release/validate_release.py --repo .
+          scripts/benchmarks/run-phase7-pr.sh
+
+  apple:
+    name: Apple artifacts (${{ matrix.root }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [a, b]
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      SOURCE_DATE_EPOCH: "0"
+    steps:
+      - name: Check out clean root
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install Rust and Apple targets
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
+      - name: Build canonical Apple archives
+        run: scripts/release/build-apple-artifacts.sh
+      - name: Smoke-test isolated Swift consumers
+        run: scripts/release/smoke-swift-consumers.sh
+      - name: Upload Apple candidate artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: root-${{ matrix.root }}-apple
+          path: target/release-apple-artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 180
+
+  python:
+    name: Python ${{ matrix.python }} (${{ matrix.root }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [a, b]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      SOURCE_DATE_EPOCH: "0"
+    steps:
+      - name: Check out clean root
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - name: Install CPython
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: arm64
+      - name: Build and smoke-test both distributions
+        env:
+          PYTHON_BIN: python
+          OUTPUT_DIR: target/release-python-wheels
+        run: |
+          scripts/release/build-python-distribution.sh vectorkit
+          scripts/release/build-python-distribution.sh vectorkit-graph
+          base_wheel="$(find target/release-python-wheels -name 'vectorkit-*.whl' ! -name 'vectorkit_graph-*' -print -quit)"
+          graph_wheel="$(find target/release-python-wheels -name 'vectorkit_graph-*.whl' -print -quit)"
+          scripts/release/test-python-coinstallation.sh python "$base_wheel" "$graph_wheel"
+      - name: Upload Python candidate artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: root-${{ matrix.root }}-python-${{ matrix.python }}
+          path: target/release-python-wheels/*.whl
+          if-no-files-found: error
+          retention-days: 180
+
+  assemble:
+    name: Prove two-root reproducibility and assemble
+    needs: [apple, python]
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Download root A
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: root-a-*
+          path: target/root-a
+          merge-multiple: true
+      - name: Download root B
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: root-b-*
+          path: target/root-b
+          merge-multiple: true
+      - name: Compare clean-root artifact bytes
+        run: python3 scripts/release/compare_artifacts.py target/root-a target/root-b
+      - name: Assemble and independently validate closed bundle
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          python3 scripts/release/assemble_release.py \
+            --repo . \
+            --staging target/root-a \
+            --output target/release-bundle-v0.1.0 \
+            --source-revision "${GITHUB_SHA}"
+          python3 scripts/release/validate_release.py \
+            --repo . \
+            --bundle target/release-bundle-v0.1.0
+      - name: Upload validated release candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-candidate-v0.1.0
+          path: target/release-bundle-v0.1.0
+          if-no-files-found: error
+          retention-days: 180

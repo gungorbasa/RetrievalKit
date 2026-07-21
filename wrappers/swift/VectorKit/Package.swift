@@ -11,6 +11,7 @@ let package = Package(
     products: [
         .library(name: "VectorKit", targets: ["VectorKit"]),
         .library(name: "VectorKitIngest", targets: ["VectorKitIngest"]),
+        .executable(name: "VectorKitDatabaseQuickstart", targets: ["VectorKitDatabaseQuickstart"]),
         .executable(name: "VectorKitRetrievalQuickstart", targets: ["VectorKitRetrievalQuickstart"])
     ],
     dependencies: [.package(path: "../VectorKitShared")],
@@ -29,6 +30,10 @@ let package = Package(
         .target(
             name: "VectorKitIngest",
             dependencies: ["VectorKitFFI"]
+        ),
+        .executableTarget(
+            name: "VectorKitDatabaseQuickstart",
+            dependencies: ["VectorKit"]
         ),
         .executableTarget(
             name: "VectorKitRetrievalQuickstart",

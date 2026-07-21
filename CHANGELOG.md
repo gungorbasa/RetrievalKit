@@ -2,7 +2,7 @@
 
 All notable user-facing changes and persistence migrations are recorded here.
 
-## Unreleased
+## 0.1.0 - Unreleased preview
 
 ### Added
 
@@ -43,6 +43,10 @@ All notable user-facing changes and persistence migrations are recorded here.
 - A manual-only verification workflow can check Rust, the V2 retrieval-quality
   gates, Python typing/lint/tests and installed wheels, plus Apple XCFramework
   and Swift builds without running automatically or publishing artifacts.
+- Evidence-led README with claim-register enforcement and tested
+  capability-oriented quickstarts.
+- Combined Swift/Python release-candidate tooling with reproducible artifact
+  inventory, SBOM, provenance, and fail-closed publication authorization.
 
 Compaction is a synchronous maintenance operation. It temporarily retains old
 and replacement structures to guarantee an all-or-nothing swap.

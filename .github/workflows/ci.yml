@@ -52,6 +52,14 @@ jobs:
       - name: Run Phase 7 deterministic registry gates
         run: scripts/benchmarks/run-phase7-pr.sh
 
+      - name: Validate README claims and release metadata
+        run: |
+          python3 benchmarks/publication/validate_readme.py --repo .
+          python3 scripts/release/validate_release.py --repo .
+          python3 -m unittest \
+            benchmarks.publication.tests.test_readme_claims \
+            scripts.release.test_release
+
   python:
     name: Python wrapper
     runs-on: ubuntu-24.04
@@ -68,10 +76,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run lint, typing, tests, and installed-wheel smoke test
+      - name: Run base and graph lint, typing, tests, and wheel smoke tests
         env:
           PYTHON_BIN: python
-        run: scripts/check-python-wrapper.sh
+        run: |
+          scripts/check-python-wrapper.sh
+          scripts/check-python-graph-wrapper.sh
 
   apple:
     name: Apple XCFramework and Swift

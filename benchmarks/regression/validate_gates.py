@@ -9,7 +9,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_ROOT = Path(__file__).resolve().parent
@@ -23,6 +23,13 @@ STATIC_FILES = (
 )
 TIERS = ("pull_request", "scheduled_full", "release")
 STATUSES = {"passed", "failed", "not_provisioned"}
+EXPECTED_BASELINE_SHA256 = "338bf2231a9b9c841515fb7018b2be7014993a71964e9e4876244f90173bd34d"
+EXPECTED_CONTRACT_SHA256 = "8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd"
+EXPECTED_FIXTURE_SHA256 = "79c37a1f1abf026d28e784454f1eb3410ad24e3abbfc0e33347b3e6a0da164a4"
+EXPECTED_REGISTRY_SHA256 = "ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384"
+EXPECTED_STATIC_ARTIFACT_SET_SHA256 = (
+    "95d834282fc1e5e45fc90259aa8f0c8dfb254bb5c6a369499dde90d1857c0099"
+)
 
 
 class ValidationError(RuntimeError):
@@ -43,13 +50,13 @@ def load_canonical(path: Path) -> dict[str, Any]:
     value = json.loads(raw)
     require(isinstance(value, dict), f"{path}: expected one JSON object")
     require(raw == canonical_bytes(value), f"{path}: JSON is not canonical")
-    return value
+    return cast(dict[str, Any], value)
 
 
 def load_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     require(isinstance(value, dict), f"{path}: expected one JSON object")
-    return value
+    return cast(dict[str, Any], value)
 
 
 def sha256_file(path: Path) -> str:
@@ -76,6 +83,18 @@ def validate_static(repo: Path) -> dict[str, Any]:
     observation = load_canonical(BENCHMARK_ROOT / "fixtures/expected-observation-v1.json")
     manifest = load_canonical(BENCHMARK_ROOT / "manifest-v1.json")
 
+    fixture_entries = sorted(
+        path.name for path in (BENCHMARK_ROOT / "fixtures").iterdir() if path.is_file()
+    )
+    require(
+        fixture_entries
+        == ["expected-observation-v1.json", "graph-quality-smoke-v1.json"],
+        "fixture inventory contains a missing or extra artifact",
+    )
+    for relative in STATIC_FILES:
+        item = BENCHMARK_ROOT / relative
+        require(item.is_file() and not item.is_symlink(), f"invalid static artifact: {relative}")
+
     require(contract["artifact_inventory"] == list(STATIC_FILES), "contract inventory changed")
     require(manifest["inventory"] == list(STATIC_FILES), "manifest inventory changed")
     entries = [
@@ -88,6 +107,11 @@ def validate_static(repo: Path) -> dict[str, Any]:
     require(manifest["registry_sha256"] == sha256_file(BENCHMARK_ROOT / "gate-registry-v1.json"), "manifest registry hash differs")
     require(manifest["baseline_sha256"] == sha256_file(BENCHMARK_ROOT / "baselines-v1.json"), "manifest baseline hash differs")
     require(manifest["fixture_sha256"] == sha256_file(BENCHMARK_ROOT / "fixtures/graph-quality-smoke-v1.json"), "manifest fixture hash differs")
+    require(manifest["canonical_artifact_set_sha256"] == EXPECTED_STATIC_ARTIFACT_SET_SHA256, "unauthorized static artifact-set change")
+    require(manifest["contract_sha256"] == EXPECTED_CONTRACT_SHA256, "unauthorized contract change")
+    require(manifest["registry_sha256"] == EXPECTED_REGISTRY_SHA256, "unauthorized registry or threshold change")
+    require(manifest["baseline_sha256"] == EXPECTED_BASELINE_SHA256, "unauthorized baseline change")
+    require(manifest["fixture_sha256"] == EXPECTED_FIXTURE_SHA256, "unauthorized fixture change")
 
     frozen = baseline["frozen_inputs"]
     frozen_paths = {
@@ -174,7 +198,7 @@ def threshold_passes(actual: Any, threshold: dict[str, Any]) -> bool:
     operator = threshold["operator"]
     expected = threshold["value"]
     if operator == "eq":
-        return actual == expected
+        return cast(bool, actual == expected)
     if operator == "gte":
         return float(actual) >= float(expected)
     if operator == "lte":

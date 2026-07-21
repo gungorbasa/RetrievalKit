@@ -9,7 +9,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_ROOT = Path(__file__).resolve().parent
@@ -146,7 +146,7 @@ def compare(actual: Any, threshold: dict[str, Any]) -> bool:
     operator = threshold["operator"]
     expected = threshold["value"]
     if operator == "eq":
-        return actual == expected
+        return cast(bool, actual == expected)
     if operator == "gte":
         return float(actual) >= float(expected)
     if operator == "lte":

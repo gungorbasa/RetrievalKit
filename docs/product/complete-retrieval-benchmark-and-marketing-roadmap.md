@@ -1,7 +1,7 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–6 complete; Phase 4b closed under the device-safety
-terminal-outcome amendment; Phase 7 not started
+Status: complete through Phase 7; Phase 4b closed under the device-safety
+terminal-outcome amendment
 
 Date: 2026-07-20
 
@@ -644,10 +644,20 @@ Exit gate:
 
 Exit result: PASS. Nine claims are permitted, six prohibited, and four
 withheld. USearch timing, graph-winner comparisons, 100K support, rejected
-device evidence, and raw-data redistribution remain excluded. Phase 7 remains
-inactive.
+device evidence, and raw-data redistribution remain excluded. Phase 7 later
+added regression enforcement without changing those Phase 6 decisions.
 
 ### Phase 7: Add Regression Gates
+
+Status: complete on 2026-07-21. Contract V1, a 26-gate machine-readable
+registry, the original synthetic graph-quality smoke fixture, deterministic
+result/failure artifacts, independent validation, mutation coverage, PR CI,
+controlled scheduled evaluation, and manual evidence-only release
+qualification are implemented. Generic CI blocks deterministic correctness
+and integrity regressions but does not enforce hardware-sensitive latency.
+Missing licensed or controlled inputs report `not_provisioned`, never pass.
+The release workflow has no physical-device command and no 100K option. See
+`docs/product/reports/phase-7-regression-gates-report.md`.
 
 Deliverables:
 
@@ -665,6 +675,14 @@ Exit gate:
 - a release cannot silently regress graph correctness, scoped retrieval
   quality, persistence equivalence, or the documented graph-free performance
   envelope
+
+Exit result: PASS. The checked-in smoke fixture passes production Rust exact,
+internal BM25, weighted hybrid, graph selection/scoped ranking, filtering,
+deletion/replacement, invalid-dimension, empty/invalid-scope, and persistence
+checks. The independent validator closes registry, baseline, fixture, frozen
+Phase 4–6, workflow-security, result, and two-root determinism rules. Full and
+release performance gates remain intentionally runnable only with provisioned
+controlled evidence.
 
 ## Claim Policy
 

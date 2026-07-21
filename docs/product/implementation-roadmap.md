@@ -98,8 +98,11 @@ Benchmark Phase 6 publication is complete. Its closed repository-local package
 contains separate methodology, quality, Mac, and physical-device reports plus
 a machine-readable claim register, evidence and licensing records, canonical
 manifest, independent validator, mutation coverage, and deterministic
-reproduction. Nine claims are permitted, six prohibited, and four withheld;
-Phase 7 has not begun. See
+reproduction. Nine claims are permitted, six prohibited, and four withheld.
+Benchmark Phase 7 regression gates are complete: deterministic PR gates,
+controlled scheduled/full gates, and manual evidence-only release
+qualification now fail closed through a 26-gate registry and independent
+validator. See `docs/product/reports/phase-7-regression-gates-report.md` and
 `docs/product/reports/phase-6-benchmark-publication-report.md`.
 This does not begin the separate release-and-distribution Phase 5 below.
 

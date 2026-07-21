@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[3]
 REGRESSION = ROOT / "benchmarks/regression"
@@ -38,18 +39,24 @@ class RegressionGateMutationTests(unittest.TestCase):
         return path
 
     def evaluate(self, tier: str, observation: dict[str, Any]) -> dict[str, Any]:
-        return runner.evaluate(
-            SimpleNamespace(
-                tier=tier,
-                observation=self.write_observation(f"{tier}.json", observation),
-                repo=ROOT,
-                source_revision="0123456789abcdef0123456789abcdef01234567",
-            )
+        return cast(
+            dict[str, Any],
+            runner.evaluate(
+                SimpleNamespace(
+                    tier=tier,
+                    observation=self.write_observation(f"{tier}.json", observation),
+                    repo=ROOT,
+                    source_revision="0123456789abcdef0123456789abcdef01234567",
+                )
+            ),
         )
 
     def pr_observation(self) -> dict[str, Any]:
-        return json.loads(
-            (REGRESSION / "fixtures/expected-observation-v1.json").read_text()
+        return cast(
+            dict[str, Any],
+            json.loads(
+                (REGRESSION / "fixtures/expected-observation-v1.json").read_text()
+            ),
         )
 
     def tier_observation(self, tier: str) -> dict[str, Any]:
@@ -145,6 +152,26 @@ class RegressionGateMutationTests(unittest.TestCase):
                 observation = self.pr_observation()
                 observation[key] = False
                 self.assert_gate_failed(self.evaluate("pull_request", observation), "P7-PR-ARTIFACT-INTEGRITY")
+
+    def test_independent_validator_rejects_missing_extra_and_altered_artifacts(self) -> None:
+        for mutation in ("missing", "extra", "altered"):
+            with self.subTest(mutation=mutation):
+                copied = self.root / mutation
+                shutil.copytree(REGRESSION, copied)
+                if mutation == "missing":
+                    (copied / "fixtures/expected-observation-v1.json").unlink()
+                elif mutation == "extra":
+                    (copied / "fixtures/undeclared.json").write_text("{}\n", encoding="utf-8")
+                else:
+                    with (copied / "contract-v1.json").open("ab") as stream:
+                        stream.write(b" ")
+                original = validator.BENCHMARK_ROOT
+                validator.BENCHMARK_ROOT = copied
+                try:
+                    with self.assertRaises((OSError, validator.ValidationError)):
+                        validator.validate_static(ROOT)
+                finally:
+                    validator.BENCHMARK_ROOT = original
 
     def test_full_quality_regressions_are_rejected(self) -> None:
         cases = {

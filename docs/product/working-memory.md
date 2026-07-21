@@ -6,6 +6,15 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- Benchmark Phase 7 is complete. Contract V1 and the 26-gate registry freeze
+  deterministic PR correctness/integrity, provisioned full-quality, and
+  controlled release-performance gates. The checked-in synthetic fixture has
+  no HotpotQA or device evidence. Generic CI never blocks on absolute timing;
+  missing scheduled/release inputs are `not_provisioned`, not passed. Manual
+  release qualification validates pre-collected 10K/25K/50K F32/I8 evidence
+  only, requires explicit owner authorization, contains no device command, and
+  exposes no 100K option. See
+  `docs/product/reports/phase-7-regression-gates-report.md`.
 - The approved capability-separated Rust/FFI/Swift architecture is implemented
   and locally qualified through all seven clean commit gates.
 - Keep customer-specific fixtures deferred; the graph package remains generic
@@ -657,10 +666,10 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
-Phase 4b is closed under the device-safety amendment. Benchmark Phase 5 external
-reference implementations and benchmark Phase 6 publication are complete. Do
-not begin benchmark Phase 7 or resume any physical-device stress benchmark
-without a new explicit owner task.
+Phase 4b is closed under the device-safety amendment. Benchmark Phase 5
+external reference implementations, Phase 6 publication, and Phase 7
+regression gates are complete. Do not begin another benchmark phase or resume
+any physical-device stress benchmark without a new explicit owner task.
 The final Phase 5 root contains 10 files, 5,100 timing rows, and 1,200 result
 rows at artifact-set SHA-256
 `1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`.

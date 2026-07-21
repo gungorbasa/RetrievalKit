@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="title desc">
+  <title id="title">VectorKit</title>
+  <desc id="desc">VectorKit is a local-first retrieval SDK: exact semantic search, BM25 hybrid ranking, and graph-scoped retrieval running entirely on device through one Rust core, with Swift and Python APIs.</desc>
+
+  <rect width="1200" height="400" rx="20" fill="#0A0D12"/>
+
+  <g id="title-block">
+    <text x="64" y="106" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="19" letter-spacing="3" fill="#E8A13D">LOCAL-FIRST RETRIEVAL FOR EDGE AI</text>
+
+    <text x="60" y="196" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="88" font-weight="800" fill="#F3F5F7">VectorKit</text>
+
+    <text x="64" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="25" fill="#C6CFD8">Exact semantic search, BM25 hybrid ranking, and</text>
+    <text x="64" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="25" fill="#C6CFD8">graph-scoped retrieval — one Rust core, no server.</text>
+
+    <!-- quantized vector strip motif -->
+    <g id="vector-strip" transform="translate(64 306)">
+      <text x="-2" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#5B6673">[</text>
+      <g fill="#E8A13D">
+        <rect x="12"  y="2" width="13" height="13" rx="2" opacity="0.95"/>
+        <rect x="31"  y="2" width="13" height="13" rx="2" opacity="0.75"/>
+        <rect x="50"  y="2" width="13" height="13" rx="2" opacity="0.55"/>
+        <rect x="69"  y="2" width="13" height="13" rx="2" opacity="0.85"/>
+        <rect x="88"  y="2" width="13" height="13" rx="2" opacity="0.40"/>
+        <rect x="107" y="2" width="13" height="13" rx="2" opacity="0.65"/>
+        <rect x="126" y="2" width="13" height="13" rx="2" opacity="0.30"/>
+        <rect x="145" y="2" width="13" height="13" rx="2" opacity="0.90"/>
+        <rect x="164" y="2" width="13" height="13" rx="2" opacity="0.50"/>
+        <rect x="183" y="2" width="13" height="13" rx="2" opacity="0.22"/>
+      </g>
+      <text x="202" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#5B6673">]</text>
+      <text x="222" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#5B6673">F32 · WEIGHTED-I8</text>
+    </g>
+
+    <text x="64" y="360" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" letter-spacing="1" fill="#9AA6B2">RUST CORE · SWIFT · PYTHON · IOS 15+ · MACOS 14+</text>
+  </g>
+
+  <g id="project-proof">
+    <!-- device boundary -->
+    <rect x="766" y="40" width="370" height="304" rx="26" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+
+    <text x="951" y="76" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="17" letter-spacing="2" fill="#E8A13D">QUERY PATH · IN PROCESS</text>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" fill="#F3F5F7" text-anchor="middle">
+      <rect x="796" y="92" width="310" height="46" rx="8" fill="#161E28" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="951" y="121">caller embeddings</text>
+
+      <rect x="796" y="158" width="310" height="46" rx="8" fill="#161E28" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="951" y="187">canonical corpus</text>
+
+      <rect x="796" y="224" width="310" height="46" rx="8" fill="#161E28" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="951" y="253">exact + BM25 + graph</text>
+
+      <rect x="796" y="290" width="310" height="46" rx="8" fill="#1B1F1A" stroke="#E8A13D" stroke-width="1.5"/>
+      <text x="951" y="319" fill="#E8A13D">ranked hits + trace</text>
+    </g>
+
+    <g stroke="#5B6673" stroke-width="1.5">
+      <line x1="951" y1="138" x2="951" y2="150"/>
+      <line x1="951" y1="204" x2="951" y2="216"/>
+      <line x1="951" y1="270" x2="951" y2="282"/>
+    </g>
+    <g fill="#5B6673">
+      <path d="M946 150 L956 150 L951 158 Z"/>
+      <path d="M946 216 L956 216 L951 224 Z"/>
+      <path d="M946 282 L956 282 L951 290 Z"/>
+    </g>
+
+    <!-- no-network note -->
+    <g transform="translate(791 364)">
+      <circle cx="8" cy="8" r="8" fill="none" stroke="#9AA6B2" stroke-width="1.5"/>
+      <line x1="2.3" y1="2.3" x2="13.7" y2="13.7" stroke="#9AA6B2" stroke-width="1.5"/>
+      <text x="26" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="17" fill="#9AA6B2">no network on the query path</text>
+    </g>
+  </g>
+</svg>

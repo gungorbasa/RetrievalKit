@@ -1,11 +1,11 @@
-# VectorKit
-
-## Fast, private retrieval for edge AI
+# ![VectorKit — fast, private retrieval for edge AI](assets/readme/hero.svg)
 
 VectorKit is the local-first retrieval foundation for Swift and Python apps:
 exact semantic search, BM25-powered hybrid ranking, metadata filtering,
 graph-scoped retrieval, and crash-safe persistence through one shared Rust
-core.
+core. It does not need a retrieval server or network call on its query path.
+
+<div align="center">
 
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust)](https://www.rust-lang.org/)
 [![Swift](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift)](https://www.swift.org/)
@@ -13,12 +13,22 @@ core.
 [![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
 
-**[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
+**[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)** · **[How it stays private](#private-by-architecture)**
 
-VectorKit keeps retrieval close to your data and gives applications a compact,
-capability-oriented API. Use the base package for a canonical corpus plus
-semantic and hybrid retrieval. Choose the graph aggregate when your product
-also needs bounded traversal and graph-scoped ranking.
+</div>
+
+## Why VectorKit
+
+Retrieval stays close to your data and behind one compact,
+capability-oriented API — the same system concepts and guarantees in Rust,
+Swift, and Python.
+
+- Exact semantic search and BM25-powered hybrid ranking share one corpus.
+- Optional graph traversal narrows retrieval to application-defined scopes.
+- Typed metadata filters are deterministic across Rust, Swift, and Python.
+- Search traces expose vector, keyword, fusion, and graph decisions.
+- Concurrent reads keep immutable query workloads moving safely.
+- Transactional, checksummed snapshots fail closed on corruption.
 
 ## Measured proof
 
@@ -115,34 +125,22 @@ Indexing, search, filtering, graph traversal, ranking, and persistence execute
 locally in the shared Rust core. VectorKit does not need a retrieval server or
 network call on its query path.
 
+<p align="center">
+  <img src="assets/readme/architecture.svg" width="100%"
+       alt="VectorKit data flow: caller-provided text and embeddings enter the canonical corpus, which feeds exact plus BM25 hybrid retrieval and an optional graph capability; both produce explainable results, and the corpus persists through transactional, checksummed crash-safe snapshots — all in-process in the shared Rust core.">
+</p>
+
 Embeddings are caller-provided. To keep the complete ingestion and query flow
 private, use a local embedding provider such as a Core ML model through
 EmbeddingKit. If your application sends text to a remote embedding service,
 that part of the flow is not local or private. See the
 [local embedding integration guide](wrappers/swift/EmbeddingKit/README.md).
 
-```mermaid
-flowchart LR
-    A["App text"] --> B["Caller-provided or local embeddings"]
-    B --> C["Canonical corpus"]
-    C --> D["Exact semantic + BM25 hybrid retrieval"]
-    C --> E["Optional graph capability"]
-    E --> F["Graph-scoped ranking"]
-    D --> G["Explainable results"]
-    F --> G
-    C <--> H["Checksummed crash-safe persistence"]
-```
-
-## Why VectorKit
-
-- Exact semantic search and BM25-powered hybrid ranking share one corpus.
-- Optional graph traversal narrows retrieval to application-defined scopes.
-- Typed metadata filters are deterministic across Rust, Swift, and Python.
-- Search traces expose vector, keyword, fusion, and graph decisions.
-- Concurrent reads keep immutable query workloads moving safely.
-- Transactional, checksummed snapshots fail closed on corruption.
-
 ## Choose your SDK
+
+Use the base package for a canonical corpus plus semantic and hybrid
+retrieval. Choose the graph aggregate when your product also needs bounded
+traversal and graph-scoped ranking.
 
 | SDK | Capability | Status |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 # Complete Retrieval Benchmark And Marketing Roadmap
 
-Status: active; Phases 0–5 complete; Phase 4b closed under the device-safety
-terminal-outcome amendment; Phase 6 not started
+Status: active; Phases 0–6 complete; Phase 4b closed under the device-safety
+terminal-outcome amendment; Phase 7 not started
 
 Date: 2026-07-20
 
@@ -618,6 +618,16 @@ Exit gate:
 
 ### Phase 6: Publish The Benchmark Report And Claim Register
 
+Status: complete on 2026-07-21. The frozen contract, methodology, separate
+quality/Mac/device reports, machine-readable claim register, licensing audit,
+evidence index, reproduction guide, and closed publication manifest are under
+`benchmarks/publication`. The independent validator recomputes Phase 3 quality,
+Phase 4b physical-device percentiles and graph-free gates, and Phase 5 Mac
+percentiles, exact ratios, and ANN recall from frozen evidence. Mutation and
+two-root determinism checks pass. The package is repository-local because the
+repository has no root project license; no external publication occurred. See
+`docs/product/reports/phase-6-benchmark-publication-report.md`.
+
 Deliverables:
 
 - methodology page and machine-readable manifest
@@ -631,6 +641,11 @@ Exit gate:
 
 - every public number maps to a reproducible artifact, device, dataset, metric,
   version, and date
+
+Exit result: PASS. Nine claims are permitted, six prohibited, and four
+withheld. USearch timing, graph-winner comparisons, 100K support, rejected
+device evidence, and raw-data redistribution remain excluded. Phase 7 remains
+inactive.
 
 ### Phase 7: Add Regression Gates
 

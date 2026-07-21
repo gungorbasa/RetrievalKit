@@ -1,0 +1,85 @@
+{
+  "acceptance_gates": [
+    "closed_inventory",
+    "canonical_hashes",
+    "independent_numerical_recomputation",
+    "claim_register_exactness",
+    "evidence_reference_integrity",
+    "licensing_eligibility",
+    "qualifier_completeness",
+    "claim_currency",
+    "two_root_byte_identity"
+  ],
+  "artifact_id": "phase6-publication-v1",
+  "canonicalization": {
+    "artifact_set_hash": "sha256 of UTF-8 lines '<relative-path>\\t<sha256>\\n' sorted by relative path, excluding manifest.json",
+    "json": "UTF-8, sorted keys, compact separators, no NaN, one trailing LF",
+    "markdown": "UTF-8, LF newlines, one trailing LF",
+    "symlinks": "forbidden"
+  },
+  "claim_expiration": {
+    "default_days": 365,
+    "expired_status": "validation_failure",
+    "mandatory_rerun_events": [
+      "benchmark implementation or timing boundary changes",
+      "retrieval, ranking, filtering, persistence, or deletion behavior changes",
+      "comparison system or embedding model version changes",
+      "dataset, query population, qrels, workload, compiler, hardware, or OS changes",
+      "a licensing or redistribution condition changes"
+    ]
+  },
+  "claim_statuses": [
+    "permitted",
+    "prohibited",
+    "withheld"
+  ],
+  "contract_id": "vectorkit-benchmark-publication-contract-v1",
+  "evidence_states_allowed_for_permitted_claims": [
+    "accepted",
+    "qualified_negative_result"
+  ],
+  "frozen_on": "2026-07-21",
+  "licensing": {
+    "derived_reporting": "allowed only when the report itself is owner-authored and every third-party input is identified with license and provenance",
+    "raw_public_dataset_policy": "exclude raw public datasets from the repository publication root; publish hashes, acquisition instructions, provenance, and eligible aggregates",
+    "unknown_or_incompatible": "exclude",
+    "unlicensed_repository_redistribution": "do not grant downstream redistribution rights until the repository owner adds an applicable project license and notices"
+  },
+  "numerics": {
+    "percentile": "nearest-rank: sorted_samples[ceil(p*n)-1]",
+    "phase4_session_aggregation": "median of five per-session nearest-rank percentiles",
+    "ratio": "comparison nanoseconds divided by VectorKit nanoseconds using decimal arithmetic",
+    "rounding": "ROUND_HALF_UP; milliseconds 3 decimals, ratios 2 decimals, percentages 2 decimals",
+    "source_values": "integer nanoseconds and full-precision JSON numbers remain machine-readable"
+  },
+  "publication_exclusions": [
+    "raw HotpotQA source or transformed corpus payloads",
+    "raw physical-device captures and device identifiers",
+    "diagnostic, partial, rejected, failed, or disqualified timing evidence",
+    "USearch timing comparisons after recall-gate failure",
+    "100K physical-device measurements or support claims",
+    "graph performance winner comparisons across non-equivalent hybrid semantics",
+    "embedding latency in retrieval latency",
+    "secrets, absolute local paths, and unpublished binaries"
+  ],
+  "report_inventory": [
+    "methodology.md",
+    "retrieval-quality.md",
+    "mac-systems-performance.md",
+    "physical-device-systems-performance.md",
+    "claim-register.json",
+    "licensing.json",
+    "evidence-index.json",
+    "reproduction.md",
+    "checksums.json",
+    "manifest.json"
+  ],
+  "schemas": {
+    "claim_register": "schema_version, artifact_id, report_date, expires_on, counts, claims[]; every claim has the fields enumerated by the Markdown contract",
+    "evidence_index": "schema_version, artifact_id, report_date, quality, mac, device; every family contains frozen configuration, recomputed values, and evidence identities",
+    "licensing": "schema_version, publication_decision, repository_license, inputs[], excluded[]",
+    "checksums": "schema_version, files{relative_path:sha256}",
+    "manifest": "schema_version, artifact_id, dates, inventory, files, canonical hash, revisions, input identities, contract, validator"
+  },
+  "schema_version": 1
+}

@@ -658,8 +658,9 @@ The consolidated execution order is maintained in
 `docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
 read-only validation API and the thread-safety/lifecycle contract are complete.
 Phase 4b is closed under the device-safety amendment. Benchmark Phase 5 external
-reference implementations are complete. Do not begin benchmark Phase 6 or
-resume any physical-device stress benchmark without a new explicit owner task.
+reference implementations and benchmark Phase 6 publication are complete. Do
+not begin benchmark Phase 7 or resume any physical-device stress benchmark
+without a new explicit owner task.
 The final Phase 5 root contains 10 files, 5,100 timing rows, and 1,200 result
 rows at artifact-set SHA-256
 `1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`.
@@ -668,6 +669,18 @@ USearch Recall@10 was 0.965/0.850/0.775 at 10K/25K/50K, below the frozen 0.99
 gate. Its latency is retained but prohibited from comparisons. VectorKit and
 sqlite-vec exact rows and both graph-application rows passed. See
 `docs/product/reports/phase-5-external-reference-implementations-report.md`.
+The frozen Phase 6 repository-local package is under
+`benchmarks/publication/artifacts/phase6-publication-v1`. It contains separate
+quality, Mac, and physical-device reports and an exact claim register with nine
+permitted, six prohibited, and four withheld entries. Its independent
+validator recomputes the published Phase 3, Phase 4b, and Phase 5 numerics,
+rejects policy mutations, and binds the closed canonical artifact set. Raw
+HotpotQA-derived payloads, device captures, binaries, rejected evidence,
+USearch timing comparisons, graph winner claims, and 100K support remain
+excluded. The repository has no root project license, so external distribution
+remains withheld; no upload, release, push, device run, or external publication
+occurred. See
+`docs/product/reports/phase-6-benchmark-publication-report.md`.
 The active production slice is physical-device memory-budget validation. The
 isolated Rust/FFI and iOS harness is implemented, and iPhone 17 Pro Max budgets
 are checked in for 24K × 384d/768d I8 hybrid plus the 50K × 384d extended tier.

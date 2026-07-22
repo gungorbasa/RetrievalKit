@@ -675,83 +675,41 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Likely Next Tasks
 
-The consolidated execution order is maintained in
-`docs/product/implementation-roadmap.md`. Checksummed V3 persistence and the
-read-only validation API and the thread-safety/lifecycle contract are complete.
-Phase 4b is closed under the device-safety amendment. Benchmark Phase 5
-external reference implementations, Phase 6 publication, and Phase 7
-regression gates are complete. Do not begin another benchmark phase or resume
-any physical-device stress benchmark without a new explicit owner task.
-The final Phase 5 root contains 10 files, 5,100 timing rows, and 1,200 result
-rows at artifact-set SHA-256
-`1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`.
-Artifact integrity passes, while benchmark acceptance remains failed because
-USearch Recall@10 was 0.965/0.850/0.775 at 10K/25K/50K, below the frozen 0.99
-gate. Its latency is retained but prohibited from comparisons. VectorKit and
-sqlite-vec exact rows and both graph-application rows passed. See
-`docs/product/reports/phase-5-external-reference-implementations-report.md`.
-The frozen Phase 6 repository-local package is under
-`benchmarks/publication/artifacts/phase6-publication-v1`. It contains separate
-quality, Mac, and physical-device reports and an exact claim register with nine
-permitted, six prohibited, and four withheld entries. Its independent
-validator recomputes the published Phase 3, Phase 4b, and Phase 5 numerics,
-rejects policy mutations, and binds the closed canonical artifact set. Raw
-HotpotQA-derived payloads, device captures, binaries, rejected evidence,
-USearch timing comparisons, graph winner claims, and 100K support remain
-excluded. The repository has no root project license, so external distribution
-remains withheld; no upload, release, push, device run, or external publication
-occurred. See
-`docs/product/reports/phase-6-benchmark-publication-report.md`.
-The active production slice is physical-device memory-budget validation. The
-isolated Rust/FFI and iOS harness is implemented, and iPhone 17 Pro Max budgets
-are checked in for 24K × 384d/768d I8 hybrid plus the 50K × 384d extended tier.
-Rust/FFI explicitly permit
-parallel immutable reads with exclusive mutation. Swift uses a
-writer-preferring asynchronous gate plus detached native calls; Python releases
-the GIL for Rust work, permits parallel shared searches, and rejects conflicting
-exclusive operations through PyO3 borrowing.
+The active slice is `v0.1.0` release qualification and distribution. Benchmark
+Phases 0–7, persistence hardening, wrapper concurrency, memory qualification,
+and the release-candidate implementation are complete. Do not begin another
+benchmark phase or resume physical-device stress work without a new explicit
+owner task.
 
-- iPhone 17 Pro Max release results are in
-  `docs/product/reports/iphone-17-pro-max-memory-budget-report.md`. The compact
-  24K target stayed at or below 124.89 MiB peak RSS and 6.187 ms post-load P95
-  across five runs. The 50K profile stayed near 198 MiB but reached 14.479 ms
-  P95 and is classified as an extended-capacity tier.
-- Run F16/F32 presets next, then repeat the compact target on older supported
-  iPhone/iPad classes before generalizing budgets.
-- `24K × 768d I8` passed at 18.015 MiB persisted and at most 7.827 ms P95;
-  its observed peak RSS ranged from 133.84 to 162.42 MiB. A diagnostic
-  `50K × 768d I8` run reached 37.519 MiB persisted and 220.02 MiB peak RSS, so
-  it is not a compact profile.
-- The 24K encoding comparison kept P95 below 10 ms in every case. Persisted
-  size was 17.923/35.501 MiB for 384d F16/F32 and 35.501/70.658 MiB for 768d
-  F16/F32. I8 remains the universal compact encoding; F32 remains the
-  correctness reference.
-- Retrieval-quality V2 is checked in under `benchmarks/retrieval-quality/v2`.
-  It expands to 306 documents and 42 graded queries with ambiguity and competing
-  documents. I8 `50/50` hybrid overlap versus F32 `100/100` is `0.9762`; human
-  relevance recall is `0.9028`, MRR is `1.0`, and NDCG is `0.9272`.
-- BM25-free I8 vector search retains `1.0` of F32 top 5 and `0.9976` of F32 top
-  10, with `1.0` top-result agreement. Do not add an F16/F32 rerank store without
-  production-derived evidence that it is needed.
-- Smaller hybrid pools have slightly better V2 human relevance than `50/50`,
-  despite lower reference overlap. Keep `50/50` provisional and revisit `25/25`
-  when anonymized application queries and relevance feedback exist.
-- `retrieval-quality-evaluation-standard.md` records the V3 gold-standard plan:
-  TREC-compatible qrels/runs, pooled blind judgments, standard metric
-  cross-checks, BEIR adapters, per-category gates, and paired confidence
-  intervals. Moss uses qrels with Hit Rate, MRR, and NDCG on SciFact, NFCorpus,
-  and mini MS MARCO; VectorKit should retain its additional fidelity and
-  lifecycle checks.
-- NIST TREC evaluation is a committed future milestone, but it does not block
-  Phase 5 release distribution. First add TREC-compatible qrels/run output and
-  standard metric cross-checks; after packaging is stable, run an appropriate
-  official collection and evaluate TREC RAG participation.
-- A manual-only GitHub Actions workflow can run Rust format/Clippy/tests, V2
-  quality gates, Python lint/type/tests plus installed-wheel smoke, and a full
-  Apple XCFramework build followed by Swift tests. It has no push or pull-request
-  trigger and does not upload artifacts, create releases, or change Package.swift.
-- Benchmark the I8 dotprod path on target iPhone/iPad/Mac hardware, especially
-  older devices that may not report `dotprod`.
-- Explore parallel exact scan only after target-device benchmarks show remaining
-  CPU pressure.
-- Validate the compact target and compaction headroom on target Apple devices.
+Complete the release gates in this order:
+
+1. Add an owner-approved root license and third-party notices, then reconcile
+   Cargo and Python license metadata with that decision.
+2. Select the final clean release revision and rebuild the complete candidate.
+   The recorded candidate predates later README changes and must not be treated
+   as evidence for the final revision.
+3. Provision passing Phase 7 scheduled/full and controlled release results for
+   that same revision. Release qualification consumes pre-collected evidence
+   only; it authorizes no device command and exposes no 100K lane.
+4. Authorize README claim handling as either historical frozen-revision
+   observations or release-revision claims backed by new accepted evidence.
+5. Add the owner publication authorization binding the revision, legal
+   approvals, Phase 7 results, claim mode, and owner identity.
+6. Complete the approval checklist, create a verified signed `v0.1.0` tag,
+   obtain protected-environment approval, run the guarded publication workflow,
+   and verify fresh remote SwiftPM and PyPI consumers.
+
+See `docs/product/release-process.md` and
+`docs/product/release-approval-checklist.md`. Until every gate passes, the
+release remains a local candidate and external publication stays blocked.
+
+Optional post-release work, ordered by evidence need:
+
+- qualify F16/F32 and compact/compaction headroom on older supported Apple
+  devices before generalizing the existing iPhone 17 Pro Max budgets;
+- expand external quality evaluation with BEIR/TREC-compatible runs, pooled
+  blind judgments, and anonymized application queries;
+- benchmark the I8 dot-product path on devices that may not expose `dotprod`;
+- explore parallel exact scanning only after measured CPU pressure, and begin
+  ANN research only if exact search still misses the frozen latency/recall
+  targets.

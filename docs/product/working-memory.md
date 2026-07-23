@@ -18,6 +18,15 @@ implemented, or superseded by the product spec.
   base-plus-graph check forces both static aggregates to load, ensuring their
   duplicate native symbols remain an explicit mutual-exclusion guard even when
   the linker would otherwise dead-strip unreferenced archive members.
+- 2026-07-23: the Xcode 26.3 two-root release build produced byte-identical
+  canonical Apple archives. Current SwiftPM checksums are
+  `fcc3c94144ce26104c92abb9227a1e95a45395e1db44265e70e585ead915266f`
+  for `RetrievalKitFFI.xcframework.zip` and
+  `5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468`
+  for `RetrievalKitGraphFFI.xcframework.zip`. The closed-bundle validator now
+  includes the assembler-required `THIRD_PARTY_NOTICES.md` in both root and
+  hashed inventory checks; a local replay of the 12 CI-built root-A artifacts
+  passes full bundle validation.
 - 2026-07-23: the project was renamed from VectorKit to RetrievalKit across
   crates (`retrievalkit-*`), Swift packages (`RetrievalKit`,
   `RetrievalKitGraph`, `RetrievalKitPipeline`, `RetrievalKitShared`,

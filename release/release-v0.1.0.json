@@ -8,8 +8,8 @@
     "architectures": ["arm64"],
     "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
     "artifacts": {
-      "RetrievalKitFFI.xcframework.zip": {"swiftpm_checksum": "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"},
-      "RetrievalKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"}
+      "RetrievalKitFFI.xcframework.zip": {"swiftpm_checksum": "fcc3c94144ce26104c92abb9227a1e95a45395e1db44265e70e585ead915266f"},
+      "RetrievalKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468"}
     },
     "products": ["RetrievalKit", "RetrievalKitIngest", "RetrievalKitGraph", "EmbeddingKit", "RetrievalKitPipeline"],
     "native_aggregate_rule": "link exactly one of RetrievalKitFFI or RetrievalKitGraphFFI; the graph aggregate includes base symbols"

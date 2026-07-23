@@ -52,6 +52,11 @@ class ReleaseTests(unittest.TestCase):
                     (output / legal_name).read_bytes(),
                     (REPO / legal_name).read_bytes(),
                 )
+                self.assertIn(legal_name, validator.BUNDLE_LEGAL_FILES)
+                self.assertIn(
+                    legal_name,
+                    validator.load_json(output / "inventory.json")["files"],
+                )
 
     def test_wrapper_legal_files_match_root(self) -> None:
         result = validator.static_validation(REPO)

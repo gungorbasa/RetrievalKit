@@ -17,6 +17,7 @@ from typing import Any
 
 ZERO_CHECKSUM = "0" * 64
 ACTION_PATTERN = re.compile(r"uses:\s+[^\s@]+@([0-9a-f]{40})(?:\s|$)")
+BUNDLE_LEGAL_FILES = {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}
 
 
 class ValidationError(RuntimeError):
@@ -212,8 +213,7 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     static = static_validation(repo)
     config = load_json(repo / "release/release-v0.1.0.json")
     required = {
-        "LICENSE",
-        "NOTICE",
+        *BUNDLE_LEGAL_FILES,
         "artifacts",
         "inventory.json",
         "release-manifest.json",
@@ -234,8 +234,7 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     inventory_paths = sorted(
         [
             *bundle.glob("artifacts/*"),
-            bundle / "LICENSE",
-            bundle / "NOTICE",
+            *(bundle / name for name in sorted(BUNDLE_LEGAL_FILES)),
             bundle / "sbom.spdx.json",
             bundle / "provenance.intoto.json",
         ]

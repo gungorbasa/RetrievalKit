@@ -132,8 +132,10 @@ Wrappers should not reimplement retrieval logic. They should call the Rust core 
 ## Documentation
 
 - Update product docs when behavior, scope, or priorities change.
-- Keep `docs/product/working-memory.md` current with short-lived handoff
-  context and remove stale notes once they are irrelevant or superseded.
+- `docs/product/working-memory.md` is the shared agent memory file for this
+  repo. All agents (Codex, Claude, Cursor) record durable session learnings and
+  short-lived handoff context there — never only in tool-private memory — and
+  remove stale notes once they are irrelevant or superseded.
 - Keep research notes separate from active implementation decisions.
 - Document benchmark methodology before relying on benchmark numbers.
 - Include examples that compile or can be run directly once code exists.

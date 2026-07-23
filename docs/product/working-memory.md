@@ -17,10 +17,14 @@ implemented, or superseded by the product spec.
   `validate_publication.py`, `generate_publication.py`, and
   `tests/test_publication.py` must not be renamed while phase6-publication-v1
   remains the authorized claim source. `validate_readme.py` uses the new
-  names (it validates the current README). The GitHub repository still needs
-  to be renamed to `gungorbasa/RetrievalKit`, and the v0.1.0 xcframework
-  checksums in `release/release-v0.1.0.json` refer to archives built under
-  the old artifact names, so Apple artifacts must be rebuilt before release.
+  names (it validates the current README). The GitHub repository is now
+  `gungorbasa/RetrievalKit`. The v0.1.0 xcframework checksums in
+  `release/release-v0.1.0.json` refer to archives built under the old artifact
+  names, so Apple artifacts must be rebuilt before release. The rename also
+  changed the frozen Phase 7 contract namespace and repository-local evidence
+  paths; its manifest, validator constants, and report identities were
+  reconciled on 2026-07-23 without changing gate inventory, thresholds,
+  baselines, fixtures, or result schema.
 - The `v0.1.0` combined Swift/Python release-candidate implementation is the
   active distribution slice. The root README is an evidence-led product page
   whose numeric observations are mapped to permitted Phase 6 claim IDs and

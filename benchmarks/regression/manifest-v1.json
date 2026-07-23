@@ -1,8 +1,8 @@
 {
   "artifact_id": "phase7-regression-static-v1",
   "baseline_sha256": "338bf2231a9b9c841515fb7018b2be7014993a71964e9e4876244f90173bd34d",
-  "canonical_artifact_set_sha256": "95d834282fc1e5e45fc90259aa8f0c8dfb254bb5c6a369499dde90d1857c0099",
-  "contract_sha256": "8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd",
+  "canonical_artifact_set_sha256": "07208b27160fa2c27c75c91961020a96615a83e4f49ab47071e340e474b28a01",
+  "contract_sha256": "85bc320da7d740e101bb6f04b688e825d3accea36a0ce6cb505026e7e921b730",
   "files": [
     {
       "path": "baselines-v1.json",
@@ -10,7 +10,7 @@
     },
     {
       "path": "contract-v1.json",
-      "sha256": "8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd"
+      "sha256": "85bc320da7d740e101bb6f04b688e825d3accea36a0ce6cb505026e7e921b730"
     },
     {
       "path": "fixtures/expected-observation-v1.json",
@@ -22,7 +22,7 @@
     },
     {
       "path": "gate-registry-v1.json",
-      "sha256": "ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384"
+      "sha256": "74370da71e1da54d27c4173edc11b14d05839d22f8e522b5270f3fa3623e8f41"
     },
     {
       "path": "result-schema-v1.json",
@@ -38,6 +38,6 @@
     "gate-registry-v1.json",
     "result-schema-v1.json"
   ],
-  "registry_sha256": "ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384",
+  "registry_sha256": "74370da71e1da54d27c4173edc11b14d05839d22f8e522b5270f3fa3623e8f41",
   "schema_version": 1
 }

@@ -26,9 +26,9 @@ excluded and has no workflow option.
 ## Frozen Phase 7 identities
 
 - contract JSON SHA-256:
-  `8aa82d3b12ca95dd6e906c374ebef02ff362855d5ea691cd5c8fb0a8418a6dfd`
+  `85bc320da7d740e101bb6f04b688e825d3accea36a0ce6cb505026e7e921b730`
 - gate registry SHA-256:
-  `ecd546e2416261ea11d0b564211ea19cb070b3a4cb74e5bf079ab82df4dd4384`
+  `74370da71e1da54d27c4173edc11b14d05839d22f8e522b5270f3fa3623e8f41`
 - baseline SHA-256:
   `338bf2231a9b9c841515fb7018b2be7014993a71964e9e4876244f90173bd34d`
 - fixture SHA-256:
@@ -38,7 +38,12 @@ excluded and has no workflow option.
 - result schema SHA-256:
   `47a7cc56b290d0249b7bee76b511d90af8ba58422f074b20ef7678209c5ac4de`
 - canonical Phase 7 static artifact-set SHA-256:
-  `95d834282fc1e5e45fc90259aa8f0c8dfb254bb5c6a369499dde90d1857c0099`
+  `07208b27160fa2c27c75c91961020a96615a83e4f49ab47071e340e474b28a01`
+
+The 2026-07-23 RetrievalKit rename mechanically changed the contract namespace
+and repository-local evidence paths. The manifest and validator pin the
+resulting identities above; gate inventory, thresholds, baselines, fixtures,
+and result schema are unchanged.
 
 JSON uses sorted keys, two-space indentation, finite numbers, and one trailing
 LF. Result roots omit time, absolute paths, randomness, and unstable host data.

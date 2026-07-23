@@ -1,8 +1,12 @@
 # RetrievalKitGraph
 
-Optional schema-driven local graph retrieval for Swift. This package links the
-aggregate `RetrievalKitGraphFFI` artifact. Install it instead of the base
-`RetrievalKit` native artifact; never link both native artifacts into one app.
+RetrievalKit with schema-driven graph capabilities included. This package links
+the aggregate `RetrievalKitGraphFFI` artifact, including semantic and hybrid
+retrieval. Install it instead of the base `RetrievalKit` native artifact; never
+link both native artifacts into one app.
+
+For a human-readable Project Apollo walkthrough and decision guide, start with
+the canonical [Swift guide](../../../docs/guides/swift.md).
 
 The package exposes two concrete products over the same canonical corpus model:
 

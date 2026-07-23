@@ -1,92 +1,95 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="560" viewBox="0 0 1200 560"
      role="img" aria-labelledby="title desc">
-  <title id="title">RetrievalKit retrieval data flow</title>
-  <desc id="desc">Caller-provided text and embeddings enter the canonical corpus. The corpus feeds exact plus BM25 hybrid retrieval and an optional graph capability with graph-scoped ranking; both produce explainable results. The corpus persists through transactional, checksummed crash-safe snapshots. All stages run in-process in the shared Rust core.</desc>
+  <title id="title">RetrievalKit unified retrieval flow</title>
+  <desc id="desc">Records and caller-provided embeddings enter one corpus. Optional graph relationships and metadata filters choose the candidate scope. Exact semantic and BM25 hybrid ranking order those candidates into ranked hits with traces. Transactional checksummed snapshots persist the same state. Every stage runs in the shared Rust core.</desc>
 
   <rect width="1200" height="560" rx="20" fill="#0A0D12"/>
 
-  <text x="48" y="66" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-        font-size="19" letter-spacing="2" fill="#E8A13D">SYSTEM MAP · EVERY STAGE RUNS IN-PROCESS IN THE SHARED RUST CORE</text>
+  <text x="48" y="58" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="20" letter-spacing="2" fill="#E8A13D">ONE LOCAL FLOW · SHARED RUST CORE</text>
 
-  <!-- main row -->
-  <g id="main-row">
-    <g id="box-input">
-      <rect x="48" y="120" width="250" height="110" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="72" y="158" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="22" font-weight="600" fill="#F3F5F7">Text + embeddings</text>
-      <text x="72" y="188" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">caller-provided or</text>
-      <text x="72" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">local Core ML</text>
+  <g id="query">
+    <rect x="48" y="88" width="1104" height="70" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+    <text x="76" y="119" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="22" font-weight="650" fill="#F3F5F7">Query context</text>
+    <text x="250" y="119" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="19" fill="#9AA6B2">text + embedding + optional starting record + hard filters</text>
+    <text x="76" y="145" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#9AA6B2">Embeddings are caller-provided; relationships come from your application.</text>
+  </g>
+
+  <g id="main-flow">
+    <g id="corpus">
+      <rect x="48" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="72" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+            font-size="24" font-weight="650" fill="#F3F5F7">One corpus</text>
+      <text x="72" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">records · chunks</text>
+      <text x="72" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">metadata · graph</text>
     </g>
 
-    <g id="box-corpus">
-      <rect x="332" y="120" width="250" height="110" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="356" y="158" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="22" font-weight="600" fill="#F3F5F7">Canonical corpus</text>
-      <text x="356" y="188" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">records · chunks</text>
-      <text x="356" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">typed metadata</text>
+    <g id="scope">
+      <rect x="332" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="356" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+            font-size="24" font-weight="650" fill="#F3F5F7">Choose candidates</text>
+      <text x="356" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">graph neighborhood</text>
+      <text x="356" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">+ metadata filters</text>
     </g>
 
-    <g id="box-retrieval">
-      <rect x="616" y="120" width="250" height="110" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="640" y="152" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="22" font-weight="600" fill="#F3F5F7">Exact + BM25</text>
-      <text x="640" y="180" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="22" font-weight="600" fill="#F3F5F7">hybrid retrieval</text>
-      <text x="640" y="210" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">semantic · lexical</text>
+    <g id="rank">
+      <rect x="616" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+      <text x="640" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+            font-size="24" font-weight="650" fill="#F3F5F7">Rank candidates</text>
+      <text x="640" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">exact semantic</text>
+      <text x="640" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#9AA6B2">+ BM25 hybrid</text>
     </g>
 
-    <g id="box-results">
-      <rect x="900" y="120" width="250" height="110" rx="10" fill="#1B1F1A" stroke="#E8A13D" stroke-width="1.5"/>
-      <text x="924" y="158" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="22" font-weight="600" fill="#E8A13D">Explainable results</text>
-      <text x="924" y="188" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">top-k · scores</text>
-      <text x="924" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#9AA6B2">search trace</text>
+    <g id="results">
+      <rect x="900" y="214" width="250" height="124" rx="10" fill="#1B1F1A" stroke="#E8A13D" stroke-width="1.5"/>
+      <text x="924" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+            font-size="24" font-weight="650" fill="#E8A13D">Return results</text>
+      <text x="924" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#C6CFD8">ranked hits</text>
+      <text x="924" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" fill="#C6CFD8">+ search trace</text>
+    </g>
+
+    <g stroke="#5B6673" stroke-width="2" fill="#5B6673">
+      <path d="M298 276 H320"/>
+      <path d="M320 270 L330 276 L320 282 Z"/>
+      <path d="M582 276 H604"/>
+      <path d="M604 270 L614 276 L604 282 Z"/>
+      <path d="M866 276 H888"/>
+      <path d="M888 270 L898 276 L888 282 Z"/>
     </g>
   </g>
 
-  <!-- main row arrows -->
-  <g stroke="#5B6673" stroke-width="1.5">
-    <line x1="298" y1="175" x2="322" y2="175"/>
-    <line x1="582" y1="175" x2="606" y2="175"/>
-    <line x1="866" y1="175" x2="890" y2="175"/>
-  </g>
-  <g fill="#5B6673">
-    <path d="M322 170 L322 180 L330 175 Z"/>
-    <path d="M606 170 L606 180 L614 175 Z"/>
-    <path d="M890 170 L890 180 L898 175 Z"/>
-  </g>
-
-  <!-- persistence -->
-  <g id="box-persistence">
-    <rect x="332" y="330" width="250" height="110" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-    <text x="356" y="368" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-          font-size="22" font-weight="600" fill="#F3F5F7">Crash-safe snapshots</text>
-    <text x="356" y="398" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#9AA6B2">transactional</text>
-    <text x="356" y="422" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#9AA6B2">checksummed</text>
-  </g>
-  <g stroke="#5B6673" stroke-width="1.5">
-    <line x1="457" y1="242" x2="457" y2="318"/>
-  </g>
-  <g fill="#5B6673">
-    <path d="M452 242 L462 242 L457 234 Z"/>
-    <path d="M452 318 L462 318 L457 326 Z"/>
+  <g id="persistence">
+    <rect x="48" y="400" width="534" height="104" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
+    <text x="72" y="438" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="23" font-weight="650" fill="#F3F5F7">Persist the same product state</text>
+    <text x="72" y="468" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="19" fill="#9AA6B2">transactional · checksummed</text>
+    <text x="72" y="494" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="19" fill="#9AA6B2">crash-safe snapshots</text>
+    <path d="M173 338 V388" stroke="#5B6673" stroke-width="2"/>
+    <path d="M167 388 L173 398 L179 388 Z" fill="#5B6673"/>
   </g>
 
-  <!-- graph branch -->
-  <g id="box-graph">
-    <rect x="616" y="330" width="250" height="110" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-    <text x="640" y="362" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-          font-size="22" font-weight="600" fill="#F3F5F7">Graph capability</text>
-    <text x="640" y="392" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#9AA6B2">optional traversal</text>
-    <text x="640" y="416" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#9AA6B2">scoped ranking</text>
+  <g id="clarification">
+    <rect x="616" y="400" width="534" height="104" rx="10" fill="#15191A" stroke="#E8A13D" stroke-width="1.5"/>
+    <text x="640" y="438" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="23" font-weight="650" fill="#E8A13D">Graph changes where search runs.</text>
+    <text x="640" y="472" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="19" fill="#C6CFD8">It is not a third hybrid scoring signal.</text>
   </g>
-  <!-- corpus -> graph elbow -->
-  <path d="M560 230 L560 280 L741 280 L741 318" fill="none" stroke="#5B6673" stroke-width="1.5"/>
-  <path d="M736 318 L746 318 L741 326 Z" fill="#5B6673"/>
-  <!-- graph -> results elbow -->
-  <path d="M866 385 L1025 385 L1025 244" fill="none" stroke="#5B6673" stroke-width="1.5"/>
-  <path d="M1020 244 L1030 244 L1025 236 Z" fill="#5B6673"/>
 
-  <text x="48" y="516" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#9AA6B2">Embeddings are the only stage you bring — keep them local (Core ML via EmbeddingKit) for a private flow.</text>
+  <text x="48" y="540" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="18" fill="#9AA6B2">No SQLite query, JSON parse, network call, or avoidable server hop on the hot query path.</text>
 </svg>

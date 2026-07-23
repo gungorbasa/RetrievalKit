@@ -1,9 +1,9 @@
-# ![RetrievalKit — fast, private retrieval for edge AI](assets/readme/hero.svg)
+# ![RetrievalKit — local hybrid search grounded by your app's relationships](assets/readme/hero.svg)
 
-RetrievalKit is local-first retrieval for Swift and Python apps. One shared
-Rust core combines exact semantic search, BM25-powered hybrid ranking, typed
-metadata filtering, graph-scoped retrieval, and crash-safe persistence — with
-no retrieval server and no network call on the query path.
+RetrievalKit is one local retrieval engine for Swift and Python apps. It
+combines semantic meaning with BM25 keyword evidence, and can use
+application-defined relationships to search only the relevant part of your
+corpus. One corpus, one ranked list, one trace, and no retrieval server.
 
 <div align="center">
 
@@ -13,22 +13,139 @@ no retrieval server and no network call on the query path.
 [![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
 
-**[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)** · **[How it stays private](#private-by-architecture)**
+**[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
 
 </div>
 
-## Why RetrievalKit
+## One search, the right context
 
-Retrieval stays close to your data and behind one compact,
-capability-oriented API — the same system concepts and guarantees in Rust,
-Swift, and Python.
+Imagine a workspace with notes from many teams and projects. Someone opens
+Project Apollo and asks:
 
-- Exact semantic search and BM25-powered hybrid ranking share one corpus.
-- Optional graph traversal narrows retrieval to application-defined scopes.
-- Typed metadata filters are deterministic across Rust, Swift, and Python.
-- Search traces expose vector, keyword, fusion, and graph decisions.
-- Concurrent reads keep immutable query workloads moving safely.
-- Transactional, checksummed snapshots fail closed on corruption.
+> Why did we choose Swift?
+
+RetrievalKit can use three kinds of evidence without turning them into three
+different products:
+
+1. The Apollo relationship selects notes that belong to that project.
+2. A metadata rule can require `status = approved`.
+3. Semantic similarity and BM25 keyword evidence rank the remaining notes.
+
+The result is the Apollo architecture decision—not an unrelated note that
+happens to mention Swift.
+
+Graph scope is not a separate result engine or a third scoring signal. It
+chooses the candidate neighborhood; the same hybrid ranker then orders those
+candidates. Relationships are supplied by your application. RetrievalKit does
+not automatically extract or invent a graph.
+
+## Choose how to search
+
+| Need | Choose |
+|---|---|
+| Meaning-based matching without query text | Semantic search |
+| Normal app/document search | Hybrid search |
+| Search inside a project, team, citation network, folder, or related records | Graph-scoped hybrid search |
+| Hard tenant, status, type, or date constraints | Metadata filters with any mode |
+
+Hybrid search should be the normal default when a user types a query: semantic
+similarity catches paraphrases while BM25 preserves exact names and terms.
+Choose semantic-only when there is no useful query text—such as finding records
+similar to another record—or when keyword overlap should intentionally have no
+effect.
+
+Graph scope and metadata filters solve different problems. A graph answers
+“what is related to this record?” A filter answers “which records satisfy this
+rule?” They can be used together.
+
+## How RetrievalKit works
+
+<p align="center">
+  <img src="assets/readme/architecture.svg" width="100%"
+       alt="RetrievalKit data flow: caller-provided records and embeddings enter one corpus; graph relationships and metadata optionally narrow the candidate set; exact semantic and BM25 hybrid ranking order those candidates; ranked hits and traces return to the app; transactional checksummed snapshots persist the same state.">
+</p>
+
+Indexing, graph traversal, filtering, ranking, trace construction, and
+persistence all run in the shared Rust core. Swift and Python provide idiomatic
+APIs over the same ownership model and correctness guarantees.
+
+Embeddings are caller-provided. To keep the complete ingestion and query flow
+private, use a local embedding provider such as a Core ML model through
+[EmbeddingKit](wrappers/swift/EmbeddingKit/README.md). If your application
+sends text to a remote embedding service, that embedding step is not local or
+private, even though RetrievalKit still indexes and searches locally.
+
+## Start with your language
+
+The canonical guides use the same Project Apollo data and explain what to
+choose, when, and why:
+
+- **[Swift guide](docs/guides/swift.md)** — graph-scoped hybrid search, the
+  simpler base package, semantic-only queries, traces, persistence, and local
+  embeddings.
+- **[Python guide](docs/guides/python.md)** — the same product flow with
+  Pythonic builders, queries, lifecycle, and packaging.
+
+The complete programs are checked into the repository and are exercised by the
+wrapper validation scripts, so the documentation stays tied to executable
+examples.
+
+## Packages and platform support
+
+Choose the graph-enabled distribution when relationships are meaningful to
+your product. It is RetrievalKit with graph capabilities included: semantic
+search, BM25 hybrid ranking, filters, traces, and persistence are already
+there. Choose the base distribution for flat corpora that do not need
+traversal.
+
+| SDK | Capability | Status |
+| --- | --- | --- |
+| Swift `RetrievalKit` | Base corpus and retrieval | **Available from source** |
+| Swift `RetrievalKitGraph` | Graph aggregate with retrieval | **Available from source** |
+| Swift `EmbeddingKit` | Local Core ML embedding integration | **Available from source** |
+| Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
+| Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
+| Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
+| Kotlin | — | **Coming soon** |
+| TypeScript | — | **Coming soon** |
+
+The Python distributions are mutually exclusive within one process. Likewise,
+Swift applications must link either the base native aggregate or the graph
+native aggregate, never both. The graph-enabled distribution already contains
+the base native retrieval capabilities.
+
+`GraphRetrievalDatabase` is the complete graph-scoped search product.
+`GraphDatabase` is available for applications that need only traversal and
+candidate projection, with no retrieval configuration or embeddings.
+
+## Run from source
+
+The `v0.1.0` preview release candidate is source-first while the remaining
+release qualification gates are completed.
+
+Run the Python graph-enabled Apollo example:
+
+```bash
+PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+target/python-graph-wrapper-check-venv-py*/bin/python \
+  wrappers/python-graph/examples/graph_retrieval_quickstart.py
+```
+
+Expected output: `graph-hybrid=decision-swift`.
+
+Run the Swift graph-enabled Apollo example:
+
+```bash
+scripts/build-xcframework.sh --macos-only --graph
+swift run --package-path wrappers/swift/RetrievalKitGraph \
+  RetrievalKitGraphRetrievalQuickstart
+```
+
+Expected output: `graph-hybrid=decision-swift`.
+
+See the [Python guide](docs/guides/python.md) or
+[Swift guide](docs/guides/swift.md) for complete code, base-package commands,
+semantic-only variations, persistence, and trace inspection.
 
 ## Measured proof
 
@@ -119,132 +236,6 @@ claims.
 See the [physical-device evidence report](benchmarks/publication/artifacts/phase6-publication-v1/physical-device-systems-performance.md)
 and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publication-v1-validation.json).
 
-## Private by architecture
-
-Indexing, search, filtering, graph traversal, ranking, and persistence execute
-locally in the shared Rust core. RetrievalKit does not need a retrieval server or
-network call on its query path.
-
-<p align="center">
-  <img src="assets/readme/architecture.svg" width="100%"
-       alt="RetrievalKit data flow: caller-provided text and embeddings enter the canonical corpus, which feeds exact plus BM25 hybrid retrieval and an optional graph capability; both produce explainable results, and the corpus persists through transactional, checksummed crash-safe snapshots — all in-process in the shared Rust core.">
-</p>
-
-Embeddings are caller-provided. To keep the complete ingestion and query flow
-private, use a local embedding provider such as a Core ML model through
-EmbeddingKit. If your application sends text to a remote embedding service,
-that part of the flow is not local or private. See the
-[local embedding integration guide](wrappers/swift/EmbeddingKit/README.md).
-
-## Choose your SDK
-
-Use the base package for a canonical corpus plus semantic and hybrid
-retrieval. Choose the graph aggregate when your product also needs bounded
-traversal and graph-scoped ranking.
-
-| SDK | Capability | Status |
-| --- | --- | --- |
-| Swift `RetrievalKit` | Base corpus and retrieval | **Available from source** |
-| Swift `RetrievalKitGraph` | Graph aggregate with retrieval | **Available from source** |
-| Swift `EmbeddingKit` | Local Core ML embedding integration | **Available from source** |
-| Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
-| Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
-| Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
-| Kotlin | — | **Coming soon** |
-| TypeScript | — | **Coming soon** |
-
-The Python distributions are mutually exclusive within one process. Likewise,
-Swift applications must link either the base native aggregate or the graph
-native aggregate, never both. The graph package already contains the base
-native capabilities.
-
-## Run from source
-
-The `v0.1.0` preview release candidate is source-first while the remaining
-release qualification gates are completed.
-
-### Python quickstart
-
-Prerequisites: Rust, a C compiler, and Python 3.10 or newer. Build, test, and
-install the local package into its isolated environment:
-
-```bash
-PYTHON_BIN=python3 scripts/check-python-wrapper.sh
-target/python-wrapper-check-venv-py*/bin/python wrappers/python/examples/database_quickstart.py
-```
-
-The example uses explicit demo vectors so it is deterministic:
-
-```python
-from retrievalkit import (
-    RetrievalConfiguration,
-    RetrievalDatabaseBuilder,
-    VectorIndexConfiguration,
-)
-
-builder = RetrievalDatabaseBuilder(
-    corpus_id="docs",
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(dimension=3)
-    ),
-)
-builder.upsert(
-    {
-        "record": {"id": "local-first", "record_type": "Article"},
-        "chunks": [{"key": "summary", "text": "Private retrieval on device."}],
-    },
-    embeddings={"summary": [1.0, 0.0, 0.0]},
-)
-database = builder.build()
-hits = database.retrieval.semantic_search([1.0, 0.0, 0.0], limit=1)
-print(hits[0]["document_id"])
-```
-
-Expected output: `local-first`.
-
-### Swift quickstart
-
-Prerequisites: Swift 6.2/Xcode and the Rust Apple target. Build the local
-macOS XCFramework, then run the tested capability-oriented example:
-
-```bash
-scripts/build-xcframework.sh --macos-only
-swift run --package-path wrappers/swift/RetrievalKit RetrievalKitDatabaseQuickstart
-```
-
-```swift
-import RetrievalKit
-
-@main
-enum DatabaseQuickstart {
-  static func main() async throws {
-    let builder = try RetrievalDatabase.Builder(
-      corpusID: "docs",
-      retrieval: RetrievalConfiguration(
-        semantic: VectorIndexConfiguration(dimension: 3)
-      )
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(id: "local-first", type: "Article"),
-        chunks: [Chunk(key: "summary", text: "Private retrieval on device.")]
-      ),
-      embeddings: ["summary": [1, 0, 0]]
-    )
-    let database = try await builder.build()
-    let hits = try await database.retrieval.semanticSearch(
-      embedding: [1, 0, 0], topK: 1
-    )
-    print(hits[0].documentID)
-  }
-}
-```
-
-The vectors above are demo embeddings, not a production embedding model. Use
-the [pipeline](wrappers/swift/RetrievalKitPipeline/README.md) with a local
-[EmbeddingKit provider](wrappers/swift/EmbeddingKit/README.md) for private
-text-to-result retrieval.
-
 ## Scope and release status
 
 - V1 is designed for local indexes with fewer than 50K chunks.
@@ -261,11 +252,14 @@ text-to-result retrieval.
 
 ## Documentation
 
+- [Swift guide](docs/guides/swift.md)
+- [Python guide](docs/guides/python.md)
 - [Product specification](docs/product/retrievalkit-product-spec.md)
 - [Capability-separated architecture](docs/product/capability-separated-architecture.md)
-- [Python wrapper](wrappers/python/README.md)
-- [Swift wrapper](wrappers/swift/RetrievalKit/README.md)
-- [Graph package](wrappers/swift/RetrievalKitGraph/README.md)
+- [Swift wrapper API/build reference](wrappers/swift/RetrievalKit/README.md)
+- [Swift graph wrapper API/build reference](wrappers/swift/RetrievalKitGraph/README.md)
+- [Python wrapper API/build reference](wrappers/python/README.md)
+- [Python graph wrapper API/build reference](wrappers/python-graph/README.md)
 - [Release process](docs/product/release-process.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)

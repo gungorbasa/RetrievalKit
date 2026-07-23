@@ -2,6 +2,13 @@
 
 This directory separates active product decisions from deferred research notes.
 
+## Guides
+
+Start here for product choices and runnable Project Apollo examples:
+
+- [`guides/swift.md`](guides/swift.md)
+- [`guides/python.md`](guides/python.md)
+
 ## Product
 
 Current implementation source of truth:

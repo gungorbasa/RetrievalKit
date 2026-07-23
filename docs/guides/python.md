@@ -1,0 +1,312 @@
+# RetrievalKit for Python
+
+RetrievalKit is one local retrieval system with two distributions:
+
+- Install `retrievalkit-graph` when records have useful relationships. It
+  already includes semantic and hybrid retrieval.
+- Install the smaller `retrievalkit` distribution when the corpus is a flat
+  collection and graph traversal would add no value.
+
+The distributions embed alternative native aggregates, so they are mutually
+exclusive within one process. The examples below use the same Project Apollo
+notes to show how the choice changes scope, not the underlying search model.
+
+## Choose the right path
+
+| Your data and question | Use | Why |
+|---|---|---|
+| Notes belong to projects, messages belong to threads, or documents cite one another | `retrievalkit-graph` with `GraphRetrievalDatabase` | Traverse relationships to choose candidates, then rank those candidates |
+| Records form a flat collection | `retrievalkit` with `RetrievalDatabase` | Get semantic and hybrid retrieval without defining a graph |
+| You have query text and an embedding | Hybrid search | Meaning and exact keyword evidence can support each other |
+| You have only an embedding, or wording should not matter | Semantic search | Rank by vector similarity alone |
+| You need hard tenant, status, type, or date rules | Metadata filters | Filters are constraints and work with either retrieval mode |
+| You only need traversal and candidate projection | `GraphDatabase` | Avoid retrieval configuration and embeddings entirely |
+
+Hybrid search is the normal default for app and document search. Semantic-only
+search is a query variation for cases where keyword evidence is unavailable or
+deliberately irrelevant; it is not a different database architecture.
+
+## Complete product: graph-scoped hybrid search
+
+Suppose a workspace contains notes from many projects. The user asks:
+“Why did we choose Swift?” while viewing Project Apollo.
+
+The graph answers *where to search*: start at Apollo and follow `contains` to
+its notes. The metadata filter requires an approved note. Hybrid retrieval then
+answers *which candidate ranks first* using semantic and BM25 evidence.
+
+Build the graph-enabled wrapper from the repository root:
+
+```bash
+PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+```
+
+Then run this checked-in program:
+
+```bash
+target/python-graph-wrapper-check-venv-py*/bin/python \
+  wrappers/python-graph/examples/graph_retrieval_quickstart.py
+```
+
+Complete runnable source:
+
+```python
+from retrievalkit_graph import (
+    GraphNode,
+    GraphRecordNode,
+    GraphRelationship,
+    GraphRetrievalDatabaseBuilder,
+    GraphSchema,
+    GraphTraversal,
+    RetrievalConfiguration,
+    VectorIndexConfiguration,
+)
+
+schema = GraphSchema(
+    record_nodes=[
+        GraphRecordNode("Project", "Project", ["title"]),
+        GraphRecordNode("Note", "Note", ["title"]),
+    ],
+    relationships=[
+        GraphRelationship(
+            "contains",
+            "Project",
+            "Note",
+            "note_ids",
+            "many",
+        )
+    ],
+)
+
+builder = GraphRetrievalDatabaseBuilder(
+    corpus_id="project-notes",
+    graph=schema,
+    retrieval=RetrievalConfiguration(
+        semantic=VectorIndexConfiguration(
+            dimension=2,
+            metric="dot_product",
+            encoding="f32",
+        )
+    ),
+)
+builder.add(
+    [
+        {
+            "record": {
+                "id": "apollo",
+                "record_type": "Project",
+                "fields": {
+                    "title": "Project Apollo",
+                    "note_ids": ["decision-swift", "launch-checklist"],
+                },
+            },
+            "chunks": [],
+        },
+        {
+            "record": {
+                "id": "decision-swift",
+                "record_type": "Note",
+                "fields": {"title": "Apple client architecture decision"},
+                "metadata": {"status": "approved"},
+            },
+            "chunks": [
+                {
+                    "key": "body",
+                    "text": (
+                        "We chose Swift for Project Apollo's Apple platform client."
+                    ),
+                }
+            ],
+        },
+        {
+            "record": {
+                "id": "launch-checklist",
+                "record_type": "Note",
+                "fields": {"title": "Launch checklist"},
+                "metadata": {"status": "draft"},
+            },
+            "chunks": [
+                {
+                    "key": "body",
+                    "text": "Project Apollo launch checklist and release owners.",
+                }
+            ],
+        },
+    ],
+    embeddings={
+        "apollo": {},
+        "decision-swift": {"body": [1.0, 0.0]},
+        "launch-checklist": {"body": [0.0, 1.0]},
+    },
+)
+database = builder.build()
+
+selection = database.graph.query(
+    seeds=[GraphNode("Project", "apollo")],
+    traversals=[GraphTraversal("contains")],
+)
+hits = database.retrieval.hybrid_search(
+    "Why did we choose Swift?",
+    [1.0, 0.0],
+    within=selection,
+    where={"status": "approved"},
+    limit=1,
+)
+
+print(f"graph-hybrid={hits[0]['document_id']}")
+```
+
+Expected output:
+
+```text
+graph-hybrid=decision-swift
+```
+
+The relationship is application data: RetrievalKit validates and traverses
+`note_ids`, but it does not extract or invent relationships.
+
+## Simpler product: hybrid search without a graph
+
+If `project` is just metadata and users do not navigate relationships, use the
+base distribution. Build and run its checked-in example:
+
+```bash
+PYTHON_BIN=python3 scripts/check-python-wrapper.sh
+target/python-wrapper-check-venv-py*/bin/python \
+  wrappers/python/examples/database_quickstart.py
+```
+
+The complete program is:
+
+```python
+from retrievalkit import (
+    RetrievalConfiguration,
+    RetrievalDatabaseBuilder,
+    VectorIndexConfiguration,
+)
+
+builder = RetrievalDatabaseBuilder(
+    corpus_id="project-notes",
+    retrieval=RetrievalConfiguration(
+        semantic=VectorIndexConfiguration(dimension=2)
+    ),
+)
+builder.upsert(
+    {
+        "record": {
+            "id": "decision-swift",
+            "record_type": "Note",
+            "metadata": {"project": "apollo", "status": "approved"},
+        },
+        "chunks": [{
+            "key": "body",
+            "text": "We chose Swift for Project Apollo's Apple platform client.",
+        }],
+    },
+    embeddings={"body": [1.0, 0.0]},
+)
+builder.upsert(
+    {
+        "record": {
+            "id": "launch-checklist",
+            "record_type": "Note",
+            "metadata": {"project": "apollo", "status": "draft"},
+        },
+        "chunks": [{
+            "key": "body",
+            "text": "Project Apollo launch checklist and release owners.",
+        }],
+    },
+    embeddings={"body": [0.0, 1.0]},
+)
+database = builder.build()
+hits = database.retrieval.hybrid_search(
+    "Why did we choose Swift?",
+    [1.0, 0.0],
+    limit=1,
+)
+print(f"hybrid={hits[0]['document_id']}")
+```
+
+Expected output:
+
+```text
+hybrid=decision-swift
+```
+
+For a hard Apollo-only constraint, add
+`where={"project": "apollo", "status": "approved"}`. Use a graph selection
+instead when “inside Apollo” means traversing explicit relationships rather
+than comparing fields.
+
+## Semantic-only is a query variation
+
+Both database types expose semantic search. Reuse the database and omit query
+text:
+
+```python
+# Graph-enabled database; `selection` is optional.
+semantic_hits = database.retrieval.semantic_search(
+    [1.0, 0.0],
+    within=selection,
+    where={"status": "approved"},
+    limit=1,
+)
+```
+
+On a base `RetrievalDatabase`, call the same method without `within`:
+
+```python
+semantic_hits = database.retrieval.semantic_search(
+    [1.0, 0.0],
+    where={"project": "apollo"},
+    limit=1,
+)
+```
+
+Choose this when there is no meaningful query text—for example, finding notes
+similar to another note—or when exact terms should intentionally have no
+influence.
+
+## Traces and persistence
+
+Hybrid hits include the fused score and an explanation of each component:
+
+```python
+hit = hits[0]
+print(hit["trace"]["vector_rank"])
+print(hit["trace"]["keyword_rank"])
+print(hit["trace"]["matched_terms"])
+print(hit["trace"]["filter_matched"])
+```
+
+Save, validate, and reload the complete graph, corpus, retrieval indexes, and
+metadata together:
+
+```python
+from pathlib import Path
+from retrievalkit_graph import GraphRetrievalDatabase
+
+snapshot = Path("project-notes.rk")
+database.save(snapshot)
+GraphRetrievalDatabase.validate(snapshot)
+reloaded = GraphRetrievalDatabase.load(snapshot)
+```
+
+Use `RetrievalDatabase.save`, `validate`, and `load` for the base distribution.
+Persistence, filtering, graph traversal, ranking, and trace construction all
+run in the shared Rust core.
+
+## Embeddings stay your choice
+
+The two-dimensional vectors above make the example deterministic; they are not
+a production embedding model. RetrievalKit requires one caller-provided
+embedding per indexed chunk and a query embedding from the same model.
+
+Use a local model when text must remain on the device. If your application
+sends text to a remote embedding API, that embedding step is remote even
+though indexing and retrieval remain local.
+
+For lower-level build, lifecycle, and API details, see the
+[`retrievalkit` wrapper reference](../../wrappers/python/README.md) and
+[`retrievalkit-graph` wrapper reference](../../wrappers/python-graph/README.md).

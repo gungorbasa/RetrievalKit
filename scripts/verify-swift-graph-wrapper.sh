@@ -56,8 +56,8 @@ check_quickstart() {
   printf '%s\n' "$actual"
 }
 
-check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitRetrievalQuickstart 'retrieval=rust'
-check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitDatabaseQuickstart 'local-first'
-check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphQuickstart 'graph=rust'
-check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphRetrievalQuickstart 'combined=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitRetrievalQuickstart 'hybrid=decision-swift'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitDatabaseQuickstart 'semantic=decision-swift'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphQuickstart 'graph-scope=decision-swift,launch-checklist'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphRetrievalQuickstart 'graph-hybrid=decision-swift'
 echo "Swift base/graph linkage and conformance verification passed"

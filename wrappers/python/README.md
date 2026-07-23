@@ -4,6 +4,10 @@ This is a thin Python wrapper around the RetrievalKit Rust retrieval core. Pytho
 provides an ergonomic API, while Rust handles indexing, filtering, ranking,
 persistence, and result tracing.
 
+For the Project Apollo walkthrough and guidance on choosing hybrid, semantic,
+graph scope, and metadata filters, start with the canonical
+[Python guide](../../docs/guides/python.md).
+
 The wrapper does not include an embedding model. Callers provide embeddings from
 the same local or remote provider for indexing and querying.
 

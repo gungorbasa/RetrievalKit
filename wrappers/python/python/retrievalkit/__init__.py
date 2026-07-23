@@ -12,8 +12,8 @@ from collections.abc import Callable, Sequence
 
 if "retrievalkit_graph._native" in sys.modules:
     raise ImportError(
-        "retrievalkit and retrievalkit_graph are mutually exclusive native distributions; "
-        "use one capability package per process"
+        "retrievalkit and retrievalkit_graph are mutually exclusive native "
+        "distributions; use one capability package per process"
     )
 
 from . import where
@@ -25,8 +25,8 @@ from ._native import (
     InvalidIdentityError,
     PersistenceError,
     RetrievalCapabilityUnavailableError,
-    UnsupportedFormatError,
     RetrievalKitError,
+    UnsupportedFormatError,
 )
 from .retrieval import (
     MissingEmbeddingError,

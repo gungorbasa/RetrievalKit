@@ -2,6 +2,10 @@
 
 Swift wrapper for RetrievalKit's Rust retrieval core.
 
+For the Project Apollo walkthrough and guidance on choosing hybrid, semantic,
+graph scope, and metadata filters, start with the canonical
+[Swift guide](../../../docs/guides/swift.md).
+
 The wrapper is intentionally thin:
 
 - `VectorIndex` owns an opaque Rust index handle.

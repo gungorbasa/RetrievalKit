@@ -7,7 +7,7 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT
 
 smoke_product() {
   local product="$1"
-  local directory="$TEMP_ROOT/$product"
+  local directory="$TEMP_ROOT/Consumer-$product"
   mkdir -p "$directory/Sources/Consumer"
   cat >"$directory/Package.swift" <<EOF
 // swift-tools-version: 6.2

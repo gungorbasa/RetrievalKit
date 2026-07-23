@@ -6,8 +6,8 @@ import sys
 
 if "retrievalkit._native" in sys.modules:
     raise ImportError(
-        "retrievalkit_graph and retrievalkit are mutually exclusive native distributions; "
-        "use one capability package per process"
+        "retrievalkit_graph and retrievalkit are mutually exclusive native "
+        "distributions; use one capability package per process"
     )
 
 from .graph import (

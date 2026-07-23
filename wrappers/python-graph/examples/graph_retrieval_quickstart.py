@@ -12,20 +12,23 @@ from retrievalkit_graph import (
 )
 
 schema = GraphSchema(
-    record_nodes=[GraphRecordNode("Topic", "Topic", ["title"])],
+    record_nodes=[
+        GraphRecordNode("Project", "Project", ["title"]),
+        GraphRecordNode("Note", "Note", ["title"]),
+    ],
     relationships=[
         GraphRelationship(
-            "related_to",
-            "Topic",
-            "Topic",
-            "related_id",
-            "optional_one",
+            "contains",
+            "Project",
+            "Note",
+            "note_ids",
+            "many",
         )
     ],
 )
 
 builder = GraphRetrievalDatabaseBuilder(
-    corpus_id="quickstart",
+    corpus_id="project-notes",
     graph=schema,
     retrieval=RetrievalConfiguration(
         semantic=VectorIndexConfiguration(
@@ -39,49 +42,64 @@ builder.add(
     [
         {
             "record": {
-                "id": "alpha",
-                "record_type": "Topic",
-                "fields": {"title": "Alpha", "related_id": "beta"},
-                "metadata": {"tenant": "red"},
+                "id": "apollo",
+                "record_type": "Project",
+                "fields": {
+                    "title": "Project Apollo",
+                    "note_ids": ["decision-swift", "launch-checklist"],
+                },
+            },
+            "chunks": [],
+        },
+        {
+            "record": {
+                "id": "decision-swift",
+                "record_type": "Note",
+                "fields": {"title": "Apple client architecture decision"},
+                "metadata": {"status": "approved"},
             },
             "chunks": [
                 {
-                    "key": "summary",
-                    "text": "alpha local search",
+                    "key": "body",
+                    "text": (
+                        "We chose Swift for Project Apollo's Apple platform client."
+                    ),
                 }
             ],
         },
         {
             "record": {
-                "id": "beta",
-                "record_type": "Topic",
-                "fields": {"title": "Beta"},
-                "metadata": {"tenant": "blue"},
+                "id": "launch-checklist",
+                "record_type": "Note",
+                "fields": {"title": "Launch checklist"},
+                "metadata": {"status": "draft"},
             },
             "chunks": [
                 {
-                    "key": "summary",
-                    "text": "beta graph retrieval",
+                    "key": "body",
+                    "text": "Project Apollo launch checklist and release owners.",
                 }
             ],
         },
     ],
     embeddings={
-        "alpha": {"summary": [1.0, 0.0]},
-        "beta": {"summary": [0.0, 1.0]},
+        "apollo": {},
+        "decision-swift": {"body": [1.0, 0.0]},
+        "launch-checklist": {"body": [0.0, 1.0]},
     },
 )
 database = builder.build()
 
 selection = database.graph.query(
-    seeds=[GraphNode("Topic", "alpha")],
-    traversals=[GraphTraversal("related_to")],
+    seeds=[GraphNode("Project", "apollo")],
+    traversals=[GraphTraversal("contains")],
 )
-hits = database.retrieval.semantic_search(
-    [0.0, 1.0],
+hits = database.retrieval.hybrid_search(
+    "Why did we choose Swift?",
+    [1.0, 0.0],
     within=selection,
-    where={"tenant": "blue"},
+    where={"status": "approved"},
+    limit=1,
 )
 
-for hit in hits:
-    print(hit["document_id"], hit["score"], hit["text"])
+print(f"graph-hybrid={hits[0]['document_id']}")

@@ -1,9 +1,12 @@
 # RetrievalKit Graph for Python
 
-`retrievalkit-graph` is the optional aggregate Python distribution for graph-only
-and combined graph-and-retrieval databases. It mirrors the separate
-`RetrievalKitGraph` Swift package; the base `retrievalkit` distribution remains
-graph-free.
+`retrievalkit-graph` is RetrievalKit with graph capabilities included. The
+aggregate Python distribution supports graph-only databases and complete
+graph-scoped semantic or hybrid retrieval. It mirrors the `RetrievalKitGraph`
+Swift package; the smaller base `retrievalkit` distribution remains graph-free.
+
+For a human-readable Project Apollo walkthrough and decision guide, start with
+the canonical [Python guide](../../docs/guides/python.md).
 
 Install this distribution instead of `retrievalkit` in a graph-enabled process:
 

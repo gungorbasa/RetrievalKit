@@ -6,6 +6,15 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-23: the root README now presents RetrievalKit as one hybrid-search
+  product. Canonical, runnable Project Apollo walkthroughs live in
+  `docs/guides/swift.md` and `docs/guides/python.md`; wrapper READMEs remain
+  lower-level API/build references. Graph scope is documented as candidate
+  selection before the shared semantic + BM25 ranker, never as a third scoring
+  signal. The checked-in Swift and Python quickstarts use the same scenario and
+  exact outputs. The release Swift consumer smoke script now prefixes temporary
+  package directories with `Consumer-` so a consumer directory cannot collide
+  with the checked-out `RetrievalKit` package identity.
 - 2026-07-23: the project was renamed from VectorKit to RetrievalKit across
   crates (`retrievalkit-*`), Swift packages (`RetrievalKit`,
   `RetrievalKitGraph`, `RetrievalKitPipeline`, `RetrievalKitShared`,

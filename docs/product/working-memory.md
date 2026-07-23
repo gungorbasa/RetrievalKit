@@ -14,7 +14,10 @@ implemented, or superseded by the product spec.
   signal. The checked-in Swift and Python quickstarts use the same scenario and
   exact outputs. The release Swift consumer smoke script now prefixes temporary
   package directories with `Consumer-` so a consumer directory cannot collide
-  with the checked-out `RetrievalKit` package identity.
+  with the checked-out `RetrievalKit` package identity. Its negative
+  base-plus-graph check forces both static aggregates to load, ensuring their
+  duplicate native symbols remain an explicit mutual-exclusion guard even when
+  the linker would otherwise dead-strip unreferenced archive members.
 - 2026-07-23: the project was renamed from VectorKit to RetrievalKit across
   crates (`retrievalkit-*`), Swift packages (`RetrievalKit`,
   `RetrievalKitGraph`, `RetrievalKitPipeline`, `RetrievalKitShared`,

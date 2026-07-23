@@ -53,7 +53,8 @@ let package = Package(
       dependencies: [
         .product(name: "RetrievalKit", package: "RetrievalKit"),
         .product(name: "RetrievalKitGraph", package: "RetrievalKit"),
-      ]
+      ],
+      linkerSettings: [.unsafeFlags(["-Xlinker", "-all_load"])]
     )
   ]
 )
@@ -61,8 +62,16 @@ EOF
 cat >"$conflict_dir/Sources/Consumer/main.swift" <<'EOF'
 import RetrievalKit
 import RetrievalKitGraph
-let _: VectorIndex? = nil
-let _: GraphDatabase? = nil
+
+_ = try VectorIndex(dimension: 2, encoding: .f32)
+_ = try GraphDatabase.Builder(
+  corpusID: "conflict",
+  schema: GraphSchema(
+    recordNodes: [
+      GraphRecordNodeSchema(recordType: "Probe", nodeType: "Probe")
+    ]
+  )
+)
 EOF
 if RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1 swift build --package-path "$conflict_dir" >"$TEMP_ROOT/conflict.log" 2>&1; then
   echo "base and graph native aggregates unexpectedly linked together" >&2

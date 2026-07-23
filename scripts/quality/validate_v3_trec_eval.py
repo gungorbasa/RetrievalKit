@@ -391,7 +391,7 @@ def validate(
         if actual_rows != expected_rows:
             raise ValidationError(f"run '{run_id}' rows differ from rank-derived Rust results")
 
-        with tempfile.TemporaryDirectory(prefix="vectorkit-v3-trec-eval-") as directory:
+        with tempfile.TemporaryDirectory(prefix="retrievalkit-v3-trec-eval-") as directory:
             temporary = Path(directory)
             selected_qrels = temporary / "qrels.tsv"
             selected_qrels.write_bytes(

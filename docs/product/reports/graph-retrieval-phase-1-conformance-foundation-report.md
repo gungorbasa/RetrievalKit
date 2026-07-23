@@ -116,7 +116,7 @@ rejection of malformed:
   locks; and
 - rerun bytes, with the first differing lexical file and byte offset reported.
 
-The complete `vectorkit-cli` suite has 39 passing tests, including the existing
+The complete `retrievalkit-cli` suite has 39 passing tests, including the existing
 V1 and V2 checked-in quality gates and the separate-collection TREC artifact
 test. This establishes V1/V2 compatibility for the evaluation-only addition.
 
@@ -143,13 +143,13 @@ identical, with no mismatch. A separate negative comparator test changed byte
 ```text
 cargo fmt --all
 cargo fmt --all -- --check
-cargo test -p vectorkit-cli quality::v3 -- --nocapture
-cargo test -p vectorkit-cli
-cargo test -p vectorkit-cli quality::tests::checked_in_fixture_passes_quality_gates
-cargo test -p vectorkit-cli quality::tests::harder_v2_fixture_passes_quality_gates
-cargo test -p vectorkit-cli quality::tests::separate_collection_and_qrels_emit_deterministic_artifacts
-cargo clippy -p vectorkit-cli --all-targets --all-features -- -D warnings
-cargo run -p vectorkit-cli -- bench quality-v3 --collection benchmarks/retrieval-quality/v3 --foundation-artifacts target/v3-phase-1-1-final --verify-rerun
+cargo test -p retrievalkit-cli quality::v3 -- --nocapture
+cargo test -p retrievalkit-cli
+cargo test -p retrievalkit-cli quality::tests::checked_in_fixture_passes_quality_gates
+cargo test -p retrievalkit-cli quality::tests::harder_v2_fixture_passes_quality_gates
+cargo test -p retrievalkit-cli quality::tests::separate_collection_and_qrels_emit_deterministic_artifacts
+cargo clippy -p retrievalkit-cli --all-targets --all-features -- -D warnings
+cargo run -p retrievalkit-cli -- bench quality-v3 --collection benchmarks/retrieval-quality/v3 --foundation-artifacts target/v3-phase-1-1-final --verify-rerun
 python3 scripts/quality/validate_v3_conformance.py --collection benchmarks/retrieval-quality/v3 --foundation-artifacts target/v3-phase-1-1-final
 python3 -m py_compile scripts/quality/validate_v3_conformance.py
 ruff check scripts/quality/validate_v3_conformance.py

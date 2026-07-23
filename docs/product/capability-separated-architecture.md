@@ -1,10 +1,10 @@
-# Capability-Separated VectorKit Architecture
+# Capability-Separated RetrievalKit Architecture
 
 Date: 2026-07-12
 
 ## Decision
 
-VectorKit stores one canonical corpus and composes optional derived query
+RetrievalKit stores one canonical corpus and composes optional derived query
 capabilities over it:
 
 ```text

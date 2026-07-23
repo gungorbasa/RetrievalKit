@@ -8,5 +8,5 @@
   "memory": {"rss_interval_ms":1,"fresh_process_repetitions":5,"phases":["build","save","load","validation","query","maintenance"]},
   "sessions": {"minimum_final":3,"gate":"median_session_p95","pool_sessions":false},
   "process": {"one_scenario_per_fresh_process":true,"serious_or_critical_thermal_invalid":true},
-  "harnesses": {"graph_free_framework":"VectorKitFFI","graph_framework":"VectorKitGraphFFI","separate_products":true}
+  "harnesses": {"graph_free_framework":"RetrievalKitFFI","graph_framework":"RetrievalKitGraphFFI","separate_products":true}
 }

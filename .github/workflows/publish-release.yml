@@ -109,7 +109,7 @@ jobs:
             target/release-bundle-v0.1.0/sbom.spdx.json \
             target/release-bundle-v0.1.0/provenance.intoto.json \
             --verify-tag \
-            --title "VectorKit $RELEASE_TAG preview" \
+            --title "RetrievalKit $RELEASE_TAG preview" \
             --notes-file CHANGELOG.md
 
   pypi:

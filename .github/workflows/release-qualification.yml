@@ -27,7 +27,7 @@ jobs:
   release-qualification:
     name: Validate supported physical-device release evidence
     if: inputs.owner_authorized
-    runs-on: [self-hosted, macOS, ARM64, vectorkit-controlled]
+    runs-on: [self-hosted, macOS, ARM64, retrievalkit-controlled]
     timeout-minutes: 120
     env:
       AUTHORIZATION_PATH: ${{ inputs.authorization_path }}

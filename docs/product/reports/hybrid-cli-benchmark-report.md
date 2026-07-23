@@ -25,7 +25,7 @@ Environment:
 Command:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench matrix \
+cargo run --release -p retrievalkit-cli -- bench matrix \
   --chunks 10000 \
   --dimensions 384,768 \
   --queries 100 \

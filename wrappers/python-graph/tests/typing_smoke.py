@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vectorkit_graph import (
+from retrievalkit_graph import (
     GraphNode,
     GraphRecordInput,
     GraphRecordNode,

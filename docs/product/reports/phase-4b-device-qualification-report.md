@@ -159,7 +159,7 @@ is I8 weighted hybrid at `1.018886`.
 
 The owner permanently stopped `100k-384d-v3-stress` after reporting that the
 device was becoming excessively hot. The collector and benchmark application
-were stopped, and no VectorKit benchmark process remained on the device. No
+were stopped, and no RetrievalKit benchmark process remained on the device. No
 further 100K execution is authorized by this qualification.
 
 The accepted stress tree is empty. Five partial F32 files—one preflight and
@@ -211,7 +211,7 @@ between fresh processes and are excluded from measured durations.
   cancellation, partial accepted evidence, and prohibited-claim cases.
 - Python compilation and Ruff pass for `benchmarks/device-graph`.
 - The standalone Swift foreground-gate test passes.
-- `cargo fmt --all --check` and the eight `vectorkit-phase4-bench` tests pass.
+- `cargo fmt --all --check` and the eight `retrievalkit-phase4-bench` tests pass.
 - Isolated iOS release linkage and all authorized app/framework hashes pass.
 - Independent inventory confirms 846 accepted supported artifacts and 846
   unique process IDs.

@@ -57,7 +57,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_altered_apple_checksum_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            archive = Path(directory) / "VectorKitFFI.xcframework.zip"
+            archive = Path(directory) / "RetrievalKitFFI.xcframework.zip"
             archive.write_bytes(b"altered")
             with self.assertRaisesRegex(validator.ValidationError, "checksum mismatch"):
                 validator.validate_xcframework_archive(archive, "0.1.0", "0" * 64)
@@ -65,9 +65,9 @@ class ReleaseTests(unittest.TestCase):
     def test_mismatched_wheel_version_is_rejected(self) -> None:
         config = validator.load_json(REPO / "release/release-v0.1.0.json")
         with tempfile.TemporaryDirectory() as directory:
-            wheel = Path(directory) / "vectorkit-9.9.9-cp310-cp310-macosx_11_0_arm64.whl"
+            wheel = Path(directory) / "retrievalkit-9.9.9-cp310-cp310-macosx_11_0_arm64.whl"
             with zipfile.ZipFile(wheel, "w") as archive:
-                archive.writestr("vectorkit-9.9.9.dist-info/RECORD", "")
+                archive.writestr("retrievalkit-9.9.9.dist-info/RECORD", "")
             with self.assertRaisesRegex(validator.ValidationError, "version mismatch"):
                 validator.validate_wheels([wheel], config)
 
@@ -91,11 +91,11 @@ class ReleaseTests(unittest.TestCase):
     def test_wheel_canonicalization_remaps_checkout_and_is_stable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            wheel = root / "vectorkit-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
-            sbom_name = "vectorkit-0.1.0.dist-info/sboms/test.json"
+            wheel = root / "retrievalkit-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+            sbom_name = "retrievalkit-0.1.0.dist-info/sboms/test.json"
             with zipfile.ZipFile(wheel, "w") as archive:
-                archive.writestr(sbom_name, '{"ref":"path+file://' + root.resolve().as_posix() + '/crates/vectorkit-core#0.1.0"}')
-                archive.writestr("vectorkit-0.1.0.dist-info/RECORD", "")
+                archive.writestr(sbom_name, '{"ref":"path+file://' + root.resolve().as_posix() + '/crates/retrievalkit-core#0.1.0"}')
+                archive.writestr("retrievalkit-0.1.0.dist-info/RECORD", "")
             canonicalize_wheel.canonicalize(root, wheel)
             first = wheel.read_bytes()
             canonicalize_wheel.canonicalize(root, wheel)

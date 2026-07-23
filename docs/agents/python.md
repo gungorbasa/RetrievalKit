@@ -31,7 +31,7 @@ Python code.
 
 ## API Design
 
-- Provide idiomatic Python names while preserving VectorKit concepts:
+- Provide idiomatic Python names while preserving RetrievalKit concepts:
   documents, chunks, metadata, filters, searches, hits, scores, and traces.
 - Keep public APIs explicit and small. Avoid broad builder frameworks or fluent
   APIs until real usage shows they help.
@@ -60,7 +60,7 @@ Python code.
 
 ## Embeddings
 
-- VectorKit's core input is embeddings, not raw text. Do not put embedding
+- RetrievalKit's core input is embeddings, not raw text. Do not put embedding
   model execution in the Rust retrieval core.
 - The Python wrapper may document how callers create embeddings from text, but
   search APIs should keep the embedding boundary explicit:
@@ -90,7 +90,7 @@ Python code.
 - Include actionable context for dimension mismatches, unsupported formats,
   missing files, persistence failures, filter validation, and deleted or stale
   chunk behavior.
-- Do not raise generic `Exception` for known VectorKit failures.
+- Do not raise generic `Exception` for known RetrievalKit failures.
 - Do not hide Rust validation failures behind Python fallback behavior.
 
 ## Performance

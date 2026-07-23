@@ -3,7 +3,7 @@
 
 Expected graph, ranking, metric, paired-comparison, and generation values are
 fully calculated from the frozen collection before any Rust artifact is read.
-The oracle does not invoke VectorKit or use Rust traces as calculation inputs.
+The oracle does not invoke RetrievalKit or use Rust traces as calculation inputs.
 """
 
 from __future__ import annotations

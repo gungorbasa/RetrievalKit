@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned BEIR collections for VectorKit's Rust quality runner."""
+"""Prepare pinned BEIR collections for RetrievalKit's Rust quality runner."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        help="Defaults to <cache-dir>/<dataset>/vectorkit.",
+        help="Defaults to <cache-dir>/<dataset>/retrievalkit.",
     )
     parser.add_argument(
         "--model-dir",
@@ -107,7 +107,7 @@ def main() -> None:
     if args.download_only:
         return
 
-    default_output = "vectorkit" if args.split == "test" else f"vectorkit-{args.split}"
+    default_output = "retrievalkit" if args.split == "test" else f"retrievalkit-{args.split}"
     output = args.output or args.cache_dir / dataset.name / default_output
     embedder = CoreMlMiniLmEmbedder(args.model_dir)
     prepare_collection(
@@ -120,7 +120,7 @@ def main() -> None:
         args.evaluation_depth,
         args.split,
     )
-    print(f"Wrote VectorKit collection to {output}")
+    print(f"Wrote RetrievalKit collection to {output}")
 
 
 def download(dataset: Dataset, archive: Path, *, force: bool) -> None:
@@ -392,7 +392,7 @@ def prepare_collection(
             "split": split,
             "source_url": dataset.url,
             "checksum": f"md5:{dataset.checksum}",
-            "preprocessing": "BEIR title + two newlines + text; one VectorKit chunk per document",
+            "preprocessing": "BEIR title + two newlines + text; one RetrievalKit chunk per document",
             "corpus_documents": dataset.corpus_count,
             "queries": dataset.splits[split].query_count,
             "qrels": dataset.splits[split].qrels_count,

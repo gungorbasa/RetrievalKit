@@ -1,4 +1,4 @@
-# VectorKit Working Memory
+# RetrievalKit Working Memory
 
 This file captures active implementation context that should survive chat
 changes. Keep it short. Delete or move notes once they become irrelevant,
@@ -6,6 +6,21 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-23: the project was renamed from VectorKit to RetrievalKit across
+  crates (`retrievalkit-*`), Swift packages (`RetrievalKit`,
+  `RetrievalKitGraph`, `RetrievalKitPipeline`, `RetrievalKitShared`,
+  `RetrievalKitBench`, `RetrievalKitIOSBench`), Python distributions
+  (`retrievalkit`, `retrievalkit-graph`), FFI symbols/headers, scripts, CI,
+  and docs. Exception: the frozen Phase 6 evidence chain keeps the historical
+  VectorKit naming because `manifest.json` hash-pins it —
+  `benchmarks/publication/artifacts/**`, `contract-v1.json`,
+  `validate_publication.py`, `generate_publication.py`, and
+  `tests/test_publication.py` must not be renamed while phase6-publication-v1
+  remains the authorized claim source. `validate_readme.py` uses the new
+  names (it validates the current README). The GitHub repository still needs
+  to be renamed to `gungorbasa/RetrievalKit`, and the v0.1.0 xcframework
+  checksums in `release/release-v0.1.0.json` refer to archives built under
+  the old artifact names, so Apple artifacts must be rebuilt before release.
 - The `v0.1.0` combined Swift/Python release-candidate implementation is the
   active distribution slice. The root README is an evidence-led product page
   whose numeric observations are mapped to permitted Phase 6 claim IDs and
@@ -33,7 +48,7 @@ implemented, or superseded by the product spec.
   and schema-driven.
 - Prefer mature fast crates for performance-sensitive work when they clearly
   help. Avoid dependencies for simple local logic.
-- The planned commercial qualification must evaluate VectorKit as a complete
+- The planned commercial qualification must evaluate RetrievalKit as a complete
   semantic, hybrid, and graph-scoped retrieval package while preserving the
   capability-separated API architecture. The benchmark and claim
   roadmap lives in
@@ -201,7 +216,7 @@ implemented, or superseded by the product spec.
 
 ## Active Product Constraints
 
-- VectorKit is local-first retrieval for mobile/desktop, with iOS/macOS as the
+- RetrievalKit is local-first retrieval for mobile/desktop, with iOS/macOS as the
   first wrapper target.
 - V1 public retrieval remains semantic exact-vector search and hybrid ranking;
   BM25 remains hybrid's internal lexical component,
@@ -249,7 +264,7 @@ implemented, or superseded by the product spec.
   place. The template deliberately contains no invented customer data.
 - M1 implements canonical `RecordStore` values/identities, persisted corpus and
   generation identity, adaptive `CandidateScope`, scoped exact/BM25/hybrid
-  retrieval, and ordered bulk hydration in `vectorkit-core`.
+  retrieval, and ordered bulk hydration in `retrievalkit-core`.
 - The 10K x 384d local development comparison measured graph-free p95 changes
   of exact +1.32%, BM25 +2.46%, and hybrid +2.66% versus pre-M1 using the median
   of three final p95 runs. Repeat the <=3% release gate on pinned hardware.
@@ -257,7 +272,7 @@ implemented, or superseded by the product spec.
   synthetic conformance fixtures. Customer data is deferred acceptance evidence
   and must never become hard-coded schema behavior. Real-workload capacity and
   device claims remain provisional until private customer validation occurs.
-- `vectorkit-graph` M2 now provides record/chunk node schemas, explicit typed
+- `retrievalkit-graph` M2 now provides record/chunk node schemas, explicit typed
   references and collections, validation policies, deterministic CSR adjacency,
   exact property seeds, bounded multi-step traversal, cycles, canonical paths,
   limits, cancellation, edge provenance, and graph-result projection into exact,
@@ -288,8 +303,8 @@ implemented, or superseded by the product spec.
   gate. See `docs/product/reports/graph-m3-benchmark-report.md`; pinned-device
   release qualification is still required.
 - M4.1 selected and proved the Swift aggregate packaging topology. The existing
-  `vectorkit-ffi` crate has an off-by-default `graph` feature; base
-  `VectorKitFFI` remains graph-free, while `VectorKitGraphFFI` is built with the
+  `retrievalkit-ffi` crate has an off-by-default `graph` feature; base
+  `RetrievalKitFFI` remains graph-free, while `RetrievalKitGraphFFI` is built with the
   feature and contains the base retrieval symbols plus graph ABI symbols in one
   static library. Graph-enabled apps select the aggregate instead of linking
   both artifacts.
@@ -298,14 +313,14 @@ implemented, or superseded by the product spec.
   canonical schema, finalization consumes the builder into one graph handle,
   and that handle supports composite save/load/validation. JSON is limited to
   cold schema and ingestion paths; M4.3 query hot paths remain typed C ABI.
-- M4.2b adds the `VectorKitGraph` Swift product with generic `Encodable` schema,
+- M4.2b adds the `RetrievalKitGraph` Swift product with generic `Encodable` schema,
   canonical record, metadata, and chunk types. Actor-owned builder/index handles
   preserve native ownership; finalization consumes the builder. Swift integration
   tests cover schema marshaling, record ingestion, consumed-builder rejection,
   and composite save/validate/load.
 - Full Swift linkage testing proved the base and aggregate static artifacts
   cannot coexist in one SwiftPM test bundle without duplicate core symbols.
-  `VectorKitGraph` therefore lives in its own Swift package and is selected
+  `RetrievalKitGraph` therefore lives in its own Swift package and is selected
   instead of the base package, enforcing the intended single-core topology.
 - M4.3a adds typed C/Swift graph queries for node-ID seeds and bounded traversal,
   opaque native result ownership, materialized matches, limit/truncation traces,
@@ -324,7 +339,7 @@ implemented, or superseded by the product spec.
   scalar mappings, cancellation, and composed scoped ranking. The graph
   aggregate ABI version was 2 for this path-materialization contract.
 - M4.4 transports the settled cross-wrapper graph error taxonomy through stable
-  native status codes and maps it to `VectorKitGraphError` without wrapper-side
+  native status codes and maps it to `RetrievalKitGraphError` without wrapper-side
   validation. Swift integration tests cover invalid schema/identity, query-limit
   rejection, cancellation, corrupt/missing persistence, internal core failures,
   and builder consumption after both successful and failed finalization. The
@@ -355,7 +370,7 @@ implemented, or superseded by the product spec.
   integer values that cannot safely cross C `size_t`; Rust remains the sole
   semantic validator. Tests cover normal and max-results-truncated queries,
   projection cardinality, and negative dimension/hop/top-k/candidate inputs.
-- M4.9 adds the `VectorKitGraphQuickstart` executable to the separate graph
+- M4.9 adds the `RetrievalKitGraphQuickstart` executable to the separate graph
   Swift package. Its deterministic generic two-record fixture demonstrates
   schema creation, canonical ingestion, property-seeded traversal,
   metadata-filtered scoped hybrid ranking, composite save, and schema-owning
@@ -375,8 +390,8 @@ implemented, or superseded by the product spec.
   symbol-neutrality and separate-linkage verification. The clean build exposed
   and fixed a Bash 3 empty-feature-array failure in the base build script. See
   `docs/product/reports/graph-m4-swift-qualification-report.md`.
-- M5 adds the separate optional `vectorkit-graph` Python distribution over the
-  same Rust `GraphDatabase` and `GraphRetrievalDatabase`. The base `vectorkit`
+- M5 adds the separate optional `retrievalkit-graph` Python distribution over the
+  same Rust `GraphDatabase` and `GraphRetrievalDatabase`. The base `retrievalkit`
   distribution remains graph-free. The optional aggregate exposes typed graph
   models, graph-only and combined builders, and separate `database.graph` and
   `database.retrieval` query namespaces. Synthetic Python tests and a runnable
@@ -428,10 +443,10 @@ Approximate vector-only sizes for `24K` vectors:
   `i8` values plus one `f32` scale per vector.
 - I8 synthetic recall passed the current gate. Exact full-scan latency is now
   faster than F32/F16 on the current Apple M1 Max development machine because
-  VectorKit uses an AArch64 `dotprod` C shim for I8 dot products when runtime
+  RetrievalKit uses an AArch64 `dotprod` C shim for I8 dot products when runtime
   feature detection reports support. SimSIMD still reports
   `neon,neon_f16,dynamic`, not `neon_i8`, because this machine has
-  `FEAT_DotProd=1` but `FEAT_I8MM=0`; keep VectorKit's guarded fallback path.
+  `FEAT_DotProd=1` but `FEAT_I8MM=0`; keep RetrievalKit's guarded fallback path.
 - `BinaryQuantized` is a future size-constrained candidate retrieval option.
   It may be necessary for `768d + data <20 MB`, but needs recall benchmarking
   before use.
@@ -530,10 +545,10 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 - `docs/agents/python.md` defines Python wrapper guidance. Python is currently
   an internal developer wrapper before the public Swift wrapper is finalized.
-- `crates/vectorkit-python` exposes a thin PyO3 module. Its default feature set
-  calls only `vectorkit-core`; the `graph` feature adds the aggregate graph
+- `crates/retrievalkit-python` exposes a thin PyO3 module. Its default feature set
+  calls only `retrievalkit-core`; the `graph` feature adds the aggregate graph
   bindings.
-- `wrappers/python` contains the graph-free `vectorkit` maturin package. The
+- `wrappers/python` contains the graph-free `retrievalkit` maturin package. The
   public API is Pythonic:
   `Index.add(documents=[...])`, `Index.search(embedding, limit=10, where=...)`,
   `Index.keyword_search(...)`, `Index.save(...)`, `Index.load(...)`, and
@@ -546,7 +561,7 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - Embeddings are caller-provided. `search_text(index, text, embed=...)` is only
   a convenience helper that calls the supplied provider, validates one returned
   query vector, then calls vector search.
-- `wrappers/python-graph` contains the optional `vectorkit-graph` aggregate.
+- `wrappers/python-graph` contains the optional `retrievalkit-graph` aggregate.
   `GraphDatabaseBuilder` accepts graph-only records without embeddings.
   `GraphRetrievalDatabaseBuilder` takes separate `graph=` and `retrieval=`
   configurations, while built databases expose `database.graph` and
@@ -563,8 +578,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## EmbeddingKit Context
 
-- EmbeddingKit lives separately from VectorKit under `wrappers/swift/EmbeddingKit`.
-  VectorKit still accepts caller-provided embeddings and does not depend on an
+- EmbeddingKit lives separately from RetrievalKit under `wrappers/swift/EmbeddingKit`.
+  RetrievalKit still accepts caller-provided embeddings and does not depend on an
   embedding runtime.
 - Core ML model conversion is intentionally outside the Swift package. The
   generic conversion script is `scripts/embedding/convert-embedding-coreml.py`
@@ -577,15 +592,15 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Ingestion Context
 
-- Generic text chunking lives in the separate Rust `vectorkit-ingest` crate so
-  retrieval remains isolated in `vectorkit-core`.
+- Generic text chunking lives in the separate Rust `retrievalkit-ingest` crate so
+  retrieval remains isolated in `retrievalkit-core`.
 - Fixed and sentence-aware strategies use Unicode-character limits and overlap;
   returned ranges are UTF-8 byte offsets into the original text.
-- Swift exposes chunking through the separate `VectorKitIngest` product and
-  Python through `vectorkit.ingest`. Both call the same Rust implementation.
+- Swift exposes chunking through the separate `RetrievalKitIngest` product and
+  Python through `retrievalkit.ingest`. Both call the same Rust implementation.
   Tokenizers differ by model, so exact token counting remains provider-owned.
-- The optional Swift `VectorKitPipeline` package and Python
-  `vectorkit.pipeline` module compose chunking, embedding, document upsert, and
+- The optional Swift `RetrievalKitPipeline` package and Python
+  `retrievalkit.pipeline` module compose chunking, embedding, document upsert, and
   hybrid text search. They validate all embeddings before upsert, so provider
   failures leave the previous document version unchanged.
 - The pipeline layer owns `DocumentChunker` in Swift and Python. Its default is
@@ -640,24 +655,24 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 - The CLI matrix benchmark can now vary filter selectivity and hybrid candidate
   limits with `--filter-every-values`, `--vector-candidates`, and
   `--keyword-candidates`.
-- A `vectorkit-ffi` crate now exposes `vectorkit_bench_synthetic_json` and
-  `vectorkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
+- A `retrievalkit-ffi` crate now exposes `retrievalkit_bench_synthetic_json` and
+  `retrievalkit_string_free` for Swift/macOS/iOS benchmark harnesses. The default
   benchmark runs `24K` chunks, `384d` and `768d`, `f32`/`f16`/`i8`, and both
   unfiltered and `filter_every=10` filtered searches. FFI benchmark rows now
   also include persistence save time, load time, persisted file sizes, and
   post-load search latency by default. `persist_bm25=false` measures a compact
   vector-only persistence profile.
 - A SwiftPM macOS command-line harness exists at
-  `wrappers/swift/VectorKitBench`. It links `vectorkit-ffi`, supports
+  `wrappers/swift/RetrievalKitBench`. It links `retrievalkit-ffi`, supports
   `--small-smoke`, `--config`, and `--config-file`, and successfully ran the
   full default FFI benchmark locally.
-- `scripts/build-xcframework.sh` packages `vectorkit-ffi` as
-  `target/apple/VectorKitFFI.xcframework`. The full Apple package is verified
+- `scripts/build-xcframework.sh` packages `retrievalkit-ffi` as
+  `target/apple/RetrievalKitFFI.xcframework`. The full Apple package is verified
   locally with `ios-arm64`, `ios-arm64-simulator`, and `macos-arm64` slices.
   The iOS simulator slice is arm64-only; `x86_64-apple-ios` is intentionally
   not used.
 - A minimal SwiftUI iOS benchmark app exists at
-  `wrappers/swift/VectorKitIOSBench`. It links the local XCFramework, exposes
+  `wrappers/swift/RetrievalKitIOSBench`. It links the local XCFramework, exposes
   smoke, device-validation, full default, and compact vector-only benchmark
   buttons, and the generic iOS Simulator build succeeds locally. The
   device-validation mode runs `24K` chunks, `384d`/`768d`, `i8`, filtered and

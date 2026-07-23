@@ -4,8 +4,8 @@ This benchmark isolates retrieval latency. Index construction and query
 embedding are outside the timed region. Run it with:
 
 ```bash
-cargo bench -p vectorkit-core --bench graph_free_regression
-cargo bench -p vectorkit-core --bench candidate_scope
+cargo bench -p retrievalkit-core --bench graph_free_regression
+cargo bench -p retrievalkit-core --bench candidate_scope
 ```
 
 ## Method

@@ -15,7 +15,7 @@ Runs the local Python wrapper quality checks in an isolated developer
 environment. This does not add any runtime package dependencies.
 
 Checks:
-  cargo test -p vectorkit-python
+  cargo test -p retrievalkit-python
   maturin develop
   ruff check .
   mypy
@@ -85,7 +85,7 @@ PY
   )"
   local venv_dir="$ROOT_DIR/target/python-wrapper-check-venv-$python_tag"
 
-  cargo test -p vectorkit-python
+  cargo test -p retrievalkit-python
 
   "$PYTHON_BIN" -m venv "$venv_dir"
   local check_python

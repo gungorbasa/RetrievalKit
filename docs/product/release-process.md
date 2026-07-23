@@ -1,25 +1,25 @@
-# VectorKit v0.1.0 release process
+# RetrievalKit v0.1.0 release process
 
 Status: release-candidate implementation complete; external publication blocked.
 
-VectorKit ships the Swift and Python previews from one signed source revision.
+RetrievalKit ships the Swift and Python previews from one signed source revision.
 The release contains separate base and graph native aggregates because linking
 both into one process is unsupported.
 
 ## Release contents
 
-- `VectorKitFFI.xcframework.zip` for the Swift base products.
-- `VectorKitGraphFFI.xcframework.zip` for the graph aggregate.
-- macOS arm64 `vectorkit` and `vectorkit-graph` wheels for CPython 3.10–3.14.
+- `RetrievalKitFFI.xcframework.zip` for the Swift base products.
+- `RetrievalKitGraphFFI.xcframework.zip` for the graph aggregate.
+- macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
-- Root Swift package products `VectorKit`, `VectorKitIngest`, `VectorKitGraph`,
-  `EmbeddingKit`, and `VectorKitPipeline`.
+- Root Swift package products `RetrievalKit`, `RetrievalKitIngest`, `RetrievalKitGraph`,
+  `EmbeddingKit`, and `RetrievalKitPipeline`.
 
 The root `Package.swift` resolves remote release archives by default. Repository
-verification uses `VECTORKIT_USE_LOCAL_ARTIFACTS=1` with independently built
+verification uses `RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1` with independently built
 local XCFrameworks. A consumer must select either the base products or
-`VectorKitGraph`; an application must never link the base and graph native
+`RetrievalKitGraph`; an application must never link the base and graph native
 aggregates together.
 
 ## Candidate procedure

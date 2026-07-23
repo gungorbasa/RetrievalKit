@@ -1,9 +1,9 @@
 # EmbeddingKit Swift
 
 EmbeddingKit is a provider-neutral embedding layer intended to pair with
-VectorKit without making VectorKit depend on an embedding model.
+RetrievalKit without making RetrievalKit depend on an embedding model.
 
-VectorKit keeps the retrieval boundary explicit:
+RetrievalKit keeps the retrieval boundary explicit:
 
 ```swift
 let hits = try await index.search(embedding: queryEmbedding, topK: 5)
@@ -13,7 +13,7 @@ EmbeddingKit provides the text-to-vector step:
 
 ```swift
 import EmbeddingKit
-import VectorKit
+import RetrievalKit
 
 let embedder: any TextEmbedder = try PrecomputedEmbedder(
     modelInfo: KnownEmbeddingModels.bgeSmallEnV15,
@@ -102,7 +102,7 @@ throughput while keeping each `MLModel` isolated to its own actor; benchmark
 
 ## Benchmark Shape
 
-Use the same shape as VectorKit retrieval benchmarks:
+Use the same shape as RetrievalKit retrieval benchmarks:
 
 - cold model initialization reported separately by concrete providers
 - warmup iterations excluded

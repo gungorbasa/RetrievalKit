@@ -12,7 +12,7 @@ usage:
   scripts/setup-social-network-example.sh
 
 Creates target/social-network-example-venv and installs:
-  - the local vectorkit wheel
+  - the local retrievalkit wheel
   - FastEmbed example dependencies
 
 Environment:
@@ -45,9 +45,9 @@ PY
   PYTHON_BIN="$PYTHON_BIN" "$ROOT_DIR/scripts/build-python-wheel.sh"
 
   local wheel
-  wheel="$(find "$ROOT_DIR/target/wheels" -maxdepth 1 -name "vectorkit-*-${cp_tag}-${cp_tag}-*.whl" | sort | tail -n 1)"
+  wheel="$(find "$ROOT_DIR/target/wheels" -maxdepth 1 -name "retrievalkit-*-${cp_tag}-${cp_tag}-*.whl" | sort | tail -n 1)"
   if [[ -z "$wheel" ]]; then
-    echo "could not find vectorkit wheel for $cp_tag in target/wheels" >&2
+    echo "could not find retrievalkit wheel for $cp_tag in target/wheels" >&2
     exit 1
   fi
 

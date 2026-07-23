@@ -46,7 +46,7 @@ not started.
   `6ea55b935ea79933f1ec64d77e88438682d2ae613c7fc0c92c863d58e91f4f3a`
 - Phase 5 input artifact-set SHA-256:
   `1e7283359f1781dacca1ced3c2fa1794e19a02a2b9669a782465e8f42a8c5602`
-- measured VectorKit revision:
+- measured RetrievalKit revision:
   `9c784d2f11b91bb907150aa1b6046880ff89fde6`
 
 The manifest excludes itself from the canonical preimage and binds all nine
@@ -70,7 +70,7 @@ totals are 3,750,320 eligible and 6,326 projected chunks, or 592.84x; that
 pooled ratio is explicitly not substituted for the mean per-query result.
 
 On the frozen Apple M1 Max exact F32 benchmark, sqlite-vec 0.1.9 P50 divided by
-VectorKit P50 is:
+RetrievalKit P50 is:
 
 | Size | Unfiltered | Filtered |
 | --- | ---: | ---: |
@@ -79,7 +79,7 @@ VectorKit P50 is:
 | 50K | 7.29x | 8.43x |
 
 The exact P50/P95 nanosecond values and millisecond rounding are in
-`mac-systems-performance.md` and `evidence-index.json`. VectorKit and
+`mac-systems-performance.md` and `evidence-index.json`. RetrievalKit and
 sqlite-vec passed the frozen identity, filtering, deletion, determinism, and
 reload gates. USearch 2.26.0 independently recomputes to mean Recall@10
 0.965/0.850/0.775 at 10K/25K/50K; the gate failed and all USearch timing
@@ -121,8 +121,8 @@ Permitted:
 
 Prohibited:
 
-- `P6-PROHIBITED-001`: universal VectorKit superiority.
-- `P6-PROHIBITED-002`: a VectorKit-versus-USearch performance advantage.
+- `P6-PROHIBITED-001`: universal RetrievalKit superiority.
+- `P6-PROHIBITED-002`: a RetrievalKit-versus-USearch performance advantage.
 - `P6-PROHIBITED-003`: a graph performance-winner claim.
 - `P6-PROHIBITED-004`: 100K physical-device support or pass.
 - `P6-PROHIBITED-005`: a combined winner table for non-equivalent graph apps.
@@ -135,7 +135,7 @@ Withheld:
 - `P6-WITHHELD-002`: energy or sustained thermal superiority.
 - `P6-WITHHELD-003`: redistribution of raw HotpotQA-derived data or raw device
   captures.
-- `P6-WITHHELD-004`: automatic transfer to later VectorKit or dependency
+- `P6-WITHHELD-004`: automatic transfer to later RetrievalKit or dependency
   revisions.
 
 Claims expire on 2027-07-21 and rerun sooner after any relevant source,

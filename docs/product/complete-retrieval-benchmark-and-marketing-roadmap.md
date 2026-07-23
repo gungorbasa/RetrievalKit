@@ -7,7 +7,7 @@ Date: 2026-07-20
 
 ## Purpose
 
-VectorKit is not only a vector index. It is a local retrieval SDK that composes
+RetrievalKit is not only a vector index. It is a local retrieval SDK that composes
 separate, native capabilities over one canonical corpus:
 
 ```text
@@ -44,11 +44,11 @@ More precise technical positioning:
 > Native, on-device semantic, hybrid, and graph-scoped retrieval for Apple
 > applications, with no server required.
 
-The benchmark should demonstrate why an application would adopt VectorKit
+The benchmark should demonstrate why an application would adopt RetrievalKit
 instead of assembling a vector library, lexical index, custom adjacency
 structures, application-side joins, and separately coordinated persistence.
 
-VectorKit must not be advertised as a general graph database. The first graph
+RetrievalKit must not be advertised as a general graph database. The first graph
 release provides deterministic explicit references, reference collections,
 document/chunk structure, bounded typed traversal, and graph-scoped retrieval.
 It does not provide Cypher, automatic entity extraction, PageRank, broad graph
@@ -81,7 +81,7 @@ same corpus, queries, embeddings, filters, graph schema, and relevance labels:
 | D | Graph selection only | Traversal and candidate-projection correctness |
 | E | Graph-scoped F32 semantic | Value of structural scope before semantic ranking |
 | F | Graph-scoped I8 semantic | Compact combined configuration |
-| G | Graph-scoped weighted hybrid | Complete VectorKit package |
+| G | Graph-scoped weighted hybrid | Complete RetrievalKit package |
 
 RRF may remain a diagnostic configuration. Weighted hybrid is the primary
 high-level hybrid comparison because it matches the current product contract.
@@ -206,7 +206,7 @@ candidate set.
 
 ### Seed contract
 
-VectorKit does not currently perform automatic entity extraction. The
+RetrievalKit does not currently perform automatic entity extraction. The
 benchmark must not silently add that capability.
 
 Each graph-aware query must therefore use one of these disclosed seed sources:
@@ -225,7 +225,7 @@ general LLM or gold supporting title to create benchmark seeds.
 
 LDBC Social Network Benchmark data may be used for a secondary traversal and
 scale fixture. It is not the primary quality or marketing benchmark because
-LDBC targets general graph database workloads outside VectorKit's supported
+LDBC targets general graph database workloads outside RetrievalKit's supported
 surface.
 
 Source: https://ldbcouncil.org/benchmarks/snb/
@@ -270,7 +270,7 @@ Run release builds offline on:
 - one older supported iPhone used to establish a conservative envelope
 - one pinned Apple Silicon Mac for repeatable development comparisons
 
-Record the exact hardware, OS, toolchain, VectorKit commit or release, thermal
+Record the exact hardware, OS, toolchain, RetrievalKit commit or release, thermal
 conditions, warmups, sample count, and percentile calculation.
 
 ## External Baselines
@@ -289,13 +289,13 @@ filters:
 - an embedded ANN engine such as USearch or ObjectBox only at a disclosed
   recall target against exact F32
 
-Never compare unconstrained ANN latency with VectorKit exact latency. Match
+Never compare unconstrained ANN latency with RetrievalKit exact latency. Match
 quality first, such as Recall@10 greater than or equal to 0.99, and disclose
 build time, index size, and memory.
 
 ### Complete-application lane
 
-Compare the complete VectorKit workflow with a representative application-side
+Compare the complete RetrievalKit workflow with a representative application-side
 stack:
 
 ```text
@@ -689,12 +689,12 @@ controlled evidence.
 Good claim forms:
 
 > Graph-scoped hybrid retrieval improved Complete Evidence Recall@10 by X% over
-> whole-corpus vector search on the VectorKit-50K [collection] benchmark.
+> whole-corpus vector search on the RetrievalKit-50K [collection] benchmark.
 
-> VectorKit reduced the ranked candidate set by X times while preserving Y%
+> RetrievalKit reduced the ranked candidate set by X times while preserving Y%
 > Supporting Document Recall@10.
 
-> VectorKit completed bounded graph selection and hybrid ranking across 50K
+> RetrievalKit completed bounded graph selection and hybrid ranking across 50K
 > local chunks in X milliseconds P95 on [device and OS].
 
 > One native SDK provides semantic, hybrid, graph-scoped retrieval, filtering,
@@ -709,7 +709,7 @@ Every numerical claim must name or link to:
 - comparison configuration
 - metric and cutoff
 - hardware and OS for performance claims
-- VectorKit version or commit
+- RetrievalKit version or commit
 - report date
 
 Do not publish:

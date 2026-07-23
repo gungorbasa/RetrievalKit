@@ -45,10 +45,10 @@ base_wheel=()
 graph_wheel=()
 while IFS= read -r wheel; do
   base_wheel+=("$wheel")
-done < <(find "$WHEEL_DIR" -maxdepth 1 -name 'vectorkit-*.whl' ! -name 'vectorkit_graph-*' -print | sort)
+done < <(find "$WHEEL_DIR" -maxdepth 1 -name 'retrievalkit-*.whl' ! -name 'retrievalkit_graph-*' -print | sort)
 while IFS= read -r wheel; do
   graph_wheel+=("$wheel")
-done < <(find "$WHEEL_DIR" -maxdepth 1 -name 'vectorkit_graph-*.whl' -print | sort)
+done < <(find "$WHEEL_DIR" -maxdepth 1 -name 'retrievalkit_graph-*.whl' -print | sort)
 
 if [[ ${#base_wheel[@]} -ne 1 || ${#graph_wheel[@]} -ne 1 ]]; then
   echo "expected exactly one base wheel and one graph wheel" >&2
@@ -70,8 +70,8 @@ import usearch
 print("numpy", numpy.__version__)
 print("sqlite-vec", importlib.metadata.version("sqlite-vec"))
 print("usearch", usearch.__version__)
-print("vectorkit", importlib.metadata.version("vectorkit"))
-print("vectorkit-graph", importlib.metadata.version("vectorkit-graph"))
+print("retrievalkit", importlib.metadata.version("retrievalkit"))
+print("retrievalkit-graph", importlib.metadata.version("retrievalkit-graph"))
 PY
 
 echo "Phase 5 environment ready: $VENV_DIR"

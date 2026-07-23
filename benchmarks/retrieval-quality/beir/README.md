@@ -1,6 +1,6 @@
 # BEIR Evaluation Adapters
 
-VectorKit supports the following evaluation-only BEIR collections:
+RetrievalKit supports the following evaluation-only BEIR collections:
 
 | Dataset | Documents | Test queries | Test qrels | Archive MD5 |
 |:--|--:|--:|--:|:--|
@@ -36,7 +36,7 @@ collections, embeddings, or generated result artifacts. Any future CI
 redistribution requires a separate license review and the required attribution;
 the current adapters intentionally write only to ignored `target/` paths.
 
-Canonical comparison uses one VectorKit chunk per BEIR document and embeds the
+Canonical comparison uses one RetrievalKit chunk per BEIR document and embeds the
 title followed by two newlines and the document text. Alternative chunking is a
 separate experiment and must not be compared directly with canonical BEIR
 results.

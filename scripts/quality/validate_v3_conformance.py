@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_COLLECTION = ROOT / "benchmarks/retrieval-quality/v3"
 NORMATIVE_AJ_SHA256 = "4d7b920b8ae591f0c05cd41abbc36c50210bbf23e6bfa0e09b4eebbffdea4f46"
 BASE_GIT_COMMIT = "d145b76ef60b964dcf004516fc4b94b00147d7c7"
-FOUNDATION_BINARY_BYTES = b"VectorKit V3 conformance foundation executable identity v1\n"
+FOUNDATION_BINARY_BYTES = b"RetrievalKit V3 conformance foundation executable identity v1\n"
 LOWERCASE_TABLE_SHA256 = "480dea577027cc707c769048f775be3aafff871a74c41efcbe0eff8314f269fc"
 
 
@@ -650,7 +650,7 @@ def build_collection_files() -> dict[str, bytes]:
             {"path": path, "sha256": sha256(files[path])} for path in sorted(paths)
         ]
 
-    tool = {"name": "vectorkit-v3-synthetic-fixture", "version": "1.0.0"}
+    tool = {"name": "retrievalkit-v3-synthetic-fixture", "version": "1.0.0"}
     preprocessing = {
         "inputs": inputs("upstream/corpus/synthetic-records-v1"),
         "outputs": [],
@@ -777,7 +777,7 @@ def build_collection_files() -> dict[str, bytes]:
         ),
         "parameters": {
             "archive_sha256": inventory["upstream/corpus/synthetic-records-v1"],
-            "archive_url": "synthetic://vectorkit/v3-conformance-1",
+            "archive_url": "synthetic://retrievalkit/v3-conformance-1",
             "collection_rule": test_lock_preimage["collection_rule"],
             "development_population_sha256": population_hash(populations["Q"]),
             "exclusion_counts": exclusion_counts,
@@ -914,9 +914,9 @@ def build_collection_files() -> dict[str, bytes]:
         "split_manifest": "manifests/split.json",
     }
     collection = {
-        "collection_id": "vectorkit-v3-conformance",
+        "collection_id": "retrievalkit-v3-conformance",
         "collection_version": "1.0.0",
-        "corpus_id": "vectorkit-v3-synthetic-corpus",
+        "corpus_id": "retrievalkit-v3-synthetic-corpus",
         "counts": {
             "chunks": len(model["corpus_embeddings"]),
             "evidence_rows": len(model["evidence"]),
@@ -1338,7 +1338,7 @@ def validate_artifacts(
             {"ids": sorted(ids), "name": name, "sha256": population_hash(ids)}
         )
     expected_population_object = {
-        "collection_id": "vectorkit-v3-conformance",
+        "collection_id": "retrievalkit-v3-conformance",
         "collection_version": "1.0.0",
         "foundation_only": True,
         "populations": sorted(expected_populations, key=lambda row: row["name"]),

@@ -2,7 +2,7 @@ import Foundation
 
 /// Similarity metric expected by embeddings produced by a model.
 public enum EmbeddingSimilarityMetric: String, Codable, Equatable, Sendable {
-    /// Use cosine similarity. VectorKit normalizes vectors when the index uses cosine.
+    /// Use cosine similarity. RetrievalKit normalizes vectors when the index uses cosine.
     case cosine
     /// Use raw dot product similarity.
     case dotProduct

@@ -1,9 +1,9 @@
-# ![VectorKit — fast, private retrieval for edge AI](assets/readme/hero.svg)
+# ![RetrievalKit — fast, private retrieval for edge AI](assets/readme/hero.svg)
 
-VectorKit is the local-first retrieval foundation for Swift and Python apps:
-exact semantic search, BM25-powered hybrid ranking, metadata filtering,
-graph-scoped retrieval, and crash-safe persistence through one shared Rust
-core. It does not need a retrieval server or network call on its query path.
+RetrievalKit is local-first retrieval for Swift and Python apps. One shared
+Rust core combines exact semantic search, BM25-powered hybrid ranking, typed
+metadata filtering, graph-scoped retrieval, and crash-safe persistence — with
+no retrieval server and no network call on the query path.
 
 <div align="center">
 
@@ -17,7 +17,7 @@ core. It does not need a retrieval server or network call on its query path.
 
 </div>
 
-## Why VectorKit
+## Why RetrievalKit
 
 Retrieval stays close to your data and behind one compact,
 capability-oriented API — the same system concepts and guarantees in Rust,
@@ -34,23 +34,23 @@ Swift, and Python.
 
 These are historical observations authorized by the frozen
 [Phase 6 claim register](benchmarks/publication/artifacts/phase6-publication-v1/claim-register.json),
-not measurements of the current checkout. They apply to VectorKit revision
+not measurements of the current checkout. They apply to RetrievalKit revision
 `9c784d2f11b91bb907150aa1b6046880ff89fde6`, were reported on 2026-07-21,
 and expire on 2027-07-21. Retrieval timings exclude embedding generation.
 
 ### Exact retrieval on Apple M1 Max
 
 <!-- claim:P6-MAC-EXACT-001 -->
-On the frozen exact F32, 384-dimensional, top-10 benchmark, VectorKit revision
+On the frozen exact F32, 384-dimensional, top-10 benchmark, RetrievalKit revision
 `9c784d2` delivered the following P50 unfiltered retrieval ratios versus
 sqlite-vec `0.1.9` on an Apple M1 Max running macOS 26.5.2. Each lane used 100
 measured queries after 20 warmups; embedding was excluded.
 
-| Corpus | sqlite-vec / VectorKit P50 | Observation |
+| Corpus | sqlite-vec / RetrievalKit P50 | Observation |
 | ---: | ---: | --- |
-| 10K | 7.17× | VectorKit lower latency |
-| 25K | 7.60× | VectorKit lower latency |
-| 50K | 7.29× | VectorKit lower latency |
+| 10K | 7.17× | RetrievalKit lower latency |
+| 25K | 7.60× | RetrievalKit lower latency |
+| 50K | 7.29× | RetrievalKit lower latency |
 <!-- /claim -->
 
 <!-- claim:P6-MAC-EXACT-002 -->
@@ -61,7 +61,7 @@ excluded.
 <!-- /claim -->
 
 <!-- claim:P6-MAC-CORRECTNESS-001 -->
-VectorKit exact F32 and sqlite-vec `0.1.9` both passed the frozen Phase 5
+RetrievalKit exact F32 and sqlite-vec `0.1.9` both passed the frozen Phase 5
 identity, filtering, deletion, determinism, and reload gates at 10K, 25K, and
 50K. This result is scoped to the frozen workload and is not proof for every
 possible input.
@@ -122,12 +122,12 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 ## Private by architecture
 
 Indexing, search, filtering, graph traversal, ranking, and persistence execute
-locally in the shared Rust core. VectorKit does not need a retrieval server or
+locally in the shared Rust core. RetrievalKit does not need a retrieval server or
 network call on its query path.
 
 <p align="center">
   <img src="assets/readme/architecture.svg" width="100%"
-       alt="VectorKit data flow: caller-provided text and embeddings enter the canonical corpus, which feeds exact plus BM25 hybrid retrieval and an optional graph capability; both produce explainable results, and the corpus persists through transactional, checksummed crash-safe snapshots — all in-process in the shared Rust core.">
+       alt="RetrievalKit data flow: caller-provided text and embeddings enter the canonical corpus, which feeds exact plus BM25 hybrid retrieval and an optional graph capability; both produce explainable results, and the corpus persists through transactional, checksummed crash-safe snapshots — all in-process in the shared Rust core.">
 </p>
 
 Embeddings are caller-provided. To keep the complete ingestion and query flow
@@ -144,12 +144,12 @@ traversal and graph-scoped ranking.
 
 | SDK | Capability | Status |
 | --- | --- | --- |
-| Swift `VectorKit` | Base corpus and retrieval | **Available from source** |
-| Swift `VectorKitGraph` | Graph aggregate with retrieval | **Available from source** |
+| Swift `RetrievalKit` | Base corpus and retrieval | **Available from source** |
+| Swift `RetrievalKitGraph` | Graph aggregate with retrieval | **Available from source** |
 | Swift `EmbeddingKit` | Local Core ML embedding integration | **Available from source** |
-| Swift `VectorKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
-| Python `vectorkit` | Base corpus and retrieval | **Available from source** |
-| Python `vectorkit-graph` | Graph aggregate with retrieval | **Available from source** |
+| Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
+| Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
+| Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
 | Kotlin | — | **Coming soon** |
 | TypeScript | — | **Coming soon** |
 
@@ -176,7 +176,7 @@ target/python-wrapper-check-venv-py*/bin/python wrappers/python/examples/databas
 The example uses explicit demo vectors so it is deterministic:
 
 ```python
-from vectorkit import (
+from retrievalkit import (
     RetrievalConfiguration,
     RetrievalDatabaseBuilder,
     VectorIndexConfiguration,
@@ -209,11 +209,11 @@ macOS XCFramework, then run the tested capability-oriented example:
 
 ```bash
 scripts/build-xcframework.sh --macos-only
-swift run --package-path wrappers/swift/VectorKit VectorKitDatabaseQuickstart
+swift run --package-path wrappers/swift/RetrievalKit RetrievalKitDatabaseQuickstart
 ```
 
 ```swift
-import VectorKit
+import RetrievalKit
 
 @main
 enum DatabaseQuickstart {
@@ -241,7 +241,7 @@ enum DatabaseQuickstart {
 ```
 
 The vectors above are demo embeddings, not a production embedding model. Use
-the [pipeline](wrappers/swift/VectorKitPipeline/README.md) with a local
+the [pipeline](wrappers/swift/RetrievalKitPipeline/README.md) with a local
 [EmbeddingKit provider](wrappers/swift/EmbeddingKit/README.md) for private
 text-to-result retrieval.
 
@@ -260,14 +260,14 @@ text-to-result retrieval.
 
 ## Documentation
 
-- [Product specification](docs/product/vectorkit-product-spec.md)
+- [Product specification](docs/product/retrievalkit-product-spec.md)
 - [Capability-separated architecture](docs/product/capability-separated-architecture.md)
 - [Python wrapper](wrappers/python/README.md)
-- [Swift wrapper](wrappers/swift/VectorKit/README.md)
-- [Graph package](wrappers/swift/VectorKitGraph/README.md)
+- [Swift wrapper](wrappers/swift/RetrievalKit/README.md)
+- [Graph package](wrappers/swift/RetrievalKitGraph/README.md)
 - [Release process](docs/product/release-process.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
-VectorKit `v0.1.0` is a preview. Public distribution has not started.
+RetrievalKit `v0.1.0` is a preview. Public distribution has not started.

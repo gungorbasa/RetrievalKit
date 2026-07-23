@@ -15,7 +15,7 @@ Phase 1.2a qualifies only the frozen whole-corpus retrieval baselines:
 All three runs passed. The evaluation-only adapter feeds the existing
 `CorpusIndex` and `RetrievalDatabase`; semantic scoring, I8 quantization, BM25,
 metadata filtering, weighted fusion, trace generation, and persistence remain
-owned by production `vectorkit-core` code. No production public API, Swift
+owned by production `retrievalkit-core` code. No production public API, Swift
 wrapper, Python wrapper, fixture byte, collection identifier, population, or
 15-run configuration was changed.
 
@@ -55,8 +55,8 @@ topic-derived graph lane and do not exclude them from whole-corpus A-C.
 
 ## Run identities and configurations
 
-All runs use collection `vectorkit-v3-conformance` version `1.0.0`, corpus
-`vectorkit-v3-synthetic-corpus`, cosine scoring, unit-L2 normalization, the
+All runs use collection `retrievalkit-v3-conformance` version `1.0.0`, corpus
+`retrievalkit-v3-synthetic-corpus`, cosine scoring, unit-L2 normalization, the
 frozen query filters, `top_k=10`, evaluation depth 10, no graph/seed/traversal
 hashes, and the R population above.
 
@@ -155,10 +155,10 @@ The completed gates were:
 
 ```bash
 cargo fmt --all -- --check
-cargo test -p vectorkit-cli
-cargo clippy -p vectorkit-cli --all-targets -- -D warnings
+cargo test -p retrievalkit-cli
+cargo clippy -p retrievalkit-cli --all-targets -- -D warnings
 
-cargo run -p vectorkit-cli -- bench quality-v3 \
+cargo run -p retrievalkit-cli -- bench quality-v3 \
   --collection benchmarks/retrieval-quality/v3 \
   --foundation-artifacts target/benchmarks/v3/phase-1.1-foundation-final \
   --verify-rerun
@@ -166,7 +166,7 @@ python3 scripts/quality/validate_v3_conformance.py \
   --collection benchmarks/retrieval-quality/v3 \
   --foundation-artifacts target/benchmarks/v3/phase-1.1-foundation-final
 
-cargo run -p vectorkit-cli -- bench quality-v3 \
+cargo run -p retrievalkit-cli -- bench quality-v3 \
   --collection benchmarks/retrieval-quality/v3 \
   --qualification-artifacts target/benchmarks/v3/phase-1.2a-qualification-final \
   --verify-rerun
@@ -184,7 +184,7 @@ ruff check scripts/quality/validate_v3_phase_1_2a.py \
 git diff --check
 ```
 
-Results: 48 `vectorkit-cli` tests passed, three independent-validator unit
+Results: 48 `retrievalkit-cli` tests passed, three independent-validator unit
 tests passed, Rust lint/format passed, both Phase 1.1 validators passed, all 21
 Rust/Python A-C comparisons passed, persistence equivalence passed for all
 three runs, and the two fresh qualification emissions were byte-identical.
@@ -194,7 +194,7 @@ Existing V1 and V2 quality gates are included in the 48-test CLI suite.
 
 Phase 1.2a changed only evaluation code and documentation:
 
-- `crates/vectorkit-cli/src/quality.rs` and `quality/v3*.rs`;
+- `crates/retrievalkit-cli/src/quality.rs` and `quality/v3*.rs`;
 - `scripts/quality/validate_v3_phase_1_2a.py` and its unit tests;
 - this report, the retrieval-quality README, working memory, and benchmark
   roadmap status.

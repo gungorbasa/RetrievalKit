@@ -456,6 +456,89 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
+name = "retrievalkit-cli"
+version = "0.1.0"
+dependencies = [
+ "icu_casemap",
+ "icu_normalizer",
+ "retrievalkit-core",
+ "retrievalkit-ffi",
+ "retrievalkit-graph",
+ "retrievalkit-phase4-bench",
+ "serde",
+ "serde_json",
+ "sha2",
+ "simsimd",
+]
+
+[[package]]
+name = "retrievalkit-core"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "fs2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "simsimd",
+ "unicode-segmentation",
+ "zstd",
+]
+
+[[package]]
+name = "retrievalkit-ffi"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "retrievalkit-core",
+ "retrievalkit-graph",
+ "retrievalkit-ingest",
+ "retrievalkit-phase4-bench",
+ "serde",
+ "serde_json",
+ "sha2",
+ "simsimd",
+]
+
+[[package]]
+name = "retrievalkit-graph"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "fs2",
+ "retrievalkit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "retrievalkit-ingest"
+version = "0.1.0"
+
+[[package]]
+name = "retrievalkit-phase4-bench"
+version = "0.1.0"
+dependencies = [
+ "retrievalkit-core",
+ "retrievalkit-graph",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "retrievalkit-python"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "retrievalkit-core",
+ "retrievalkit-graph",
+ "retrievalkit-ingest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -615,89 +698,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "vectorkit-cli"
-version = "0.1.0"
-dependencies = [
- "icu_casemap",
- "icu_normalizer",
- "serde",
- "serde_json",
- "sha2",
- "simsimd",
- "vectorkit-core",
- "vectorkit-ffi",
- "vectorkit-graph",
- "vectorkit-phase4-bench",
-]
-
-[[package]]
-name = "vectorkit-core"
-version = "0.1.0"
-dependencies = [
- "cc",
- "fs2",
- "serde",
- "serde_json",
- "sha2",
- "simsimd",
- "unicode-segmentation",
- "zstd",
-]
-
-[[package]]
-name = "vectorkit-ffi"
-version = "0.1.0"
-dependencies = [
- "libc",
- "serde",
- "serde_json",
- "sha2",
- "simsimd",
- "vectorkit-core",
- "vectorkit-graph",
- "vectorkit-ingest",
- "vectorkit-phase4-bench",
-]
-
-[[package]]
-name = "vectorkit-graph"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "fs2",
- "serde",
- "serde_json",
- "vectorkit-core",
-]
-
-[[package]]
-name = "vectorkit-ingest"
-version = "0.1.0"
-
-[[package]]
-name = "vectorkit-phase4-bench"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
- "vectorkit-core",
- "vectorkit-graph",
-]
-
-[[package]]
-name = "vectorkit-python"
-version = "0.1.0"
-dependencies = [
- "pyo3",
- "serde",
- "serde_json",
- "vectorkit-core",
- "vectorkit-graph",
- "vectorkit-ingest",
-]
 
 [[package]]
 name = "version_check"

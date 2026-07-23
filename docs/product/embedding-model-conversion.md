@@ -132,7 +132,7 @@ Measure in three layers:
    - Repeat for Core ML compute modes `.cpuOnly`, `.cpuAndGPU`,
      `.cpuAndNeuralEngine`, and `.all`.
 
-2. Retrieval-only latency in `VectorKit`.
+2. Retrieval-only latency in `RetrievalKit`.
    - Build or reuse one index per model, because model output vectors are not
      interchangeable even when dimensions match.
    - Keep `top_k`, chunk count, filters, vector encoding, and query texts
@@ -219,7 +219,7 @@ converter wraps the Hugging Face transformer model with:
 - For `e5-small-v2`, callers should apply the recorded `query_prefix` and
   `passage_prefix` consistently when generating query and document embeddings.
 - The 768-dimensional presets are quality-ceiling comparisons. They increase
-  VectorKit storage, memory, and exact-search cost, so benchmark them separately
+  RetrievalKit storage, memory, and exact-search cost, so benchmark them separately
   from the small-model default candidates.
 
 ## References

@@ -1,6 +1,6 @@
 """README quickstart using deterministic demo embeddings."""
 
-from vectorkit import (
+from retrievalkit import (
     RetrievalConfiguration,
     RetrievalDatabaseBuilder,
     VectorIndexConfiguration,

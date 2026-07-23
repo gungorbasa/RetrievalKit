@@ -1,0 +1,4 @@
+module RetrievalKitFFI [system] {
+  header "../../../../../crates/retrievalkit-ffi/include/retrievalkit_ffi.h"
+  export *
+}

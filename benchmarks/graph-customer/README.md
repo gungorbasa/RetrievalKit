@@ -1,6 +1,6 @@
 # Graph Customer Fixture Contract
 
-This directory defines the evidence required before VectorKit starts M2's
+This directory defines the evidence required before RetrievalKit starts M2's
 optional graph engine. It deliberately contains no customer records, graph
 facts, expected results, device claims, or latency targets.
 

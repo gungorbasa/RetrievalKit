@@ -57,7 +57,7 @@ and replacement structures to guarantee an all-or-nothing swap.
 - Existing persistence format V1 indexes remain readable.
 - Saving a V1 or V2 index writes format V3 and migrates or upgrades its payload
   into a checksummed generation under `.snapshots`.
-- Index directories should be treated as VectorKit-owned. Applications must
+- Index directories should be treated as RetrievalKit-owned. Applications must
   not modify `.snapshots` or `manifest.json` directly.
 
 ### Upgrade

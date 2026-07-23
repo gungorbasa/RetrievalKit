@@ -1,6 +1,6 @@
 # Swift Agent Guidance
 
-Swift is used for VectorKit's Apple platform wrappers and benchmark harnesses.
+Swift is used for RetrievalKit's Apple platform wrappers and benchmark harnesses.
 
 ## Scope
 

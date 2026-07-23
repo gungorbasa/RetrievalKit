@@ -23,7 +23,7 @@ device-performance, or marketing claim is authorized.
 
 The supported-product benchmark matrix is `10k-384d-v3`, `25k-384d-v3`, and
 `50k-384d-v3`. The `100k-384d-v3-stress` workload is diagnostic scaling
-evidence outside VectorKit V1's supported capacity envelope. It cannot satisfy
+evidence outside RetrievalKit V1's supported capacity envelope. It cannot satisfy
 or fail the supported-product gate, cannot create a product, support, quality,
 latency, or marketing claim, and does not authorize ANN/HNSW. V1 remains
 optimized and supported for fewer than 50K chunks.
@@ -95,11 +95,11 @@ valid final sessions during Phase 4b.
 
 The release Xcode project now produces two distinct arm64 iOS apps:
 
-- `VectorKitIOSBench` links only the base `VectorKitFFI`. Binary symbol
-  inspection found no `_vectorkit_graph_*` symbol. Its environment evidence
+- `RetrievalKitIOSBench` links only the base `RetrievalKitFFI`. Binary symbol
+  inspection found no `_retrievalkit_graph_*` symbol. Its environment evidence
   records zero graph state creations, graph file opens, and graph dispatches.
-- `VectorKitIOSGraphBench` links only the aggregate `VectorKitGraphFFI` and
-  contains `_vectorkit_graph_ffi_abi_version`. It preflights workload and
+- `RetrievalKitIOSGraphBench` links only the aggregate `RetrievalKitGraphFFI` and
+  contains `_retrievalkit_graph_ffi_abi_version`. It preflights workload and
   encoding classification, release/fresh-process rules, physical versus
   simulator state, device identity, thermal/power/storage state, the seven
   stages, lifecycle sample counts, 1 ms RSS, five repetitions, and three
@@ -141,7 +141,7 @@ HotpotQA/V3 checks, `git diff --check`, and the clean-worktree check.
 
 ## Exact Phase 4b task
 
-Build the frozen release `VectorKitFFI` and `VectorKitGraphFFI` XCFrameworks and
+Build the frozen release `RetrievalKitFFI` and `RetrievalKitGraphFFI` XCFrameworks and
 the two isolated iOS products once; execute the 10K/25K/50K F32/I8 supported
 matrix on physical iPhone 17 Pro Max, plus the preflight-authorized 100K stress
 lane on iPhone 17 Pro Max only; use one scenario per fresh process, 100 warmups

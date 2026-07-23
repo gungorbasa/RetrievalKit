@@ -1,6 +1,6 @@
 {
   "baseline_id": "phase7-baselines-v1",
-  "contract_id": "vectorkit-regression-gates-v1",
+  "contract_id": "retrievalkit-regression-gates-v1",
   "gates": [
     {
       "baseline": "graph-quality-smoke-v1",
@@ -48,7 +48,7 @@
       "baseline": "zero correctness violations",
       "claim_impact": "deleted, superseded, and invalid-dimension exclusion",
       "evidence_paths": [
-        "crates/vectorkit-graph/tests/regression_gates.rs"
+        "crates/retrievalkit-graph/tests/regression_gates.rs"
       ],
       "failure_severity": "blocks_pr",
       "gate_id": "P7-PR-EXCLUSIONS",
@@ -69,7 +69,7 @@
       "baseline": "zero filter mismatches",
       "claim_impact": "metadata-filter correctness",
       "evidence_paths": [
-        "crates/vectorkit-graph/tests/regression_gates.rs"
+        "crates/retrievalkit-graph/tests/regression_gates.rs"
       ],
       "failure_severity": "blocks_pr",
       "gate_id": "P7-PR-FILTERING",
@@ -90,7 +90,7 @@
       "baseline": "zero replay divergences",
       "claim_impact": "save, validate, load, and replay equivalence",
       "evidence_paths": [
-        "crates/vectorkit-graph/tests/regression_gates.rs"
+        "crates/retrievalkit-graph/tests/regression_gates.rs"
       ],
       "failure_severity": "blocks_pr",
       "gate_id": "P7-PR-PERSISTENCE",
@@ -111,7 +111,7 @@
       "baseline": "zero selection mismatches and one invalid-scope rejection",
       "claim_impact": "graph selection, projection, scoped ranking, empty and invalid scope behavior",
       "evidence_paths": [
-        "crates/vectorkit-graph/tests/regression_gates.rs"
+        "crates/retrievalkit-graph/tests/regression_gates.rs"
       ],
       "failure_severity": "blocks_pr",
       "gate_id": "P7-PR-GRAPH-SCOPE",
@@ -153,7 +153,7 @@
       "baseline": "Phase 4b graph-free zero activity",
       "claim_impact": "graph-free dispatch isolation",
       "evidence_paths": [
-        "crates/vectorkit-ffi/src/phase4_graph_free.rs"
+        "crates/retrievalkit-ffi/src/phase4_graph_free.rs"
       ],
       "failure_severity": "blocks_pr",
       "gate_id": "P7-PR-GRAPH-FREE",

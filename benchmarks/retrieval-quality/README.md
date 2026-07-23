@@ -9,7 +9,7 @@ or network access.
 Run the benchmark:
 
 ```bash
-cargo run --release -p vectorkit-cli -- \
+cargo run --release -p retrievalkit-cli -- \
   bench quality \
   --fixture benchmarks/retrieval-quality/v2/fixture.json \
   --iterations 50
@@ -24,7 +24,7 @@ Generate deterministic TREC artifacts without changing the production search
 or wrapper APIs:
 
 ```bash
-cargo run --release -p vectorkit-cli -- \
+cargo run --release -p retrievalkit-cli -- \
   bench quality \
   --fixture benchmarks/retrieval-quality/v2/fixture.json \
   --artifacts target/benchmarks/retrieval-quality/v2-trec \
@@ -49,7 +49,7 @@ target/quality-eval-venv/bin/python scripts/quality/validate_trec_metrics.py \
 ```
 
 An optional `--trec-eval /path/to/trec_eval` argument also checks Precision@5,
-Recall@5, and MRR@10 with the official evaluator. NDCG uses VectorKit's explicit
+Recall@5, and MRR@10 with the official evaluator. NDCG uses RetrievalKit's explicit
 `2^relevance - 1` gain mapping and is cross-checked with `ir_measures`.
 
 Regenerate embeddings after intentionally editing `source.json`:
@@ -77,7 +77,7 @@ are deterministic three-dimensional F32 source vectors.
 Validate the collection and emit foundation-only artifacts:
 
 ```bash
-cargo run -p vectorkit-cli -- \
+cargo run -p retrievalkit-cli -- \
   bench quality-v3 \
   --collection benchmarks/retrieval-quality/v3 \
   --foundation-artifacts target/v3-conformance-foundation \
@@ -105,7 +105,7 @@ executing graph runs D-G. Emit a fresh partial qualification under the only
 supported durable output root and prove two emissions are byte-identical:
 
 ```bash
-cargo run -p vectorkit-cli -- \
+cargo run -p retrievalkit-cli -- \
   bench quality-v3 \
   --collection benchmarks/retrieval-quality/v3 \
   --qualification-artifacts target/benchmarks/v3/phase-1.2a-qualification \
@@ -232,9 +232,9 @@ target/embedding-conversion-venv/bin/python \
 target/embedding-conversion-venv/bin/python \
   scripts/quality/prepare_beir.py --dataset nfcorpus
 
-cargo run --release -p vectorkit-cli -- \
+cargo run --release -p retrievalkit-cli -- \
   bench quality \
-  --fixture target/benchmarks/beir/scifact/vectorkit/collection.json \
+  --fixture target/benchmarks/beir/scifact/retrievalkit/collection.json \
   --artifacts target/benchmarks/beir/scifact/trec \
   --iterations 1
 ```

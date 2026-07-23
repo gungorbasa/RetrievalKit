@@ -1,0 +1,22 @@
+[package]
+name = "retrievalkit-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+graph = ["dep:retrievalkit-graph"]
+
+[dependencies]
+pyo3 = { version = "0.27.2", features = ["extension-module"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+retrievalkit-core = { path = "../retrievalkit-core" }
+retrievalkit-graph = { path = "../retrievalkit-graph", optional = true }
+retrievalkit-ingest = { path = "../retrievalkit-ingest" }

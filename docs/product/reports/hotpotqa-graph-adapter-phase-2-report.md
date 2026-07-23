@@ -41,7 +41,7 @@ target/benchmarks/public-collections/inspection-venv/bin/python \
   --root target/benchmarks/public-collections/hotpotqa-linked-abstracts-graph-v1 \
   --cache-dir target/benchmarks/public-collections \
   --model-dir target/embedding-models/all-MiniLM-L6-v2 \
-  --production-cli target/debug/vectorkit
+  --production-cli target/debug/retrievalkit
 ```
 
 Both commands returned `status: valid`. The two complete adapter emissions,
@@ -143,7 +143,7 @@ F32 tokens, dimension, finiteness, normalization, identity order, and hashes.
 The local source-acquisition workflow requires explicit CC BY-SA 4.0
 acceptance before download. The generated source inventory preserves a compact
 notice attributing the HotpotQA authors and Wikipedia contributors, links the
-license, identifies VectorKit transformations, and states ShareAlike. No raw
+license, identifies RetrievalKit transformations, and states ShareAlike. No raw
 archive, Parquet shard, extracted abstract, model package, tokenizer,
 embedding, or generated collection is tracked by Git; all remain under ignored
 `target/` paths.

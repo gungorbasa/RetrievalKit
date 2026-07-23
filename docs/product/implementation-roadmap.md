@@ -1,4 +1,4 @@
-# VectorKit Implementation Roadmap
+# RetrievalKit Implementation Roadmap
 
 This roadmap translates the product specification into the remaining engineering
 work. It prioritizes correctness and usable local SDK functionality before new
@@ -21,7 +21,7 @@ Completed:
 
 The remaining V1 work is production hardening, measurement, and distribution.
 
-The implementation and qualification plan for advertising VectorKit as a
+The implementation and qualification plan for advertising RetrievalKit as a
 complete semantic, hybrid, and graph-scoped retrieval package is maintained in
 `docs/product/complete-retrieval-benchmark-and-marketing-roadmap.md`. Its public
 quality, target-device, external-baseline, and claim gates are additional to
@@ -281,7 +281,7 @@ V1 decision:
 
 Future gold-standard milestone, non-blocking for Phase 5:
 
-- Emit TREC-compatible qrels and run files and validate VectorKit metrics with
+- Emit TREC-compatible qrels and run files and validate RetrievalKit metrics with
   `trec_eval` or `ir_measures`.
 - Run at least SciFact and NFCorpus for external BEIR/Moss comparison.
 - Build pooled, blind relevance judgments across vector, BM25, RRF, weighted
@@ -302,7 +302,7 @@ publication workflows are implemented. External publication remains blocked
 on the owner-approved license/notices, provisioned Phase 7 scheduled/release
 gates, release-revision claim authorization, a signed tag, and owner approval.
 
-Goal: make VectorKit installable without cloning the repository or manually
+Goal: make RetrievalKit installable without cloning the repository or manually
 building Rust artifacts.
 
 Work:

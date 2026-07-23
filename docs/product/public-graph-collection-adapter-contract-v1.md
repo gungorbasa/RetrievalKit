@@ -72,7 +72,7 @@ the [Apache-2.0 code license](https://github.com/hotpotqa/hotpot/blob/master/LIC
 the [CC BY-SA 4.0 text](https://creativecommons.org/licenses/by-sa/4.0/), and
 the [EMNLP 2018 paper](https://aclanthology.org/D18-1259/). Generated notices
 must attribute the HotpotQA authors and Wikipedia contributors, link CC BY-SA
-4.0, identify VectorKit transformations, and apply ShareAlike where required.
+4.0, identify RetrievalKit transformations, and apply ShareAlike where required.
 
 ## 3. Source-only sampling and corpus construction
 
@@ -92,7 +92,7 @@ Validate all source rows and reject duplicate IDs. Within each split order
 queries by the unsigned bytewise tuple:
 
 ```text
-(SHA256("vectorkit-hotpotqa-linked-abstracts-v1" || NUL || split || NUL || upstream_id), upstream_id UTF-8)
+(SHA256("retrievalkit-hotpotqa-linked-abstracts-v1" || NUL || split || NUL || upstream_id), upstream_id UTF-8)
 ```
 
 Take the first 2,000 train rows and first 1,000 distractor-dev rows. Type,
@@ -289,7 +289,7 @@ files as the same baseline. The upstream model card declares Apache-2.0.
 3.5: one compact canonical JSON object per row with stable IDs and 384
 canonical shortest-round-trip F32 values, LF terminated. Runtime is the pinned
 Core ML package on macOS with the same compute-unit selection used by the
-existing VectorKit baseline. A clean reproduction must compare embedding-file
+existing RetrievalKit baseline. A clean reproduction must compare embedding-file
 SHA-256; a different runtime result is a failure, not a new baseline.
 
 I8 is derived only from those frozen normalized F32 values. Per vector compute

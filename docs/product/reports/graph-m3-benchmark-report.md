@@ -37,7 +37,7 @@ comparison; pinned-device release runs remain authoritative.
 
 ## Composite Persistence
 
-Command: `cargo bench -p vectorkit-graph --bench composite_persistence`
+Command: `cargo bench -p retrievalkit-graph --bench composite_persistence`
 
 The fixture contains 2,000 canonical records, one chunk per record, four
 outgoing references per record, three warmups per measured operation, and 20
@@ -59,7 +59,7 @@ manifest/checksums, schema hash, corpus/generation binding, and graph payload.
 
 ## Bounded Query Check
 
-Command: `cargo bench -p vectorkit-graph --bench bounded_traversal`
+Command: `cargo bench -p retrievalkit-graph --bench bounded_traversal`
 
 For 2,000 nodes and 8,000 edges: build 12 ms, three-hop traversal p95 18 us,
 candidate projection p95 2 us, and scoped exact search p95 1,041 ns. Traversal,

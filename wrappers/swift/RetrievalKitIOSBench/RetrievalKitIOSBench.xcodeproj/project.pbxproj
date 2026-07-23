@@ -1,0 +1,470 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		01A000000000000000000001 /* RetrievalKitIOSBenchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000001 /* RetrievalKitIOSBenchApp.swift */; };
+		01A000000000000000000002 /* BenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000002 /* BenchmarkView.swift */; };
+		01A000000000000000000003 /* BenchmarkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000003 /* BenchmarkViewModel.swift */; };
+		01A000000000000000000004 /* RetrievalKitFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000004 /* RetrievalKitFFI.xcframework */; };
+		01A000000000000000000006 /* social-network-index in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000006 /* social-network-index */; };
+		01A000000000000000000007 /* social-network-query.json in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000007 /* social-network-query.json */; };
+		01A000000000000000000008 /* GraphBenchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000008 /* GraphBenchApp.swift */; };
+		01A000000000000000000009 /* GraphBenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000009 /* GraphBenchmarkView.swift */; };
+		01A00000000000000000000A /* RetrievalKitGraphFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000A /* RetrievalKitGraphFFI.xcframework */; };
+		01A00000000000000000000C /* ForegroundExecutionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000C /* ForegroundExecutionGate.swift */; };
+		01A00000000000000000000D /* ForegroundExecutionGate.swift in Graph Sources */ = {isa = PBXBuildFile; fileRef = 01B00000000000000000000C /* ForegroundExecutionGate.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		01B000000000000000000001 /* RetrievalKitIOSBenchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetrievalKitIOSBenchApp.swift; sourceTree = "<group>"; };
+		01B000000000000000000002 /* BenchmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkView.swift; sourceTree = "<group>"; };
+		01B000000000000000000003 /* BenchmarkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkViewModel.swift; sourceTree = "<group>"; };
+		01B000000000000000000004 /* RetrievalKitFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = RetrievalKitFFI.xcframework; path = ../../../target/apple/RetrievalKitFFI.xcframework; sourceTree = "<group>"; };
+		01B000000000000000000005 /* RetrievalKitIOSBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RetrievalKitIOSBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		01B000000000000000000006 /* social-network-index */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "social-network-index"; sourceTree = "<group>"; };
+		01B000000000000000000007 /* social-network-query.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "social-network-query.json"; sourceTree = "<group>"; };
+		01B000000000000000000008 /* GraphBenchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphBenchApp.swift; sourceTree = "<group>"; };
+		01B000000000000000000009 /* GraphBenchmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphBenchmarkView.swift; sourceTree = "<group>"; };
+		01B00000000000000000000A /* RetrievalKitGraphFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = RetrievalKitGraphFFI.xcframework; path = ../../../target/apple/RetrievalKitGraphFFI.xcframework; sourceTree = "<group>"; };
+		01B00000000000000000000B /* RetrievalKitIOSGraphBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RetrievalKitIOSGraphBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		01B00000000000000000000C /* ForegroundExecutionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundExecutionGate.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		01C000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A000000000000000000004 /* RetrievalKitFFI.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		01C000000000000000000004 /* Graph Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A00000000000000000000A /* RetrievalKitGraphFFI.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01D000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				01D000000000000000000002 /* RetrievalKitIOSBench */,
+				01D000000000000000000005 /* RetrievalKitIOSGraphBench */,
+				01D000000000000000000006 /* Shared */,
+				01B000000000000000000004 /* RetrievalKitFFI.xcframework */,
+				01B00000000000000000000A /* RetrievalKitGraphFFI.xcframework */,
+				01D000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		01D000000000000000000002 /* RetrievalKitIOSBench */ = {
+			isa = PBXGroup;
+			children = (
+				01B000000000000000000001 /* RetrievalKitIOSBenchApp.swift */,
+				01B000000000000000000002 /* BenchmarkView.swift */,
+				01B000000000000000000003 /* BenchmarkViewModel.swift */,
+				01D000000000000000000004 /* Resources */,
+			);
+			path = RetrievalKitIOSBench;
+			sourceTree = "<group>";
+		};
+		01D000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				01B000000000000000000005 /* RetrievalKitIOSBench.app */,
+				01B00000000000000000000B /* RetrievalKitIOSGraphBench.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		01D000000000000000000005 /* RetrievalKitIOSGraphBench */ = {
+			isa = PBXGroup;
+			children = (
+				01B000000000000000000008 /* GraphBenchApp.swift */,
+				01B000000000000000000009 /* GraphBenchmarkView.swift */,
+			);
+			path = RetrievalKitIOSGraphBench;
+			sourceTree = "<group>";
+		};
+		01D000000000000000000006 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				01B00000000000000000000C /* ForegroundExecutionGate.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		01D000000000000000000004 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				01B000000000000000000006 /* social-network-index */,
+				01B000000000000000000007 /* social-network-query.json */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		01E000000000000000000001 /* RetrievalKitIOSBench */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01F000000000000000000002 /* Build configuration list for PBXNativeTarget "RetrievalKitIOSBench" */;
+			buildPhases = (
+				01C000000000000000000002 /* Sources */,
+				01C000000000000000000003 /* Resources */,
+				01C000000000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RetrievalKitIOSBench;
+			productName = RetrievalKitIOSBench;
+			productReference = 01B000000000000000000005 /* RetrievalKitIOSBench.app */;
+			productType = "com.apple.product-type.application";
+		};
+		01E000000000000000000003 /* RetrievalKitIOSGraphBench */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01F000000000000000000007 /* Build configuration list for PBXNativeTarget "RetrievalKitIOSGraphBench" */;
+			buildPhases = (
+				01C000000000000000000005 /* Graph Sources */,
+				01C000000000000000000004 /* Graph Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RetrievalKitIOSGraphBench;
+			productName = RetrievalKitIOSGraphBench;
+			productReference = 01B00000000000000000000B /* RetrievalKitIOSGraphBench.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		01E000000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					01E000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					01E000000000000000000003 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 01F000000000000000000001 /* Build configuration list for PBXProject "RetrievalKitIOSBench" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 01D000000000000000000001;
+			productRefGroup = 01D000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				01E000000000000000000001 /* RetrievalKitIOSBench */,
+				01E000000000000000000003 /* RetrievalKitIOSGraphBench */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		01C000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A000000000000000000006 /* social-network-index in Resources */,
+				01A000000000000000000007 /* social-network-query.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		01C000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A000000000000000000001 /* RetrievalKitIOSBenchApp.swift in Sources */,
+				01A000000000000000000002 /* BenchmarkView.swift in Sources */,
+				01A000000000000000000003 /* BenchmarkViewModel.swift in Sources */,
+				01A00000000000000000000C /* ForegroundExecutionGate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		01C000000000000000000005 /* Graph Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A000000000000000000008 /* GraphBenchApp.swift in Sources */,
+				01A000000000000000000009 /* GraphBenchmarkView.swift in Sources */,
+				01A00000000000000000000D /* ForegroundExecutionGate.swift in Graph Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		01F000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		01F000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		01F000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 456T4LX972;
+				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RetrievalKit Bench";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.retrievalkit.RetrievalKitIOSBench;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		01F000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 456T4LX972;
+				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RetrievalKit Bench";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.retrievalkit.RetrievalKitIOSBench;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		01F000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 456T4LX972;
+				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RetrievalKit Graph Bench";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.retrievalkit.RetrievalKitIOSGraphBench;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		01F000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 456T4LX972;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RetrievalKit Graph Bench";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.retrievalkit.RetrievalKitIOSGraphBench;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		01F000000000000000000001 /* Build configuration list for PBXProject "RetrievalKitIOSBench" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01F000000000000000000003 /* Debug */,
+				01F000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		01F000000000000000000002 /* Build configuration list for PBXNativeTarget "RetrievalKitIOSBench" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01F000000000000000000005 /* Debug */,
+				01F000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		01F000000000000000000007 /* Build configuration list for PBXNativeTarget "RetrievalKitIOSGraphBench" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01F000000000000000000008 /* Debug */,
+				01F000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 01E000000000000000000002 /* Project object */;
+}

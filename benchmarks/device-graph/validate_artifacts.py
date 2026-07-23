@@ -71,7 +71,7 @@ CHECKS = (
     "stable_identities:passed",
     "persistence_reload_policy:passed",
 )
-MAGIC = b"VECTORKIT-PHASE4-V1\0"
+MAGIC = b"RETRIEVALKIT-PHASE4-V1\0"
 CANCELLATION_AMENDMENT_PATH = (
     "docs/product/target-device-graph-benchmark-contract-v1-amendment-3.md"
 )
@@ -457,10 +457,10 @@ def validate_linkage(base_binary: Path, graph_binary: Path) -> None:
     require(nm is not None and strings is not None, "nm and strings are required")
     base_symbols = subprocess.run([nm, "-g", str(base_binary)], check=True, capture_output=True, text=True).stdout
     graph_symbols = subprocess.run([nm, "-g", str(graph_binary)], check=True, capture_output=True, text=True).stdout
-    require("_vectorkit_graph_" not in base_symbols, "graph-free binary contains graph symbols")
-    require("_vectorkit_phase4_graph_free_regression_json" in base_symbols, "graph-free API missing")
-    require("_vectorkit_graph_ffi_abi_version" in graph_symbols, "graph-capable API missing")
-    require("_vectorkit_phase4_graph_free_regression_json" in graph_symbols, "candidate base API missing")
+    require("_retrievalkit_graph_" not in base_symbols, "graph-free binary contains graph symbols")
+    require("_retrievalkit_phase4_graph_free_regression_json" in base_symbols, "graph-free API missing")
+    require("_retrievalkit_graph_ffi_abi_version" in graph_symbols, "graph-capable API missing")
+    require("_retrievalkit_phase4_graph_free_regression_json" in graph_symbols, "candidate base API missing")
     subprocess.run([strings, str(base_binary)], check=True, capture_output=True, text=True)
 
 

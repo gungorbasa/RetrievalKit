@@ -4,65 +4,65 @@ import Foundation
 import PackageDescription
 
 let version = "0.1.0"
-let releaseBase = "https://github.com/gungorbasa/VectorKit/releases/download/v\(version)"
-let useLocalArtifacts = ProcessInfo.processInfo.environment["VECTORKIT_USE_LOCAL_ARTIFACTS"] == "1"
+let releaseBase = "https://github.com/gungorbasa/RetrievalKit/releases/download/v\(version)"
+let useLocalArtifacts = ProcessInfo.processInfo.environment["RETRIEVALKIT_USE_LOCAL_ARTIFACTS"] == "1"
 
 let baseBinary: Target = useLocalArtifacts
-  ? .binaryTarget(name: "VectorKitFFI", path: "target/apple/VectorKitFFI.xcframework")
+  ? .binaryTarget(name: "RetrievalKitFFI", path: "target/apple/RetrievalKitFFI.xcframework")
   : .binaryTarget(
-    name: "VectorKitFFI",
-    url: "\(releaseBase)/VectorKitFFI.xcframework.zip",
+    name: "RetrievalKitFFI",
+    url: "\(releaseBase)/RetrievalKitFFI.xcframework.zip",
     checksum: "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"
   )
 
 let graphBinary: Target = useLocalArtifacts
-  ? .binaryTarget(name: "VectorKitGraphFFI", path: "target/apple/VectorKitGraphFFI.xcframework")
+  ? .binaryTarget(name: "RetrievalKitGraphFFI", path: "target/apple/RetrievalKitGraphFFI.xcframework")
   : .binaryTarget(
-    name: "VectorKitGraphFFI",
-    url: "\(releaseBase)/VectorKitGraphFFI.xcframework.zip",
+    name: "RetrievalKitGraphFFI",
+    url: "\(releaseBase)/RetrievalKitGraphFFI.xcframework.zip",
     checksum: "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"
   )
 
 let package = Package(
-  name: "VectorKit",
+  name: "RetrievalKit",
   platforms: [.macOS(.v14), .iOS(.v15)],
   products: [
-    .library(name: "VectorKit", targets: ["VectorKit"]),
-    .library(name: "VectorKitIngest", targets: ["VectorKitIngest"]),
-    .library(name: "VectorKitGraph", targets: ["VectorKitGraph"]),
+    .library(name: "RetrievalKit", targets: ["RetrievalKit"]),
+    .library(name: "RetrievalKitIngest", targets: ["RetrievalKitIngest"]),
+    .library(name: "RetrievalKitGraph", targets: ["RetrievalKitGraph"]),
     .library(name: "EmbeddingKit", targets: ["EmbeddingKit"]),
-    .library(name: "VectorKitPipeline", targets: ["VectorKitPipeline"]),
+    .library(name: "RetrievalKitPipeline", targets: ["RetrievalKitPipeline"]),
   ],
   targets: [
     baseBinary,
     graphBinary,
     .target(
-      name: "VectorKitShared",
-      path: "wrappers/swift/VectorKitShared/Sources/VectorKitShared"
+      name: "RetrievalKitShared",
+      path: "wrappers/swift/RetrievalKitShared/Sources/RetrievalKitShared"
     ),
     .target(
-      name: "VectorKit",
-      dependencies: ["VectorKitFFI", "VectorKitShared"],
-      path: "wrappers/swift/VectorKit/Sources/VectorKit"
+      name: "RetrievalKit",
+      dependencies: ["RetrievalKitFFI", "RetrievalKitShared"],
+      path: "wrappers/swift/RetrievalKit/Sources/RetrievalKit"
     ),
     .target(
-      name: "VectorKitIngest",
-      dependencies: ["VectorKitFFI"],
-      path: "wrappers/swift/VectorKit/Sources/VectorKitIngest"
+      name: "RetrievalKitIngest",
+      dependencies: ["RetrievalKitFFI"],
+      path: "wrappers/swift/RetrievalKit/Sources/RetrievalKitIngest"
     ),
     .target(
-      name: "VectorKitGraph",
-      dependencies: ["VectorKitGraphFFI", "VectorKitShared"],
-      path: "wrappers/swift/VectorKitGraph/Sources/VectorKitGraph"
+      name: "RetrievalKitGraph",
+      dependencies: ["RetrievalKitGraphFFI", "RetrievalKitShared"],
+      path: "wrappers/swift/RetrievalKitGraph/Sources/RetrievalKitGraph"
     ),
     .target(
       name: "EmbeddingKit",
       path: "wrappers/swift/EmbeddingKit/Sources/EmbeddingKit"
     ),
     .target(
-      name: "VectorKitPipeline",
-      dependencies: ["VectorKit", "VectorKitIngest", "EmbeddingKit"],
-      path: "wrappers/swift/VectorKitPipeline/Sources/VectorKitPipeline"
+      name: "RetrievalKitPipeline",
+      dependencies: ["RetrievalKit", "RetrievalKitIngest", "EmbeddingKit"],
+      path: "wrappers/swift/RetrievalKitPipeline/Sources/RetrievalKitPipeline"
     ),
   ],
   swiftLanguageModes: [.v6]

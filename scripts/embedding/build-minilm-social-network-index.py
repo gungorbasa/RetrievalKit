@@ -14,7 +14,7 @@ from typing import Any
 import coremltools as ct
 import numpy as np
 from transformers import AutoTokenizer
-from vectorkit import Index
+from retrievalkit import Index
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -82,11 +82,11 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build The Social Network VectorKit index with all-MiniLM-L6-v2 Core ML embeddings."
+        description="Build The Social Network RetrievalKit index with all-MiniLM-L6-v2 Core ML embeddings."
     )
     parser.add_argument("--json", default=str(DEFAULT_SOURCE_JSON), help="source JSON path")
     parser.add_argument("--model-dir", default=str(DEFAULT_MODEL_DIR), help="generated MiniLM model directory")
-    parser.add_argument("--index-dir", default=str(DEFAULT_INDEX_DIR), help="output VectorKit index directory")
+    parser.add_argument("--index-dir", default=str(DEFAULT_INDEX_DIR), help="output RetrievalKit index directory")
     parser.add_argument("--queries-path", default=str(DEFAULT_QUERIES_PATH), help="output query embedding JSON")
     parser.add_argument("--query", default="Mark and Erica arguing in a dim bar", help="fallback query")
     parser.add_argument("--limit", type=int, default=5, help="top_k recorded in query fixture")

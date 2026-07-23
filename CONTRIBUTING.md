@@ -1,13 +1,13 @@
-# Contributing to VectorKit
+# Contributing to RetrievalKit
 
-VectorKit is preparing its first preview distribution. Bug reports,
+RetrievalKit is preparing its first preview distribution. Bug reports,
 reproduction cases, documentation corrections, and focused design discussion
 are welcome.
 
 ## Before opening a change
 
 1. Read [AGENTS.md](AGENTS.md), the
-   [product specification](docs/product/vectorkit-product-spec.md), and any
+   [product specification](docs/product/retrievalkit-product-spec.md), and any
    language-specific guidance under `docs/agents/`.
 2. Open an issue for public API, persistence-format, architecture, or product
    scope changes before implementing them.

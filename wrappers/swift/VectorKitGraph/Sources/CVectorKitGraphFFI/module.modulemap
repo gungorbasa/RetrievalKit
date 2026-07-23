@@ -1,4 +1,0 @@
-module VectorKitGraphFFI [system] {
-    header "../../../../../crates/vectorkit-ffi/include/vectorkit_graph_ffi.h"
-    export *
-}

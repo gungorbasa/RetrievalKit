@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from vectorkit_graph import (
+from retrievalkit_graph import (
     GraphRecordInput,
     GraphRecordNode,
     GraphRelationship,
@@ -172,7 +172,7 @@ def _decode_graph_value(value: Any) -> Any:
 
 
 def _node(*, node_type: str, record_id: str) -> Any:
-    from vectorkit_graph import GraphNode
+    from retrievalkit_graph import GraphNode
 
     return GraphNode(node_type, record_id)
 

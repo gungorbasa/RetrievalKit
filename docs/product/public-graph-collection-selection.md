@@ -4,7 +4,7 @@ Status: selected for Phase 2a on 2026-07-17
 
 ## Decision
 
-VectorKit's first public graph-quality collection is **HotpotQA distractor
+RetrievalKit's first public graph-quality collection is **HotpotQA distractor
 release V1.1/V1 plus the January 14, 2019 linked-abstract corpus**. Development
 queries come from train V1.1 and the locked reporting population comes from the
 publicly judged distractor dev V1 split. The per-query distractor contexts are
@@ -65,7 +65,7 @@ not infer dataset permission from the code license.
   `1acca1c5cc93c4890ea51091d2bad7c3ef6987aead127ab88728dc9e26555729`.
 - Dataset and processed-Wikipedia content are CC BY-SA 4.0. Redistribution
   requires attribution, a license link, change indication, and ShareAlike for
-  adaptations. The code is Apache-2.0. VectorKit may privately cache verified
+  adaptations. The code is Apache-2.0. RetrievalKit may privately cache verified
   inputs, but repository policy forbids committing raw data. Public cache or
   redistribution must carry the CC BY-SA obligations and upstream attribution.
 

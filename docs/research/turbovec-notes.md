@@ -11,10 +11,10 @@ Snapshot reviewed:
 
 ## Summary
 
-Do not adopt `turbovec` as VectorKit's V1 retrieval engine.
+Do not adopt `turbovec` as RetrievalKit's V1 retrieval engine.
 
 `turbovec` is a compressed approximate vector index based on TurboQuant.
-VectorKit V1 is intentionally centered on exact vector search, BM25 keyword
+RetrievalKit V1 is intentionally centered on exact vector search, BM25 keyword
 search, hybrid ranking, typed metadata filters, persistence, and Swift/iOS
 integration for small local indexes.
 
@@ -29,7 +29,7 @@ maps, binary persistence validation, and benchmark instrumentation.
 `turbovec` supports allowlist or mask filtering inside the scoring path instead
 of scoring all rows and filtering afterward.
 
-VectorKit already narrows many filtered searches through metadata candidate
+RetrievalKit already narrows many filtered searches through metadata candidate
 offsets. The useful generalization is to keep pushing filter information closer
 to the tight scoring loop:
 
@@ -38,7 +38,7 @@ to the tight scoring loop:
 - Keep a correctness predicate check after candidate narrowing.
 - Report how many rows or blocks were skipped for debugging and benchmarks.
 
-This fits VectorKit V1 because it improves exact search rather than replacing
+This fits RetrievalKit V1 because it improves exact search rather than replacing
 it with approximate retrieval.
 
 ### Explicit Cache Warmup
@@ -46,8 +46,8 @@ it with approximate retrieval.
 `turbovec` has a `prepare()` method that eagerly initializes derived search
 state so the first user query does not pay lazy setup cost.
 
-VectorKit can use the same API idea if future search structures have meaningful
-load-time or post-mutation cache work. A VectorKit version should keep the
+RetrievalKit can use the same API idea if future search structures have meaningful
+load-time or post-mutation cache work. A RetrievalKit version should keep the
 contract simple:
 
 - Safe to call more than once.
@@ -61,7 +61,7 @@ contract simple:
 `turbovec` layers stable external `u64` IDs over positional vector slots and
 uses swap-remove for O(1) deletion.
 
-VectorKit has richer chunk/document semantics, so the API shape should not be
+RetrievalKit has richer chunk/document semantics, so the API shape should not be
 copied directly. The idea is still relevant for internal compaction:
 
 - Keep hot vector storage positional and compact.
@@ -74,7 +74,7 @@ copied directly. The idea is still relevant for internal compaction:
 `turbovec` validates magic bytes, file versions, expected payload lengths, and
 some incompatible old formats.
 
-VectorKit should continue to be strict in the same spirit:
+RetrievalKit should continue to be strict in the same spirit:
 
 - Validate magic, version, dimension, metric, vector encoding, counts, and file
   lengths.
@@ -85,7 +85,7 @@ VectorKit should continue to be strict in the same spirit:
 ### Quantized Search Research
 
 TurboQuant itself is not a V1 replacement for exact search. It may be worth
-benchmarking later if VectorKit needs stronger compression than the current
+benchmarking later if RetrievalKit needs stronger compression than the current
 `I8ScalarQuantized` path can provide.
 
 Any future exploration should measure:
@@ -104,7 +104,7 @@ on realistic datasets.
 `turbovec` exposes low-level behavior around block skipping for tests and
 benchmarks.
 
-VectorKit could expose similar internal counters in benchmark output or trace
+RetrievalKit could expose similar internal counters in benchmark output or trace
 diagnostics:
 
 - Active rows scanned.
@@ -122,7 +122,7 @@ changing public search semantics.
 `turbovec` tests concurrent search, concurrent cache initialization, search
 after load, and mutation invalidating cached layouts.
 
-If VectorKit adds shared immutable search caches or a public warmup method,
+If RetrievalKit adds shared immutable search caches or a public warmup method,
 copy the testing pattern:
 
 - Same query returns the same hits across threads.
@@ -153,11 +153,11 @@ Results:
 - `cargo clippy -p turbovec --all-targets -- -D warnings` failed on lint debt,
   including unused items, style warnings, high argument counts, and type
   complexity. This is not a runtime failure, but it means the crate should not
-  be vendored or adopted without cleanup if VectorKit keeps strict Rust checks.
+  be vendored or adopted without cleanup if RetrievalKit keeps strict Rust checks.
 
 ## Recommendation
 
 Keep `turbovec` as a deferred research reference. The immediately useful ideas
 are filter-aware scoring loops, explicit cache warmup, strict binary format
-validation, and better benchmark counters. These support VectorKit's exact V1
+validation, and better benchmark counters. These support RetrievalKit's exact V1
 direction without pulling in an approximate index as a core dependency.

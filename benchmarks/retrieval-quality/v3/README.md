@@ -1,4 +1,4 @@
-# VectorKit V3 Retrieval-Quality Fixture
+# RetrievalKit V3 Retrieval-Quality Fixture
 
 Status: frozen conformance collection; graph-aware evaluation-artifact Phase 1
 is complete. The Phase 1.1 and Phase 1.2a-c qualification artifacts remain
@@ -29,7 +29,7 @@ Generate the complete A-G qualification into a fresh ignored directory:
 ```bash
 ARTIFACTS=target/benchmarks/v3/phase-1.2c-qualification
 
-cargo run -p vectorkit-cli -- bench quality-v3 \
+cargo run -p retrievalkit-cli -- bench quality-v3 \
   --collection benchmarks/retrieval-quality/v3 \
   --qualification-artifacts "$ARTIFACTS" \
   --verify-rerun
@@ -86,7 +86,7 @@ python3 scripts/quality/bootstrap_v3_trec_eval.py
 uv run --python 3.13 --with ir_measures==0.4.3 \
   python scripts/quality/assemble_v3_publication.py \
   --collection benchmarks/retrieval-quality/v3 \
-  --executable target/release/vectorkit \
+  --executable target/release/retrievalkit \
   --qualification-output target/benchmarks/v3/release-qualification \
   --output target/benchmarks/v3/publication \
   --gate-report-root target/benchmarks/v3/publication-gates

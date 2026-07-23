@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-check VectorKit's deterministic metrics with ir_measures and trec_eval."""
+"""Cross-check RetrievalKit's deterministic metrics with ir_measures and trec_eval."""
 
 from __future__ import annotations
 
@@ -235,7 +235,7 @@ def validate_with_trec_eval(
     tolerance: float,
 ) -> list[str]:
     """Validate binary metrics supported without custom gain mappings."""
-    with tempfile.TemporaryDirectory(prefix="vectorkit-trec-eval-") as directory:
+    with tempfile.TemporaryDirectory(prefix="retrievalkit-trec-eval-") as directory:
         top_ten = Path(directory) / "top-ten.trec"
         ranks: dict[str, int] = {}
         selected: list[str] = []

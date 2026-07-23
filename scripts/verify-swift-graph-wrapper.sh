@@ -15,32 +15,32 @@ if [[ "$SKIP_BUILD" == false ]]; then
   "$ROOT_DIR/scripts/build-xcframework.sh" --macos-only --graph
 fi
 
-BASE_BINARY="$ROOT_DIR/target/apple/VectorKitFFI.xcframework/macos-arm64/VectorKitFFI.framework/VectorKitFFI"
-GRAPH_BINARY="$ROOT_DIR/target/apple/VectorKitGraphFFI.xcframework/macos-arm64/VectorKitGraphFFI.framework/VectorKitGraphFFI"
+BASE_BINARY="$ROOT_DIR/target/apple/RetrievalKitFFI.xcframework/macos-arm64/RetrievalKitFFI.framework/RetrievalKitFFI"
+GRAPH_BINARY="$ROOT_DIR/target/apple/RetrievalKitGraphFFI.xcframework/macos-arm64/RetrievalKitGraphFFI.framework/RetrievalKitGraphFFI"
 for binary in "$BASE_BINARY" "$GRAPH_BINARY"; do
   [[ -f "$binary" ]] || { echo "missing native artifact: $binary" >&2; exit 1; }
 done
 
-if nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_vectorkit_graph_ffi_abi_version' >/dev/null; then
-  echo "base VectorKitFFI unexpectedly exports graph symbols" >&2
+if nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null; then
+  echo "base RetrievalKitFFI unexpectedly exports graph symbols" >&2
   exit 1
 fi
-nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_vectorkit_index_new' >/dev/null || {
-  echo "base VectorKitFFI does not export the core API" >&2
+nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_retrievalkit_index_new' >/dev/null || {
+  echo "base RetrievalKitFFI does not export the core API" >&2
   exit 1
 }
-nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_vectorkit_index_new' >/dev/null || {
+nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_retrievalkit_index_new' >/dev/null || {
   echo "graph aggregate does not export the core API" >&2
   exit 1
 }
-nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_vectorkit_graph_ffi_abi_version' >/dev/null || {
+nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null || {
   echo "graph aggregate does not export the graph API" >&2
   exit 1
 }
 
-swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKitShared"
-swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKit"
-swift test --package-path "$ROOT_DIR/wrappers/swift/VectorKitGraph"
+swift test --package-path "$ROOT_DIR/wrappers/swift/RetrievalKitShared"
+swift test --package-path "$ROOT_DIR/wrappers/swift/RetrievalKit"
+swift test --package-path "$ROOT_DIR/wrappers/swift/RetrievalKitGraph"
 
 check_quickstart() {
   local package_path="$1"
@@ -56,8 +56,8 @@ check_quickstart() {
   printf '%s\n' "$actual"
 }
 
-check_quickstart "$ROOT_DIR/wrappers/swift/VectorKit" VectorKitRetrievalQuickstart 'retrieval=rust'
-check_quickstart "$ROOT_DIR/wrappers/swift/VectorKit" VectorKitDatabaseQuickstart 'local-first'
-check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphQuickstart 'graph=rust'
-check_quickstart "$ROOT_DIR/wrappers/swift/VectorKitGraph" VectorKitGraphRetrievalQuickstart 'combined=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitRetrievalQuickstart 'retrieval=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKit" RetrievalKitDatabaseQuickstart 'local-first'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphQuickstart 'graph=rust'
+check_quickstart "$ROOT_DIR/wrappers/swift/RetrievalKitGraph" RetrievalKitGraphRetrievalQuickstart 'combined=rust'
 echo "Swift base/graph linkage and conformance verification passed"

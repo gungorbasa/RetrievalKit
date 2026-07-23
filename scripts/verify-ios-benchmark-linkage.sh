@@ -2,24 +2,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$ROOT_DIR/wrappers/swift/VectorKitIOSBench/VectorKitIOSBench.xcodeproj"
+PROJECT="$ROOT_DIR/wrappers/swift/RetrievalKitIOSBench/RetrievalKitIOSBench.xcodeproj"
 BASE_DERIVED="$ROOT_DIR/target/xcode-phase4-base"
 GRAPH_DERIVED="$ROOT_DIR/target/xcode-phase4-graph"
 
 if [[ "${1:-}" != "--skip-build" ]]; then
   "$ROOT_DIR/scripts/build-xcframework.sh"
   "$ROOT_DIR/scripts/build-xcframework.sh" --graph
-  xcodebuild -project "$PROJECT" -scheme VectorKitIOSBench -configuration Release \
+  xcodebuild -project "$PROJECT" -scheme RetrievalKitIOSBench -configuration Release \
     -sdk iphoneos -derivedDataPath "$BASE_DERIVED" CODE_SIGNING_ALLOWED=NO build
-  xcodebuild -project "$PROJECT" -scheme VectorKitIOSGraphBench -configuration Release \
+  xcodebuild -project "$PROJECT" -scheme RetrievalKitIOSGraphBench -configuration Release \
     -sdk iphoneos -derivedDataPath "$GRAPH_DERIVED" CODE_SIGNING_ALLOWED=NO build
 elif [[ $# -ne 1 ]]; then
   echo "usage: $0 [--skip-build]" >&2
   exit 2
 fi
 
-BASE_BINARY="$BASE_DERIVED/Build/Products/Release-iphoneos/VectorKitIOSBench.app/VectorKitIOSBench"
-GRAPH_BINARY="$GRAPH_DERIVED/Build/Products/Release-iphoneos/VectorKitIOSGraphBench.app/VectorKitIOSGraphBench"
+BASE_BINARY="$BASE_DERIVED/Build/Products/Release-iphoneos/RetrievalKitIOSBench.app/RetrievalKitIOSBench"
+GRAPH_BINARY="$GRAPH_DERIVED/Build/Products/Release-iphoneos/RetrievalKitIOSGraphBench.app/RetrievalKitIOSGraphBench"
 for binary in "$BASE_BINARY" "$GRAPH_BINARY"; do
   [[ -f "$binary" ]] || { echo "missing release iOS binary: $binary" >&2; exit 1; }
   file "$binary" | grep -F 'Mach-O 64-bit executable arm64' >/dev/null || {
@@ -28,15 +28,15 @@ for binary in "$BASE_BINARY" "$GRAPH_BINARY"; do
   }
 done
 
-if nm -g "$BASE_BINARY" | grep -F '_vectorkit_graph_' >/dev/null; then
+if nm -g "$BASE_BINARY" | grep -F '_retrievalkit_graph_' >/dev/null; then
   echo "graph-free iOS binary unexpectedly contains a graph symbol" >&2
   exit 1
 fi
-nm -g "$BASE_BINARY" | grep -F '_vectorkit_bench_memory_json' >/dev/null || {
+nm -g "$BASE_BINARY" | grep -F '_retrievalkit_bench_memory_json' >/dev/null || {
   echo "graph-free iOS binary does not contain the base benchmark API" >&2
   exit 1
 }
-nm -g "$GRAPH_BINARY" | grep -F '_vectorkit_graph_ffi_abi_version' >/dev/null || {
+nm -g "$GRAPH_BINARY" | grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null || {
   echo "graph-capable iOS binary does not contain the graph API" >&2
   exit 1
 }

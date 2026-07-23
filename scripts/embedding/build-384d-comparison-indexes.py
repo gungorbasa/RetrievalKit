@@ -15,7 +15,7 @@ from typing import Any
 import coremltools as ct
 import numpy as np
 from transformers import AutoTokenizer
-from vectorkit import Index
+from retrievalkit import Index
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -66,7 +66,7 @@ def main() -> None:
     )
 
     output_root.mkdir(parents=True, exist_ok=True)
-    print("VectorKit 384d comparison index build")
+    print("RetrievalKit 384d comparison index build")
     print(f"  source_json: {source_json}")
     print(f"  records: {len(records)}")
     print(f"  chunk_token_limit: {args.chunk_token_limit}")
@@ -100,7 +100,7 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build production-style 48K VectorKit indexes for 384d Core ML embedding models."
+        description="Build production-style 48K RetrievalKit indexes for 384d Core ML embedding models."
     )
     parser.add_argument("--json", default=str(DEFAULT_SOURCE_JSON), help="source JSON path")
     parser.add_argument("--model-root", default=str(DEFAULT_MODEL_ROOT), help="generated model root")

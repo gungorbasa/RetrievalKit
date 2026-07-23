@@ -29,7 +29,7 @@ from typing import Any, BinaryIO, Callable, Iterable, Iterator, Mapping, Sequenc
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE = ROOT / "target/benchmarks/public-collections"
-HOTPOT_SELECTION_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
+HOTPOT_SELECTION_SALT = "retrievalkit-hotpotqa-linked-abstracts-v1"
 HOTPOT_TRAIN_LIMIT = 2_000
 HOTPOT_REPORTING_LIMIT = 1_000
 HOTPOT_NEIGHBOR_LIMIT = 15

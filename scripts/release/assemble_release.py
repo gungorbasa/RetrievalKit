@@ -77,9 +77,9 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
         "spdxVersion": "SPDX-2.3",
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
-        "name": f"VectorKit-{config['version']}",
-        "documentNamespace": f"https://github.com/gungorbasa/VectorKit/releases/tag/{config['tag']}#sbom",
-        "creationInfo": {"created": source_date(), "creators": ["Tool: VectorKit-release-assembler-v1"]},
+        "name": f"RetrievalKit-{config['version']}",
+        "documentNamespace": f"https://github.com/gungorbasa/RetrievalKit/releases/tag/{config['tag']}#sbom",
+        "creationInfo": {"created": source_date(), "creators": ["Tool: RetrievalKit-release-assembler-v1"]},
         "packages": cargo_packages(repo),
     }
     write_json(output / "sbom.spdx.json", sbom)
@@ -89,12 +89,12 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
         "predicateType": "https://slsa.dev/provenance/v1",
         "predicate": {
             "buildDefinition": {
-                "buildType": "https://github.com/gungorbasa/VectorKit/release/v1",
+                "buildType": "https://github.com/gungorbasa/RetrievalKit/release/v1",
                 "externalParameters": {"version": config["version"], "platform": "arm64-apple"},
                 "internalParameters": {},
-                "resolvedDependencies": [{"uri": "git+https://github.com/gungorbasa/VectorKit", "digest": {"gitCommit": revision}}],
+                "resolvedDependencies": [{"uri": "git+https://github.com/gungorbasa/RetrievalKit", "digest": {"gitCommit": revision}}],
             },
-            "runDetails": {"builder": {"id": "https://github.com/gungorbasa/VectorKit/actions"}, "metadata": {"invocationId": os.environ.get("GITHUB_RUN_ID", "local-dry-run")}},
+            "runDetails": {"builder": {"id": "https://github.com/gungorbasa/RetrievalKit/actions"}, "metadata": {"invocationId": os.environ.get("GITHUB_RUN_ID", "local-dry-run")}},
         },
     }
     write_json(output / "provenance.intoto.json", provenance)

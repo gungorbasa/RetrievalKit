@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "created_with": "retrievalkit",
+  "dimension": 384,
+  "metric": "Cosine",
+  "vector_count": 28650,
+  "active_chunk_count": 28650,
+  "has_bm25": true,
+  "vector_encoding": "I8ScalarQuantized",
+  "vector_bytes": 11116200,
+  "chunk_bytes": 12629615,
+  "chunk_uncompressed_bytes": 59904180,
+  "chunk_compression": "zstd",
+  "bm25_bytes": 9093486,
+  "bm25_uncompressed_bytes": 46360478,
+  "bm25_compression": "zstd",
+  "tombstone_bytes": 28650,
+  "normalization": "unit_l2"
+}

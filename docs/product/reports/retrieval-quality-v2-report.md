@@ -1,4 +1,4 @@
-# VectorKit Retrieval Quality V2: Harder Vector-Only and Hybrid Fixture
+# RetrievalKit Retrieval Quality V2: Harder Vector-Only and Hybrid Fixture
 
 Date: 2026-07-11
 
@@ -30,7 +30,7 @@ lifecycle violations.
 
 V2 inherits V1 and explicitly overrides judgments when new documents make an
 old relevance set incomplete. Judgments are authored from document meaning and
-are not generated from VectorKit rankings.
+are not generated from RetrievalKit rankings.
 
 ## Vector-Only Quality
 

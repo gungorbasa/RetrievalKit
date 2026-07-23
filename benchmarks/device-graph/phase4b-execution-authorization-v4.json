@@ -54,18 +54,18 @@
   },
   "products": {
     "baseline": {
-      "name": "VectorKitIOSBench",
-      "bundle_identifier": "dev.vectorkit.VectorKitIOSBench",
-      "framework": "VectorKitFFI",
+      "name": "RetrievalKitIOSBench",
+      "bundle_identifier": "dev.retrievalkit.RetrievalKitIOSBench",
+      "framework": "RetrievalKitFFI",
       "app_executable_sha256": "f96b69c5344575ecd3262715e5e26c703a0c9d3443fccfda9a65fbf372cae5a9",
       "framework_binary_sha256": "92ed1fd226e0785803ad3d4717efdb1fcbc3d78609ed93c335eb68cdfd68d183",
       "info_plist_sha256": "4521ffff2956cc9950577943026c31ad3d74d7962c97f4301f667ef6dd90651e",
       "code_directory_sha256": "f913b3151691207d9d93dab7f6a8f9da91faf8b972d07a10ebf977477a5696b6"
     },
     "candidate": {
-      "name": "VectorKitIOSGraphBench",
-      "bundle_identifier": "dev.vectorkit.VectorKitIOSGraphBench",
-      "framework": "VectorKitGraphFFI",
+      "name": "RetrievalKitIOSGraphBench",
+      "bundle_identifier": "dev.retrievalkit.RetrievalKitIOSGraphBench",
+      "framework": "RetrievalKitGraphFFI",
       "app_executable_sha256": "6b6ac8a336243207726773c70bb9a2c4cacb51125737496029fb020e97bbd97c",
       "framework_binary_sha256": "aacad12a5c4d7179c38e9e64da1c76adeac45d7f8a88002394233f49881e2999",
       "info_plist_sha256": "438c4b0e55a9eb120c2f6cd55cae9403f5c9938efbba16798c4c28fef9212210",

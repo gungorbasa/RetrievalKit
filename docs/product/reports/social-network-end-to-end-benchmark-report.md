@@ -42,8 +42,8 @@ from per-query latency.
 
 | System | Corpus | Embedding runtime | Search runtime | P50 | P95 | P99 | Mean |
 |---|---:|---|---|---:|---:|---:|---:|
-| MiniLM Core ML + Swift exact search | 28,650 chunks | Core ML `all-MiniLM-L6-v2` seq=256 | Swift VectorKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
-| BGE FastEmbed + Python exact search | 28,650 chunks | FastEmbed `BAAI/bge-small-en-v1.5` | Python VectorKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
+| MiniLM Core ML + Swift exact search | 28,650 chunks | Core ML `all-MiniLM-L6-v2` seq=256 | Swift RetrievalKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
+| BGE FastEmbed + Python exact search | 28,650 chunks | FastEmbed `BAAI/bge-small-en-v1.5` | Python RetrievalKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
 
 MiniLM component breakdown:
 
@@ -75,7 +75,7 @@ MiniLM setup timings:
 |---|---:|
 | Record prep | 21,314.501 ms |
 | Core ML document embedding | 118,834.370 ms |
-| VectorKit index add | 278,908.603 ms |
+| RetrievalKit index add | 278,908.603 ms |
 | Save index | 4,409.619 ms |
 | Full build | 402,297.322 ms |
 | Query fixture embedding | 2,391.703 ms |
@@ -85,7 +85,7 @@ MiniLM setup timings:
 
 This uses the Moss-style benchmark shape: warmups first, then 750 measured
 query executions with `top_k=5`.
-The corpus size is intentionally different: VectorKit currently uses the real
+The corpus size is intentionally different: RetrievalKit currently uses the real
 Social Network fixture with 28,650 chunks instead of a 100,000-document FAQ
 corpus.
 

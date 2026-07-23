@@ -66,7 +66,7 @@ class CollectorTests(unittest.TestCase):
             item = collector.Product(
                 role="candidate",
                 app=root / "app",
-                bundle_id="dev.vectorkit.test",
+                bundle_id="dev.retrievalkit.test",
                 executable_sha256="a" * 64,
                 framework_sha256="b" * 64,
             )

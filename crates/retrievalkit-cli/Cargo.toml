@@ -1,0 +1,22 @@
+[package]
+name = "retrievalkit-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "retrievalkit"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["float_roundtrip"] }
+sha2 = "0.10.9"
+simsimd = "6.5.16"
+icu_casemap = "=1.4.0"
+icu_normalizer = "=1.4.3"
+retrievalkit-core = { path = "../retrievalkit-core" }
+retrievalkit-ffi = { path = "../retrievalkit-ffi" }
+retrievalkit-graph = { path = "../retrievalkit-graph" }
+retrievalkit-phase4-bench = { path = "../retrievalkit-phase4-bench" }

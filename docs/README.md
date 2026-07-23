@@ -6,7 +6,7 @@ This directory separates active product decisions from deferred research notes.
 
 Current implementation source of truth:
 
-- [`product/vectorkit-product-spec.md`](product/vectorkit-product-spec.md)
+- [`product/retrievalkit-product-spec.md`](product/retrievalkit-product-spec.md)
 - [`product/working-memory.md`](product/working-memory.md) for active handoff
   context and recent decisions that should survive chat changes
 - [`product/memory-benchmark.md`](product/memory-benchmark.md) for isolated RSS,
@@ -33,7 +33,7 @@ Technical explorations that are not part of the current V1 scope:
 
 ## Current Direction
 
-VectorKit V1 is a small-index local retrieval SDK:
+RetrievalKit V1 is a small-index local retrieval SDK:
 
 ```text
 target size: fewer than 50K chunks

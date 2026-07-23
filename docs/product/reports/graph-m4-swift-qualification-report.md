@@ -26,8 +26,8 @@ Clean full XCFramework builds passed for both packages with these slices:
 
 The verification script proves:
 
-- base `VectorKitFFI` exports the core ABI and no graph ABI symbol;
-- aggregate `VectorKitGraphFFI` exports the same core ABI plus graph ABI;
+- base `RetrievalKitFFI` exports the core ABI and no graph ABI symbol;
+- aggregate `RetrievalKitGraphFFI` exports the same core ABI plus graph ABI;
 - base and graph Swift packages link and test in separate processes;
 - the deterministic quickstart produces exactly the checked-in output.
 

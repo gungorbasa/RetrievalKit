@@ -1,4 +1,4 @@
-# VectorKit Regression Gate Contract V1
+# RetrievalKit Regression Gate Contract V1
 
 Status: frozen before Phase 7 threshold implementation
 

@@ -8,7 +8,7 @@ Keep this file focused on repo-wide rules. Put language-specific instructions in
 
 - Codex: read this root `AGENTS.md`.
 - Claude: read `CLAUDE.md`, which points back to this file.
-- Cursor: read `.cursor/rules/vectorkit.mdc`, which points back to this file.
+- Cursor: read `.cursor/rules/retrievalkit.mdc`, which points back to this file.
 - Rust changes: also read `docs/agents/rust.md`.
 - Python changes: also read `docs/agents/python.md`.
 
@@ -16,7 +16,7 @@ When changing repository guidance, update this file first. Keep tool-specific fi
 
 ## Product Direction
 
-VectorKit is a local-first retrieval SDK for mobile and desktop apps. The first target is an iOS/macOS SDK with a Rust retrieval core and a Swift wrapper.
+RetrievalKit is a local-first retrieval SDK for mobile and desktop apps. The first target is an iOS/macOS SDK with a Rust retrieval core and a Swift wrapper.
 
 The current V1 direction is:
 
@@ -29,7 +29,7 @@ The current V1 direction is:
 
 Do not add HNSW, ANN indexing, server mode, sync, dashboards, or distributed database features unless the product spec is updated first. HNSW research exists in `docs/research/`, but it is deferred until exact/hybrid retrieval is polished and benchmarked.
 
-Use `docs/product/vectorkit-product-spec.md` as the implementation source of truth.
+Use `docs/product/retrievalkit-product-spec.md` as the implementation source of truth.
 
 ## Engineering Principles
 
@@ -95,8 +95,8 @@ Expected long-term shape:
 
 ```text
 crates/
-  vectorkit-core/        # Rust retrieval core
-  vectorkit-cli/         # Benchmarking and local tooling
+  retrievalkit-core/        # Rust retrieval core
+  retrievalkit-cli/         # Benchmarking and local tooling
 wrappers/
   swift/                 # Swift/iOS/macOS wrapper
   python/                # Future wrapper, if added

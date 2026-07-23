@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from vectorkit import (
+from retrievalkit import (
     CompactionReport,
     DocumentInput,
     Filter,
@@ -16,15 +16,15 @@ from vectorkit import (
     VectorIndexConfiguration,
     where,
 )
-from vectorkit.ingest import RustTextChunker
-from vectorkit.pipeline import Pipeline
+from retrievalkit.ingest import RustTextChunker
+from retrievalkit.pipeline import Pipeline
 
 
 def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None:
     documents: list[DocumentInput] = [
         {
             "id": "doc-1",
-            "metadata": {"project": "vectorkit"},
+            "metadata": {"project": "retrievalkit"},
             "chunks": [
                 {
                     "text": "python wrapper",
@@ -35,7 +35,7 @@ def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None
         }
     ]
     filters: Filter = where.all(
-        where.eq("project", "vectorkit"),
+        where.eq("project", "retrievalkit"),
         where.eq("archived", False),
     )
 

@@ -1,6 +1,6 @@
-# VectorKit Python Wrapper
+# RetrievalKit Python Wrapper
 
-This is a thin Python wrapper around the VectorKit Rust retrieval core. Python
+This is a thin Python wrapper around the RetrievalKit Rust retrieval core. Python
 provides an ergonomic API, while Rust handles indexing, filtering, ranking,
 persistence, and result tracing.
 
@@ -15,7 +15,7 @@ Use `RetrievalDatabase` for new code. It matches the Rust and Swift system
 architecture while keeping Python naming and data structures idiomatic:
 
 ```python
-from vectorkit import (
+from retrievalkit import (
     RetrievalConfiguration,
     RetrievalDatabaseBuilder,
     VectorIndexConfiguration,
@@ -32,7 +32,7 @@ builder.upsert(
         "record": {
             "id": "note-42",
             "record_type": "Note",
-            "metadata": {"project": "vectorkit"},
+            "metadata": {"project": "retrievalkit"},
         },
         "chunks": [{"key": "summary", "text": "Local retrieval architecture"}],
     },
@@ -42,7 +42,7 @@ database = builder.build()
 
 hits = database.retrieval.semantic_search(
     query_embedding,
-    where={"project": "vectorkit"},
+    where={"project": "retrievalkit"},
 )
 ```
 
@@ -88,7 +88,7 @@ python -m ruff check .
 ```
 
 `mypy` and `ruff` are developer tools only. They are not runtime dependencies of
-the `vectorkit` package.
+the `retrievalkit` package.
 
 ## Build A Local Wheel
 
@@ -114,7 +114,7 @@ target/wheels/
 Install it into another local environment:
 
 ```bash
-python -m pip install "target/wheels/vectorkit-*.whl"
+python -m pip install "target/wheels/retrievalkit-*.whl"
 ```
 
 The wheel contains a compiled Rust extension, so it is specific to the platform
@@ -132,17 +132,17 @@ previously published generation remains loadable. The next successful save
 removes abandoned and superseded generations. Existing V1 root-file indexes
 remain readable and migrate automatically on their next save.
 
-Only one writer may save a given directory at a time. VectorKit uses an
+Only one writer may save a given directory at a time. RetrievalKit uses an
 OS-released lock, so a process crash does not leave the directory permanently
 locked; a competing save fails with an actionable `PersistenceError`.
 
-Treat the index directory as VectorKit-owned; do not modify `.snapshots` or
+Treat the index directory as RetrievalKit-owned; do not modify `.snapshots` or
 `manifest.json` directly.
 
 ```python
 from pathlib import Path
 
-from vectorkit import Index
+from retrievalkit import Index
 
 path = Path("./search-index")
 index = Index(dimension=384)
@@ -156,7 +156,7 @@ New saves use a checksummed V3 manifest. Validate a stored index without keeping
 it loaded for search:
 
 ```python
-from vectorkit import CorruptIndexError, Index
+from retrievalkit import CorruptIndexError, Index
 
 try:
     Index.validate(path)
@@ -258,8 +258,8 @@ Character limits are only a fallback because token counts depend on the model's
 tokenizer.
 
 ```python
-from vectorkit import Index, hybrid_search_text, search_text
-from vectorkit.ingest import chunk_text
+from retrievalkit import Index, hybrid_search_text, search_text
+from retrievalkit.ingest import chunk_text
 
 
 def embed(texts):
@@ -283,7 +283,7 @@ index.add(
     documents=[
         {
             "id": "doc-1",
-            "metadata": {"project": "vectorkit"},
+            "metadata": {"project": "retrievalkit"},
             "chunks": [
                 {
                     "text": text,
@@ -301,7 +301,7 @@ hits = search_text(
     "How does the wrapper work?",
     embed=embed,
     limit=5,
-    where={"project": "vectorkit", "archived": False},
+    where={"project": "retrievalkit", "archived": False},
 )
 
 hybrid_hits = hybrid_search_text(
@@ -309,7 +309,7 @@ hybrid_hits = hybrid_search_text(
     "How does the wrapper work?",
     embed=embed,
     limit=5,
-    where={"project": "vectorkit", "archived": False},
+    where={"project": "retrievalkit", "archived": False},
     vector_candidates=10,
     keyword_candidates=25,
 )
@@ -319,10 +319,10 @@ Chunk limits and overlap are measured in Unicode characters. `start_byte` and
 `end_byte` are UTF-8 byte offsets into the original string. Sentence mode
 prefers sentence endings, then whitespace, and falls back to the hard character
 limit. The implementation lives in Rust and is shared with the separate Swift
-`VectorKitIngest` product.
+`RetrievalKitIngest` product.
 
 Graph capabilities are intentionally absent from this base distribution. Use
-the separate `vectorkit-graph` distribution in `wrappers/python-graph` when an
+the separate `retrievalkit-graph` distribution in `wrappers/python-graph` when an
 application needs graph-only or combined graph-and-retrieval databases. The two
 native distributions must not be imported in the same Python process.
 
@@ -330,7 +330,7 @@ Use `TimestampMillis` when metadata must remain distinct from an ordinary
 integer across ingestion, filtering, persistence, and result hydration:
 
 ```python
-from vectorkit import TimestampMillis
+from retrievalkit import TimestampMillis
 
 metadata = {"captured_at": TimestampMillis(120_000)}
 where = {"captured_at": {"$gte": TimestampMillis(60_000)}}
@@ -342,8 +342,8 @@ The optional pipeline module composes chunking, a caller-provided embedding
 provider, indexing, and hybrid text search:
 
 ```python
-from vectorkit import Index
-from vectorkit.pipeline import Pipeline
+from retrievalkit import Index
+from retrievalkit.pipeline import Pipeline
 
 index = Index(dimension=384)
 pipeline = Pipeline(
@@ -362,8 +362,8 @@ mutating the index.
 Applications can instead pass any object implementing `chunks(text)`. This
 allows Markdown-, transcript-, email-, or source-code-aware chunking while the
 pipeline continues to own embedding validation and atomic document upsert.
-The customization protocol lives in `vectorkit.pipeline`; the concrete
-`RustTextChunker` remains available from `vectorkit.ingest` when callers want
+The customization protocol lives in `retrievalkit.pipeline`; the concrete
+`RustTextChunker` remains available from `retrievalkit.ingest` when callers want
 non-default limits.
 
 ## Filter Syntax
@@ -371,10 +371,10 @@ non-default limits.
 Common filters use `where={...}`:
 
 ```python
-from vectorkit import Filter
+from retrievalkit import Filter
 
 filters: Filter = {
-    "project": "vectorkit",
+    "project": "retrievalkit",
     "archived": False,
     "created_at": {"$gte": 1710000000000},
     "source": {"$in": ["notes", "docs"]},
@@ -396,7 +396,7 @@ hits = index.hybrid_search(
     "python wrapper",
     query_embedding,
     limit=10,
-    where={"project": "vectorkit"},
+    where={"project": "retrievalkit"},
     alpha=0.6,
 )
 ```
@@ -412,7 +412,7 @@ Inputs and search results are plain dictionaries, with public `TypedDict` shapes
 available for annotations:
 
 ```python
-from vectorkit import DocumentInput, HybridHit, SearchHit
+from retrievalkit import DocumentInput, HybridHit, SearchHit
 
 documents: list[DocumentInput] = [
     {
@@ -429,13 +429,13 @@ hybrid_hits: list[HybridHit] = index.hybrid_search("python wrapper", query_embed
 Complex filters can use helper constructors:
 
 ```python
-from vectorkit import where
+from retrievalkit import where
 
 index.search(
     query_embedding,
     limit=10,
     where=where.all(
-        where.eq("project", "vectorkit"),
+        where.eq("project", "retrievalkit"),
         where.range("created_at", gte=1710000000000),
     ),
 )

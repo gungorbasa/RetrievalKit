@@ -1,12 +1,12 @@
 # Social Network Search Example
 
-This example builds a local VectorKit index from:
+This example builds a local RetrievalKit index from:
 
 ```text
 /Users/gungorbasa/Desktop/the_social_network_v.1.32.json
 ```
 
-It uses FastEmbed for local text embeddings and VectorKit for local retrieval.
+It uses FastEmbed for local text embeddings and RetrievalKit for local retrieval.
 
 ## Embedding Architecture
 
@@ -20,7 +20,7 @@ It uses FastEmbed for local text embeddings and VectorKit for local retrieval.
 - Embedding provider: `fastembed.TextEmbedding`.
 - Model: `BAAI/bge-small-en-v1.5`.
 - Dimension: `384`.
-- VectorKit storage/search encoding: `i8`.
+- RetrievalKit storage/search encoding: `i8`.
 - Query path: embed query text with the same FastEmbed model, then call
   `Index.search(...)`, `Index.keyword_search(...)`, or
   `Index.hybrid_search(...)` with optional metadata filters.
@@ -36,11 +36,11 @@ total chunks/vectors: 28,650
 
 The original Qdrant pipeline can overwrite some generated shot chunks because
 its point ID does not include the chunk number. This example keeps every chunk
-under a unique VectorKit document ID, so the final vector count matches the
+under a unique RetrievalKit document ID, so the final vector count matches the
 number of generated chunks.
 
 The user mentioned `386` dimensions, but FastEmbed's default
-`BAAI/bge-small-en-v1.5` model returns `384` dimensions. VectorKit requires the
+`BAAI/bge-small-en-v1.5` model returns `384` dimensions. RetrievalKit requires the
 index dimension to match the embedding provider output exactly, so this example
 uses `384`.
 
@@ -60,7 +60,7 @@ target/social-network-example-venv/
 
 It installs:
 
-- the local `vectorkit` wheel
+- the local `retrievalkit` wheel
 - `fastembed`
 - `PyYAML`
 
@@ -74,7 +74,7 @@ target/social-network-example-venv/bin/python \
   --rebuild
 ```
 
-Rebuild the index after changing VectorKit persistence, BM25, hybrid search, or
+Rebuild the index after changing RetrievalKit persistence, BM25, hybrid search, or
 metadata generation. Older saved indexes may still load, but keyword and hybrid
 evaluation need the BM25 side of the index to be present for full behavior.
 
@@ -116,8 +116,8 @@ Latest measured results on `MacBookPro18,4` / Apple M1 Max:
 
 | System | Corpus | Embedding | Search | P50 | P95 | P99 | Mean |
 |---|---:|---|---|---:|---:|---:|---:|
-| MiniLM Core ML + Swift exact search | 28,650 chunks | `all-MiniLM-L6-v2` seq=256 | Swift VectorKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
-| BGE FastEmbed + Python exact search | 28,650 chunks | `BAAI/bge-small-en-v1.5` | Python VectorKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
+| MiniLM Core ML + Swift exact search | 28,650 chunks | `all-MiniLM-L6-v2` seq=256 | Swift RetrievalKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
+| BGE FastEmbed + Python exact search | 28,650 chunks | `BAAI/bge-small-en-v1.5` | Python RetrievalKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
 
 See `docs/product/reports/social-network-end-to-end-benchmark-report.md` for
 the environment, commands, and embedding/search component breakdown. See

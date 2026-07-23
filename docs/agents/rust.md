@@ -1,6 +1,6 @@
 # Rust Agent Guidance
 
-Rust is the core implementation language for VectorKit. Read this file before creating or modifying Rust code.
+Rust is the core implementation language for RetrievalKit. Read this file before creating or modifying Rust code.
 
 ## Role of the Rust Core
 

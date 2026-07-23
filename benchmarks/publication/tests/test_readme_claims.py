@@ -40,7 +40,7 @@ class ReadmeClaimMutationTests(unittest.TestCase):
         self.assertEqual(len(swift_blocks), 1)
         python_source = (REPO / "wrappers/python/examples/database_quickstart.py").read_text()
         self.assertEqual(python_blocks[0], "\n".join(python_source.splitlines()[2:]) + "\n")
-        swift_source = (REPO / "wrappers/swift/VectorKit/Sources/VectorKitDatabaseQuickstart/main.swift").read_text()
+        swift_source = (REPO / "wrappers/swift/RetrievalKit/Sources/RetrievalKitDatabaseQuickstart/main.swift").read_text()
         self.assertEqual(swift_blocks[0], swift_source)
 
     def test_changed_number_is_rejected(self) -> None:
@@ -51,16 +51,16 @@ class ReadmeClaimMutationTests(unittest.TestCase):
         self.assert_rejected(README.replace("sqlite-vec `0.1.9`", "sqlite-vec", 1))
 
     def test_universal_superiority_is_rejected(self) -> None:
-        self.assert_rejected(README + "\nVectorKit is universally faster than sqlite-vec.\n")
+        self.assert_rejected(README + "\nRetrievalKit is universally faster than sqlite-vec.\n")
 
     def test_usearch_timing_claim_is_rejected(self) -> None:
         self.assert_rejected(README + "\nUSearch has lower latency and is faster.\n")
 
     def test_graph_winner_claim_is_rejected(self) -> None:
-        self.assert_rejected(README + "\nVectorKit beats the graph baseline.\n")
+        self.assert_rejected(README + "\nRetrievalKit beats the graph baseline.\n")
 
     def test_100k_support_claim_is_rejected(self) -> None:
-        self.assert_rejected(README + "\nVectorKit supports 100K chunks.\n")
+        self.assert_rejected(README + "\nRetrievalKit supports 100K chunks.\n")
 
     def test_expired_claim_is_rejected(self) -> None:
         self.assert_rejected(README, as_of=date(2027, 7, 22))

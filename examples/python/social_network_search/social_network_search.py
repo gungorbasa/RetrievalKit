@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Any, Iterable, TypeAlias
 
 import yaml
 from fastembed import TextEmbedding
-from vectorkit import Index
-from vectorkit import where as vk_where
+from retrievalkit import Index
+from retrievalkit import where as vk_where
 
 if TYPE_CHECKING:
-    from vectorkit import DocumentInput, Filter, HybridHit, KeywordHit, SearchHit
+    from retrievalkit import DocumentInput, Filter, HybridHit, KeywordHit, SearchHit
 else:
     DocumentInput: TypeAlias = dict[str, Any]
     Filter: TypeAlias = dict[str, Any]
@@ -183,13 +183,13 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build and search a VectorKit index for The Social Network JSON analysis."
+        description="Build and search a RetrievalKit index for The Social Network JSON analysis."
     )
     parser.add_argument("--json", default=str(DEFAULT_JSON_PATH), help="source JSON path")
     parser.add_argument(
         "--index-dir",
         default=str(DEFAULT_INDEX_DIR),
-        help="directory where the VectorKit index is saved",
+        help="directory where the RetrievalKit index is saved",
     )
     parser.add_argument(
         "--query",
@@ -500,7 +500,7 @@ def run_searches(
         elif search_mode == "hybrid":
             if not hasattr(index, "hybrid_search"):
                 raise RuntimeError(
-                    "installed vectorkit package does not expose Index.hybrid_search; "
+                    "installed retrievalkit package does not expose Index.hybrid_search; "
                     "rerun scripts/setup-social-network-example.sh or reinstall the "
                     "current Python wrapper wheel"
                 )
@@ -1188,7 +1188,7 @@ def print_timing_report(
         print_stats("hybrid_search_ms", hybrid_search_times)
         print_stats("hybrid_query_total_ms", hybrid_total_times)
     else:
-        print("  hybrid_search_ms: skipped; installed vectorkit has no hybrid_search")
+        print("  hybrid_search_ms: skipped; installed retrievalkit has no hybrid_search")
 
 
 def print_stats(label: str, values: list[float]) -> None:

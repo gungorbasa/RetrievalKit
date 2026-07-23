@@ -169,9 +169,9 @@ manifest.
 ## Verification
 
 The required Rust gates passed: `cargo fmt --all -- --check`; complete tests
-for `vectorkit-core` (129 unit plus 10 M1 integration), `vectorkit-graph` (30
-tests), default `vectorkit-ffi` (15 tests), graph-enabled `vectorkit-ffi` (19
-tests), and `vectorkit-cli` (62 tests); and warning-denying all-target Clippy
+for `retrievalkit-core` (129 unit plus 10 M1 integration), `retrievalkit-graph` (30
+tests), default `retrievalkit-ffi` (15 tests), graph-enabled `retrievalkit-ffi` (19
+tests), and `retrievalkit-cli` (62 tests); and warning-denying all-target Clippy
 for all four crates.
 
 The full Swift wrapper verifier passed shared (2), base/injest (20), and graph

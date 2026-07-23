@@ -3,14 +3,14 @@ requires = ["maturin>=1.8,<2"]
 build-backend = "maturin"
 
 [project]
-name = "vectorkit"
+name = "retrievalkit"
 version = "0.1.0"
-description = "Thin Python wrapper for the VectorKit Rust retrieval core"
+description = "Thin Python wrapper for the RetrievalKit Rust retrieval core"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-  { name = "VectorKit" }
+  { name = "RetrievalKit" }
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -19,8 +19,8 @@ classifiers = [
 ]
 
 [tool.maturin]
-manifest-path = "../../crates/vectorkit-python/Cargo.toml"
-module-name = "vectorkit._native"
+manifest-path = "../../crates/retrievalkit-python/Cargo.toml"
+module-name = "retrievalkit._native"
 python-source = "python"
 exclude = ["python/**/__pycache__/**", "python/**/*.pyc"]
 
@@ -28,7 +28,7 @@ exclude = ["python/**/__pycache__/**", "python/**/*.pyc"]
 python_version = "3.10"
 strict = true
 files = [
-  "python/vectorkit",
+  "python/retrievalkit",
   "tests/typing_smoke.py",
 ]
 

@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")"
-HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_ffi.h"
-GRAPH_HEADER_PATH="$ROOT_DIR/crates/vectorkit-ffi/include/vectorkit_graph_ffi.h"
+HEADER_PATH="$ROOT_DIR/crates/retrievalkit-ffi/include/retrievalkit_ffi.h"
+GRAPH_HEADER_PATH="$ROOT_DIR/crates/retrievalkit-ffi/include/retrievalkit_graph_ffi.h"
 BUILD_DIR="$ROOT_DIR/target/apple"
-FRAMEWORK_NAME="VectorKitFFI"
+FRAMEWORK_NAME="RetrievalKitFFI"
 GRAPH_BUILD=0
 MIN_IOS_VERSION="${MIN_IOS_VERSION:-15.0}"
 MIN_MACOS_VERSION="${MIN_MACOS_VERSION:-14.0}"
@@ -20,11 +20,11 @@ usage() {
 usage:
   scripts/build-xcframework.sh [--macos-only] [--graph]
 
-Builds target/apple/VectorKitFFI.xcframework from vectorkit-ffi.
+Builds target/apple/RetrievalKitFFI.xcframework from retrievalkit-ffi.
 
 Options:
   --macos-only   build only the local macOS arm64 slice; useful for script smoke checks
-  --graph        build the aggregate VectorKitGraphFFI artifact instead of the base artifact
+  --graph        build the aggregate RetrievalKitGraphFFI artifact instead of the base artifact
   --help, -h     show this help
 
 Install all Apple Rust targets before the full build:
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --graph)
       GRAPH_BUILD=1
-      FRAMEWORK_NAME="VectorKitGraphFFI"
+      FRAMEWORK_NAME="RetrievalKitGraphFFI"
       ;;
     --help|-h)
       usage
@@ -76,16 +76,16 @@ build_with_deployment_target() {
   case "$platform" in
     macos)
       MACOSX_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p retrievalkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     ios)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p retrievalkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     ios-simulator)
       IPHONEOS_DEPLOYMENT_TARGET="$min_version" \
       IPHONESIMULATOR_DEPLOYMENT_TARGET="$min_version" \
-        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p vectorkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
+        cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p retrievalkit-ffi --release --target "$rust_target" ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"}
       ;;
     *)
       echo "unsupported platform for $rust_target: $platform" >&2
@@ -106,7 +106,7 @@ framework_info_plist() {
   <key>CFBundleExecutable</key>
   <string>$FRAMEWORK_NAME</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.vectorkit.$FRAMEWORK_NAME</string>
+  <string>dev.retrievalkit.$FRAMEWORK_NAME</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -144,7 +144,7 @@ create_framework_from_static_lib() {
   mkdir -p "$headers_dir" "$modules_dir"
   cp "$static_lib" "$framework_dir/$FRAMEWORK_NAME"
   if [[ "$GRAPH_BUILD" == "1" ]]; then
-    cp "$HEADER_PATH" "$headers_dir/vectorkit_ffi.h"
+    cp "$HEADER_PATH" "$headers_dir/retrievalkit_ffi.h"
     cp "$GRAPH_HEADER_PATH" "$headers_dir/$FRAMEWORK_NAME.h"
   else
     cp "$HEADER_PATH" "$headers_dir/$FRAMEWORK_NAME.h"
@@ -172,7 +172,7 @@ build_framework_slice() {
 
   build_rust_target "$rust_target" "$platform" "$min_version"
   create_framework_from_static_lib \
-    "$ROOT_DIR/target/$rust_target/release/libvectorkit_ffi.a" \
+    "$ROOT_DIR/target/$rust_target/release/libretrievalkit_ffi.a" \
     "$slice_name"
 }
 

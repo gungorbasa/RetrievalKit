@@ -32,7 +32,7 @@ Both failures were stopped and disclosed. Each correction was committed before
 a new authorization; attempts were never compared to choose a preferred
 quality result. The successful execution used:
 
-- executable: `target/release/vectorkit`;
+- executable: `target/release/retrievalkit`;
 - executable SHA-256:
   `5f4f4fd6ce0d9083814233212ef5a5d1284a519b0d3c4408be7240721cb4fb15`;
 - source tree: `ce4d360a819528d4a46c40d9c180c903065862ca`;

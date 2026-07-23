@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://vectorkit.dev/schemas/graph-customer-fixture-v1.json",
-  "title": "VectorKit sanitized graph customer fixture",
+  "$id": "https://retrievalkit.dev/schemas/graph-customer-fixture-v1.json",
+  "title": "RetrievalKit sanitized graph customer fixture",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "fixture_id", "status", "sanitization", "source", "queries", "mutations", "workload", "targets", "equivalence"],

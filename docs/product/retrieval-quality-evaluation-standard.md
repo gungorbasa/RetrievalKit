@@ -6,7 +6,7 @@ Date: 2026-07-11
 
 ## Purpose
 
-This document defines how VectorKit should decide whether vector-only, keyword,
+This document defines how RetrievalKit should decide whether vector-only, keyword,
 hybrid, encoding, or ranking changes improve retrieval quality. It preserves the
 V3 ideas discovered while building the V1 and V2 MiniLM fixtures and aligns the
 next benchmark with established information-retrieval practice.
@@ -78,7 +78,7 @@ a mini MS MARCO dataset. Its recorded MiniLM baseline includes:
 | NFCorpus | 0.690 | 0.313 | 0.504 |
 | SciFact | 0.806 | 0.658 | 0.621 |
 
-These scores cannot be compared numerically with VectorKit V2 because the
+These scores cannot be compared numerically with RetrievalKit V2 because the
 corpora and qrels differ.
 
 Sources:
@@ -90,7 +90,7 @@ Sources:
 ### Moss assessment
 
 Moss follows the core industry pattern by using external datasets, qrels, MRR,
-and NDCG. VectorKit V2 already goes further in several areas: direct relevance
+and NDCG. RetrievalKit V2 already goes further in several areas: direct relevance
 recall, vector-only I8/F32 fidelity, filters, deletion, replacement,
 persistence reload, multiple candidate pools, and executable quality gates.
 
@@ -104,7 +104,7 @@ The public Moss repository does not currently show, in this suite:
 - explicit pass/fail relevance regression thresholds
 - separate encoding-fidelity evaluation
 
-Moss is useful corroboration, but it should not be VectorKit’s sole gold
+Moss is useful corroboration, but it should not be RetrievalKit’s sole gold
 standard.
 
 ## Established Industry and Research Practice
@@ -117,7 +117,7 @@ multiple diverse retrieval runs and judges the pooled documents. This reduces
 the risk that a novel system is penalized because only one baseline’s results
 were labeled.
 
-Use TREC-compatible qrels and run files so VectorKit’s metric implementation can
+Use TREC-compatible qrels and run files so RetrievalKit’s metric implementation can
 be checked against `trec_eval` or `ir_measures`.
 
 Sources:
@@ -138,7 +138,7 @@ Source: https://github.com/beir-cellar/beir
 
 MTEB uses NDCG@10 as the main score for retrieval tasks and covers many domains,
 languages, and annotation styles. It is appropriate for comparing embedding
-models, but a product-specific collection is still required for VectorKit’s
+models, but a product-specific collection is still required for RetrievalKit’s
 actual user behavior.
 
 Sources:
@@ -167,7 +167,7 @@ Source: https://ann-benchmarks.com/
 The active evaluation path uses checked-in deterministic V1/V2 fixtures and
 public collections with existing qrels. SciFact and NFCorpus are the first
 real-world collections because both fit the under-50K V1 target and do not
-require VectorKit to operate an assessor workflow.
+require RetrievalKit to operate an assessor workflow.
 
 Every collection freezes its corpus, queries, qrels, embedding model,
 preprocessing, chunking policy, and evaluation split. Official test splits are
@@ -175,7 +175,7 @@ used for final reporting. Train or development splits may be used for
 configuration work when the upstream collection provides them; never tune on
 the reported test split.
 
-Human-authored VectorKit-specific collection building is deferred until
+Human-authored RetrievalKit-specific collection building is deferred until
 representative product data and actual assessors are available. There is no
 active pooling, blind-review, adjudication, or human-judgment workflow.
 
@@ -245,15 +245,15 @@ Next:
 1. Establish repeatable external baselines and collection-specific regression
    gates.
 2. Add paired bootstrap confidence intervals and per-category regression gates.
-3. Evaluate downstream answer and citation quality separately when VectorKit is
+3. Evaluate downstream answer and citation quality separately when RetrievalKit is
    used inside RAG; do not fold generation quality into retrieval metrics.
 
-Deferred: a VectorKit-specific judged collection until assessors and
+Deferred: a RetrievalKit-specific judged collection until assessors and
 representative product data exist.
 
 ## Current Position
 
-VectorKit V2 remains the fast deterministic regression fixture. The active next
+RetrievalKit V2 remains the fast deterministic regression fixture. The active next
 step is reproducible TREC evaluation on SciFact and NFCorpus using their
-upstream qrels. A VectorKit-specific human-reviewed release collection remains
+upstream qrels. A RetrievalKit-specific human-reviewed release collection remains
 explicitly deferred.

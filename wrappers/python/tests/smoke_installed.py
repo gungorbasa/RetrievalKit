@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from vectorkit import (
+from retrievalkit import (
     Index,
     RetrievalConfiguration,
     RetrievalDatabaseBuilder,
@@ -25,7 +25,7 @@ def main() -> None:
         documents=[
             {
                 "id": "doc-alpha",
-                "metadata": {"project": "vectorkit"},
+                "metadata": {"project": "retrievalkit"},
                 "chunks": [
                     {
                         "text": "alpha",
@@ -40,7 +40,7 @@ def main() -> None:
         index,
         "query alpha",
         embed=embed,
-        where={"project": "vectorkit"},
+        where={"project": "retrievalkit"},
     )
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
     fusion = hits[0]["trace"]["fusion"]

@@ -13,7 +13,7 @@ usage() {
 usage:
   scripts/build-python-wheel.sh [--debug] [--skip-smoke-test]
 
-Builds a local Python wheel for the VectorKit Python wrapper.
+Builds a local Python wheel for the RetrievalKit Python wrapper.
 
 The wheel is written to:
   target/wheels/
@@ -30,7 +30,7 @@ Environment:
   PYTHON_BIN  Python interpreter used to create the build virtualenv; default python3
 
 Install the produced wheel with:
-  python -m pip install target/wheels/vectorkit-*.whl
+  python -m pip install target/wheels/retrievalkit-*.whl
 
 Note: wheels with native Rust extensions are platform and Python ABI specific.
 EOF
@@ -97,10 +97,10 @@ PY
   local built_wheels=()
   while IFS= read -r wheel; do
     built_wheels+=("$wheel")
-  done < <(find "$build_wheel_dir" -maxdepth 1 -name 'vectorkit-*.whl' -print | sort)
+  done < <(find "$build_wheel_dir" -maxdepth 1 -name 'retrievalkit-*.whl' -print | sort)
 
   if [[ ${#built_wheels[@]} -eq 0 ]]; then
-    echo "maturin completed but no vectorkit wheel was produced in $build_wheel_dir" >&2
+    echo "maturin completed but no retrievalkit wheel was produced in $build_wheel_dir" >&2
     exit 1
   fi
 

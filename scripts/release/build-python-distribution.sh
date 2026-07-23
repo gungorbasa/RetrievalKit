@@ -10,16 +10,16 @@ export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT_DIR=/workspace"
 unset RUSTFLAGS
 
 case "$DISTRIBUTION" in
-  vectorkit)
+  retrievalkit)
     WRAPPER_DIR="$ROOT_DIR/wrappers/python"
     SMOKE="$ROOT_DIR/wrappers/python/tests/smoke_installed.py"
     ;;
-  vectorkit-graph)
+  retrievalkit-graph)
     WRAPPER_DIR="$ROOT_DIR/wrappers/python-graph"
     SMOKE="$ROOT_DIR/wrappers/python-graph/tests/smoke_installed.py"
     ;;
   *)
-    echo "usage: $0 {vectorkit|vectorkit-graph}" >&2
+    echo "usage: $0 {retrievalkit|retrievalkit-graph}" >&2
     exit 2
     ;;
 esac

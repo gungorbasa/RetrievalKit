@@ -154,12 +154,12 @@ def run_numpy_oracle(data: WorkloadData, _request: dict[str, Any]) -> dict[str, 
     return result
 
 
-def run_vectorkit_exact(data: WorkloadData, request: dict[str, Any]) -> dict[str, Any]:
-    from vectorkit import Index
+def run_retrievalkit_exact(data: WorkloadData, request: dict[str, Any]) -> dict[str, Any]:
+    from retrievalkit import Index
 
-    result = base_result("vectorkit_f32_exact", data)
+    result = base_result("retrievalkit_f32_exact", data)
     result["system_version"] = request["source_revision"]
-    persistence_root = Path(request["scratch_root"]) / "vectorkit-exact-index"
+    persistence_root = Path(request["scratch_root"]) / "retrievalkit-exact-index"
     started = time.perf_counter_ns()
     index = Index(dimension=data.dimension, metric="cosine", encoding="f32")
     batch_size = 256
@@ -731,7 +731,7 @@ def run_sqlite_application(
 
 
 def graph_schema() -> Any:
-    from vectorkit_graph import GraphRecordNode, GraphRelationship, GraphSchema
+    from retrievalkit_graph import GraphRecordNode, GraphRelationship, GraphSchema
 
     return GraphSchema(
         record_nodes=[GraphRecordNode("Item", "Item", ["ordinal"])],
@@ -751,7 +751,7 @@ def graph_schema() -> Any:
     )
 
 
-def populate_vectorkit_graph(data: WorkloadData, builder: Any) -> None:
+def populate_retrievalkit_graph(data: WorkloadData, builder: Any) -> None:
     active_records = data.active_records
     batch_size = 64
     for start in range(0, active_records, batch_size):
@@ -799,10 +799,10 @@ def populate_vectorkit_graph(data: WorkloadData, builder: Any) -> None:
         builder.add(records, embeddings=embeddings)
 
 
-def vectorkit_graph_query(
+def retrievalkit_graph_query(
     database: Any, data: WorkloadData, query_index: int
 ) -> dict[str, Any]:
-    from vectorkit_graph import GraphNode, GraphTraversal
+    from retrievalkit_graph import GraphNode, GraphTraversal
 
     spec = data.query_specs[query_index]
     started_total = time.perf_counter_ns()
@@ -861,19 +861,19 @@ def vectorkit_graph_query(
     }
 
 
-def run_vectorkit_graph_app(
+def run_retrievalkit_graph_app(
     data: WorkloadData, request: dict[str, Any]
 ) -> dict[str, Any]:
-    from vectorkit_graph import (
+    from retrievalkit_graph import (
         GraphRetrievalDatabase,
         GraphRetrievalDatabaseBuilder,
         RetrievalConfiguration,
         VectorIndexConfiguration,
     )
 
-    result = base_result("vectorkit_graph_app", data)
+    result = base_result("retrievalkit_graph_app", data)
     result["system_version"] = request["source_revision"]
-    persistence_root = Path(request["scratch_root"]) / "vectorkit-graph-app"
+    persistence_root = Path(request["scratch_root"]) / "retrievalkit-graph-app"
     started = time.perf_counter_ns()
     builder = GraphRetrievalDatabaseBuilder(
         corpus_id=f"phase5-{data.spec['workload_id']}",
@@ -884,7 +884,7 @@ def run_vectorkit_graph_app(
             )
         ),
     )
-    populate_vectorkit_graph(data, builder)
+    populate_retrievalkit_graph(data, builder)
     database = builder.build()
     result["build_ns"] = time.perf_counter_ns() - started
     save_started = time.perf_counter_ns()
@@ -896,21 +896,21 @@ def run_vectorkit_graph_app(
     loaded = GraphRetrievalDatabase.load(persistence_root)
     result["load_ns"] = time.perf_counter_ns() - load_started
     expected = [
-        vectorkit_graph_query(database, data, value)
+        retrievalkit_graph_query(database, data, value)
         for value in range(len(data.query_specs))
     ]
     measurement = request["measurement"]
     for value in range(int(measurement["warmups"])):
-        vectorkit_graph_query(database, data, value % len(data.query_specs))
+        retrievalkit_graph_query(database, data, value % len(data.query_specs))
     samples = []
     stage_values: dict[str, list[int]] = {stage: [] for stage in expected[0]["stages"]}
     for sample_index in range(int(measurement["samples"])):
         query_index = sample_index % len(data.query_specs)
-        measured = vectorkit_graph_query(database, data, query_index)
+        measured = retrievalkit_graph_query(database, data, query_index)
         if measured["exact_ids"] != expected[query_index]["exact_ids"]:
-            raise RuntimeError("VectorKit graph exact result changed")
+            raise RuntimeError("RetrievalKit graph exact result changed")
         if measured["hybrid_ids"] != expected[query_index]["hybrid_ids"]:
-            raise RuntimeError("VectorKit graph hybrid result changed")
+            raise RuntimeError("RetrievalKit graph hybrid result changed")
         for stage, duration in measured["stages"].items():
             stage_values[stage].append(int(duration))
             samples.append(
@@ -927,7 +927,7 @@ def run_vectorkit_graph_app(
     replay_results = []
     for index, spec in enumerate(data.query_specs):
         measured = expected[index]
-        replay = vectorkit_graph_query(loaded, data, index)
+        replay = retrievalkit_graph_query(loaded, data, index)
         for operation, ids, replay_ids in [
             ("graph_scoped_exact", measured["exact_ids"], replay["exact_ids"]),
             ("graph_scoped_hybrid", measured["hybrid_ids"], replay["hybrid_ids"]),
@@ -983,8 +983,8 @@ RUNNERS: dict[str, Callable[[WorkloadData, dict[str, Any]], dict[str, Any]]] = {
     "sqlite_custom_graph_app": run_sqlite_application,
     "sqlite_vec_exact": run_sqlite_vec_exact,
     "usearch_hnsw": run_usearch,
-    "vectorkit_f32_exact": run_vectorkit_exact,
-    "vectorkit_graph_app": run_vectorkit_graph_app,
+    "retrievalkit_f32_exact": run_retrievalkit_exact,
+    "retrievalkit_graph_app": run_retrievalkit_graph_app,
 }
 
 

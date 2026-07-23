@@ -343,10 +343,10 @@ contains `retrieval`, including queries excluded only from a derived seed lane:
 
 Both files use finite `f32` values and the dimension declared in
 `manifests/embedding.json`. Missing and unexpected embedding keys are errors.
-The values are raw model-output F32 vectors before VectorKit's metric-specific
+The values are raw model-output F32 vectors before RetrievalKit's metric-specific
 runtime normalization. The same source vectors feed all canonical runs. I8
 runs first apply the section 3.8 normalization policy and then quantize through
-the frozen VectorKit configuration; an adapter MUST NOT use a different
+the frozen RetrievalKit configuration; an adapter MUST NOT use a different
 embedding model for I8. Embeddings MUST NOT appear in
 `records.jsonl`, `queries.jsonl`, or `graph-schema.json`.
 
@@ -785,7 +785,7 @@ the corresponding `collection.json` values. The implementation revision MUST
 be identical across every A-G configuration in one artifact.
 
 For retrieval runs, `metric` is the artifact's one frozen development-selected
-VectorKit metric, `cosine` or `dot_product`, and MUST be identical across
+RetrievalKit metric, `cosine` or `dot_product`, and MUST be identical across
 A-C/E-G. `normalization` is exactly `unit_l2` for `cosine` and `none` for
 `dot_product`, and `normalization_policy` is the corresponding exact section
 3.8 object. For D, metric, normalization, and normalization policy are null.
@@ -1953,7 +1953,7 @@ conservative physical device. It is separate from the headline-device evidence
 and MUST:
 
 - be a physical iPhone supported by the app's then-current minimum iOS and
-  VectorKit binary;
+  RetrievalKit binary;
 - be at least two hardware generations older than the headline device;
 - have less memory and/or weaker vector capabilities than the headline device;
 - disclose whether AArch64 dot-product and the selected SIMD backend are
@@ -2000,7 +2000,7 @@ claim.
 
 - Use release Swift code and optimized Rust/XCFramework code with assertions
   and tracing configured as in the shipping package.
-- Record device model/identifier, OS build, toolchain, VectorKit revision,
+- Record device model/identifier, OS build, toolchain, RetrievalKit revision,
   workload hash, power state, battery range, low-power mode, thermal state,
   free storage, and foreground/background conditions.
 - Run one workload/configuration per fresh app process. Disable network use and
@@ -2076,7 +2076,7 @@ instructions, raw results, and failures.
 
 ### 10.1 Engine isolation
 
-Exact VectorKit is compared only with competent exact search using identical
+Exact RetrievalKit is compared only with competent exact search using identical
 precomputed corpus/query embeddings, canonical chunks, queries, metric,
 normalization, filters, top K, hardware, and process conditions. Scalar and
 Accelerate/vDSP exact scans and a supported embedded brute-force engine are
@@ -2094,7 +2094,7 @@ support, save/load/validation behavior, and all search parameters.
 
 ### 10.2 Complete application stack
 
-The complete lane compares VectorKit with a published, competent application
+The complete lane compares RetrievalKit with a published, competent application
 stack implementing the same vector retrieval, lexical/fusion behavior, graph
 schema and bounded traversal, metadata filtering/intersection, document
 projection, hydration, deletion/update semantics, and generation-consistent
@@ -2175,9 +2175,9 @@ unresolved Phase 0 contract decision.
 
 Phase 1 is expected to change only evaluation tooling and tests, principally:
 
-- `crates/vectorkit-cli/src/quality.rs`;
-- `crates/vectorkit-cli/src/quality/artifacts.rs`;
-- new graph-aware modules under `crates/vectorkit-cli/src/quality/`;
+- `crates/retrievalkit-cli/src/quality.rs`;
+- `crates/retrievalkit-cli/src/quality/artifacts.rs`;
+- new graph-aware modules under `crates/retrievalkit-cli/src/quality/`;
 - `scripts/quality/validate_trec_metrics.py` and focused independent graph
   metric/path validators under `scripts/quality/`;
 - `benchmarks/retrieval-quality/README.md`; and

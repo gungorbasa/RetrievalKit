@@ -204,7 +204,7 @@ def summarize(config: dict[str, Any], adapters: list[dict[str, Any]]) -> dict[st
             operations = operation_map(adapter)
             gates: dict[str, Any] = {}
             if adapter["status"] == "success" and system_id in {
-                "vectorkit_f32_exact",
+                "retrievalkit_f32_exact",
                 "sqlite_vec_exact",
             }:
                 for operation_id, oracle_rows in [
@@ -226,7 +226,7 @@ def summarize(config: dict[str, Any], adapters: list[dict[str, Any]]) -> dict[st
                     operations["ann_filtered"].get("unsupported_reason") is not None
                 )
             if adapter["status"] == "success" and system_id in {
-                "vectorkit_graph_app",
+                "retrievalkit_graph_app",
                 "sqlite_custom_graph_app",
             }:
                 application = operations["graph_scoped_application"]
@@ -291,7 +291,7 @@ def summarize(config: dict[str, Any], adapters: list[dict[str, Any]]) -> dict[st
             "local Mac results are not physical-device or marketing evidence",
             "ANN latency is comparable only when Recall@10 is at least 0.99",
             "USearch Python predicate filtering is unsupported",
-            "SQLite FTS5 hybrid semantics are non-equivalent to VectorKit hybrid",
+            "SQLite FTS5 hybrid semantics are non-equivalent to RetrievalKit hybrid",
             "peak RSS is process-level rather than isolated component memory",
         ],
         "overall_acceptance": "passed" if all(all_gates) else "failed",

@@ -18,7 +18,7 @@ VENV_DIR="$ROOT_DIR/target/python-graph-wrapper-check-venv-$PYTHON_TAG"
 BUILD_DIR="$ROOT_DIR/target/python-graph-wrapper-wheel-$PYTHON_TAG"
 SMOKE_DIR="$ROOT_DIR/target/python-graph-wrapper-smoke-$PYTHON_TAG"
 
-cargo test -p vectorkit-python --features graph
+cargo test -p retrievalkit-python --features graph
 "$PYTHON_BIN" -m venv "$VENV_DIR"
 "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check 'maturin==1.14.1' pytest mypy ruff
 (
@@ -35,7 +35,7 @@ if [[ "$SKIP_WHEEL" == "0" ]]; then
     cd "$WRAPPER_DIR"
     "$VENV_DIR/bin/python" -m maturin build --locked --release --interpreter "$VENV_DIR/bin/python" --out "$BUILD_DIR"
   )
-  WHEEL="$(find "$BUILD_DIR" -maxdepth 1 -name 'vectorkit_graph-*.whl' -print -quit)"
+  WHEEL="$(find "$BUILD_DIR" -maxdepth 1 -name 'retrievalkit_graph-*.whl' -print -quit)"
   [[ -n "$WHEEL" ]] || { echo "graph wheel was not produced" >&2; exit 1; }
   "$PYTHON_BIN" -m venv "$SMOKE_DIR"
   "$SMOKE_DIR/bin/python" -m pip install --disable-pip-version-check "$WHEEL"

@@ -1,7 +1,7 @@
 # Phase 5 External Reference Implementations
 
 This directory contains benchmark-only adapters for the retrieval benchmark
-roadmap's Phase 5. Nothing here is linked into VectorKit production crates or
+roadmap's Phase 5. Nothing here is linked into RetrievalKit production crates or
 public wrappers, and nothing executes on a physical device.
 
 The normative methodology is
@@ -9,7 +9,7 @@ The normative methodology is
 
 ## Systems
 
-- VectorKit F32 exact and VectorKit graph-scoped retrieval from the checked-out
+- RetrievalKit F32 exact and RetrievalKit graph-scoped retrieval from the checked-out
   source revision.
 - NumPy `2.5.1` as the independent exact-result oracle. Oracle latency is not a
   comparative result.
@@ -22,7 +22,7 @@ The normative methodology is
 The exact feature mapping is in `feature-parity-v1.json`. In particular,
 USearch predicate filtering is unsupported in the selected Python binding, and
 the custom application's FTS5/hybrid semantics are non-equivalent to
-VectorKit's tokenizer, BM25, normalization, and fusion.
+RetrievalKit's tokenizer, BM25, normalization, and fusion.
 
 ## Supported build environment
 
@@ -38,7 +38,7 @@ Required host tools:
   in `environment.json`
 - maturin `1.14.1`, invoked through `uv tool run`
 
-Create the isolated environment and build both local VectorKit wheels:
+Create the isolated environment and build both local RetrievalKit wheels:
 
 ```bash
 scripts/benchmarks/setup-phase5-external.sh

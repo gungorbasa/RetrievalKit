@@ -36,8 +36,8 @@ target/embedding-conversion-venv/bin/python \
 Run Swift exact vector search over the persisted index:
 
 ```bash
-cd wrappers/swift/VectorKitBench
-.build/release/vectorkit-bench \
+cd wrappers/swift/RetrievalKitBench
+.build/release/retrievalkit-bench \
   --real-index ../../../target/examples/social-network-index-minilm \
   --query-embeddings ../../../target/examples/social-network-minilm-queries.json
 ```
@@ -48,7 +48,7 @@ cd wrappers/swift/VectorKitBench
 |---|---:|
 | Record prep | `21,314.501 ms` |
 | Core ML document embedding | `118,834.370 ms` |
-| VectorKit index add | `278,908.603 ms` |
+| RetrievalKit index add | `278,908.603 ms` |
 | Save index | `4,409.619 ms` |
 | Full build | `402,297.322 ms` |
 | Query fixture embedding | `2,391.703 ms` |
@@ -81,7 +81,7 @@ tokenization/model execution is wired into the benchmark.
 
 - MiniLM `seq=256` search over the real 28,650 chunk index is very cheap in
   Swift: `0.497 ms` p95 for exact vector search.
-- Query-time latency is dominated by embedding, not VectorKit search.
+- Query-time latency is dominated by embedding, not RetrievalKit search.
 - The measured combined p95 is roughly `4.042 ms`, which is close to the Moss
   published `4.3 ms` p95 end-to-end number, but this still needs a single Swift
   end-to-end benchmark before treating it as an app number.

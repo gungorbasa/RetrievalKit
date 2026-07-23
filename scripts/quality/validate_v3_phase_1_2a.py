@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Independently cross-check VectorKit V3 Phase 1.2a A-C rankings.
+"""Independently cross-check RetrievalKit V3 Phase 1.2a A-C rankings.
 
 This qualification-only validator reads the frozen collection and Rust result
-artifact directly. It does not invoke VectorKit or consume Rust scoring traces
+artifact directly. It does not invoke RetrievalKit or consume Rust scoring traces
 as inputs to its calculations.
 """
 

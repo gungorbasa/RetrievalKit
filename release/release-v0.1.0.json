@@ -3,21 +3,21 @@
   "version": "0.1.0",
   "tag": "v0.1.0",
   "status": "preview_release_candidate",
-  "repository": "https://github.com/gungorbasa/VectorKit",
+  "repository": "https://github.com/gungorbasa/RetrievalKit",
   "apple": {
     "architectures": ["arm64"],
     "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
     "artifacts": {
-      "VectorKitFFI.xcframework.zip": {"swiftpm_checksum": "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"},
-      "VectorKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"}
+      "RetrievalKitFFI.xcframework.zip": {"swiftpm_checksum": "c5fd96725f3991f6a6770bdaa2affaff7ccbb8015fb05731f44e24368967869d"},
+      "RetrievalKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "e94e6079c781fbeb5cdad740f14746869748242bf81b3955c1e9493abe321ec4"}
     },
-    "products": ["VectorKit", "VectorKitIngest", "VectorKitGraph", "EmbeddingKit", "VectorKitPipeline"],
-    "native_aggregate_rule": "link exactly one of VectorKitFFI or VectorKitGraphFFI; the graph aggregate includes base symbols"
+    "products": ["RetrievalKit", "RetrievalKitIngest", "RetrievalKitGraph", "EmbeddingKit", "RetrievalKitPipeline"],
+    "native_aggregate_rule": "link exactly one of RetrievalKitFFI or RetrievalKitGraphFFI; the graph aggregate includes base symbols"
   },
   "python": {
     "platform": "macosx_arm64",
     "implementations": ["cp310", "cp311", "cp312", "cp313", "cp314"],
-    "distributions": ["vectorkit", "vectorkit-graph"],
+    "distributions": ["retrievalkit", "retrievalkit-graph"],
     "co_installation": "unsupported; one native capability distribution per process"
   },
   "phase6_claims": {

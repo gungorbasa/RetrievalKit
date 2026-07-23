@@ -331,7 +331,7 @@ def validate_results(
         _manifest, query_specs = regenerate_manifest(workload)
         query_specs_by_workload[str(workload["workload_id"])] = query_specs
     for workload_id, query_specs in query_specs_by_workload.items():
-        for system_id in ["vectorkit_graph_app", "sqlite_custom_graph_app"]:
+        for system_id in ["retrievalkit_graph_app", "sqlite_custom_graph_app"]:
             if system_id not in config["systems"]:
                 continue
             for query in query_specs:
@@ -372,7 +372,7 @@ def validate_results(
             if gates["recall_gate_passed"] != (mean >= 0.99):
                 raise ValidationError("ANN recall gate differs")
         if (
-            row["system_id"] in {"vectorkit_f32_exact", "sqlite_vec_exact"}
+            row["system_id"] in {"retrievalkit_f32_exact", "sqlite_vec_exact"}
             and row["status"] == "success"
         ):
             for operation in ["exact_unfiltered", "exact_filtered"]:

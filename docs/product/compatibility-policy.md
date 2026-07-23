@@ -1,6 +1,6 @@
 # Compatibility policy
 
-VectorKit `0.x` releases are previews. Minor releases may refine APIs, but every
+RetrievalKit `0.x` releases are previews. Minor releases may refine APIs, but every
 intentional source or persistence change must be documented in the changelog
 and accompanied by migration guidance.
 
@@ -19,7 +19,7 @@ must fail with actionable typed errors and preserve read/validate/migrate paths
 for formats still listed as supported.
 
 The base and graph native aggregates are alternatives, not co-linkable modules.
-`vectorkit` and `vectorkit-graph` are likewise mutually exclusive inside one
+`retrievalkit` and `retrievalkit-graph` are likewise mutually exclusive inside one
 Python process. This boundary is part of compatibility, not a temporary build
 limitation.
 

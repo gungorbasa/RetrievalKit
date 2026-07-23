@@ -114,7 +114,7 @@ QUESTION_FIELDS = {
     "supporting_facts",
     "type",
 }
-SAMPLE_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
+SAMPLE_SALT = "retrievalkit-hotpotqa-linked-abstracts-v1"
 HOTPOT_ACCEPTANCE_RELATIVE_PATH = Path(
     "license-acceptance/hotpotqa-cc-by-sa-4.0-v1.json"
 )
@@ -441,7 +441,7 @@ def validate_graph_and_records(
         "neighbor_limit": 15,
         "records": preimage_records,
         "records_seen": corpus_info["source_records"],
-        "sample_salt": "vectorkit-hotpotqa-linked-abstracts-v1",
+        "sample_salt": "retrievalkit-hotpotqa-linked-abstracts-v1",
         "selected_conflicting_titles": corpus_info["selected_conflicting_titles"],
         "selected_missing_titles": corpus_info["selected_missing_titles"],
         "source_conflicting_titles": corpus_info["source_conflicting_title_count"],
@@ -631,7 +631,7 @@ def validate_sources(cache_dir: Path, model_dir: Path, source_inventory: Mapping
         or "Wikipedia contributors" not in notice
         or "CC BY-SA 4.0" not in notice
         or "ShareAlike" not in notice
-        or "VectorKit" not in notice
+        or "RetrievalKit" not in notice
     ):
         raise ValidationError("license and attribution material mismatch")
     expected_inventory = {

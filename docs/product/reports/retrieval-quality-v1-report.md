@@ -1,4 +1,4 @@
-# VectorKit Retrieval Quality V1: Vector Only and Hybrid
+# RetrievalKit Retrieval Quality V1: Vector Only and Hybrid
 
 Status: historical baseline. V2 expands this fixture to 42 harder judged
 queries and is the active quality report.

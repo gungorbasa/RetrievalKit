@@ -95,7 +95,7 @@ final class EmbeddingKitTests: XCTestCase {
         let tokenizerURL = try makeWordPieceTokenizerFixture()
         let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 8)
 
-        let tokenized = try tokenizer.tokenize("Hello, VectorKit!")
+        let tokenized = try tokenizer.tokenize("Hello, RetrievalKit!")
 
         XCTAssertEqual(tokenized.inputIDs, [101, 7592, 1010, 9207, 23615, 999, 102, 0])
         XCTAssertEqual(tokenized.attentionMask, [1, 1, 1, 1, 1, 1, 1, 0])
@@ -154,7 +154,7 @@ final class EmbeddingKitTests: XCTestCase {
             let tokenizer = try BertWordPieceTokenizer(tokenizerJSON: tokenizerURL, sequenceLength: 12)
             try assertTokenizer(
                 tokenizer,
-                text: "Hello, VectorKit!",
+                text: "Hello, RetrievalKit!",
                 inputIDs: [101, 7592, 1010, 9207, 23615, 999, 102, 0, 0, 0, 0, 0],
                 attentionMask: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
                 file: #filePath,

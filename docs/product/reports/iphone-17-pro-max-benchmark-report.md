@@ -32,7 +32,7 @@ most for I8ScalarQuantized.
 
 ## Executive Summary
 
-VectorKit is comfortably inside the V1 retrieval-latency target on iPhone 17 Pro
+RetrievalKit is comfortably inside the V1 retrieval-latency target on iPhone 17 Pro
 Max for 24K exact-search indexes.
 
 For unfiltered exact vector search:

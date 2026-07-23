@@ -80,10 +80,10 @@ jobs:
           PYTHON_BIN: python
           OUTPUT_DIR: target/release-python-wheels
         run: |
-          scripts/release/build-python-distribution.sh vectorkit
-          scripts/release/build-python-distribution.sh vectorkit-graph
-          base_wheel="$(find target/release-python-wheels -name 'vectorkit-*.whl' ! -name 'vectorkit_graph-*' -print -quit)"
-          graph_wheel="$(find target/release-python-wheels -name 'vectorkit_graph-*.whl' -print -quit)"
+          scripts/release/build-python-distribution.sh retrievalkit
+          scripts/release/build-python-distribution.sh retrievalkit-graph
+          base_wheel="$(find target/release-python-wheels -name 'retrievalkit-*.whl' ! -name 'retrievalkit_graph-*' -print -quit)"
+          graph_wheel="$(find target/release-python-wheels -name 'retrievalkit_graph-*.whl' -print -quit)"
           scripts/release/test-python-coinstallation.sh python "$base_wheel" "$graph_wheel"
       - name: Upload Python candidate artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

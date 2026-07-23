@@ -4,7 +4,7 @@
 
 HNSW is deferred.
 
-The current product direction is the small-index local MVP defined in [`../product/vectorkit-product-spec.md`](../product/vectorkit-product-spec.md):
+The current product direction is the small-index local MVP defined in [`../product/retrievalkit-product-spec.md`](../product/retrievalkit-product-spec.md):
 
 ```text
 target size: fewer than 50K chunks

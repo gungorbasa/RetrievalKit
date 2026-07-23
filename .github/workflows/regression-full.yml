@@ -20,11 +20,11 @@ concurrency:
 jobs:
   full-regression:
     name: Full quality and benchmark validation
-    runs-on: [self-hosted, macOS, ARM64, vectorkit-controlled]
+    runs-on: [self-hosted, macOS, ARM64, retrievalkit-controlled]
     timeout-minutes: 180
     env:
       DISPATCH_OBSERVATION: ${{ inputs.observation_path }}
-      SCHEDULED_OBSERVATION: ${{ vars.VECTORKIT_PHASE7_FULL_OBSERVATION }}
+      SCHEDULED_OBSERVATION: ${{ vars.RETRIEVALKIT_PHASE7_FULL_OBSERVATION }}
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

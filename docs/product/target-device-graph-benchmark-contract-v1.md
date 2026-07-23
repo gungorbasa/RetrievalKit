@@ -5,7 +5,7 @@ Status: frozen Phase 4 contract; device scope amended by
 
 Date frozen: 2026-07-18
 
-This document is the normative contract for VectorKit Phase 4 target-device
+This document is the normative contract for RetrievalKit Phase 4 target-device
 graph benchmarks. It specializes the device and performance requirements in
 section 9 of the previously frozen Graph Retrieval Evaluation Contract V3
 without changing any V3 quality population, query, judgment, ranking, metric,
@@ -158,7 +158,7 @@ inferred by subtraction.
 
 Every device artifact records physical-versus-simulator status; hardware model
 and identifier; OS version/build; total RAM; AArch64 dot-product availability;
-selected SIMD backend; toolchain and VectorKit revision; process ID; release
+selected SIMD backend; toolchain and RetrievalKit revision; process ID; release
 configuration; workload and fixture hashes; power source; battery level range;
 low-power-mode state; thermal state at start and end; free storage; network
 state; and foreground state. Serious or critical thermal state invalidates and
@@ -176,10 +176,10 @@ future devices are not required to run 100K. Every 100K outcome remains
 
 Two distinct release application products are required:
 
-- the graph-free product links only `VectorKitFFI` and contains no graph
+- the graph-free product links only `RetrievalKitFFI` and contains no graph
   framework, symbol, state initialization, graph file access, or graph-aware
   dispatch; and
-- the graph-capable product links `VectorKitGraphFFI` and runs the staged graph
+- the graph-capable product links `RetrievalKitGraphFFI` and runs the staged graph
   protocol.
 
 The products must not use runtime flags to turn one shared graph-linked binary

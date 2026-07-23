@@ -3,7 +3,7 @@
 Run:
 
 ```bash
-cargo bench -p vectorkit-graph --bench bounded_traversal
+cargo bench -p retrievalkit-graph --bench bounded_traversal
 ```
 
 ## Method

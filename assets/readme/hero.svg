@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="400" viewBox="0 0 1200 400"
      role="img" aria-labelledby="title desc">
-  <title id="title">VectorKit</title>
-  <desc id="desc">VectorKit is a local-first retrieval SDK: exact semantic search, BM25 hybrid ranking, and graph-scoped retrieval running entirely on device through one Rust core, with Swift and Python APIs.</desc>
+  <title id="title">RetrievalKit</title>
+  <desc id="desc">RetrievalKit is a local-first retrieval SDK: exact semantic search, BM25 hybrid ranking, and graph-scoped retrieval running entirely on device through one Rust core, with Swift and Python APIs.</desc>
 
   <rect width="1200" height="400" rx="20" fill="#0A0D12"/>
 
@@ -11,30 +11,55 @@
           font-size="19" letter-spacing="3" fill="#E8A13D">LOCAL-FIRST RETRIEVAL FOR EDGE AI</text>
 
     <text x="60" y="196" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-          font-size="88" font-weight="800" fill="#F3F5F7">VectorKit</text>
+          font-size="88" font-weight="800" fill="#F3F5F7">RetrievalKit</text>
 
     <text x="64" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
           font-size="25" fill="#C6CFD8">Exact semantic search, BM25 hybrid ranking, and</text>
     <text x="64" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
           font-size="25" fill="#C6CFD8">graph-scoped retrieval — one Rust core, no server.</text>
 
-    <!-- quantized vector strip motif -->
-    <g id="vector-strip" transform="translate(64 306)">
-      <text x="-2" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#5B6673">[</text>
+    <!-- signal-fusion motif: vector + keyword + graph → one ranked list -->
+    <g id="fusion-strip" transform="translate(64 298)"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <!-- vector signal -->
+      <text x="-2" y="16" font-size="18" fill="#5B6673">[</text>
       <g fill="#E8A13D">
-        <rect x="12"  y="2" width="13" height="13" rx="2" opacity="0.95"/>
-        <rect x="31"  y="2" width="13" height="13" rx="2" opacity="0.75"/>
-        <rect x="50"  y="2" width="13" height="13" rx="2" opacity="0.55"/>
-        <rect x="69"  y="2" width="13" height="13" rx="2" opacity="0.85"/>
-        <rect x="88"  y="2" width="13" height="13" rx="2" opacity="0.40"/>
-        <rect x="107" y="2" width="13" height="13" rx="2" opacity="0.65"/>
-        <rect x="126" y="2" width="13" height="13" rx="2" opacity="0.30"/>
-        <rect x="145" y="2" width="13" height="13" rx="2" opacity="0.90"/>
-        <rect x="164" y="2" width="13" height="13" rx="2" opacity="0.50"/>
-        <rect x="183" y="2" width="13" height="13" rx="2" opacity="0.22"/>
+        <rect x="12" y="4" width="13" height="13" rx="2" opacity="0.95"/>
+        <rect x="30" y="4" width="13" height="13" rx="2" opacity="0.55"/>
+        <rect x="48" y="4" width="13" height="13" rx="2" opacity="0.80"/>
+        <rect x="66" y="4" width="13" height="13" rx="2" opacity="0.35"/>
+        <rect x="84" y="4" width="13" height="13" rx="2" opacity="0.65"/>
+        <rect x="102" y="4" width="13" height="13" rx="2" opacity="0.25"/>
       </g>
-      <text x="202" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#5B6673">]</text>
-      <text x="222" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#5B6673">F32 · WEIGHTED-I8</text>
+      <text x="120" y="16" font-size="18" fill="#5B6673">]</text>
+      <text x="141" y="16" font-size="18" fill="#5B6673">+</text>
+      <!-- keyword signal -->
+      <text x="163" y="16" font-size="18" fill="#C6CFD8">"private notes"</text>
+      <text x="348" y="16" font-size="18" fill="#5B6673">+</text>
+      <!-- graph signal -->
+      <g transform="translate(374 0)">
+        <g stroke="#5B6673" stroke-width="1.5">
+          <line x1="6" y1="11" x2="24" y2="4"/>
+          <line x1="6" y1="11" x2="24" y2="18"/>
+          <line x1="24" y1="4" x2="42" y2="11"/>
+          <line x1="24" y1="18" x2="42" y2="11"/>
+        </g>
+        <g fill="#E8A13D">
+          <circle cx="6" cy="11" r="3.5"/>
+          <circle cx="24" cy="4" r="3.5"/>
+          <circle cx="24" cy="18" r="3.5"/>
+          <circle cx="42" cy="11" r="3.5"/>
+        </g>
+      </g>
+      <!-- fusion arrow -->
+      <line x1="436" y1="11" x2="460" y2="11" stroke="#5B6673" stroke-width="1.5"/>
+      <path d="M460 6 L460 16 L468 11 Z" fill="#5B6673"/>
+      <!-- one ranked list -->
+      <g transform="translate(482 2)">
+        <rect x="0" y="0"  width="64" height="5" rx="2.5" fill="#E8A13D"/>
+        <rect x="0" y="9"  width="46" height="5" rx="2.5" fill="#5B6673" opacity="0.7"/>
+        <rect x="0" y="18" width="30" height="5" rx="2.5" fill="#5B6673" opacity="0.4"/>
+      </g>
     </g>
 
     <text x="64" y="360" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -56,7 +81,7 @@
       <text x="951" y="187">canonical corpus</text>
 
       <rect x="796" y="224" width="310" height="46" rx="8" fill="#161E28" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="951" y="253">exact + BM25 + graph</text>
+      <text x="951" y="253">vector + bm25 + graph</text>
 
       <rect x="796" y="290" width="310" height="46" rx="8" fill="#1B1F1A" stroke="#E8A13D" stroke-width="1.5"/>
       <text x="951" y="319" fill="#E8A13D">ranked hits + trace</text>

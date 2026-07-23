@@ -52,7 +52,7 @@ Provisional extended-capacity gates:
 - Post-load P95: 16 ms.
 - Compaction peak increase: 40 MiB.
 
-50K is usable on this device but does not meet VectorKit's original 5–10 ms
+50K is usable on this device but does not meet RetrievalKit's original 5–10 ms
 retrieval goal. Treat it as an extended-capacity profile, not the primary V1
 performance tier. Compaction also needs substantially more safety headroom than
 the 24K profile because one run observed a 28.84 MiB transient increase.

@@ -58,7 +58,7 @@ def validate_local_links(repo: Path, readme: str) -> None:
 
 
 def validate_status_labels(readme: str) -> None:
-    for sdk in ("Swift `VectorKit`", "Swift `VectorKitGraph`", "Swift `EmbeddingKit`", "Swift `VectorKitPipeline`", "Python `vectorkit`", "Python `vectorkit-graph`"):
+    for sdk in ("Swift `RetrievalKit`", "Swift `RetrievalKitGraph`", "Swift `EmbeddingKit`", "Swift `RetrievalKitPipeline`", "Python `retrievalkit`", "Python `retrievalkit-graph`"):
         require(re.search(rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source\*\* \|", readme), f"incorrect source status for {sdk}")
     for sdk in ("Kotlin", "TypeScript"):
         require(re.search(rf"\| {sdk} \|.*\| \*\*Coming soon\*\* \|", readme), f"incorrect coming-soon status for {sdk}")
@@ -85,7 +85,7 @@ def validate_claims(repo: Path, readme: str, mapping: dict[str, Any], as_of: dat
 
     lowered = readme.lower()
     prohibited = {
-        "universal superiority": r"vectorkit (?:is|is always|is universally) (?:faster|better) than",
+        "universal superiority": r"retrievalkit (?:is|is always|is universally) (?:faster|better) than",
         "graph performance winner": r"(?:beats|faster than) (?:the )?graph baseline",
         "100K support": r"(?:supports|passes|qualified for) 100k",
         "USearch timing": r"usearch.{0,120}(?:faster|latency|speedup|performance advantage)",

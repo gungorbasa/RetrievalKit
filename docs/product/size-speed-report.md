@@ -32,14 +32,14 @@ ANN graph data, server state, sync state, or external database files.
 The main matrix was run with actual persistence enabled:
 
 ```bash
-rm -rf /tmp/vectorkit-report-matrix
-cargo run --release -p vectorkit-cli -- bench matrix \
+rm -rf /tmp/retrievalkit-report-matrix
+cargo run --release -p retrievalkit-cli -- bench matrix \
   --chunks 24000 \
   --dimensions 384,768 \
   --queries 100 \
   --top-k 5,10 \
   --encodings f32,f16,i8 \
-  --persist-dir /tmp/vectorkit-report-matrix \
+  --persist-dir /tmp/retrievalkit-report-matrix \
   --budget-mb 20 \
   --avg-chunk-data-bytes 256 \
   --avg-metadata-bytes 32 \
@@ -53,13 +53,13 @@ index, not the old estimate.
 Detailed file breakdowns were then run for the closest configurations:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench synthetic \
+cargo run --release -p retrievalkit-cli -- bench synthetic \
   --chunks 24000 \
   --dimension 384 \
   --queries 100 \
   --top-k 10 \
   --encoding i8 \
-  --persist-dir /tmp/vectorkit-report-384-i8 \
+  --persist-dir /tmp/retrievalkit-report-384-i8 \
   --budget-mb 20 \
   --avg-chunk-data-bytes 256 \
   --avg-metadata-bytes 32 \
@@ -170,7 +170,7 @@ A focused scoring-kernel benchmark isolates raw dot-product scanning from chunk
 lookup, filtering, top-k maintenance, and trace construction:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench kernels \
+cargo run --release -p retrievalkit-cli -- bench kernels \
   --vectors 24000 \
   --dimensions 384,768 \
   --queries 200 \
@@ -179,7 +179,7 @@ cargo run --release -p vectorkit-cli -- bench kernels \
 
 On the current Apple M1 Max development machine, `simsimd_capabilities` reports
 `neon,neon_f16,dynamic`, and macOS reports `FEAT_DotProd=1` but `FEAT_I8MM=0`.
-SimSIMD therefore does not advertise `neon_i8`, but VectorKit can still use the
+SimSIMD therefore does not advertise `neon_i8`, but RetrievalKit can still use the
 dot-product instruction for the dot-product-only I8 scoring path.
 
 | vectors | dim | encoding | payload MiB | avg ms | p95 ms |
@@ -219,7 +219,7 @@ path for the no-filter case while keeping active-offset scanning, deterministic
 top-k ordering, and late `SearchHit` materialization:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench matrix \
+cargo run --release -p retrievalkit-cli -- bench matrix \
   --chunks 24000 \
   --dimensions 384,768 \
   --queries 200 \
@@ -243,7 +243,7 @@ I8 path, the filtered I8 fast path improved `384d` substantially and kept
 `768d` roughly flat-to-slightly faster:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench matrix \
+cargo run --release -p retrievalkit-cli -- bench matrix \
   --chunks 24000 \
   --dimensions 384,768 \
   --queries 200 \

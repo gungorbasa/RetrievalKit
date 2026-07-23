@@ -2,7 +2,7 @@
 """Independently reconstruct and cross-check V3 Phase 1.2b Run D.
 
 The oracle reads only the frozen collection plus finalized Rust artifacts. It
-does not invoke VectorKit and does not use Rust graph traces as calculation
+does not invoke RetrievalKit and does not use Rust graph traces as calculation
 inputs.
 """
 
@@ -215,7 +215,7 @@ def build_graph(model: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_text(text: str) -> str:
     # The frozen strings are ASCII; this still applies the declared NFC/full-fold/
-    # Unicode-whitespace pipeline without relying on VectorKit.
+    # Unicode-whitespace pipeline without relying on RetrievalKit.
     folded = unicodedata.normalize("NFC", text).casefold()
     return " ".join(folded.split())
 

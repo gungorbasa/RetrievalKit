@@ -13,7 +13,7 @@
     "markdown": "UTF-8, LF newlines, one trailing LF",
     "symlinks": "forbidden"
   },
-  "contract_id": "vectorkit-regression-gates-v1",
+  "contract_id": "retrievalkit-regression-gates-v1",
   "failure_semantics": {
     "failed": "blocking regression or invalid evidence",
     "infrastructure_error": "failed",

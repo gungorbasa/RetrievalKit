@@ -24,14 +24,14 @@ configuration did not satisfy its quality requirement.
 | System ID | Implementation/version | Role | License | Final classification |
 | --- | --- | --- | --- | --- |
 | `numpy_f32_oracle` | NumPy 2.5.1 | independent F32 exact identity and recall oracle | BSD-3-Clause plus bundled compatible licenses | correctness only; timing excluded |
-| `vectorkit_f32_exact` | VectorKit source `9c784d2f` | product exact semantic baseline | repository MIT | equivalent exact/filter/delete/save-load |
-| `vectorkit_graph_app` | VectorKit source `9c784d2f` | product graph-scoped exact and hybrid workflow | repository MIT | equivalent application workflow |
+| `retrievalkit_f32_exact` | RetrievalKit source `9c784d2f` | product exact semantic baseline | repository MIT | equivalent exact/filter/delete/save-load |
+| `retrievalkit_graph_app` | RetrievalKit source `9c784d2f` | product graph-scoped exact and hybrid workflow | repository MIT | equivalent application workflow |
 | `sqlite_vec_exact` | sqlite-vec 0.1.9 | independent embedded exact-vector reference | MIT OR Apache-2.0 | equivalent exact/filter/delete/save-load |
 | `usearch_hnsw` | USearch 2.26.0 | embedded HNSW ANN reference | Apache-2.0 | unfiltered ANN measured but recall gate failed; filtered ANN unsupported |
 | `sqlite_custom_graph_app` | SQLite 3.50.4, sqlite-vec 0.1.9, FTS5, adjacency tables, application fusion | competent custom assembly baseline | SQLite public domain; sqlite-vec MIT OR Apache-2.0 | application-equivalent structure; hybrid ranking non-equivalent |
 
 No external package became a production dependency. NumPy is independent from
-VectorKit and is not used to time a comparison lane. VectorKit graph bindings
+RetrievalKit and is not used to time a comparison lane. RetrievalKit graph bindings
 run in a separate process from the base bindings because the two native Python
 distributions are mutually exclusive.
 
@@ -62,7 +62,7 @@ The normative machine-readable matrix is
 `benchmarks/external-reference/feature-parity-v1.json`. The most important
 boundaries are:
 
-- VectorKit and sqlite-vec are directly comparable for F32 cosine exact search,
+- RetrievalKit and sqlite-vec are directly comparable for F32 cosine exact search,
   equality filtering, deletion exclusion, and save/load replay.
 - USearch 2.26.0's Python binding does not expose predicate filtering. The
   harness records filtered ANN as unsupported and does not substitute
@@ -70,15 +70,15 @@ boundaries are:
 - The SQLite custom application implements graph selection, metadata
   intersection, exact vector scoring, lexical scoring, fusion, hydration,
   deletion, and coordinated persistence. Its FTS5 tokenizer/BM25 and fusion
-  semantics differ from VectorKit, so hybrid output and total application
+  semantics differ from RetrievalKit, so hybrid output and total application
   latency are not direct engine comparisons.
-- VectorKit graph state is immutable after build; incremental graph deletion is
+- RetrievalKit graph state is immutable after build; incremental graph deletion is
   explicitly unsupported. Stable generation-bound selection and composite
   persistence are unsupported in the custom baseline.
 
 ## Correctness and recall
 
-All VectorKit and sqlite-vec exact queries returned the NumPy oracle's ordered
+All RetrievalKit and sqlite-vec exact queries returned the NumPy oracle's ordered
 top 10 for unfiltered and equality-filtered search. Deleted identities were
 excluded, measured results were stable, and save/load replay preserved ordered
 identity. Both application lanes returned the expected graph-scoped exact
@@ -93,7 +93,7 @@ for internal determinism only.
 
 The decline on the unseen final split means this frozen HNSW configuration is
 not an acceptable recall-constrained alternative for these workloads. Phase 5
-does not authorize ANN/HNSW in production VectorKit.
+does not authorize ANN/HNSW in production RetrievalKit.
 
 ## Local exact-search performance
 
@@ -102,14 +102,14 @@ They are local development evidence, not physical-device or marketing claims.
 
 | Workload | System | Unfiltered P50 / P95 | Filtered P50 / P95 |
 | --- | --- | ---: | ---: |
-| 10K × 384d | VectorKit | 0.881 / 2.240 | 0.315 / 0.384 |
+| 10K × 384d | RetrievalKit | 0.881 / 2.240 | 0.315 / 0.384 |
 | 10K × 384d | sqlite-vec | 6.315 / 6.683 | 3.265 / 3.621 |
-| 25K × 384d | VectorKit | 2.039 / 2.248 | 0.915 / 1.058 |
+| 25K × 384d | RetrievalKit | 2.039 / 2.248 | 0.915 / 1.058 |
 | 25K × 384d | sqlite-vec | 15.497 / 16.097 | 8.314 / 8.883 |
-| 50K × 384d | VectorKit | 4.184 / 4.321 | 1.911 / 2.146 |
+| 50K × 384d | RetrievalKit | 4.184 / 4.321 | 1.911 / 2.146 |
 | 50K × 384d | sqlite-vec | 30.480 / 31.189 | 16.111 / 17.321 |
 
-On this environment and protocol, VectorKit's exact retrieval path was faster
+On this environment and protocol, RetrievalKit's exact retrieval path was faster
 than sqlite-vec for every accepted exact row. This statement applies only to
 the frozen local workloads, selected versions, bindings, filtering semantics,
 and timing boundaries. It does not generalize to other devices or datasets.
@@ -117,13 +117,13 @@ and timing boundaries. It does not generalize to other devices or datasets.
 ## Application-stage observations
 
 Directly measured end-to-end application P50/P95 values were 0.073/0.089,
-0.119/0.164, and 0.172/0.250 ms for VectorKit at 10K/25K/50K. The custom SQLite
+0.119/0.164, and 0.172/0.250 ms for RetrievalKit at 10K/25K/50K. The custom SQLite
 application recorded 0.052/0.060, 0.066/0.078, and 0.086/0.103 ms. Raw stage
 rows separately retain graph selection, candidate/filter intersection where
 applicable, vector ranking, lexical ranking, fusion, hydration, and direct
 end-to-end timing.
 
-These numbers are diagnostic profiles, not a relative winner: VectorKit uses
+These numbers are diagnostic profiles, not a relative winner: RetrievalKit uses
 its native graph-scoped weighted hybrid contract, while the custom application
 uses SQLite FTS5 BM25 and different normalization/fusion semantics. The narrow
 result is that both complete workflows execute, persist, reload, and return
@@ -132,12 +132,12 @@ deterministic filter/deletion-safe results.
 ## Build, persistence, and memory
 
 Build/save/load times and byte counts are retained per system and workload in
-`summary.json`. At 50K, persisted sizes were 75.08 MiB for VectorKit exact,
-77.12 MiB for the VectorKit graph application, 77.18 MiB for sqlite-vec exact,
+`summary.json`. At 50K, persisted sizes were 75.08 MiB for RetrievalKit exact,
+77.12 MiB for the RetrievalKit graph application, 77.18 MiB for sqlite-vec exact,
 81.13 MiB for USearch, and 115.07 MiB for the custom SQLite application.
 
 Peak RSS is process-level `ru_maxrss`, not isolated index allocation. At 50K it
-ranged from 193.41 MiB for sqlite-vec exact to 657.20 MiB for the VectorKit
+ranged from 193.41 MiB for sqlite-vec exact to 657.20 MiB for the RetrievalKit
 graph application; these values include Python, bindings, generated fixtures,
 build-time state, and process high-water marks. They must not be read as steady
 state component memory or compared to Phase 4 physical-device budgets.
@@ -146,7 +146,7 @@ state component memory or compared to Phase 4 physical-device budgets.
 
 The final root contains zero adapter/build/load failures and six explicit
 unsupported-operation records: filtered ANN for each workload and incremental
-VectorKit graph deletion for each workload. USearch's three recall failures are
+RetrievalKit graph deletion for each workload. USearch's three recall failures are
 represented by failed acceptance rows rather than fabricated adapter errors.
 
 Pre-final development also surfaced and fixed four harness/toolchain issues:

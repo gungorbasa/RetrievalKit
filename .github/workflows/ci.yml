@@ -41,13 +41,13 @@ jobs:
 
       - name: Run V2 retrieval-quality gates
         run: |
-          cargo run --release -q -p vectorkit-cli -- \
+          cargo run --release -q -p retrievalkit-cli -- \
             bench quality \
             --fixture benchmarks/retrieval-quality/v2/fixture.json \
             --iterations 5
 
       - name: Run Phase 7 graph-quality smoke gate
-        run: cargo test --locked -p vectorkit-graph --test regression_gates
+        run: cargo test --locked -p retrievalkit-graph --test regression_gates
 
       - name: Run Phase 7 deterministic registry gates
         run: scripts/benchmarks/run-phase7-pr.sh

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="560" viewBox="0 0 1200 560"
      role="img" aria-labelledby="title desc">
-  <title id="title">VectorKit retrieval data flow</title>
+  <title id="title">RetrievalKit retrieval data flow</title>
   <desc id="desc">Caller-provided text and embeddings enter the canonical corpus. The corpus feeds exact plus BM25 hybrid retrieval and an optional graph capability with graph-scoped ranking; both produce explainable results. The corpus persists through transactional, checksummed crash-safe snapshots. All stages run in-process in the shared Rust core.</desc>
 
   <rect width="1200" height="560" rx="20" fill="#0A0D12"/>

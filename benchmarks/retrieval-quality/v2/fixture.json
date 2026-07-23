@@ -13833,7 +13833,7 @@
       "metadata": {
         "department": "engineering",
         "kind": "spec",
-        "project": "vectorkit"
+        "project": "retrievalkit"
       },
       "text": "Offline search reliability specification: queries must work after airplane-mode launch, corrupted indexes must produce a rebuild action, and saved indexes must restore deterministic rankings."
     },
@@ -14228,7 +14228,7 @@
       "metadata": {
         "department": "engineering",
         "kind": "checklist",
-        "project": "vectorkit"
+        "project": "retrievalkit"
       },
       "text": "Swift package release checklist: build the XCFramework for device and simulator, verify checksums, test a clean Package.swift integration, tag the release, and publish migration notes."
     },
@@ -14623,7 +14623,7 @@
       "metadata": {
         "department": "engineering",
         "kind": "runbook",
-        "project": "vectorkit"
+        "project": "retrievalkit"
       },
       "text": "Index corruption recovery guide: validate the snapshot, preserve the diagnostic error, remove only the damaged generation, restore a known-good copy when available, or rebuild from application-owned documents."
     },

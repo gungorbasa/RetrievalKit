@@ -17,7 +17,7 @@ Environment:
 Command:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench topk \
+cargo run --release -p retrievalkit-cli -- bench topk \
   --candidates 50000 \
   --queries 1000 \
   --top-k 5,10,50,100
@@ -44,7 +44,7 @@ compares equivalent ranked outputs.
 Command:
 
 ```bash
-cargo run --release -p vectorkit-cli -- bench matrix \
+cargo run --release -p retrievalkit-cli -- bench matrix \
   --chunks 50000 \
   --dimensions 384 \
   --queries 200 \

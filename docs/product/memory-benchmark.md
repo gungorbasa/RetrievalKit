@@ -1,6 +1,6 @@
 # Isolated Memory Benchmark
 
-VectorKit's memory benchmark runs one index scenario per process. It measures
+RetrievalKit's memory benchmark runs one index scenario per process. It measures
 the full lifecycle rather than treating search RSS as the index's total cost.
 
 ## What It Measures
@@ -32,7 +32,7 @@ Use a release build. Debug measurements are retained in the report and should
 not be used for device budgets.
 
 ```bash
-cargo run --release -p vectorkit-cli -- \
+cargo run --release -p retrievalkit-cli -- \
   bench memory --config benchmarks/memory/24k-384d-i8-hybrid-t25.json
 ```
 
@@ -42,7 +42,7 @@ configured budget is exceeded. A small integration check is available at
 
 ## Run on iOS
 
-Build the XCFramework, open `VectorKitIOSBench`, select a Memory preset, and run
+Build the XCFramework, open `RetrievalKitIOSBench`, select a Memory preset, and run
 on physical hardware. Run Memory before any other benchmark after launch. Once
 any benchmark starts, the app requires a relaunch before Memory can run so
 allocator state and the process high-water mark cannot contaminate the scenario.

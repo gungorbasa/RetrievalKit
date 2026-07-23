@@ -1,4 +1,4 @@
-# VectorKit Benchmark Publication Contract v1
+# RetrievalKit Benchmark Publication Contract v1
 
 Status: frozen
 
@@ -10,7 +10,7 @@ Frozen: 2026-07-21
 
 This contract governs the repository-local Phase 6 publication package. It
 does not authorize a website, release, upload, push, announcement, or other
-external publication. It does not change the VectorKit product boundary of
+external publication. It does not change the RetrievalKit product boundary of
 fewer than 50K chunks and it does not reopen measurement.
 
 The package reports three evidence families separately: Phase 3 HotpotQA
@@ -59,7 +59,7 @@ Published percentiles use nearest rank:
 20 warmups. Phase 4b query tables first compute each of five session
 percentiles over 1,000 measured queries after 100 warmups and then publish the
 median session percentile. Ratios divide the comparison-system integer
-nanoseconds by the VectorKit integer nanoseconds with decimal arithmetic.
+nanoseconds by the RetrievalKit integer nanoseconds with decimal arithmetic.
 
 Source integers and full-precision values remain in `evidence-index.json`.
 Displayed milliseconds use three decimal places, ratios two, and percentages

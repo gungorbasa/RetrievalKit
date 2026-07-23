@@ -22,8 +22,8 @@ typed error. Hybrid retrieval supports semantic and hybrid queries. Combined
 graph selections scope retrieval through generation-bound native candidate IDs
 without copying records into Swift.
 
-The base `VectorKitFFI` artifact exports retrieval symbols but no graph ABI.
-The optional `VectorKitGraphFFI` aggregate exports one copy of the core and the
+The base `RetrievalKitFFI` artifact exports retrieval symbols but no graph ABI.
+The optional `RetrievalKitGraphFFI` aggregate exports one copy of the core and the
 graph ABI. The Swift types expose only their enabled engine views:
 `GraphDatabase.graph`, `RetrievalDatabase.retrieval`, and both views on
 `GraphRetrievalDatabase`.
@@ -66,7 +66,7 @@ The following checks passed:
 - `cargo test --all-features`
 - full macOS, iOS device, and iOS simulator XCFramework builds for base and
   graph aggregate artifacts
-- `swift test` for `VectorKitShared`, `VectorKit`, and `VectorKitGraph`
+- `swift test` for `RetrievalKitShared`, `RetrievalKit`, and `RetrievalKitGraph`
 - base/graph native symbol-isolation checks
 - retrieval-only, graph-only, and combined quickstarts with exact expected
   output

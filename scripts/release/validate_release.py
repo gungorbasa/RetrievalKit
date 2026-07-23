@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate VectorKit release metadata, artifacts, and publication authority."""
+"""Validate RetrievalKit release metadata, artifacts, and publication authority."""
 
 from __future__ import annotations
 
@@ -54,13 +54,13 @@ def static_validation(repo: Path) -> dict[str, Any]:
     require(f'let version = "{version}"' in package, "root Swift package version mismatch")
     for product in config["apple"]["products"]:
         require(f'.library(name: "{product}"' in package, f"root Swift package missing product: {product}")
-    require("VECTORKIT_USE_LOCAL_ARTIFACTS" in package, "root Swift package missing explicit local-artifact mode")
+    require("RETRIEVALKIT_USE_LOCAL_ARTIFACTS" in package, "root Swift package missing explicit local-artifact mode")
     require("link exactly one" in config["apple"]["native_aggregate_rule"], "aggregate linkage rule missing")
     require("VERSION" in (repo / "scripts/build-xcframework.sh").read_text(), "XCFramework metadata does not read VERSION")
     require(config["python"]["implementations"] == ["cp310", "cp311", "cp312", "cp313", "cp314"], "Python release matrix changed")
-    require(config["python"]["distributions"] == ["vectorkit", "vectorkit-graph"], "Python distribution set changed")
-    require("mutually exclusive" in (repo / "wrappers/python/python/vectorkit/__init__.py").read_text(), "base Python co-install diagnostic missing")
-    require("mutually exclusive" in (repo / "wrappers/python-graph/python/vectorkit_graph/__init__.py").read_text(), "graph Python co-install diagnostic missing")
+    require(config["python"]["distributions"] == ["retrievalkit", "retrievalkit-graph"], "Python distribution set changed")
+    require("mutually exclusive" in (repo / "wrappers/python/python/retrievalkit/__init__.py").read_text(), "base Python co-install diagnostic missing")
+    require("mutually exclusive" in (repo / "wrappers/python-graph/python/retrievalkit_graph/__init__.py").read_text(), "graph Python co-install diagnostic missing")
     validate_markdown_links(repo)
     validate_workflows(repo)
     checksums = {name: row["swiftpm_checksum"] for name, row in config["apple"]["artifacts"].items()}
@@ -161,7 +161,7 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
     observed: set[tuple[str, str]] = set()
     for path in paths:
         name = path.name
-        normalized = "vectorkit-graph" if name.startswith("vectorkit_graph-") else "vectorkit" if name.startswith("vectorkit-") else ""
+        normalized = "retrievalkit-graph" if name.startswith("retrievalkit_graph-") else "retrievalkit" if name.startswith("retrievalkit-") else ""
         require(bool(normalized), f"unexpected Python wheel: {name}")
         tag = next((tag for tag in config["python"]["implementations"] if f"-{tag}-" in name), "")
         require(bool(tag), f"unexpected Python tag: {name}")

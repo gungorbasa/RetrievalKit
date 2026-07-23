@@ -1,0 +1,4 @@
+module RetrievalKitGraphFFI [system] {
+    header "../../../../../crates/retrievalkit-ffi/include/retrievalkit_graph_ffi.h"
+    export *
+}

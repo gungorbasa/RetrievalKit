@@ -31,7 +31,7 @@ from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE = ROOT / "target/benchmarks/public-collections"
-SAMPLE_SALT = "vectorkit-hotpotqa-linked-abstracts-v1"
+SAMPLE_SALT = "retrievalkit-hotpotqa-linked-abstracts-v1"
 HOTPOT_LICENSE_ID = "CC-BY-SA-4.0"
 HOTPOT_NOTICE_SHA256 = (
     "7faee46f984d08420a5224019a63510956e950159996db04c4d602e2dcaaa5c4"
@@ -1143,7 +1143,7 @@ ATTRIBUTION_NOTICE = (
     "Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W. Cohen, "
     "Ruslan Salakhutdinov, and Christopher D. Manning for HotpotQA (EMNLP "
     "2018), and Wikipedia contributors for article content and links. "
-    "VectorKit deterministically samples questions, retains a source-only "
+    "RetrievalKit deterministically samples questions, retains a source-only "
     "linked-abstract subset, maps pages and links to canonical records and "
     "graph inputs, and generates local MiniLM embeddings. Adapted material "
     "remains subject to CC BY-SA 4.0 ShareAlike. Raw upstream data is not "
@@ -1548,7 +1548,7 @@ def verify_model(model_dir: Path) -> dict[str, str]:
 
 
 def find_embedding_python() -> Path:
-    override = os.environ.get("VECTOR_KIT_HOTPOT_EMBEDDING_PYTHON")
+    override = os.environ.get("RETRIEVAL_KIT_HOTPOT_EMBEDDING_PYTHON")
     candidates = [
         Path(override) if override else None,
         ROOT / "target/embedding-conversion-venv/bin/python",
@@ -1560,7 +1560,7 @@ def find_embedding_python() -> Path:
     raise AdapterError(
         "frozen Core ML embedding runtime is unavailable; expected "
         "target/embedding-conversion-venv/bin/python or "
-        "VECTOR_KIT_HOTPOT_EMBEDDING_PYTHON"
+        "RETRIEVAL_KIT_HOTPOT_EMBEDDING_PYTHON"
     )
 
 
@@ -1626,7 +1626,7 @@ def run_embedding_worker(
     kind: str,
     output: Path,
 ) -> dict[str, str]:
-    with tempfile.TemporaryDirectory(prefix="vectorkit-hotpot-embedding-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="retrievalkit-hotpot-embedding-") as temporary:
         input_path = Path(temporary) / "inputs.jsonl"
         input_path.write_bytes(jsonl_bytes(rows))
         command = [
@@ -2102,7 +2102,7 @@ def build_once(
 
 
 def prepare_production_cli() -> Path:
-    command = ["cargo", "build", "-p", "vectorkit-cli"]
+    command = ["cargo", "build", "-p", "retrievalkit-cli"]
     result = subprocess.run(
         command, cwd=ROOT, text=True, capture_output=True, check=False
     )
@@ -2111,7 +2111,7 @@ def prepare_production_cli() -> Path:
             "failed to build production-backed validation CLI: "
             + (result.stderr.strip() or result.stdout.strip())
         )
-    cli = ROOT / "target/debug/vectorkit"
+    cli = ROOT / "target/debug/retrievalkit"
     if not cli.is_file():
         raise AdapterError(f"production-backed validation CLI is missing: {cli}")
     return cli

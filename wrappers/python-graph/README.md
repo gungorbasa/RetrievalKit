@@ -1,11 +1,11 @@
-# VectorKit Graph for Python
+# RetrievalKit Graph for Python
 
-`vectorkit-graph` is the optional aggregate Python distribution for graph-only
+`retrievalkit-graph` is the optional aggregate Python distribution for graph-only
 and combined graph-and-retrieval databases. It mirrors the separate
-`VectorKitGraph` Swift package; the base `vectorkit` distribution remains
+`RetrievalKitGraph` Swift package; the base `retrievalkit` distribution remains
 graph-free.
 
-Install this distribution instead of `vectorkit` in a graph-enabled process:
+Install this distribution instead of `retrievalkit` in a graph-enabled process:
 
 ```bash
 cd wrappers/python-graph
@@ -16,7 +16,7 @@ python examples/graph_retrieval_quickstart.py
 The combined builder keeps graph schema and retrieval configuration explicit:
 
 ```python
-from vectorkit_graph import (
+from retrievalkit_graph import (
     GraphNode,
     GraphRecordNode,
     GraphRelationship,
@@ -97,5 +97,5 @@ also support cooperative cancellation and second-based timeouts. Rust performs
 schema validation, graph traversal, filtering, ranking, persistence, and
 hydration; the Python layer only converts typed inputs and results.
 
-Because both packages embed native VectorKit core symbols, import either
-`vectorkit` or `vectorkit_graph` in one process, not both.
+Because both packages embed native RetrievalKit core symbols, import either
+`retrievalkit` or `retrievalkit_graph` in one process, not both.

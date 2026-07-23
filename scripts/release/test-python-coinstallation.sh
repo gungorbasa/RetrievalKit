@@ -34,6 +34,6 @@ else:
 PY
 }
 
-check_order vectorkit vectorkit_graph
-check_order vectorkit_graph vectorkit
+check_order retrievalkit retrievalkit_graph
+check_order retrievalkit_graph retrievalkit
 echo "Python base/graph co-installation diagnostic passed"

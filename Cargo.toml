@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "crates/vectorkit-core",
-    "crates/vectorkit-graph",
-    "crates/vectorkit-ingest",
-    "crates/vectorkit-phase4-bench",
-    "crates/vectorkit-cli",
-    "crates/vectorkit-ffi",
-    "crates/vectorkit-python",
+    "crates/retrievalkit-core",
+    "crates/retrievalkit-graph",
+    "crates/retrievalkit-ingest",
+    "crates/retrievalkit-phase4-bench",
+    "crates/retrievalkit-cli",
+    "crates/retrievalkit-ffi",
+    "crates/retrievalkit-python",
 ]
 resolver = "2"
 
@@ -14,4 +14,4 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/vectorkit/vectorkit"
+repository = "https://github.com/retrievalkit/retrievalkit"

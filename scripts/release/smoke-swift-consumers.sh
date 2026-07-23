@@ -15,11 +15,11 @@ import PackageDescription
 let package = Package(
   name: "Consumer",
   platforms: [.macOS(.v14)],
-  dependencies: [.package(name: "VectorKit", path: "$ROOT_DIR")],
+  dependencies: [.package(name: "RetrievalKit", path: "$ROOT_DIR")],
   targets: [
     .executableTarget(
       name: "Consumer",
-      dependencies: [.product(name: "$product", package: "VectorKit")]
+      dependencies: [.product(name: "$product", package: "RetrievalKit")]
     )
   ]
 )
@@ -29,14 +29,14 @@ import $product
 print("$product=ok")
 EOF
   local output
-  output="$(VECTORKIT_USE_LOCAL_ARTIFACTS=1 swift run --package-path "$directory" Consumer)"
+  output="$(RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1 swift run --package-path "$directory" Consumer)"
   [[ "$output" == "$product=ok" ]] || { echo "unexpected $product consumer output: $output" >&2; exit 1; }
 }
 
-smoke_product VectorKit
-smoke_product VectorKitGraph
+smoke_product RetrievalKit
+smoke_product RetrievalKitGraph
 smoke_product EmbeddingKit
-smoke_product VectorKitPipeline
+smoke_product RetrievalKitPipeline
 
 conflict_dir="$TEMP_ROOT/ConflictingAggregates"
 mkdir -p "$conflict_dir/Sources/Consumer"
@@ -46,25 +46,25 @@ import PackageDescription
 let package = Package(
   name: "ConflictingAggregates",
   platforms: [.macOS(.v14)],
-  dependencies: [.package(name: "VectorKit", path: "$ROOT_DIR")],
+  dependencies: [.package(name: "RetrievalKit", path: "$ROOT_DIR")],
   targets: [
     .executableTarget(
       name: "Consumer",
       dependencies: [
-        .product(name: "VectorKit", package: "VectorKit"),
-        .product(name: "VectorKitGraph", package: "VectorKit"),
+        .product(name: "RetrievalKit", package: "RetrievalKit"),
+        .product(name: "RetrievalKitGraph", package: "RetrievalKit"),
       ]
     )
   ]
 )
 EOF
 cat >"$conflict_dir/Sources/Consumer/main.swift" <<'EOF'
-import VectorKit
-import VectorKitGraph
+import RetrievalKit
+import RetrievalKitGraph
 let _: VectorIndex? = nil
 let _: GraphDatabase? = nil
 EOF
-if VECTORKIT_USE_LOCAL_ARTIFACTS=1 swift build --package-path "$conflict_dir" >"$TEMP_ROOT/conflict.log" 2>&1; then
+if RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1 swift build --package-path "$conflict_dir" >"$TEMP_ROOT/conflict.log" 2>&1; then
   echo "base and graph native aggregates unexpectedly linked together" >&2
   exit 1
 fi

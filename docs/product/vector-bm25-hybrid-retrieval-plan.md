@@ -2,15 +2,15 @@
 
 Status: implemented. The active V1 defaults are I8 vector storage, `50/50`
 candidates, and weighted normalized fusion with query-time `alpha=0.6`.
-Refer to `vectorkit-product-spec.md` for current decisions.
+Refer to `retrievalkit-product-spec.md` for current decisions.
 
-This note captures the current direction for improving VectorKit retrieval
+This note captures the current direction for improving RetrievalKit retrieval
 quality and speed. It is library-level guidance, not specific to any one
 example dataset.
 
 ## Goals
 
-- Keep VectorKit local-first and exact for V1.
+- Keep RetrievalKit local-first and exact for V1.
 - Improve retrieval quality across semantic, keyword, and mixed queries.
 - Keep behavior deterministic and explainable.
 - Measure embedding latency separately from retrieval latency.

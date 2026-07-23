@@ -1,0 +1,14 @@
+[package]
+name = "retrievalkit-phase4-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["float_roundtrip"] }
+sha2 = "0.10.9"
+retrievalkit-core = { path = "../retrievalkit-core" }
+retrievalkit-graph = { path = "../retrievalkit-graph" }

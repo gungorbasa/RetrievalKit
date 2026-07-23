@@ -300,8 +300,9 @@ Status: the combined `v0.1.0` Swift/Python release-candidate surface, automatic
 PR CI, remote Swift binary manifest, macOS arm64 wheel matrix, deterministic
 bundle metadata, checksums, SBOM, provenance, governance documents, and guarded
 publication workflows are implemented. External publication remains blocked
-on the owner-approved license/notices, provisioned Phase 7 scheduled/release
-gates, release-revision claim authorization, a signed tag, and owner approval.
+on provisioned Phase 7 scheduled/release gates, release-revision claim
+authorization, a signed tag, and owner approval. Apache-2.0 licensing and
+company attribution are complete.
 
 Goal: make RetrievalKit installable without cloning the repository or manually
 building Rust artifacts.

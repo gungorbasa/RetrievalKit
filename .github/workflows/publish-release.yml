@@ -104,6 +104,9 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             target/release-bundle-v0.1.0/artifacts/* \
+            target/release-bundle-v0.1.0/LICENSE \
+            target/release-bundle-v0.1.0/NOTICE \
+            target/release-bundle-v0.1.0/THIRD_PARTY_NOTICES.md \
             target/release-bundle-v0.1.0/checksums.sha256 \
             target/release-bundle-v0.1.0/inventory.json \
             target/release-bundle-v0.1.0/sbom.spdx.json \

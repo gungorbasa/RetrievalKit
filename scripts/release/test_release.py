@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -19,6 +20,7 @@ def load(name: str, path: Path):
 
 
 validator = load("release_validator", REPO / "scripts/release/validate_release.py")
+assembler = load("release_assembler", REPO / "scripts/release/assemble_release.py")
 canonical_zip = load("canonical_zip", REPO / "scripts/release/canonical_zip.py")
 compare_artifacts = load("compare_artifacts", REPO / "scripts/release/compare_artifacts.py")
 canonicalize_wheel = load("canonicalize_wheel", REPO / "scripts/release/canonicalize_wheel.py")
@@ -28,13 +30,61 @@ class ReleaseTests(unittest.TestCase):
     def test_static_release_metadata_passes_with_explicit_blockers(self) -> None:
         result = validator.static_validation(REPO)
         self.assertEqual(result["version"], "0.1.0")
-        self.assertIn("root LICENSE is absent", result["publication_blockers"])
+        self.assertNotIn("root LICENSE is absent", result["publication_blockers"])
+        self.assertNotIn("owner-approved NOTICE is absent", result["publication_blockers"])
         self.assertIn("owner publication authorization is absent", result["publication_blockers"])
 
-    def test_publication_fails_closed_without_license_and_authorization(self) -> None:
+    def test_publication_fails_closed_without_authorization(self) -> None:
         result = validator.static_validation(REPO)
         with self.assertRaises(validator.ValidationError):
             validator.require(not result["publication_blockers"], "publication blocked")
+
+    def test_release_bundle_includes_license_and_notice(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staging = root / "staging"
+            staging.mkdir()
+            (staging / "demo.zip").write_bytes(b"artifact")
+            output = root / "bundle"
+            assembler.assemble(REPO, staging, output, "a" * 40)
+            for legal_name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+                self.assertEqual(
+                    (output / legal_name).read_bytes(),
+                    (REPO / legal_name).read_bytes(),
+                )
+
+    def test_wrapper_legal_files_match_root(self) -> None:
+        result = validator.static_validation(REPO)
+        self.assertNotIn("third-party notices are absent", result["publication_blockers"])
+        for wrapper in ("wrappers/python", "wrappers/python-graph"):
+            for legal_name in ("LICENSE", "NOTICE"):
+                self.assertNotIn(
+                    f"wrapper legal file out of sync: {wrapper}/{legal_name}",
+                    result["publication_blockers"],
+                )
+                self.assertEqual(
+                    (REPO / wrapper / legal_name).read_bytes(),
+                    (REPO / legal_name).read_bytes(),
+                )
+
+    def test_out_of_sync_wrapper_legal_file_is_a_blocker(self) -> None:
+        blockers = validator.publication_blockers(
+            REPO, validator.load_json(REPO / "release/release-v0.1.0.json")
+        )
+        self.assertNotIn("wrapper legal file out of sync: wrappers/python/LICENSE", blockers)
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            for name in ("Cargo.toml", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+                shutil.copy2(REPO / name, fake / name)
+            for wrapper in ("wrappers/python", "wrappers/python-graph"):
+                (fake / wrapper).mkdir(parents=True)
+                shutil.copy2(REPO / wrapper / "pyproject.toml", fake / wrapper / "pyproject.toml")
+                shutil.copy2(REPO / "NOTICE", fake / wrapper / "NOTICE")
+            (fake / "wrappers/python/LICENSE").write_text("stale", encoding="utf-8")
+            shutil.copy2(REPO / "LICENSE", fake / "wrappers/python-graph/LICENSE")
+            config = validator.load_json(REPO / "release/release-v0.1.0.json")
+            blockers = validator.publication_blockers(fake, config)
+            self.assertIn("wrapper legal file out of sync: wrappers/python/LICENSE", blockers)
 
     def test_canonical_xcframework_zip_is_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

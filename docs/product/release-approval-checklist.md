@@ -6,9 +6,10 @@ Every item is required unless explicitly marked candidate-only.
 
 - [ ] `VERSION`, Cargo, Python, Swift, changelog, and manifests equal `0.1.0`.
 - [ ] Release revision is clean and matches the verified signed `v0.1.0` tag.
-- [ ] Owner-approved root license exists.
-- [ ] Owner-approved notices and third-party attributions exist.
-- [ ] Python license metadata matches the approved project license.
+- [ ] Root `LICENSE` remains the owner-approved Apache-2.0 text.
+- [ ] `NOTICE` retains the owner-approved company attribution and required
+  third-party notices.
+- [ ] Cargo and Python metadata remain Apache-2.0.
 
 ## Evidence and tests
 

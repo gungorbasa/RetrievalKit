@@ -160,8 +160,8 @@ native capabilities.
 
 ## Run from source
 
-The `v0.1.0` preview release candidate is source-first while licensing and
-release qualification are completed.
+The `v0.1.0` preview release candidate is source-first while the remaining
+release qualification gates are completed.
 
 ### Python quickstart
 
@@ -250,13 +250,14 @@ text-to-result retrieval.
 - V1 is designed for local indexes with fewer than 50K chunks.
 - Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
   iOS 15+, including the arm64 iOS Simulator.
-- Installation is source-first until the release license and notices are
+- RetrievalKit is licensed under
+  [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
+- Installation remains source-first until the remaining release gates are
   owner-approved.
 - Benchmark evidence supports scoped observations, not a universal competitor
   claim.
-- SwiftPM and Python package publication remain blocked pending licensing,
-  provisioned Phase 7 release gates, and claim authorization for the release
-  revision.
+- SwiftPM and Python package publication remain blocked pending provisioned
+  Phase 7 release gates and claim authorization for the release revision.
 
 ## Documentation
 

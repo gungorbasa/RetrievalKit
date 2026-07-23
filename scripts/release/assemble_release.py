@@ -71,6 +71,8 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
     artifacts.mkdir()
     for source in files:
         shutil.copy2(source, artifacts / source.name)
+    for legal_name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+        shutil.copy2(repo / legal_name, output / legal_name)
 
     subjects = [{"name": path.name, "digest": {"sha256": digest(path)}} for path in sorted(artifacts.iterdir())]
     sbom = {
@@ -98,7 +100,16 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
         },
     }
     write_json(output / "provenance.intoto.json", provenance)
-    payloads = sorted([*artifacts.iterdir(), output / "sbom.spdx.json", output / "provenance.intoto.json"])
+    payloads = sorted(
+        [
+            *artifacts.iterdir(),
+            output / "LICENSE",
+            output / "NOTICE",
+            output / "THIRD_PARTY_NOTICES.md",
+            output / "sbom.spdx.json",
+            output / "provenance.intoto.json",
+        ]
+    )
     inventory = {"schema_version": 1, "files": {path.relative_to(output).as_posix(): digest(path) for path in payloads}}
     write_json(output / "inventory.json", inventory)
     manifest = {

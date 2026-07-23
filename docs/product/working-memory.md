@@ -28,11 +28,14 @@ implemented, or superseded by the product spec.
   separate base/graph remote aggregates; macOS arm64 Python targets CPython
   3.10–3.14. Release tooling produces canonical XCFramework archives, a closed
   wheel matrix, checksums, SPDX SBOM, and provenance, then validates two-root
-  determinism and fresh consumers. Publication is fail-closed until the owner
-  adds a root license/notices, reconciles Python metadata, provisions passing
-  Phase 7 scheduled/release results for the release revision, authorizes claim
-  handling, and approves a signed tag. No publication or device command is part
-  of this slice. See `docs/product/release-process.md`.
+  determinism and fresh consumers. On 2026-07-23 the owner selected
+  Apache-2.0 for RetrievalKit, with copyright held by EGGYOLK YAZILIM TİCARET
+  LİMİTED ŞİRKETİ; the root license, notice, Cargo metadata, and Python
+  metadata are reconciled. Publication remains fail-closed until the owner
+  provisions passing Phase 7 scheduled/release results for the release
+  revision, authorizes claim handling, and approves a signed tag. No
+  publication or device command is part of this slice. See
+  `docs/product/release-process.md`.
 - Benchmark Phase 7 is complete. Contract V1 and the 26-gate registry freeze
   deterministic PR correctness/integrity, provisioned full-quality, and
   controlled release-performance gates. The checked-in synthetic fixture has
@@ -698,19 +701,17 @@ owner task.
 
 Complete the release gates in this order:
 
-1. Add an owner-approved root license and third-party notices, then reconcile
-   Cargo and Python license metadata with that decision.
-2. Select the final clean release revision and rebuild the complete candidate.
+1. Select the final clean release revision and rebuild the complete candidate.
    The recorded candidate predates later README changes and must not be treated
    as evidence for the final revision.
-3. Provision passing Phase 7 scheduled/full and controlled release results for
+2. Provision passing Phase 7 scheduled/full and controlled release results for
    that same revision. Release qualification consumes pre-collected evidence
    only; it authorizes no device command and exposes no 100K lane.
-4. Authorize README claim handling as either historical frozen-revision
+3. Authorize README claim handling as either historical frozen-revision
    observations or release-revision claims backed by new accepted evidence.
-5. Add the owner publication authorization binding the revision, legal
+4. Add the owner publication authorization binding the revision, legal
    approvals, Phase 7 results, claim mode, and owner identity.
-6. Complete the approval checklist, create a verified signed `v0.1.0` tag,
+5. Complete the approval checklist, create a verified signed `v0.1.0` tag,
    obtain protected-environment approval, run the guarded publication workflow,
    and verify fresh remote SwiftPM and PyPI consumers.
 

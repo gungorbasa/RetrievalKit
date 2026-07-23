@@ -113,11 +113,43 @@ def validate_workflows(repo: Path) -> None:
 def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
     blockers: list[str] = []
     license_path = repo / "LICENSE"
-    notices = [repo / "NOTICE", repo / "THIRD_PARTY_NOTICES.md"]
+    notice_path = repo / "NOTICE"
     if not license_path.is_file():
         blockers.append("root LICENSE is absent")
-    if not any(path.is_file() for path in notices):
-        blockers.append("owner-approved notices are absent")
+    else:
+        license_text = license_path.read_text(encoding="utf-8")
+        if "Apache License" not in license_text or "Version 2.0" not in license_text:
+            blockers.append("root LICENSE is not Apache-2.0")
+    if not notice_path.is_file():
+        blockers.append("owner-approved NOTICE is absent")
+    elif (
+        "Copyright 2026 EGGYOLK YAZILIM TİCARET LİMİTED ŞİRKETİ"
+        not in notice_path.read_text(encoding="utf-8")
+    ):
+        blockers.append("NOTICE lacks the approved company attribution")
+    cargo = (repo / "Cargo.toml").read_text(encoding="utf-8")
+    if 'license = "Apache-2.0"' not in cargo:
+        blockers.append("Cargo metadata is not reconciled with Apache-2.0")
+    pyprojects = (
+        repo / "wrappers/python/pyproject.toml",
+        repo / "wrappers/python-graph/pyproject.toml",
+    )
+    for pyproject in pyprojects:
+        if 'license = { text = "Apache-2.0" }' not in pyproject.read_text(encoding="utf-8"):
+            relative_path = pyproject.relative_to(repo)
+            blockers.append(
+                f"Python metadata is not reconciled with Apache-2.0: {relative_path}"
+            )
+    if not (repo / "THIRD_PARTY_NOTICES.md").is_file():
+        blockers.append("third-party notices are absent")
+    for wrapper in ("wrappers/python", "wrappers/python-graph"):
+        for legal_name in ("LICENSE", "NOTICE"):
+            root_file = repo / legal_name
+            copy_file = repo / wrapper / legal_name
+            if not root_file.is_file():
+                continue
+            if not copy_file.is_file() or copy_file.read_bytes() != root_file.read_bytes():
+                blockers.append(f"wrapper legal file out of sync: {wrapper}/{legal_name}")
     authorization = repo / "release/publication-authorization-v1.json"
     if not authorization.is_file():
         blockers.append("owner publication authorization is absent")
@@ -138,9 +170,6 @@ def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
         if checksum == ZERO_CHECKSUM:
             blockers.append("SwiftPM release checksums are placeholders")
             break
-    # Existing package metadata asserts MIT while the repository has no chosen root grant.
-    if not license_path.is_file():
-        blockers.append("Python MIT metadata is not reconciled with a root license")
     return blockers
 
 
@@ -182,7 +211,16 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
 def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     static = static_validation(repo)
     config = load_json(repo / "release/release-v0.1.0.json")
-    required = {"artifacts", "inventory.json", "release-manifest.json", "checksums.sha256", "sbom.spdx.json", "provenance.intoto.json"}
+    required = {
+        "LICENSE",
+        "NOTICE",
+        "artifacts",
+        "inventory.json",
+        "release-manifest.json",
+        "checksums.sha256",
+        "sbom.spdx.json",
+        "provenance.intoto.json",
+    }
     require({path.name for path in bundle.iterdir()} == required, "release bundle root inventory mismatch")
     checksums: dict[str, str] = {}
     for line in (bundle / "checksums.sha256").read_text().splitlines():
@@ -193,10 +231,26 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     for path in expected_payloads:
         require(digest(path) == checksums[path.relative_to(bundle).as_posix()], f"artifact checksum mismatch: {path.name}")
     inventory = load_json(bundle / "inventory.json")
-    inventory_paths = sorted([*bundle.glob("artifacts/*"), bundle / "sbom.spdx.json", bundle / "provenance.intoto.json"])
+    inventory_paths = sorted(
+        [
+            *bundle.glob("artifacts/*"),
+            bundle / "LICENSE",
+            bundle / "NOTICE",
+            bundle / "sbom.spdx.json",
+            bundle / "provenance.intoto.json",
+        ]
+    )
     require(set(inventory["files"]) == {path.relative_to(bundle).as_posix() for path in inventory_paths}, "closed artifact inventory mismatch")
     for path in inventory_paths:
         require(inventory["files"][path.relative_to(bundle).as_posix()] == digest(path), f"inventory hash mismatch: {path.name}")
+    require(
+        (bundle / "LICENSE").read_bytes() == (repo / "LICENSE").read_bytes(),
+        "release bundle LICENSE differs from the repository license",
+    )
+    require(
+        (bundle / "NOTICE").read_bytes() == (repo / "NOTICE").read_bytes(),
+        "release bundle NOTICE differs from the repository notice",
+    )
     manifest = load_json(bundle / "release-manifest.json")
     require(manifest["version"] == config["version"], "release manifest version mismatch")
     require(manifest["publication_ready"] is False, "unlicensed release bundle claims publication readiness")

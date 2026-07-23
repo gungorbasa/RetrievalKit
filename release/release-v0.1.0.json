@@ -27,8 +27,6 @@
     "release_revision_transfer": false
   },
   "publication_blockers": [
-    "owner-approved root LICENSE and notices",
-    "Python MIT metadata reconciled with the chosen root license",
     "Phase 7 scheduled and release gates provisioned and passing for the release revision",
     "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
     "signed v0.1.0 tag and owner release approval"

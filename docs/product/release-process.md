@@ -13,6 +13,7 @@ both into one process is unsupported.
 - macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
+- Apache-2.0 `LICENSE` and the RetrievalKit company `NOTICE`.
 - Root Swift package products `RetrievalKit`, `RetrievalKitIngest`, `RetrievalKitGraph`,
   `EmbeddingKit`, and `RetrievalKitPipeline`.
 
@@ -44,8 +45,9 @@ without publishing. It never invokes a physical-device command.
 Publication fails closed unless all of the following are true for the release
 revision:
 
-- the owner has selected and approved a root `LICENSE` and notices;
-- Python's current MIT metadata has been reconciled with that choice;
+- the root `LICENSE` remains Apache-2.0 and `NOTICE` retains the approved
+  company attribution;
+- Cargo and Python package metadata remain reconciled as Apache-2.0;
 - Phase 7 scheduled and controlled release results are provisioned and passed;
 - README numeric claims remain explicitly historical or are newly authorized;
 - bundle inventory, checksums, SBOM, provenance, attestations, and fresh

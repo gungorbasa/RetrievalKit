@@ -116,6 +116,7 @@ This does not begin the separate release-and-distribution Phase 5 below.
 | 4 | Real retrieval-quality benchmark | Candidate defaults need evidence from realistic data | Recall and ranking quality are measured against exact ground truth |
 | 5 | Release and distribution | Source-only SDKs cannot be adopted reliably | CI builds, tests, signs, and publishes supported artifacts |
 | 6 | Exact-search scaling gate | Determine whether >50K needs a new engine | Measurements choose parallel exact scan or ANN research |
+| 7 | Website and in-browser demo | Adoption needs a public page that proves the local-first claim live | Demo retrieval runs entirely in the visitor's browser from a published site |
 
 ## Phase 1: Corruption Detection
 
@@ -347,6 +348,42 @@ Any future ANN implementation must:
 ANN does not ship merely because the dataset exceeds 50K. It ships only when it
 improves measured latency without violating the agreed recall target.
 
+## Phase 7: Public Website and In-Browser Demo
+
+Status: proposed 2026-07-23. Requires a product-spec amendment before
+implementation because the current V1 direction does not include a web target.
+
+Goal: publish a public website whose demo proves the local-first claim by
+running RetrievalKit retrieval entirely in the visitor's browser, with an
+optional on-device LLM answering over the retrieved results.
+
+Work:
+
+- Publish a static site (GitHub Pages first; custom domain optional) that
+  reuses the README visual identity and follows the claim policy: permitted
+  Phase 6 claims only, with their frozen-revision qualifiers.
+- Build a demo-only wasm artifact of `retrievalkit-core` plus
+  `retrievalkit-graph`: persistence (`fs2`), `zstd`, and the native SIMD/C
+  kernels feature-gated off; in-memory corpus only; portable scoring fallback.
+  This is not a supported wrapper and creates no cross-language parity
+  obligations.
+- Run query embedding in the browser with a small local model (for example
+  MiniLM 384d via transformers.js) so the full query flow stays on-device.
+- Ship a small prebuilt corpus with graph edges so the demo can show semantic,
+  hybrid, and graph-scoped retrieval with the retrieval trace visible.
+- Add an opt-in in-browser LLM answer layer (WebGPU, small model) on top of
+  the retrieved hits. Retrieval-only remains the default path so the demo
+  works without WebGPU and without a large weight download.
+
+Exit criteria:
+
+- The published demo performs indexing-free query retrieval with no network
+  request on the query path after initial asset download.
+- Wasm retrieval results match native results on a checked-in fixture.
+- The LLM layer is optional, clearly labeled, and its absence does not break
+  the demo.
+- Every numeric statement on the site maps to a permitted claim.
+
 ## Recommended Execution Order
 
 Implement one independently releasable slice at a time:
@@ -359,6 +396,8 @@ Implement one independently releasable slice at a time:
 6. CI and public Apple package distribution.
 7. Add TREC-compatible external and production-derived quality evaluation.
 8. Reassess parallel exact search and ANN using the collected evidence.
+9. Amend the product spec for the web target, then publish the website and
+   wasm-based in-browser demo.
 
 Each slice should update tests, wrapper docs, the changelog, and working memory,
 then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.

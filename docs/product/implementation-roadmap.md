@@ -369,8 +369,12 @@ Work:
   obligations.
 - Run query embedding in the browser with a small local model (for example
   MiniLM 384d via transformers.js) so the full query flow stays on-device.
-- Ship a small prebuilt corpus with graph edges so the demo can show semantic,
-  hybrid, and graph-scoped retrieval with the retrieval trace visible.
+- Ship 2–3 small curated scenarios with prebuilt graph edges (for example
+  notes with backlinks, personal-CRM contacts, papers with citations) so the
+  demo can show semantic, hybrid, and graph-scoped retrieval side by side
+  with the retrieval trace visible. Graphs are prebuilt per scenario because
+  graph scopes are application-defined; the demo does not imply automatic
+  graph construction, which is not an SDK capability.
 - Add an opt-in in-browser LLM answer layer (WebGPU, small model) on top of
   the retrieved hits. Retrieval-only remains the default path so the demo
   works without WebGPU and without a large weight download.

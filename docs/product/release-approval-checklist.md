@@ -33,6 +33,8 @@ Every item is required unless explicitly marked candidate-only.
 
 - [ ] Protected release environment approval is recorded.
 - [ ] GitHub Release is created from the verified tag with validated assets only.
+- [ ] Base and graph Swift package repositories publish manifests from the same
+  signed revision and resolve only their matching native aggregate.
 - [ ] Trusted PyPI publication uploads exactly the validated wheel inventory.
 - [ ] Fresh remote SwiftPM and PyPI consumer projects pass.
 - [ ] Changelog, compatibility notes, and rollback owner are confirmed.

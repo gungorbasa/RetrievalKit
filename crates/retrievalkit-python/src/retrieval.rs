@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use serde::Deserialize;
 use retrievalkit_core::{
     CorpusId, HybridHit, HybridQuery, Metadata, Record, RecordChunkInput, RetrievalConfiguration,
     RetrievalDatabase, SearchHit, SearchQuery,
 };
+use serde::Deserialize;
 
 use crate::{
     file_size_report_to_py, hybrid_trace_to_py, parse_encoding, parse_metric,
@@ -172,7 +172,7 @@ impl PyRetrievalDatabase {
         if let Some(filter) = parse_optional_filter(r#where)? {
             query = query.with_filter(filter);
         }
-        query = query.with_alpha(alpha);
+        query = query.try_with_alpha(alpha).map_err(py_error)?;
         let database = self.require_database()?;
         let hits = py.detach(move || database.hybrid_search(&query).map_err(py_error))?;
         hybrid_hits_to_py(py, database, &hits)

@@ -34,9 +34,9 @@ All notable user-facing changes and persistence migrations are recorded here.
   reload, and latency. Its V1 evidence keeps `50/50` as the hybrid default and
   confirms 98.33% top-5 and 100% top-10 I8/F32 vector-only overlap.
 - New Rust, Swift, and Python indexes now default to I8 scalar-quantized vector
-  storage. Hybrid queries default to 50/50 candidates and RRF with `rrf_k=60`,
-  matching the measured V1 quality configuration. F32 and weighted fusion
-  remain explicit options.
+  storage. Hybrid queries default to 50/50 candidates and weighted normalized
+  score fusion with query-time `alpha = 0.6`, matching the public search API.
+  F32, different `alpha` values, and explicit candidate limits remain available.
 - Retrieval-quality V2 expands the benchmark to 306 documents and 42 graded,
   ambiguous queries. It adds a human relevance-recall gate while preserving V1
   as a historical baseline.
@@ -58,6 +58,12 @@ and replacement structures to guarantee an all-or-nothing swap.
   instead of separately allocated C strings. The graph aggregate ABI version is
   10. Native libraries, headers, and Swift wrappers from different ABI versions
   must not be mixed.
+- Swift base and graph products use separate package manifests so a base-only
+  consumer never resolves or downloads the graph native aggregate.
+- Invalid hybrid `alpha` values are query-argument errors in Rust, Swift, and
+  Python rather than being mislabeled as an invalid persisted index format.
+- `RetrievalKitPipeline` now accepts the shared typed `DocumentID` used by the
+  progressive Swift API while preserving its existing string result surface.
 - Existing persistence format V1 indexes remain readable.
 - Saving a V1 or V2 index writes format V3 and migrates or upgrades its payload
   into a checksummed generation under `.snapshots`.

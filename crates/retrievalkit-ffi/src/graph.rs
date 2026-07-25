@@ -816,7 +816,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
         .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
         .try_with_alpha(options.alpha)
         .map_err(|error| FfiError {
-            code: VK_GRAPH_STATUS_INVALID_IDENTITY,
+            code: super::VK_STATUS_INVALID_ARGUMENT,
             message: error.to_string(),
         })?;
         if let Some(filter) = unsafe { optional_filter(filter) } {
@@ -1309,7 +1309,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
         .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
         .try_with_alpha(options.alpha)
         .map_err(|error| FfiError {
-            code: VK_GRAPH_STATUS_INVALID_IDENTITY,
+            code: super::VK_STATUS_INVALID_ARGUMENT,
             message: error.to_string(),
         })?;
         if let Some(filter) = unsafe { optional_filter(filter) } {

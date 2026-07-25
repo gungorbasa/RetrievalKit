@@ -84,8 +84,9 @@ final class RetrievalKitGraphTests: XCTestCase {
         within: selection
       )
       XCTFail("Rust must reject alpha outside the public range")
-    } catch RetrievalKitGraphError.invalidIdentity(let message) {
+    } catch RetrievalKitGraphError.invalidArgument(let message) {
       XCTAssertTrue(message.contains("alpha must be finite and between 0 and 1"))
+      XCTAssertFalse(message.contains("index format"))
     }
   }
 

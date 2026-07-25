@@ -15,27 +15,17 @@ let baseBinary: Target = useLocalArtifacts
     checksum: "fcc3c94144ce26104c92abb9227a1e95a45395e1db44265e70e585ead915266f"
   )
 
-let graphBinary: Target = useLocalArtifacts
-  ? .binaryTarget(name: "RetrievalKitGraphFFI", path: "target/apple/RetrievalKitGraphFFI.xcframework")
-  : .binaryTarget(
-    name: "RetrievalKitGraphFFI",
-    url: "\(releaseBase)/RetrievalKitGraphFFI.xcframework.zip",
-    checksum: "5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468"
-  )
-
 let package = Package(
   name: "RetrievalKit",
   platforms: [.macOS(.v14), .iOS(.v15)],
   products: [
     .library(name: "RetrievalKit", targets: ["RetrievalKit"]),
     .library(name: "RetrievalKitIngest", targets: ["RetrievalKitIngest"]),
-    .library(name: "RetrievalKitGraph", targets: ["RetrievalKitGraph"]),
     .library(name: "EmbeddingKit", targets: ["EmbeddingKit"]),
     .library(name: "RetrievalKitPipeline", targets: ["RetrievalKitPipeline"]),
   ],
   targets: [
     baseBinary,
-    graphBinary,
     .target(
       name: "RetrievalKitShared",
       path: "wrappers/swift/RetrievalKitShared/Sources/RetrievalKitShared"
@@ -49,11 +39,6 @@ let package = Package(
       name: "RetrievalKitIngest",
       dependencies: ["RetrievalKitFFI"],
       path: "wrappers/swift/RetrievalKit/Sources/RetrievalKitIngest"
-    ),
-    .target(
-      name: "RetrievalKitGraph",
-      dependencies: ["RetrievalKitGraphFFI", "RetrievalKitShared"],
-      path: "wrappers/swift/RetrievalKitGraph/Sources/RetrievalKitGraph"
     ),
     .target(
       name: "EmbeddingKit",

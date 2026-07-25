@@ -374,6 +374,7 @@ public struct GraphSchema: Equatable, Sendable, Codable {
 }
 
 public enum RetrievalKitGraphError: Error, Equatable, Sendable {
+  case invalidArgument(String)
   case invalidSchema(String)
   case invalidIdentity(String)
   case staleGeneration(String)
@@ -394,7 +395,8 @@ public enum RetrievalKitGraphError: Error, Equatable, Sendable {
 extension RetrievalKitGraphError: LocalizedError {
   public var errorDescription: String? {
     switch self {
-    case .invalidSchema(let message), .invalidIdentity(let message), .staleGeneration(let message),
+    case .invalidArgument(let message), .invalidSchema(let message),
+      .invalidIdentity(let message), .staleGeneration(let message),
       .incompatibleVersion(let message), .graphUnavailable(let message),
       .corruptSnapshot(let message), .queryLimitExceeded(let message), .cancelled(let message),
       .timedOut(let message), .lockUnavailable(let message), .invalidDimension(let message),
@@ -647,7 +649,7 @@ private enum Native {
   static func error(_ status: VkStatus, fallback: String) -> RetrievalKitGraphError {
     let message = status.message.map { String(cString: $0) } ?? fallback
     switch status.code {
-    case VK_STATUS_INVALID_ARGUMENT: return .internalError(message)
+    case VK_STATUS_INVALID_ARGUMENT: return .invalidArgument(message)
     case VK_GRAPH_STATUS_INVALID_SCHEMA: return .invalidSchema(message)
     case VK_GRAPH_STATUS_INVALID_IDENTITY: return .invalidIdentity(message)
     case VK_GRAPH_STATUS_STALE_GENERATION: return .staleGeneration(message)

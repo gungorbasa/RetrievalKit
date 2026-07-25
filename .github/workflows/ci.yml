@@ -105,3 +105,7 @@ jobs:
 
       - name: Verify Swift base and graph packages
         run: scripts/verify-swift-graph-wrapper.sh --skip-build
+      - name: Smoke-test isolated Swift consumers
+        run: scripts/release/smoke-swift-consumers.sh
+      - name: Test Swift pipeline package
+        run: swift test --package-path wrappers/swift/RetrievalKitPipeline

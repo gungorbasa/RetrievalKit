@@ -1359,6 +1359,7 @@ impl FfiError {
             | retrievalkit_core::RetrievalKitError::InvalidRecordValue { .. } => {
                 VK_STATUS_INVALID_IDENTITY
             }
+            retrievalkit_core::RetrievalKitError::InvalidQuery { .. } => VK_STATUS_INVALID_ARGUMENT,
             _ => VK_STATUS_CORE_ERROR,
         };
         Self {

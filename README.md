@@ -114,6 +114,11 @@ Swift applications must link either the base native aggregate or the graph
 native aggregate, never both. The graph-enabled distribution already contains
 the base native retrieval capabilities.
 
+Swift base and graph distributions use separate package manifests. This keeps
+SwiftPM from downloading the graph native artifact for a base-only application,
+or the base artifact for a graph application. Until public distribution starts,
+use the checked-in source packages shown in the quickstarts below.
+
 `GraphRetrievalDatabase` is the complete graph-scoped search product.
 `GraphDatabase` is available for applications that need only traversal and
 candidate projection, with no retrieval configuration or embeddings.

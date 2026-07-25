@@ -236,7 +236,8 @@ impl HybridQuery {
     /// binding has identical alpha semantics.
     pub fn try_with_alpha(self, alpha: f32) -> crate::Result<Self> {
         if !alpha.is_finite() || !(0.0..=1.0).contains(&alpha) {
-            return Err(crate::RetrievalKitError::InvalidFormat {
+            return Err(crate::RetrievalKitError::InvalidQuery {
+                parameter: "alpha",
                 message: "alpha must be finite and between 0 and 1; use 1 for vector-only or 0 for BM25-only"
                     .to_owned(),
             });
@@ -500,11 +501,18 @@ mod tests {
                 keyword_weight: 0.75,
             }
         );
-        assert!(HybridQuery::new("query", vec![1.0, 0.0], 5)
-            .try_with_alpha(f32::NAN)
-            .is_err());
-        assert!(HybridQuery::new("query", vec![1.0, 0.0], 5)
-            .try_with_alpha(1.01)
-            .is_err());
+        for alpha in [f32::NAN, 1.01] {
+            let error = HybridQuery::new("query", vec![1.0, 0.0], 5)
+                .try_with_alpha(alpha)
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                crate::RetrievalKitError::InvalidQuery {
+                    parameter: "alpha",
+                    ..
+                }
+            ));
+            assert!(!error.to_string().contains("index format"));
+        }
     }
 }

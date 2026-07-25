@@ -155,7 +155,7 @@ public struct Pipeline: Sendable {
 
         let textChunks = try chunker.chunks(for: document.text)
         guard !textChunks.isEmpty else {
-            throw RetrievalKitPipelineError.emptyDocument(documentID: document.id)
+            throw RetrievalKitPipelineError.emptyDocument(documentID: document.id.rawValue)
         }
         try validateChunks(textChunks, source: document.text)
 
@@ -182,7 +182,7 @@ public struct Pipeline: Sendable {
         }
 
         let chunkIDs = try await index.upsert(document: document, chunks: chunkInputs)
-        return IngestionResult(documentID: document.id, chunkIDs: chunkIDs)
+        return IngestionResult(documentID: document.id.rawValue, chunkIDs: chunkIDs)
     }
 
     /// Embeds text and performs hybrid vector plus BM25 search.

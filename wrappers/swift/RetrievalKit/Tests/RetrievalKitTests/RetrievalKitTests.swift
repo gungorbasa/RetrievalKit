@@ -58,6 +58,7 @@ final class RetrievalKitTests: XCTestCase {
       XCTFail("Rust must reject alpha outside the public range")
     } catch RetrievalKitError.invalidArgument(let message) {
       XCTAssertTrue(message.contains("alpha must be finite and between 0 and 1"))
+      XCTAssertFalse(message.contains("index format"))
     }
   }
 

@@ -9,8 +9,9 @@ database types:
 | Graph records and traversal without retrieval | `GraphDatabase` |
 | Graph traversal followed by scoped retrieval | `GraphRetrievalDatabase` |
 
-The base and graph packages contain alternative native aggregates. An
-application links `RetrievalKit` or `RetrievalKitGraph`, never both.
+The base and graph packages contain alternative native aggregates and use
+separate SwiftPM manifests. An application selects `RetrievalKit` or
+`RetrievalKitGraph`, never both, and downloads only the selected aggregate.
 
 ## Retrieval only
 

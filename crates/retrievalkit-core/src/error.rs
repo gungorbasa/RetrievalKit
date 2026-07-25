@@ -43,6 +43,10 @@ pub enum RetrievalKitError {
         path: String,
         cause: String,
     },
+    InvalidQuery {
+        parameter: &'static str,
+        message: String,
+    },
     InvalidFormat {
         message: String,
     },
@@ -104,6 +108,9 @@ impl Display for RetrievalKitError {
                     "persistence {operation} failed for '{path}': {cause}. Check that the index path exists and is readable when loading, or that its parent directory is writable when saving"
                 )
             }
+            Self::InvalidQuery { parameter, message } => {
+                write!(f, "invalid query parameter '{parameter}': {message}")
+            }
             Self::InvalidFormat { message } => {
                 write!(f, "invalid index format: {message}")
             }
@@ -136,6 +143,19 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "persistence create directory failed for '/tmp/index': Not a directory. Check that the index path exists and is readable when loading, or that its parent directory is writable when saving"
+        );
+    }
+
+    #[test]
+    fn invalid_query_names_the_parameter_without_claiming_index_corruption() {
+        let error = RetrievalKitError::InvalidQuery {
+            parameter: "alpha",
+            message: "must be between 0 and 1".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "invalid query parameter 'alpha': must be between 0 and 1"
         );
     }
 }

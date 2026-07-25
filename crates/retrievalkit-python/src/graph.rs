@@ -6,24 +6,24 @@ use std::time::{Duration, Instant};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use serde::Deserialize;
-use serde_json::json;
 use retrievalkit_core::{
     ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, HybridHit, HybridQuery,
     Metadata, Record, RecordChunkInput, RecordId, RecordInput, RetrievalConfiguration,
-    RetrievalDatabase, SearchHit, SearchQuery, RetrievalKitError as CoreError,
+    RetrievalDatabase, RetrievalKitError as CoreError, SearchHit, SearchQuery,
 };
 use retrievalkit_graph::{
     CancellationToken, Direction, GraphDatabase, GraphDatabaseFileSizes,
     GraphError as RustGraphError, GraphQuery, GraphResult, GraphRetrievalDatabase, GraphScalar,
     GraphSchema, NodeId, NodeSource, NodeType, QueryLimits, RelationshipType, Seed, Traverse,
 };
+use serde::Deserialize;
+use serde_json::json;
 
 use crate::{
     hybrid_trace_to_py, metadata_to_py, parse_encoding, parse_metric, parse_optional_filter,
     py_error, search_hit_to_py, DimensionMismatchError, GraphCancelledError, GraphError,
     GraphQueryError, GraphTimeoutError, InvalidGraphSchemaError,
-    RetrievalCapabilityUnavailableError, StaleGraphSelectionError, RetrievalKitError,
+    RetrievalCapabilityUnavailableError, RetrievalKitError, StaleGraphSelectionError,
 };
 
 #[derive(Debug, Deserialize)]
@@ -524,7 +524,7 @@ impl PyGraphRetrievalDatabase {
         if let Some(filter) = filter {
             query = query.with_filter(filter);
         }
-        query = query.with_alpha(alpha);
+        query = query.try_with_alpha(alpha).map_err(py_error)?;
         let database = self.require_database()?;
         let selection = selection
             .map(|selection| {

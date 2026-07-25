@@ -19,6 +19,9 @@ must fail with actionable typed errors and preserve read/validate/migrate paths
 for formats still listed as supported.
 
 The base and graph native aggregates are alternatives, not co-linkable modules.
+Swift distributes them through separate `RetrievalKit` and
+`RetrievalKitGraph` package manifests so resolving one capability never
+downloads the other native aggregate.
 `retrievalkit` and `retrievalkit-graph` are likewise mutually exclusive inside one
 Python process. This boundary is part of compatibility, not a temporary build
 limitation.

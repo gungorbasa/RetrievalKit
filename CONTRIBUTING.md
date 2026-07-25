@@ -32,12 +32,9 @@ Python changes should also run `scripts/check-python-wrapper.sh` and
 
 ## Legal status
 
-The repository does not yet contain an owner-approved root license. Do not
-assume that source availability grants redistribution rights. Until the owner
-adds a license and contribution terms, discuss any non-trivial code
-contribution with the maintainer before submitting it. Never add or change a
-license on the project's behalf.
+RetrievalKit is licensed under Apache-2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE). Do not add or change the project license, copyright holder,
+or contribution terms without explicit owner approval.
 
 By submitting a change, you confirm that you have the right to submit its
-contents. A future contribution policy may require additional confirmation
-before a public release.
+contents.

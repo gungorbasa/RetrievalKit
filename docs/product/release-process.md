@@ -14,14 +14,16 @@ both into one process is unsupported.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
 - Apache-2.0 `LICENSE` and the RetrievalKit company `NOTICE`.
-- Root Swift package products `RetrievalKit`, `RetrievalKitIngest`, `RetrievalKitGraph`,
+- Base Swift package products `RetrievalKit`, `RetrievalKitIngest`,
   `EmbeddingKit`, and `RetrievalKitPipeline`.
+- Standalone graph Swift package product `RetrievalKitGraph`.
 
-The root `Package.swift` resolves remote release archives by default. Repository
-verification uses `RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1` with independently built
-local XCFrameworks. A consumer must select either the base products or
-`RetrievalKitGraph`; an application must never link the base and graph native
-aggregates together.
+The root `Package.swift` is the base package and resolves only
+`RetrievalKitFFI`. `Package.graph.swift` is staged as `Package.swift` in the
+standalone graph package repository and resolves only `RetrievalKitGraphFFI`.
+Repository verification uses `RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1` with
+independently built local XCFrameworks. A consumer selects one package; an
+application must never link the base and graph native aggregates together.
 
 ## Candidate procedure
 
@@ -30,8 +32,9 @@ aggregates together.
 2. Run Phase 7 PR gates and Phase 6/README claim validation.
 3. Build both three-slice arm64 XCFrameworks and canonical zip archives.
 4. Build both wheel distributions for each CPython 3.10–3.14 interpreter.
-5. Smoke-test every artifact in a fresh consumer environment, including the
-   negative base/graph co-import test.
+5. Smoke-test both isolated Swift package manifests and every artifact in a
+   fresh consumer environment, including the negative base/graph co-import
+   test.
 6. Assemble the closed release bundle with checksums, SBOM, and provenance.
 7. Repeat from a second clean root and compare every byte.
 8. Validate the bundle independently and complete the
@@ -52,6 +55,8 @@ revision:
 - README numeric claims remain explicitly historical or are newly authorized;
 - bundle inventory, checksums, SBOM, provenance, attestations, and fresh
   consumer smoke tests pass;
+- the standalone graph Swift package repository and protected publication step
+  are configured and point at the same signed source revision;
 - `v0.1.0` is a verified signed tag matching the authorization;
 - the protected release environment receives owner approval.
 

@@ -126,6 +126,8 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
     assert database.retrieval.hybrid_search("alpha", [1.0, 0.0])[0][
         "document_id"
     ] == "alpha"
+    with pytest.raises(ValueError, match="invalid query parameter 'alpha'"):
+        database.retrieval.hybrid_search("alpha", [1.0, 0.0], alpha=1.1)
 
     database.save(tmp_path)
     RetrievalDatabase.validate(tmp_path)

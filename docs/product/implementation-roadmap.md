@@ -297,7 +297,7 @@ delay packaging the already-tested V1 SDK.
 ## Phase 5: Release and Distribution
 
 Status: the combined `v0.1.0` Swift/Python release-candidate surface, automatic
-PR CI, remote Swift binary manifest, macOS arm64 wheel matrix, deterministic
+PR CI, isolated base/graph Swift binary manifests, macOS arm64 wheel matrix, deterministic
 bundle metadata, checksums, SBOM, provenance, governance documents, and guarded
 publication workflows are implemented. External publication remains blocked
 on provisioned Phase 7 scheduled/release gates, release-revision claim
@@ -312,7 +312,8 @@ Work:
 - Add CI for Rust formatting, Clippy, tests, Python typing/lint/tests, Swift
   tests, and persistence compatibility fixtures.
 - Build versioned Apple XCFramework release artifacts with checksums.
-- Switch the public Swift package to a tagged binary target.
+- Publish separate tagged base and graph Swift packages so selecting one
+  capability downloads only its matching binary target.
 - Build and smoke-test both Python distributions for CPython 3.10–3.14 on
   macOS arm64. Other operating systems remain future work.
 - Add release automation, signed tags, changelog checks, and migration notes.
@@ -321,7 +322,8 @@ Work:
 
 Exit criteria:
 
-- A fresh Swift project can add one package URL and run the example.
+- A fresh Swift project can add the base or graph package URL and run the
+  matching example without downloading the other aggregate.
 - A supported Python environment can install one wheel command and run the
   example.
 - CI reproduces every published artifact from a tag.

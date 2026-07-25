@@ -11,8 +11,8 @@ use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 use retrievalkit_core::{
     ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridFusionTrace, HybridHit,
     HybridQuery, IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata,
-    MetadataValue, SearchHit, SearchQuery, StoredChunk, VectorEncoding,
-    RetrievalKitError as CoreError, VectorMetric,
+    MetadataValue, RetrievalKitError as CoreError, SearchHit, SearchQuery, StoredChunk,
+    VectorEncoding, VectorMetric,
 };
 use retrievalkit_ingest::{chunk_text as split_text, ChunkingConfig, ChunkingStrategy};
 
@@ -23,7 +23,11 @@ pyo3::create_exception!(_native, FilterError, RetrievalKitError);
 pyo3::create_exception!(_native, UnsupportedFormatError, RetrievalKitError);
 pyo3::create_exception!(_native, CorruptIndexError, RetrievalKitError);
 pyo3::create_exception!(_native, InvalidIdentityError, RetrievalKitError);
-pyo3::create_exception!(_native, RetrievalCapabilityUnavailableError, RetrievalKitError);
+pyo3::create_exception!(
+    _native,
+    RetrievalCapabilityUnavailableError,
+    RetrievalKitError
+);
 #[cfg(feature = "graph")]
 pyo3::create_exception!(_native, GraphError, RetrievalKitError);
 #[cfg(feature = "graph")]
@@ -260,7 +264,7 @@ impl PyIndex {
         if let Some(filter) = filter {
             query = query.with_filter(filter);
         }
-        query = query.with_alpha(alpha);
+        query = query.try_with_alpha(alpha).map_err(py_error)?;
 
         let hits = py.detach(move || self.inner.hybrid_search(&query).map_err(py_error))?;
         hybrid_hits_to_py(py, &self.inner, &hits)
@@ -358,7 +362,9 @@ pub(crate) fn py_error(error: CoreError) -> PyErr {
         }
         CoreError::InvalidRecordValue { .. }
         | CoreError::InvalidCandidateScope { .. }
-        | CoreError::StaleGeneration { .. } => RetrievalKitError::new_err(error.to_string()),
+        | CoreError::StaleGeneration { .. }
+        | CoreError::MissingEmbedding { .. } => RetrievalKitError::new_err(error.to_string()),
+        CoreError::InvalidQuery { .. } => PyValueError::new_err(error.to_string()),
         CoreError::InvalidDimension { .. } => DimensionMismatchError::new_err(error.to_string()),
         CoreError::InvalidRange { .. } => FilterError::new_err(error.to_string()),
         CoreError::Persistence { .. } => PersistenceError::new_err(error.to_string()),

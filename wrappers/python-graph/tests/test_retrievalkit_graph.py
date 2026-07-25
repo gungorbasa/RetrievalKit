@@ -140,6 +140,10 @@ def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None
         "gamma", [0.0, 1.0], within=selection, where={"tenant": "blue"}
     )
     assert hybrid[0]["document_id"] == "gamma"
+    with pytest.raises(ValueError, match="invalid query parameter 'alpha'"):
+        database.retrieval.hybrid_search(
+            "gamma", [0.0, 1.0], within=selection, alpha=-0.1
+        )
 
     database.save(tmp_path)
     GraphRetrievalDatabase.validate(tmp_path)

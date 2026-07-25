@@ -33,11 +33,23 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("root LICENSE is absent", result["publication_blockers"])
         self.assertNotIn("owner-approved NOTICE is absent", result["publication_blockers"])
         self.assertIn("owner publication authorization is absent", result["publication_blockers"])
+        self.assertIn(
+            "standalone graph Swift package repository and protected publication step are not configured",
+            result["publication_blockers"],
+        )
 
     def test_publication_fails_closed_without_authorization(self) -> None:
         result = validator.static_validation(REPO)
         with self.assertRaises(validator.ValidationError):
             validator.require(not result["publication_blockers"], "publication blocked")
+
+    def test_swift_packages_resolve_only_their_selected_aggregate(self) -> None:
+        base = (REPO / "Package.swift").read_text()
+        graph = (REPO / "Package.graph.swift").read_text()
+        self.assertIn("RetrievalKitFFI.xcframework.zip", base)
+        self.assertNotIn("RetrievalKitGraphFFI", base)
+        self.assertIn("RetrievalKitGraphFFI.xcframework.zip", graph)
+        self.assertNotIn("RetrievalKitFFI.xcframework.zip", graph)
 
     def test_release_bundle_includes_license_and_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

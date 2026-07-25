@@ -6,6 +6,14 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-25 Swift distribution decision: the root `Package.swift` is base-only
+  and `Package.graph.swift` is the standalone graph publication manifest.
+  SwiftPM eagerly resolved both remote binary targets when they shared one
+  manifest, even for a base-only consumer. Release validation and clean
+  consumer smoke tests now require each package to reference only its matching
+  aggregate. Public graph distribution still requires a dedicated package
+  repository and protected publication step; release qualification remains
+  paused until the owner resumes it.
 - 2026-07-25 Swift/Rust boundary decision: Swift is the first logic-free wrapper
   implementation and establishes the contract for later language wrappers.
   Rust owns progressive dimension inference, pending graph-only records,
@@ -95,10 +103,10 @@ implemented, or superseded by the product spec.
   reconciled on 2026-07-23 without changing gate inventory, thresholds,
   baselines, fixtures, or result schema.
 - The `v0.1.0` combined Swift/Python release-candidate implementation is the
-  active distribution slice. The root README is an evidence-led product page
+  paused distribution slice. The root README is an evidence-led product page
   whose numeric observations are mapped to permitted Phase 6 claim IDs and
-  mutation-tested in CI. The root Swift package exposes five products with
-  separate base/graph remote aggregates; macOS arm64 Python targets CPython
+  mutation-tested in CI. Separate Swift package manifests expose the four base
+  products and the standalone graph product; macOS arm64 Python targets CPython
   3.10–3.14. Release tooling produces canonical XCFramework archives, a closed
   wheel matrix, checksums, SPDX SBOM, and provenance, then validates two-root
   determinism and fresh consumers. On 2026-07-23 the owner selected

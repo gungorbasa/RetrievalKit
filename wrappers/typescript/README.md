@@ -12,10 +12,12 @@ names remain provisional until naming clearance.
 
 ## Build and verify
 
+The initial target requires macOS arm64, Node.js 20 or newer, and Rust `cargo`.
 From this directory:
 
 ```bash
-npm install
+npm ci
+npm run preflight
 npm run build
 npm run typecheck
 npm run lint
@@ -23,6 +25,10 @@ npm test
 npm run verify:contents
 npm run smoke:install
 ```
+
+`preflight` prints the detected Node.js, Rust, and host values and exits before
+compilation when a requirement is not met. `build:native` invokes the same
+preflight, so it cannot accidentally bypass the platform check.
 
 `build:native` compiles the same napi-rs crate twice. The base build has no
 `retrievalkit-graph` dependency; the graph build enables the off-by-default

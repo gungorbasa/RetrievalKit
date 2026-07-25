@@ -49,13 +49,6 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-require_tool() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "required tool not found: $1" >&2
-    exit 1
-  fi
-}
-
 venv_python() {
   local venv_dir="$1"
   if [[ -x "$venv_dir/bin/python" ]]; then
@@ -69,8 +62,7 @@ venv_python() {
 }
 
 main() {
-  require_tool cargo
-  require_tool "$PYTHON_BIN"
+  PYTHON_BIN="$PYTHON_BIN" "$ROOT_DIR/scripts/preflight-python-wrapper.sh"
 
   if [[ ! -f "$WRAPPER_DIR/pyproject.toml" ]]; then
     echo "missing Python wrapper pyproject: $WRAPPER_DIR/pyproject.toml" >&2

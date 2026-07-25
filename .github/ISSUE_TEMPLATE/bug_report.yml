@@ -23,6 +23,12 @@ body:
         - Swift graph
         - Python base
         - Python graph
+        - TypeScript / Node base
+        - TypeScript / Node graph
+        - Kotlin / JVM base
+        - Kotlin / JVM graph
+        - Android base (arm64-v8a)
+        - Android graph (arm64-v8a)
         - Build or release tooling
     validations:
       required: true
@@ -30,7 +36,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Hardware, OS, architecture, toolchain, and build mode.
+      description: Hardware, OS, architecture, package/runtime version, toolchain versions, and build mode. For Android, also include the device/API level and NDK version.
     validations:
       required: true
   - type: textarea

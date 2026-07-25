@@ -7,6 +7,8 @@ REPO_DIR=$(CDPATH= cd -- "$KOTLIN_DIR/../.." && pwd)
 MANIFEST="$REPO_DIR/crates/retrievalkit-jni/Cargo.toml"
 MODE=${1:-all}
 
+"$SCRIPT_DIR/preflight.sh" "$MODE"
+
 install_licenses() {
   destination=$1
   mkdir -p "$destination"

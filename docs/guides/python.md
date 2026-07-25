@@ -41,6 +41,11 @@ Build the graph-enabled wrapper from the repository root:
 PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
 ```
 
+The check begins with a preflight that requires CPython 3.10-3.14, Python
+`venv`, and Rust `cargo`. It prints the detected interpreter, Rust toolchain,
+and host before starting the build. The initial public wheel target remains
+macOS arm64 even when source validation succeeds on another host.
+
 Then run this checked-in program:
 
 ```bash

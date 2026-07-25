@@ -94,13 +94,29 @@ filtering, lexical order, stale/cross-corpus rejection, and ranking.
 ## Build and verify from source
 
 The JNI crate is compiled twice: base without the `graph` feature and graph with
-it. Use JDK 17 with the pinned Gradle/Android plugin toolchain. The wrapper
-README supplies the exact host and Android NDK commands. After the native
-libraries are present, run:
+it. Use JDK 17 with the pinned Gradle/Android plugin toolchain. On macOS, select
+an installed JDK 17 before running the preflight. It reports both required and
+detected Java, Rust, host, and (for Android) NDK values, then exits before a
+build if they do not match:
 
 ```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
 cd wrappers/kotlin
+./scripts/preflight.sh jvm
+./scripts/build-native.sh jvm
 ./gradlew :base:test :graph:test
+./gradlew :example-retrieval:run
+```
+
+To build the Android arm64-v8a packages, install Rust's Android target and NDK
+26, then run:
+
+```bash
+rustup target add aarch64-linux-android
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+./scripts/preflight.sh android
+./scripts/build-native.sh android
 ./gradlew :android-base:assembleRelease :android-graph:assembleRelease
 ```
 

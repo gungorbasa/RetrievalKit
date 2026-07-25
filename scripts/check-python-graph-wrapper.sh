@@ -13,6 +13,8 @@ elif [[ $# -ne 0 ]]; then
   exit 2
 fi
 
+PYTHON_BIN="$PYTHON_BIN" "$ROOT_DIR/scripts/preflight-python-wrapper.sh"
+
 PYTHON_TAG="$($PYTHON_BIN -c 'import sys; print(f"py{sys.version_info.major}{sys.version_info.minor}")')"
 VENV_DIR="$ROOT_DIR/target/python-graph-wrapper-check-venv-$PYTHON_TAG"
 BUILD_DIR="$ROOT_DIR/target/python-graph-wrapper-wheel-$PYTHON_TAG"

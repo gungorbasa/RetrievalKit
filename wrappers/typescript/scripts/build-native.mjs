@@ -2,16 +2,11 @@ import { cp, mkdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
+import "./preflight.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const workspace = resolve(here, "../../..");
 const target = process.argv[2] ?? "all";
-
-if (process.platform !== "darwin" || process.arch !== "arm64") {
-  throw new Error(
-    `The initial repository package supports macOS arm64 only; got ${process.platform}-${process.arch}.`
-  );
-}
 
 async function run(command, args) {
   await new Promise((resolvePromise, reject) => {

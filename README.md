@@ -136,9 +136,15 @@ candidate projection, with no retrieval configuration or embeddings.
 ## Run from source
 
 The `v0.1.0` preview release candidate is source-first while the remaining
-release qualification gates are completed.
+release qualification gates are completed. Start at the repository root. Each
+quickstart below checks its required toolchain before compiling and runs a
+checked-in example; none publishes or downloads a RetrievalKit package from a
+public registry.
 
-Run the Python graph-enabled Apollo example:
+### Python
+
+The initial wheel target is macOS arm64 with CPython 3.10-3.14. Install
+[Rust](https://rustup.rs/) and a supported Python interpreter, then run:
 
 ```bash
 PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
@@ -147,6 +153,41 @@ target/python-graph-wrapper-check-venv-py*/bin/python \
 ```
 
 Expected output: `graph-hybrid=decision-swift`.
+
+### TypeScript/Node
+
+The initial Node target is macOS arm64 with Node.js 20 or newer. Install
+[Rust](https://rustup.rs/) and Node.js, then run:
+
+```bash
+cd wrappers/typescript
+npm ci
+npm run preflight
+npm run build
+node graph/examples/graph-retrieval.mjs
+```
+
+The printed result contains `documentId: 'local'`.
+
+### Kotlin/JVM
+
+The initial Kotlin/JVM native package runs on macOS arm64. It requires Rust and
+JDK 17; the produced bytecode targets Java 11. On macOS, select an installed
+JDK 17 and run:
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
+cd wrappers/kotlin
+./scripts/preflight.sh jvm
+./scripts/build-native.sh jvm
+./gradlew :example-retrieval:run
+```
+
+Expected output includes:
+`kotlin: Kotlin calls the local Rust retrieval core. (1.0)`.
+
+### Swift
 
 Run the Swift graph-enabled Apollo example:
 
@@ -161,22 +202,6 @@ Expected output: `graph-hybrid=decision-swift`.
 See the [Python guide](docs/guides/python.md) or
 [Swift guide](docs/guides/swift.md) for complete code, base-package commands,
 semantic-only variations, persistence, and trace inspection.
-
-Run the Node.js source checks on a supported macOS arm64 host:
-
-```bash
-cd wrappers/typescript
-npm ci
-npm run build
-npm test
-```
-
-Run the Kotlin/JVM tests after building the matching JNI aggregate:
-
-```bash
-cd wrappers/kotlin
-./gradlew :base:test :graph:test
-```
 
 The [TypeScript guide](docs/guides/typescript.md) and
 [Kotlin guide](docs/guides/kotlin.md) include native build, package-content,

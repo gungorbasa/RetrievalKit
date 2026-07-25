@@ -131,9 +131,14 @@ from Rust as typed values.
 
 ## Build and verify from source
 
+The initial target requires macOS arm64, Node.js 20 or newer, and Rust `cargo`.
+The preflight prints detected values and exits before compilation when they do
+not match.
+
 ```bash
 cd wrappers/typescript
 npm ci
+npm run preflight
 npm run build
 npm run typecheck
 npm run lint

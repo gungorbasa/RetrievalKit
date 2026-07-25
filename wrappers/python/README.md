@@ -229,8 +229,13 @@ wheels, run the wheel build on each target operating system and smoke-test the
 installed package. The smoke test runs by default.
 
 ```bash
+PYTHON_BIN=python3 scripts/preflight-python-wrapper.sh
 scripts/build-python-wheel.sh
 ```
+
+The preflight requires CPython 3.10-3.14, `venv`, and Rust `cargo`, and prints
+the detected versions and host. Passing source validation outside macOS arm64
+does not expand the initial public wheel support claim.
 
 This keeps the repository ready for platform-specific wheels without requiring a
 GitHub CI workflow yet.

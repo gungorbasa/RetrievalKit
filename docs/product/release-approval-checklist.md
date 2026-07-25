@@ -19,6 +19,9 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] Phase 6 publication and README claim validators pass.
 - [ ] Numeric claims are historical frozen-revision observations or explicitly reauthorized.
 - [ ] Rust, Python, Swift, wrapper-isolation, snippets, links, and package tests pass.
+- [ ] The wrapper onboarding qualification succeeds from independent clean-source
+  exports for Python, Node, and Kotlin; retain its machine-readable timing,
+  machine/toolchain, and dependency-cache evidence with the release record.
 
 ## Artifacts
 

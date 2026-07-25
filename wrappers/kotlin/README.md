@@ -84,9 +84,13 @@ The base native crate is built without the Cargo `graph` feature and has no
 ## Build and test
 
 The checked-in Gradle wrapper pins Gradle 8.10.2. Use JDK 17 for the build
-toolchain; the produced JVM bytecode targets Java 11. From this directory:
+toolchain; the produced JVM bytecode targets Java 11. On macOS, select JDK 17
+and run the preflight before compiling:
 
 ```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
+./scripts/preflight.sh jvm
 ./scripts/build-native.sh jvm
 ./gradlew :base:test :graph:test
 ./gradlew :example-retrieval:run
@@ -98,13 +102,19 @@ The three examples cover retrieval-only, graph-only, and graph-scoped
 retrieval. They use progressive Rust builders and do not expose native handles,
 internal chunk IDs, or keyed embedding maps.
 
+The preflight prints required and detected Java, Rust, and host values.
+`build-native.sh` invokes it again and stops with a corrective JDK message
+instead of passing an unsupported Java version to Gradle.
+
 Android requires Rust's `aarch64-linux-android` standard library plus Android
 NDK 26. The script defaults to the standard macOS SDK location and accepts
 `ANDROID_NDK_HOME` when the NDK is elsewhere:
 
 ```bash
 rustup target add aarch64-linux-android
-ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125" ./scripts/build-native.sh android
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+./scripts/preflight.sh android
+./scripts/build-native.sh android
 ./gradlew :android-base:assembleRelease :android-graph:assembleRelease
 ./gradlew :android-base:inspectBaseAar :android-graph:inspectGraphAar
 ./gradlew :base:inspectBaseArtifact

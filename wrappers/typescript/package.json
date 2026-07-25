@@ -7,10 +7,11 @@
     "graph"
   ],
   "scripts": {
+    "preflight": "node ./scripts/preflight.mjs",
     "build:native": "node ./scripts/build-native.mjs all",
     "build": "npm run build:native && npm run build --workspace retrievalkit-node-local && npm run build --workspace retrievalkit-node-graph-local",
     "typecheck": "npm run typecheck --workspace retrievalkit-node-local && npm run typecheck --workspace retrievalkit-node-graph-local",
-    "lint": "eslint base/src base/test graph/src graph/test && node --check scripts/build-native.mjs && node --check scripts/verify-package-content.mjs && node --check scripts/smoke-local-install.mjs",
+    "lint": "eslint base/src base/test graph/src graph/test && node --check scripts/preflight.mjs && node --check scripts/build-native.mjs && node --check scripts/verify-package-content.mjs && node --check scripts/smoke-local-install.mjs",
     "test": "npm run test --workspace retrievalkit-node-local && npm run test --workspace retrievalkit-node-graph-local",
     "verify:contents": "node ./scripts/verify-package-content.mjs",
     "smoke:install": "node ./scripts/smoke-local-install.mjs"

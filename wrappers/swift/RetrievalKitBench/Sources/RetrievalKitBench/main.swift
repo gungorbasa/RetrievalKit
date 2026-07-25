@@ -438,7 +438,7 @@ func loadIndex(path: String) throws -> OpaquePointer {
 }
 
 func search(index: OpaquePointer, embedding: [Float], topK: Int) throws -> [RealSearchHit] {
-    var output = VkSearchResultBuffer(hits: nil, count: 0)
+    var output = VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
     var status = VkStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
 
@@ -461,13 +461,40 @@ func search(index: OpaquePointer, embedding: [Float], topK: Int) throws -> [Real
         return []
     }
 
-    return UnsafeBufferPointer(start: hits, count: output.count).map { hit in
+    return try UnsafeBufferPointer(start: hits, count: output.count).map { hit in
         RealSearchHit(
-            documentID: String(cString: hit.document_id),
+            documentID: try packedString(hit.document_id, utf8: output.utf8, count: output.utf8_len),
             score: hit.score,
-            text: String(cString: hit.text)
+            text: try packedString(hit.text, utf8: output.utf8, count: output.utf8_len)
         )
     }
+}
+
+func packedString(
+    _ range: VkUtf8Range,
+    utf8: UnsafePointer<UInt8>?,
+    count: Int
+) throws -> String {
+    guard
+        count >= 0,
+        range.offset >= 0,
+        range.length >= 0,
+        range.offset <= count,
+        range.length <= count - range.offset
+    else {
+        throw BenchHarnessError.retrievalKit("native result contains an invalid UTF-8 range")
+    }
+    guard range.length > 0 else {
+        return ""
+    }
+    guard let utf8 else {
+        throw BenchHarnessError.retrievalKit("native result UTF-8 arena is missing")
+    }
+    let bytes = UnsafeBufferPointer(start: utf8.advanced(by: range.offset), count: range.length)
+    guard let value = String(bytes: bytes, encoding: .utf8) else {
+        throw BenchHarnessError.retrievalKit("native result contains invalid UTF-8")
+    }
+    return value
 }
 
 func statusMessage(_ status: VkStatus) -> String {

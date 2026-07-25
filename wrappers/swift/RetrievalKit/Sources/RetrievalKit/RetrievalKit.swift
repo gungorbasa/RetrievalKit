@@ -658,7 +658,7 @@ public actor VectorIndex {
       try Task.checkCancellation()
       return try await Task.detached(priority: Task.currentPriority) {
         defer { withExtendedLifetime(owner) {} }
-        var output = VkSearchResultBuffer(hits: nil, count: 0)
+        var output = emptySearchResultBuffer()
         let ffiFilter = try filter?.makeFFI()
         var status = VkStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
@@ -680,7 +680,10 @@ public actor VectorIndex {
         guard let hits = output.hits else {
           return []
         }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(SearchResult.init)
+        let decoder = PackedResultDecoder(output)
+        return try UnsafeBufferPointer(start: hits, count: output.count).map {
+          try SearchResult($0, decoder: decoder)
+        }
       }.value
     }
   }
@@ -697,7 +700,7 @@ public actor VectorIndex {
       try Task.checkCancellation()
       return try await Task.detached(priority: Task.currentPriority) {
         defer { withExtendedLifetime(owner) {} }
-        var output = VkKeywordResultBuffer(hits: nil, count: 0)
+        var output = emptyKeywordResultBuffer()
         let arena = CStringArena()
         let ffiFilter = try filter?.makeFFI()
         var status = VkStatus(code: 0, message: nil)
@@ -717,7 +720,10 @@ public actor VectorIndex {
         guard let hits = output.hits else {
           return []
         }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
+        let decoder = PackedResultDecoder(output)
+        return try UnsafeBufferPointer(start: hits, count: output.count).map {
+          try KeywordResult($0, decoder: decoder)
+        }
       }.value
     }
   }
@@ -737,7 +743,7 @@ public actor VectorIndex {
       try Task.checkCancellation()
       return try await Task.detached(priority: Task.currentPriority) {
         defer { withExtendedLifetime(owner) {} }
-        var output = VkHybridResultBuffer(hits: nil, count: 0)
+        var output = emptyHybridResultBuffer()
         let arena = CStringArena()
         let ffiOptions = options.ffiValue(alpha: alpha)
         let ffiFilter = try filter?.makeFFI()
@@ -763,7 +769,10 @@ public actor VectorIndex {
         guard let hits = output.hits else {
           return []
         }
-        return UnsafeBufferPointer(start: hits, count: output.count).map(HybridResult.init)
+        let decoder = PackedResultDecoder(output)
+        return try UnsafeBufferPointer(start: hits, count: output.count).map {
+          try HybridResult($0, decoder: decoder)
+        }
       }.value
     }
   }
@@ -819,7 +828,7 @@ public actor RetrievalQueries {
   {
     let owner = owner
     return try await Task.detached(priority: Task.currentPriority) {
-      var output = VkSearchResultBuffer(hits: nil, count: 0)
+      var output = emptySearchResultBuffer()
       let ffiFilter = try filter?.makeFFI()
       var status = VkStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
@@ -832,7 +841,10 @@ public actor RetrievalQueries {
       else { throw RetrievalKitError.from(status: status) }
       defer { retrievalkit_search_results_free(output) }
       guard let hits = output.hits else { return [] }
-      return UnsafeBufferPointer(start: hits, count: output.count).map(SearchResult.init)
+      let decoder = PackedResultDecoder(output)
+      return try UnsafeBufferPointer(start: hits, count: output.count).map {
+        try SearchResult($0, decoder: decoder)
+      }
     }.value
   }
 
@@ -843,7 +855,7 @@ public actor RetrievalQueries {
   ) async throws -> [KeywordResult] {
     let owner = owner
     return try await Task.detached(priority: Task.currentPriority) {
-      var output = VkKeywordResultBuffer(hits: nil, count: 0)
+      var output = emptyKeywordResultBuffer()
       let arena = CStringArena()
       let ffiFilter = try filter?.makeFFI()
       var status = VkStatus(code: 0, message: nil)
@@ -860,7 +872,10 @@ public actor RetrievalQueries {
       else { throw RetrievalKitError.from(status: status) }
       defer { retrievalkit_keyword_results_free(output) }
       guard let hits = output.hits else { return [] }
-      return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
+      let decoder = PackedResultDecoder(output)
+      return try UnsafeBufferPointer(start: hits, count: output.count).map {
+        try KeywordResult($0, decoder: decoder)
+      }
     }.value
   }
 
@@ -871,7 +886,7 @@ public actor RetrievalQueries {
   ) async throws -> [HybridResult] {
     let owner = owner
     return try await Task.detached(priority: Task.currentPriority) {
-      var output = VkHybridResultBuffer(hits: nil, count: 0)
+      var output = emptyHybridResultBuffer()
       let arena = CStringArena()
       let ffiFilter = try filter?.makeFFI()
       var status = VkStatus(code: 0, message: nil)
@@ -885,7 +900,10 @@ public actor RetrievalQueries {
       else { throw RetrievalKitError.from(status: status) }
       defer { retrievalkit_hybrid_results_free(output) }
       guard let hits = output.hits else { return [] }
-      return UnsafeBufferPointer(start: hits, count: output.count).map(HybridResult.init)
+      let decoder = PackedResultDecoder(output)
+      return try UnsafeBufferPointer(start: hits, count: output.count).map {
+        try HybridResult($0, decoder: decoder)
+      }
     }.value
   }
 }
@@ -1018,11 +1036,11 @@ public actor RetrievalDatabase {
 }
 
 extension SearchResult {
-  fileprivate init(_ hit: VkSearchHit) {
+  fileprivate init(_ hit: VkSearchHit, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
-      documentID: string(from: hit.document_id),
-      text: string(from: hit.text),
+      documentID: try decoder.string(hit.document_id),
+      text: try decoder.string(hit.text),
       score: hit.score,
       trace: SearchTrace(
         vectorScore: hit.vector_score,
@@ -1033,23 +1051,26 @@ extension SearchResult {
 }
 
 extension KeywordResult {
-  fileprivate init(_ hit: VkKeywordHit) {
+  fileprivate init(_ hit: VkKeywordHit, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
-      documentID: string(from: hit.document_id),
-      text: string(from: hit.text),
+      documentID: try decoder.string(hit.document_id),
+      text: try decoder.string(hit.text),
       score: hit.score,
-      matchedTerms: strings(from: hit.matched_terms)
+      matchedTerms: try decoder.strings(
+        start: hit.matched_terms_start,
+        count: hit.matched_terms_count
+      )
     )
   }
 }
 
 extension HybridResult {
-  fileprivate init(_ hit: VkHybridHit) {
+  fileprivate init(_ hit: VkHybridHit, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
-      documentID: string(from: hit.document_id),
-      text: string(from: hit.text),
+      documentID: try decoder.string(hit.document_id),
+      text: try decoder.string(hit.text),
       score: hit.score,
       vectorScore: hit.has_vector_score ? hit.vector_score : nil,
       keywordScore: hit.has_keyword_score ? hit.keyword_score : nil,
@@ -1059,11 +1080,108 @@ extension HybridResult {
         normalizedVectorScore: hit.has_normalized_vector_score ? hit.normalized_vector_score : nil,
         normalizedKeywordScore: hit.has_normalized_keyword_score
           ? hit.normalized_keyword_score : nil,
-        matchedTerms: strings(from: hit.matched_terms),
+        matchedTerms: try decoder.strings(
+          start: hit.matched_terms_start,
+          count: hit.matched_terms_count
+        ),
         filterMatched: hit.filter_matched
       )
     )
   }
+}
+
+private struct PackedResultDecoder {
+  private let utf8: UnsafePointer<UInt8>?
+  private let utf8Count: Int
+  private let matchedTerms: UnsafePointer<VkUtf8Range>?
+  private let matchedTermsCount: Int
+
+  init(_ output: VkSearchResultBuffer) {
+    utf8 = output.utf8
+    utf8Count = output.utf8_len
+    matchedTerms = nil
+    matchedTermsCount = 0
+  }
+
+  init(_ output: VkKeywordResultBuffer) {
+    utf8 = output.utf8
+    utf8Count = output.utf8_len
+    matchedTerms = output.matched_terms
+    matchedTermsCount = output.matched_terms_count
+  }
+
+  init(_ output: VkHybridResultBuffer) {
+    utf8 = output.utf8
+    utf8Count = output.utf8_len
+    matchedTerms = output.matched_terms
+    matchedTermsCount = output.matched_terms_count
+  }
+
+  func string(_ range: VkUtf8Range) throws -> String {
+    guard
+      utf8Count >= 0,
+      range.offset >= 0,
+      range.length >= 0,
+      range.offset <= utf8Count,
+      range.length <= utf8Count - range.offset
+    else {
+      throw RetrievalKitError.core("native result contains an invalid UTF-8 range")
+    }
+    guard range.length > 0 else { return "" }
+    guard let utf8 else {
+      throw RetrievalKitError.core("native result UTF-8 arena is missing")
+    }
+    let bytes = UnsafeBufferPointer(start: utf8.advanced(by: range.offset), count: range.length)
+    guard let value = String(bytes: bytes, encoding: .utf8) else {
+      throw RetrievalKitError.core("native result contains invalid UTF-8")
+    }
+    return value
+  }
+
+  func strings(start: Int, count: Int) throws -> [String] {
+    guard
+      matchedTermsCount >= 0,
+      start >= 0,
+      count >= 0,
+      start <= matchedTermsCount,
+      count <= matchedTermsCount - start
+    else {
+      throw RetrievalKitError.core("native result contains an invalid matched-term range")
+    }
+    guard count > 0 else { return [] }
+    guard let matchedTerms else {
+      throw RetrievalKitError.core("native result matched-term ranges are missing")
+    }
+    return try UnsafeBufferPointer(start: matchedTerms.advanced(by: start), count: count).map {
+      try string($0)
+    }
+  }
+}
+
+private func emptySearchResultBuffer() -> VkSearchResultBuffer {
+  VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
+}
+
+private func emptyKeywordResultBuffer() -> VkKeywordResultBuffer {
+  VkKeywordResultBuffer(
+    hits: nil,
+    count: 0,
+    utf8: nil,
+    utf8_len: 0,
+    matched_terms: nil,
+    matched_terms_count: 0
+  )
+}
+
+private func emptyHybridResultBuffer() -> VkHybridResultBuffer {
+  VkHybridResultBuffer(
+    hits: nil,
+    count: 0,
+    utf8: nil,
+    utf8_len: 0,
+    matched_terms: nil,
+    matched_terms_count: 0
+  )
 }
 
 private enum FFI {
@@ -1289,20 +1407,4 @@ private func withOptionalPointer<T, R>(
     return body(nil)
   }
   return withUnsafePointer(to: &unwrapped, body)
-}
-
-private func string(from pointer: UnsafeMutablePointer<CChar>?) -> String {
-  guard let pointer else {
-    return ""
-  }
-  return String(cString: pointer)
-}
-
-private func strings(from array: VkStringArray) -> [String] {
-  guard let values = array.values else {
-    return []
-  }
-  return UnsafeBufferPointer(start: values, count: array.count).map { pointer in
-    pointer.map { String(cString: $0) } ?? ""
-  }
 }

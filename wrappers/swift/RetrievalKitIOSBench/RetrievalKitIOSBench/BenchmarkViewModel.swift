@@ -754,7 +754,7 @@ private func vectorSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkSearchResultBuffer(hits: nil, count: 0)
+    var output = VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
     var status = VkStatus(code: 0, message: nil)
     defer {
         retrievalkit_status_clear(&status)
@@ -781,16 +781,17 @@ private func vectorSearch(
         return []
     }
 
-    return UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
+    let decoder = PackedResultDecoder(output)
+    return try UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
         RealDataHit(
             rank: offset + 1,
             chunkID: hit.chunk_id,
-            documentID: string(hit.document_id),
+            documentID: try decoder.string(hit.document_id),
             score: hit.score,
             vectorScore: hit.vector_score,
             keywordScore: nil,
             matchedTerms: [],
-            textPreview: preview(string(hit.text))
+            textPreview: preview(try decoder.string(hit.text))
         )
     }
 }
@@ -801,7 +802,9 @@ private func keywordSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkKeywordResultBuffer(hits: nil, count: 0)
+    var output = VkKeywordResultBuffer(
+        hits: nil, count: 0, utf8: nil, utf8_len: 0,
+        matched_terms: nil, matched_terms_count: 0)
     var status = VkStatus(code: 0, message: nil)
     defer {
         retrievalkit_status_clear(&status)
@@ -820,16 +823,18 @@ private func keywordSearch(
         return []
     }
 
-    return UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
+    let decoder = PackedResultDecoder(output)
+    return try UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
         RealDataHit(
             rank: offset + 1,
             chunkID: hit.chunk_id,
-            documentID: string(hit.document_id),
+            documentID: try decoder.string(hit.document_id),
             score: hit.score,
             vectorScore: nil,
             keywordScore: hit.score,
-            matchedTerms: strings(hit.matched_terms),
-            textPreview: preview(string(hit.text))
+            matchedTerms: try decoder.strings(
+                start: hit.matched_terms_start, count: hit.matched_terms_count),
+            textPreview: preview(try decoder.string(hit.text))
         )
     }
 }
@@ -841,7 +846,9 @@ private func hybridSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkHybridResultBuffer(hits: nil, count: 0)
+    var output = VkHybridResultBuffer(
+        hits: nil, count: 0, utf8: nil, utf8_len: 0,
+        matched_terms: nil, matched_terms_count: 0)
     var status = VkStatus(code: 0, message: nil)
     let options = VkHybridOptions(
         vector_top_k: 50,
@@ -880,16 +887,18 @@ private func hybridSearch(
         return []
     }
 
-    return UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
+    let decoder = PackedResultDecoder(output)
+    return try UnsafeBufferPointer(start: hits, count: output.count).enumerated().map { offset, hit in
         RealDataHit(
             rank: offset + 1,
             chunkID: hit.chunk_id,
-            documentID: string(hit.document_id),
+            documentID: try decoder.string(hit.document_id),
             score: hit.score,
             vectorScore: hit.has_vector_score ? hit.vector_score : nil,
             keywordScore: hit.has_keyword_score ? hit.keyword_score : nil,
-            matchedTerms: strings(hit.matched_terms),
-            textPreview: preview(string(hit.text))
+            matchedTerms: try decoder.strings(
+                start: hit.matched_terms_start, count: hit.matched_terms_count),
+            textPreview: preview(try decoder.string(hit.text))
         )
     }
 }
@@ -938,16 +947,78 @@ private func statusDescription(_ status: VkStatus) -> String {
     status.message.map { String(cString: $0) } ?? "unknown RetrievalKit FFI error"
 }
 
-private func string(_ pointer: UnsafeMutablePointer<CChar>?) -> String {
-    pointer.map { String(cString: $0) } ?? ""
-}
+private struct PackedResultDecoder {
+    private let utf8: UnsafePointer<UInt8>?
+    private let utf8Count: Int
+    private let matchedTerms: UnsafePointer<VkUtf8Range>?
+    private let matchedTermsCount: Int
 
-private func strings(_ array: VkStringArray) -> [String] {
-    guard let values = array.values else {
-        return []
+    init(_ output: VkSearchResultBuffer) {
+        utf8 = output.utf8
+        utf8Count = output.utf8_len
+        matchedTerms = nil
+        matchedTermsCount = 0
     }
-    return UnsafeBufferPointer(start: values, count: array.count).map { pointer in
-        pointer.map { String(cString: $0) } ?? ""
+
+    init(_ output: VkKeywordResultBuffer) {
+        utf8 = output.utf8
+        utf8Count = output.utf8_len
+        matchedTerms = output.matched_terms
+        matchedTermsCount = output.matched_terms_count
+    }
+
+    init(_ output: VkHybridResultBuffer) {
+        utf8 = output.utf8
+        utf8Count = output.utf8_len
+        matchedTerms = output.matched_terms
+        matchedTermsCount = output.matched_terms_count
+    }
+
+    func string(_ range: VkUtf8Range) throws -> String {
+        guard
+            utf8Count >= 0,
+            range.offset >= 0,
+            range.length >= 0,
+            range.offset <= utf8Count,
+            range.length <= utf8Count - range.offset
+        else {
+            throw BenchmarkError.ffi("native result contains an invalid UTF-8 range")
+        }
+        guard range.length > 0 else {
+            return ""
+        }
+        guard let utf8 else {
+            throw BenchmarkError.ffi("native result UTF-8 arena is missing")
+        }
+        let bytes = UnsafeBufferPointer(
+            start: utf8.advanced(by: range.offset), count: range.length)
+        guard let value = String(bytes: bytes, encoding: .utf8) else {
+            throw BenchmarkError.ffi("native result contains invalid UTF-8")
+        }
+        return value
+    }
+
+    func strings(start: Int, count: Int) throws -> [String] {
+        guard
+            matchedTermsCount >= 0,
+            start >= 0,
+            count >= 0,
+            start <= matchedTermsCount,
+            count <= matchedTermsCount - start
+        else {
+            throw BenchmarkError.ffi("native result contains an invalid matched-term range")
+        }
+        guard count > 0 else {
+            return []
+        }
+        guard let matchedTerms else {
+            throw BenchmarkError.ffi("native result matched-term ranges are missing")
+        }
+        return try UnsafeBufferPointer(
+            start: matchedTerms.advanced(by: start), count: count
+        ).map {
+            try string($0)
+        }
     }
 }
 

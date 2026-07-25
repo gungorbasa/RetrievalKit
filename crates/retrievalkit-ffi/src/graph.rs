@@ -16,10 +16,12 @@ use retrievalkit_graph::{FieldPath, GraphSchema, NodeType, RelationshipType};
 use serde::Deserialize;
 
 use super::{
-    ffi_bool, ffi_ptr, optional_filter, parse_encoding_code, parse_hybrid_fusion, parse_metric,
-    read_c_string, read_f32_slice, string_array, string_to_owned_ptr, FfiError, VkFilter,
-    VkHybridHit, VkHybridOptions, VkHybridQueryOptions, VkHybridResultBuffer, VkKeywordHit,
-    VkKeywordResultBuffer, VkSearchHit, VkSearchResultBuffer, VkStatus,
+    empty_hybrid_result_buffer, empty_keyword_result_buffer, empty_search_result_buffer, ffi_bool,
+    ffi_ptr, optional_filter, packed_hybrid_result_buffer, packed_keyword_result_buffer,
+    packed_search_result_buffer, parse_encoding_code, parse_hybrid_fusion, parse_metric,
+    read_c_string, read_f32_slice, string_array, string_to_owned_ptr, FfiError, PackedRecordId,
+    PackedResultText, VkFilter, VkHybridOptions, VkHybridQueryOptions, VkHybridResultBuffer,
+    VkKeywordResultBuffer, VkSearchResultBuffer, VkStatus,
 };
 
 const VK_GRAPH_STATUS_INVALID_SCHEMA: i32 = 100;
@@ -229,7 +231,7 @@ struct EmbeddedRecordBatch {
 
 #[no_mangle]
 pub extern "C" fn retrievalkit_graph_ffi_abi_version() -> u32 {
-    9
+    10
 }
 
 #[no_mangle]
@@ -679,6 +681,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_semantic_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_search_result_buffer() };
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
             FfiError::invalid_argument("graph retrieval database must not be null")
         })?;
@@ -697,7 +700,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_semantic_search(
             database.database.semantic_search(&query)?
         };
         unsafe {
-            *out_results = capability_search_buffer(&database.database, hits);
+            *out_results = capability_search_buffer(&database.database, hits)?;
         }
         Ok(())
     })
@@ -717,6 +720,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_keyword_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_keyword_result_buffer() };
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
             FfiError::invalid_argument("graph retrieval database must not be null")
         })?;
@@ -732,7 +736,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_keyword_search(
             database.database.keyword_search(&query)?
         };
         unsafe {
-            *out_results = capability_keyword_buffer(&database.database, hits);
+            *out_results = capability_keyword_buffer(&database.database, hits)?;
         }
         Ok(())
     })
@@ -755,6 +759,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
             FfiError::invalid_argument("graph retrieval database must not be null")
         })?;
@@ -776,7 +781,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search(
             database.database.hybrid_search(&query)?
         };
         unsafe {
-            *out_results = capability_hybrid_buffer(&database.database, hits);
+            *out_results = capability_hybrid_buffer(&database.database, hits)?;
         }
         Ok(())
     })
@@ -799,6 +804,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
             FfiError::invalid_argument("graph retrieval database must not be null")
         })?;
@@ -824,7 +830,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
             database.database.hybrid_search(&query)?
         };
         unsafe {
-            *out_results = capability_hybrid_buffer(&database.database, hits);
+            *out_results = capability_hybrid_buffer(&database.database, hits)?;
         }
         Ok(())
     })
@@ -1180,6 +1186,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_search_result_buffer() };
         let index = unsafe { graph_index(index) }?;
         let scope = unsafe { graph_scope(scope) }?;
         let mut query = SearchQuery::new(
@@ -1193,7 +1200,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_search(
             *out_results = graph_search_buffer(
                 index,
                 index.index.search_in_candidates(&query, &scope.scope)?,
-            )
+            )?
         };
         Ok(())
     })
@@ -1213,6 +1220,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_keyword_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_keyword_result_buffer() };
         let index = unsafe { graph_index(index) }?;
         let scope = unsafe { graph_scope(scope) }?;
         let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
@@ -1225,7 +1233,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_keyword_search(
                 index
                     .index
                     .keyword_search_in_candidates(&query, &scope.scope)?,
-            )
+            )?
         };
         Ok(())
     })
@@ -1248,6 +1256,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let index = unsafe { graph_index(index) }?;
         let scope = unsafe { graph_scope(scope) }?;
         let mut query = HybridQuery::new(
@@ -1266,7 +1275,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search(
                 index
                     .index
                     .hybrid_search_in_candidates(&query, &scope.scope)?,
-            )
+            )?
         };
         Ok(())
     })
@@ -1289,6 +1298,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let index = unsafe { graph_index(index) }?;
         let scope = unsafe { graph_scope(scope) }?;
         let mut query = HybridQuery::new(
@@ -1311,7 +1321,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
                 index
                     .index
                     .hybrid_search_in_candidates(&query, &scope.scope)?,
-            )
+            )?
         };
         Ok(())
     })
@@ -1530,173 +1540,72 @@ fn decode_schema(json: String) -> std::result::Result<GraphSchema, FfiError> {
 fn capability_search_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<SearchHit>,
-) -> VkSearchResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| {
-            let (document_id, record_id) =
-                capability_result_ids(database, hit.chunk_id, &hit.document_id);
-            VkSearchHit {
-                chunk_id: hit.chunk_id,
-                document_id,
-                record_id,
-                text: string_to_owned_ptr(
-                    database
-                        .corpus()
-                        .chunk(hit.chunk_id)
-                        .map_or("", |chunk| chunk.text.as_str()),
-                ),
-                score: hit.score,
-                vector_score: hit.trace.vector_score,
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkSearchResultBuffer { hits, count }
+) -> std::result::Result<VkSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
 }
 
 fn capability_keyword_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<KeywordHit>,
-) -> VkKeywordResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| {
-            let (document_id, record_id) =
-                capability_result_ids(database, hit.chunk_id, &hit.document_id);
-            VkKeywordHit {
-                chunk_id: hit.chunk_id,
-                document_id,
-                record_id,
-                text: string_to_owned_ptr(
-                    database
-                        .corpus()
-                        .chunk(hit.chunk_id)
-                        .map_or("", |chunk| chunk.text.as_str()),
-                ),
-                score: hit.score,
-                matched_terms: string_array(hit.matched_terms),
-            }
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkKeywordResultBuffer { hits, count }
+) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
 }
 
 fn capability_hybrid_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<HybridHit>,
-) -> VkHybridResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| {
-            let (document_id, record_id) =
-                capability_result_ids(database, hit.chunk_id, &hit.document_id);
-            VkHybridHit {
-                chunk_id: hit.chunk_id,
-                document_id,
-                record_id,
-                text: string_to_owned_ptr(
-                    database
-                        .corpus()
-                        .chunk(hit.chunk_id)
-                        .map_or("", |chunk| chunk.text.as_str()),
-                ),
-                score: hit.score,
-                has_vector_score: hit.vector_score.is_some(),
-                vector_score: hit.vector_score.unwrap_or_default(),
-                has_keyword_score: hit.keyword_score.is_some(),
-                keyword_score: hit.keyword_score.unwrap_or_default(),
-                has_vector_rank: hit.trace.vector_rank.is_some(),
-                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
-                has_keyword_rank: hit.trace.keyword_rank.is_some(),
-                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
-                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
-                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
-                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
-                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
-                matched_terms: string_array(hit.trace.matched_terms),
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkHybridResultBuffer { hits, count }
+) -> std::result::Result<VkHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
 }
 
-fn capability_result_ids(
+fn capability_result_text(
     database: &GraphRetrievalDatabase,
     chunk_id: u64,
-    fallback_record_id: &str,
-) -> (*mut c_char, *mut c_char) {
+) -> PackedResultText<'_> {
     let identity = database.corpus().chunk_identity(chunk_id);
-    let document_id = identity.map_or(fallback_record_id, |value| value.chunk_key.as_str());
-    let record_id = identity.map_or(fallback_record_id, |value| value.record_id.as_str());
-    (
-        string_to_owned_ptr(document_id),
-        string_to_owned_ptr(record_id),
-    )
+    PackedResultText {
+        document_id: identity.map(|value| value.chunk_key.as_str()),
+        record_id: identity.map_or(PackedRecordId::DocumentId, |value| {
+            PackedRecordId::Value(value.record_id.as_str())
+        }),
+        text: database
+            .corpus()
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    }
 }
 
-fn graph_search_buffer(index: &VkGraphIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| VkSearchHit {
-            chunk_id: hit.chunk_id,
-            document_id: string_to_owned_ptr(&hit.document_id),
-            record_id: string_to_owned_ptr(&hit.document_id),
-            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
-            score: hit.score,
-            vector_score: hit.trace.vector_score,
-            filter_matched: hit.trace.filter_matched,
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkSearchResultBuffer { hits, count }
+fn graph_search_buffer(
+    index: &VkGraphIndex,
+    hits: Vec<SearchHit>,
+) -> std::result::Result<VkSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::DocumentId,
+        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+    })
 }
-fn graph_keyword_buffer(index: &VkGraphIndex, hits: Vec<KeywordHit>) -> VkKeywordResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| VkKeywordHit {
-            chunk_id: hit.chunk_id,
-            document_id: string_to_owned_ptr(&hit.document_id),
-            record_id: string_to_owned_ptr(&hit.document_id),
-            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
-            score: hit.score,
-            matched_terms: string_array(hit.matched_terms),
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkKeywordResultBuffer { hits, count }
+
+fn graph_keyword_buffer(
+    index: &VkGraphIndex,
+    hits: Vec<KeywordHit>,
+) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::DocumentId,
+        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+    })
 }
-fn graph_hybrid_buffer(index: &VkGraphIndex, hits: Vec<HybridHit>) -> VkHybridResultBuffer {
-    let hits = hits
-        .into_iter()
-        .map(|hit| VkHybridHit {
-            chunk_id: hit.chunk_id,
-            document_id: string_to_owned_ptr(&hit.document_id),
-            record_id: string_to_owned_ptr(&hit.document_id),
-            text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
-            score: hit.score,
-            has_vector_score: hit.vector_score.is_some(),
-            vector_score: hit.vector_score.unwrap_or_default(),
-            has_keyword_score: hit.keyword_score.is_some(),
-            keyword_score: hit.keyword_score.unwrap_or_default(),
-            has_vector_rank: hit.trace.vector_rank.is_some(),
-            vector_rank: hit.trace.vector_rank.unwrap_or_default(),
-            has_keyword_rank: hit.trace.keyword_rank.is_some(),
-            keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
-            has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
-            normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
-            has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
-            normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
-            matched_terms: string_array(hit.trace.matched_terms),
-            filter_matched: hit.trace.filter_matched,
-        })
-        .collect();
-    let (hits, count) = boxed_buffer(hits);
-    VkHybridResultBuffer { hits, count }
+
+fn graph_hybrid_buffer(
+    index: &VkGraphIndex,
+    hits: Vec<HybridHit>,
+) -> std::result::Result<VkHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::DocumentId,
+        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+    })
 }
 
 impl From<retrievalkit_graph::GraphError> for FfiError {
@@ -1766,6 +1675,7 @@ mod tests {
     fn graph_errors_map_to_the_stable_public_status_taxonomy() {
         use retrievalkit_graph::GraphError;
 
+        assert_eq!(retrievalkit_graph_ffi_abi_version(), 10);
         let cases = [
             (
                 GraphError::InvalidSchema {
@@ -1960,10 +1870,7 @@ mod tests {
         assert!(!database.is_null());
         let text = CString::new("semantic").unwrap();
         let embedding = [1.0_f32, 0.0];
-        let mut results = VkHybridResultBuffer {
-            hits: std::ptr::null_mut(),
-            count: 0,
-        };
+        let mut results = empty_hybrid_result_buffer();
         assert!(unsafe {
             retrievalkit_graph_retrieval_hybrid_search_alpha(
                 database,
@@ -1984,11 +1891,27 @@ mod tests {
         });
         assert_eq!(status.code, super::super::VK_STATUS_OK);
         assert_eq!(results.count, 1);
+        let hit = unsafe { &*results.hits };
+        assert!(hit.has_record_id);
+        assert_eq!(unsafe { result_string(&results, hit.document_id) }, "body");
+        assert_eq!(unsafe { result_string(&results, hit.record_id) }, "item-1");
+        assert_eq!(unsafe { result_string(&results, hit.text) }, "semantic");
         unsafe {
             super::super::retrievalkit_hybrid_results_free(results);
             retrievalkit_graph_retrieval_database_free(database);
             super::super::retrievalkit_status_clear(&mut status);
         }
+    }
+
+    unsafe fn result_string(
+        buffer: &VkHybridResultBuffer,
+        range: super::super::VkUtf8Range,
+    ) -> &str {
+        assert!(range.offset <= buffer.utf8_len);
+        assert!(range.length <= buffer.utf8_len - range.offset);
+        let bytes =
+            unsafe { std::slice::from_raw_parts(buffer.utf8.add(range.offset), range.length) };
+        std::str::from_utf8(bytes).unwrap()
     }
 
     #[test]
@@ -2261,10 +2184,7 @@ mod tests {
             1
         );
         let embedding = [1.0_f32, 0.0];
-        let mut exact = VkSearchResultBuffer {
-            hits: std::ptr::null_mut(),
-            count: 0,
-        };
+        let mut exact = empty_search_result_buffer();
         assert!(unsafe {
             retrievalkit_graph_scope_search(
                 index,
@@ -2279,10 +2199,7 @@ mod tests {
         });
         assert_eq!(exact.count, 1);
         let text = CString::new("generic").unwrap();
-        let mut keyword = VkKeywordResultBuffer {
-            hits: std::ptr::null_mut(),
-            count: 0,
-        };
+        let mut keyword = empty_keyword_result_buffer();
         assert!(unsafe {
             retrievalkit_graph_scope_keyword_search(
                 index,

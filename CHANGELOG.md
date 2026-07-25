@@ -54,6 +54,10 @@ and replacement structures to guarantee an all-or-nothing swap.
 
 ### Compatibility
 
+- Search result buffers now use a packed UTF-8 arena and offset/length ranges
+  instead of separately allocated C strings. The graph aggregate ABI version is
+  10. Native libraries, headers, and Swift wrappers from different ABI versions
+  must not be mixed.
 - Existing persistence format V1 indexes remain readable.
 - Saving a V1 or V2 index writes format V3 and migrates or upgrades its payload
   into a checksummed generation under `.snapshots`.
@@ -62,6 +66,7 @@ and replacement structures to guarantee an all-or-nothing swap.
 
 ### Upgrade
 
-No application code changes are required. Rebuild the Rust core or wrapper,
-load the existing index normally, and call the existing save API when ready to
-migrate it.
+No Swift application source changes are required. Rebuild and upgrade the Rust
+native artifact, C headers, and Swift wrapper together. Then load the existing
+index normally and call the existing save API when ready to migrate its
+persistence format.

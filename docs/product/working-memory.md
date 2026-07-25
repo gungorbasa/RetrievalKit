@@ -15,11 +15,13 @@ implemented, or superseded by the product spec.
   retrieval upsert and every query path use typed C ABI values with contiguous
   float buffers; JSON remains limited to cold schema-rich graph ingestion. Do
   not add wrapper-side fallbacks or duplicate these rules in Python/Node.
-  Remaining boundary performance debt is explicit: result hydration still
-  returns owned strings per hit, the Rust query object still owns one vector
-  copy, and the advanced multi-document graph upsert serializes embeddings on
-  the cold JSON path. Optimize those only with measured, compatibility-tested
-  ABI changes; they are not wrapper semantics.
+  Result hydration uses fixed hit arrays, one packed UTF-8 arena, and one flat
+  matched-term range array for BM25/hybrid; Swift validates and decodes ranges
+  without owning retrieval semantics. The graph aggregate ABI version for this
+  contract is 10. Remaining boundary performance debt is explicit: the Rust
+  query object still owns one vector copy, and advanced multi-document graph
+  upsert serializes embeddings on the cold JSON path. Optimize those only with
+  measured, compatibility-tested ABI changes; they are not wrapper semantics.
 - 2026-07-23 owner sequencing decision: pause release qualification and all
   new benchmark work until the SDK implementation is finalized. Do not rebuild
   the release candidate, provision Phase 7 scheduled/release evidence, resume

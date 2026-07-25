@@ -1080,14 +1080,22 @@ Do:
 - pass top-k and mode.
 - pass public hybrid `alpha` directly; Rust validates and expands it into
   concrete fusion weights.
-- return result IDs and scores into caller-provided buffers.
-- fetch full text separately when needed.
+- return fixed-width result records whose strings reference one owned packed
+  UTF-8 arena.
+- return BM25 and hybrid matched terms through one flat range table referencing
+  that same arena.
 
 Do not:
 
-- return heap-allocated strings from Rust during search.
+- allocate or free a separate native string for every result field or matched
+  term.
 - pass JSON across FFI in the hot path.
 - allocate large result objects per query.
+
+The packed result buffer remains valid until its matching free function is
+called. Wrappers decode native strings before freeing it and never retain
+borrowed arena pointers. Exact results require at most a hit allocation and a
+UTF-8 allocation; BM25 and hybrid add one matched-term range allocation.
 
 The common Swift document-upsert path also uses typed C strings, metadata
 entries, and a contiguous float buffer. Schema-rich graph ingestion may use
@@ -1096,17 +1104,17 @@ JSON on the cold build path, but query embeddings and query controls never do.
 Minimal C ABI shape:
 
 ```c
-int lrag_search(
-  LragIndexHandle *handle,
-  const float *query_vector,
-  size_t dimension,
-  const char *query_text,
-  uint32_t top_k,
-  LragSearchOptions options,
-  LragSearchResult *out_results,
-  size_t out_capacity,
-  size_t *out_count
-);
+typedef struct {
+  size_t offset;
+  size_t length;
+} VkUtf8Range;
+
+typedef struct {
+  const VkSearchHit *hits;
+  size_t count;
+  const uint8_t *utf8;
+  size_t utf8_len;
+} VkSearchResultBuffer;
 ```
 
 ## Correctness Requirements

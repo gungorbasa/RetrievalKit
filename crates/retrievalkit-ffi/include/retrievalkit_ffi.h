@@ -89,19 +89,27 @@ typedef struct VkTextChunkBuffer {
   size_t count;
 } VkTextChunkBuffer;
 
+typedef struct VkUtf8Range {
+  size_t offset;
+  size_t length;
+} VkUtf8Range;
+
 typedef struct VkSearchHit {
   uint64_t chunk_id;
-  char *document_id;
-  char *record_id;
-  char *text;
+  VkUtf8Range document_id;
+  bool has_record_id;
+  VkUtf8Range record_id;
+  VkUtf8Range text;
   float score;
   float vector_score;
   bool filter_matched;
 } VkSearchHit;
 
 typedef struct VkSearchResultBuffer {
-  VkSearchHit *hits;
+  const VkSearchHit *hits;
   size_t count;
+  const uint8_t *utf8;
+  size_t utf8_len;
 } VkSearchResultBuffer;
 
 typedef struct VkStringArray {
@@ -111,23 +119,30 @@ typedef struct VkStringArray {
 
 typedef struct VkKeywordHit {
   uint64_t chunk_id;
-  char *document_id;
-  char *record_id;
-  char *text;
+  VkUtf8Range document_id;
+  bool has_record_id;
+  VkUtf8Range record_id;
+  VkUtf8Range text;
   float score;
-  VkStringArray matched_terms;
+  size_t matched_terms_start;
+  size_t matched_terms_count;
 } VkKeywordHit;
 
 typedef struct VkKeywordResultBuffer {
-  VkKeywordHit *hits;
+  const VkKeywordHit *hits;
   size_t count;
+  const uint8_t *utf8;
+  size_t utf8_len;
+  const VkUtf8Range *matched_terms;
+  size_t matched_terms_count;
 } VkKeywordResultBuffer;
 
 typedef struct VkHybridHit {
   uint64_t chunk_id;
-  char *document_id;
-  char *record_id;
-  char *text;
+  VkUtf8Range document_id;
+  bool has_record_id;
+  VkUtf8Range record_id;
+  VkUtf8Range text;
   float score;
   bool has_vector_score;
   float vector_score;
@@ -141,13 +156,18 @@ typedef struct VkHybridHit {
   float normalized_vector_score;
   bool has_normalized_keyword_score;
   float normalized_keyword_score;
-  VkStringArray matched_terms;
+  size_t matched_terms_start;
+  size_t matched_terms_count;
   bool filter_matched;
 } VkHybridHit;
 
 typedef struct VkHybridResultBuffer {
-  VkHybridHit *hits;
+  const VkHybridHit *hits;
   size_t count;
+  const uint8_t *utf8;
+  size_t utf8_len;
+  const VkUtf8Range *matched_terms;
+  size_t matched_terms_count;
 } VkHybridResultBuffer;
 
 typedef struct VkHybridOptions {

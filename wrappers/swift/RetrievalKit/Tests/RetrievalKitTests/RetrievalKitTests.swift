@@ -138,6 +138,33 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertEqual(hybridResults.first?.trace.filterMatched, true)
   }
 
+  func testPackedResultsPreserveUnicodeAcrossEverySearchMode() async throws {
+    let builder = try RetrievalDatabase.Builder(corpusID: "unicode", encoding: .f32)
+    try await builder.upsert(
+      Document(id: "belge-ğ", text: "Swift için özel arama"),
+      embedding: [1, 0]
+    )
+    let database = try await builder.build()
+
+    let semantic = try await database.search(embedding: [1, 0], limit: 1)
+    let keyword = try await database.search(text: "swift", limit: 1)
+    let hybrid = try await database.search(
+      text: "swift",
+      embedding: [1, 0],
+      alpha: 0.6,
+      limit: 1
+    )
+
+    XCTAssertEqual(semantic[0].documentID, "belge-ğ")
+    XCTAssertEqual(semantic[0].text, "Swift için özel arama")
+    XCTAssertEqual(keyword[0].documentID, "belge-ğ")
+    XCTAssertEqual(keyword[0].text, "Swift için özel arama")
+    XCTAssertTrue(keyword[0].matchedTerms.contains("swift"))
+    XCTAssertEqual(hybrid[0].documentID, "belge-ğ")
+    XCTAssertEqual(hybrid[0].text, "Swift için özel arama")
+    XCTAssertTrue(hybrid[0].trace.matchedTerms.contains("swift"))
+  }
+
   func testDeleteRemovesDocumentFromResults() async throws {
     let index = try VectorIndex(dimension: 2)
 

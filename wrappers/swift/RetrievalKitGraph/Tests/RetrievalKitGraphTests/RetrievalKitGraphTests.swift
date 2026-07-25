@@ -610,7 +610,11 @@ final class RetrievalKitGraphTests: XCTestCase {
       graph: capabilitySchema(),
       encoding: .f32
     )
-    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
+    let rust = capabilityInput(
+      id: "rust",
+      title: "Rust",
+      text: "native retrieval — Swift için özel"
+    )
     try await builder.upsert(
       rust.record,
       documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
@@ -666,7 +670,11 @@ final class RetrievalKitGraphTests: XCTestCase {
       graph: capabilitySchema(),
       encoding: .f32
     )
-    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
+    let rust = capabilityInput(
+      id: "rust",
+      title: "Rust",
+      text: "native retrieval — Swift için özel"
+    )
     try await builder.upsert(
       rust.record,
       documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
@@ -678,6 +686,9 @@ final class RetrievalKitGraphTests: XCTestCase {
       embedding: [1, 0]
     )
     XCTAssertEqual(hybrid.map(\.recordID), ["rust"])
+    XCTAssertEqual(hybrid.first?.documentID, "summary")
+    XCTAssertEqual(hybrid.first?.text, "native retrieval — Swift için özel")
+    XCTAssertTrue(hybrid.first?.trace.matchedTerms.contains("native") == true)
   }
 
   func testCombinedDatabaseRejectsSelectionFromAnotherCorpus() async throws {

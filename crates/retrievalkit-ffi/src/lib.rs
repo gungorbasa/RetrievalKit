@@ -138,11 +138,20 @@ pub struct VkTextChunkBuffer {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct VkUtf8Range {
+    pub offset: usize,
+    pub length: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkSearchHit {
     pub chunk_id: u64,
-    pub document_id: *mut c_char,
-    pub record_id: *mut c_char,
-    pub text: *mut c_char,
+    pub document_id: VkUtf8Range,
+    pub has_record_id: bool,
+    pub record_id: VkUtf8Range,
+    pub text: VkUtf8Range,
     pub score: c_float,
     pub vector_score: c_float,
     pub filter_matched: bool,
@@ -150,8 +159,10 @@ pub struct VkSearchHit {
 
 #[repr(C)]
 pub struct VkSearchResultBuffer {
-    pub hits: *mut VkSearchHit,
+    pub hits: *const VkSearchHit,
     pub count: usize,
+    pub utf8: *const u8,
+    pub utf8_len: usize,
 }
 
 #[repr(C)]
@@ -162,27 +173,36 @@ pub struct VkStringArray {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkKeywordHit {
     pub chunk_id: u64,
-    pub document_id: *mut c_char,
-    pub record_id: *mut c_char,
-    pub text: *mut c_char,
+    pub document_id: VkUtf8Range,
+    pub has_record_id: bool,
+    pub record_id: VkUtf8Range,
+    pub text: VkUtf8Range,
     pub score: c_float,
-    pub matched_terms: VkStringArray,
+    pub matched_terms_start: usize,
+    pub matched_terms_count: usize,
 }
 
 #[repr(C)]
 pub struct VkKeywordResultBuffer {
-    pub hits: *mut VkKeywordHit,
+    pub hits: *const VkKeywordHit,
     pub count: usize,
+    pub utf8: *const u8,
+    pub utf8_len: usize,
+    pub matched_terms: *const VkUtf8Range,
+    pub matched_terms_count: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkHybridHit {
     pub chunk_id: u64,
-    pub document_id: *mut c_char,
-    pub record_id: *mut c_char,
-    pub text: *mut c_char,
+    pub document_id: VkUtf8Range,
+    pub has_record_id: bool,
+    pub record_id: VkUtf8Range,
+    pub text: VkUtf8Range,
     pub score: c_float,
     pub has_vector_score: bool,
     pub vector_score: c_float,
@@ -196,14 +216,19 @@ pub struct VkHybridHit {
     pub normalized_vector_score: c_float,
     pub has_normalized_keyword_score: bool,
     pub normalized_keyword_score: c_float,
-    pub matched_terms: VkStringArray,
+    pub matched_terms_start: usize,
+    pub matched_terms_count: usize,
     pub filter_matched: bool,
 }
 
 #[repr(C)]
 pub struct VkHybridResultBuffer {
-    pub hits: *mut VkHybridHit,
+    pub hits: *const VkHybridHit,
     pub count: usize,
+    pub utf8: *const u8,
+    pub utf8_len: usize,
+    pub matched_terms: *const VkUtf8Range,
+    pub matched_terms_count: usize,
 }
 
 #[repr(C)]
@@ -469,6 +494,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_semantic_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_search_result_buffer() };
         let database = unsafe { database.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
         let mut query = SearchQuery::new(
@@ -479,7 +505,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_semantic_search(
             query = query.with_filter(filter);
         }
         let hits = database.database.semantic_search(&query)?;
-        unsafe { *out_results = retrieval_search_result_buffer(&database.database, hits) };
+        unsafe { *out_results = retrieval_search_result_buffer(&database.database, hits)? };
         Ok(())
     })
 }
@@ -499,6 +525,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_keyword_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_keyword_result_buffer() };
         let database = unsafe { database.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
         let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
@@ -506,7 +533,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_keyword_search(
             query = query.with_filter(filter);
         }
         let hits = database.database.keyword_search(&query)?;
-        unsafe { *out_results = retrieval_keyword_result_buffer(&database.database, hits) };
+        unsafe { *out_results = retrieval_keyword_result_buffer(&database.database, hits)? };
         Ok(())
     })
 }
@@ -529,6 +556,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let database = unsafe { database.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
         let mut query = HybridQuery::new(
@@ -542,7 +570,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search(
         }
         query.fusion = parse_hybrid_fusion(options)?;
         let hits = database.database.hybrid_search(&query)?;
-        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits) };
+        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits)? };
         Ok(())
     })
 }
@@ -568,6 +596,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let database = unsafe { database.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
         let mut query = HybridQuery::new(
@@ -582,7 +611,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
             query = query.with_filter(filter);
         }
         let hits = database.database.hybrid_search(&query)?;
-        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits) };
+        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits)? };
         Ok(())
     })
 }
@@ -884,6 +913,7 @@ pub unsafe extern "C" fn retrievalkit_index_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_search_result_buffer() };
         let index = unsafe { index_ref(index) }?;
         let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
         let mut query = SearchQuery::new(embedding.to_vec(), top_k);
@@ -891,7 +921,7 @@ pub unsafe extern "C" fn retrievalkit_index_search(
             query = query.with_filter(filter);
         }
         let hits = index.index.search(&query)?;
-        let buffer = search_result_buffer(index, hits);
+        let buffer = search_result_buffer(index, hits)?;
         unsafe { *out_results = buffer };
         Ok(())
     })
@@ -917,13 +947,14 @@ pub unsafe extern "C" fn retrievalkit_index_keyword_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_keyword_result_buffer() };
         let index = unsafe { index_ref(index) }?;
         let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
         if let Some(filter) = unsafe { optional_filter(filter) } {
             query = query.with_filter(filter);
         }
         let hits = index.index.keyword_search(&query)?;
-        let buffer = keyword_result_buffer(index, hits);
+        let buffer = keyword_result_buffer(index, hits)?;
         unsafe { *out_results = buffer };
         Ok(())
     })
@@ -953,6 +984,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let index = unsafe { index_ref(index) }?;
         let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
         let mut query = HybridQuery::new(
@@ -966,7 +998,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search(
         }
         query.fusion = parse_hybrid_fusion(options)?;
         let hits = index.index.hybrid_search(&query)?;
-        let buffer = hybrid_result_buffer(index, hits);
+        let buffer = hybrid_result_buffer(index, hits)?;
         unsafe { *out_results = buffer };
         Ok(())
     })
@@ -992,6 +1024,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
         if out_results.is_null() {
             return Err(FfiError::invalid_argument("out_results must not be null"));
         }
+        unsafe { *out_results = empty_hybrid_result_buffer() };
         let index = unsafe { index_ref(index) }?;
         let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
         let mut query = HybridQuery::new(
@@ -1006,7 +1039,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
             query = query.with_filter(filter);
         }
         let hits = index.index.hybrid_search(&query)?;
-        let buffer = hybrid_result_buffer(index, hits);
+        let buffer = hybrid_result_buffer(index, hits)?;
         unsafe { *out_results = buffer };
         Ok(())
     })
@@ -1050,56 +1083,38 @@ pub unsafe extern "C" fn retrievalkit_text_chunks_free(buffer: VkTextChunkBuffer
 ///
 /// # Safety
 ///
-/// `buffer.hits` must be null or a pointer allocated by RetrievalKit FFI.
+/// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
+/// FFI and the buffer must not have been freed before.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_search_results_free(buffer: VkSearchResultBuffer) {
-    if buffer.hits.is_null() {
-        return;
-    }
-    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
-    for hit in hits.iter() {
-        unsafe { retrievalkit_string_free(hit.document_id) };
-        unsafe { retrievalkit_string_free(hit.record_id) };
-        unsafe { retrievalkit_string_free(hit.text) };
-    }
+    unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
+    unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
 }
 
 /// Frees keyword search results returned by `retrievalkit_index_keyword_search`.
 ///
 /// # Safety
 ///
-/// `buffer.hits` must be null or a pointer allocated by RetrievalKit FFI.
+/// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
+/// FFI and the buffer must not have been freed before.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_keyword_results_free(buffer: VkKeywordResultBuffer) {
-    if buffer.hits.is_null() {
-        return;
-    }
-    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
-    for hit in hits.iter() {
-        unsafe { retrievalkit_string_free(hit.document_id) };
-        unsafe { retrievalkit_string_free(hit.record_id) };
-        unsafe { retrievalkit_string_free(hit.text) };
-        unsafe { string_array_free(hit.matched_terms) };
-    }
+    unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
+    unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
+    unsafe { drop_ffi_slice(buffer.matched_terms, buffer.matched_terms_count) };
 }
 
 /// Frees hybrid search results returned by `retrievalkit_index_hybrid_search`.
 ///
 /// # Safety
 ///
-/// `buffer.hits` must be null or a pointer allocated by RetrievalKit FFI.
+/// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
+/// FFI and the buffer must not have been freed before.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_hybrid_results_free(buffer: VkHybridResultBuffer) {
-    if buffer.hits.is_null() {
-        return;
-    }
-    let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
-    for hit in hits.iter() {
-        unsafe { retrievalkit_string_free(hit.document_id) };
-        unsafe { retrievalkit_string_free(hit.record_id) };
-        unsafe { retrievalkit_string_free(hit.text) };
-        unsafe { string_array_free(hit.matched_terms) };
-    }
+    unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
+    unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
+    unsafe { drop_ffi_slice(buffer.matched_terms, buffer.matched_terms_count) };
 }
 
 /// Builds an equality metadata filter.
@@ -1358,6 +1373,13 @@ impl FfiError {
             message: "RetrievalKit FFI call panicked".to_owned(),
         }
     }
+
+    fn result_buffer_overflow() -> Self {
+        Self {
+            code: VK_STATUS_CORE_ERROR,
+            message: "packed result buffer size overflow".to_owned(),
+        }
+    }
 }
 
 impl From<retrievalkit_core::RetrievalKitError> for FfiError {
@@ -1595,209 +1617,372 @@ fn text_chunk_buffer(mut chunks: Vec<VkTextChunk>) -> VkTextChunkBuffer {
     buffer
 }
 
-fn search_result_buffer(index: &VkIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = index
-                .index
-                .chunk(hit.chunk_id)
-                .map(|chunk| chunk.text.as_str())
-                .unwrap_or("");
-            VkSearchHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                vector_score: hit.trace.vector_score,
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkSearchResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
+#[cfg_attr(not(feature = "graph"), allow(dead_code))]
+pub(crate) enum PackedRecordId<'a> {
+    None,
+    DocumentId,
+    Value(&'a str),
+}
+
+pub(crate) struct PackedResultText<'a> {
+    pub document_id: Option<&'a str>,
+    pub record_id: PackedRecordId<'a>,
+    pub text: &'a str,
+}
+
+struct PackedUtf8Arena {
+    bytes: Vec<u8>,
+}
+
+impl PackedUtf8Arena {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn push(&mut self, value: &str) -> VkUtf8Range {
+        let range = VkUtf8Range {
+            offset: self.bytes.len(),
+            length: value.len(),
+        };
+        self.bytes.extend_from_slice(value.as_bytes());
+        range
+    }
+}
+
+fn checked_result_bytes(total: usize, value: &str) -> std::result::Result<usize, FfiError> {
+    total
+        .checked_add(value.len())
+        .ok_or_else(FfiError::result_buffer_overflow)
+}
+
+fn packed_text_size(
+    total: usize,
+    fallback_document_id: &str,
+    value: PackedResultText<'_>,
+) -> std::result::Result<usize, FfiError> {
+    let document_id = value.document_id.unwrap_or(fallback_document_id);
+    let total = checked_result_bytes(total, document_id)?;
+    let total = match value.record_id {
+        PackedRecordId::None => total,
+        PackedRecordId::DocumentId => checked_result_bytes(total, document_id)?,
+        PackedRecordId::Value(record_id) => checked_result_bytes(total, record_id)?,
     };
-    std::mem::forget(hits);
-    buffer
+    checked_result_bytes(total, value.text)
+}
+
+fn pack_text(
+    arena: &mut PackedUtf8Arena,
+    fallback_document_id: &str,
+    value: PackedResultText<'_>,
+) -> (VkUtf8Range, bool, VkUtf8Range, VkUtf8Range) {
+    let document_id_value = value.document_id.unwrap_or(fallback_document_id);
+    let document_id = arena.push(document_id_value);
+    let (has_record_id, record_id) = match value.record_id {
+        PackedRecordId::None => (false, VkUtf8Range::default()),
+        PackedRecordId::DocumentId => (true, arena.push(document_id_value)),
+        PackedRecordId::Value(record_id) => (true, arena.push(record_id)),
+    };
+    let text = arena.push(value.text);
+    (document_id, has_record_id, record_id, text)
+}
+
+fn into_ffi_slice<T>(values: Vec<T>) -> (*const T, usize) {
+    if values.is_empty() {
+        return (ptr::null(), 0);
+    }
+    let values = values.into_boxed_slice();
+    let count = values.len();
+    let values = Box::into_raw(values);
+    (values.cast::<T>() as *const T, count)
+}
+
+unsafe fn drop_ffi_slice<T>(values: *const T, count: usize) {
+    if values.is_null() {
+        return;
+    }
+    unsafe {
+        drop(Box::from_raw(ptr::slice_from_raw_parts_mut(
+            values as *mut T,
+            count,
+        )));
+    }
+}
+
+pub(crate) fn empty_search_result_buffer() -> VkSearchResultBuffer {
+    VkSearchResultBuffer {
+        hits: ptr::null(),
+        count: 0,
+        utf8: ptr::null(),
+        utf8_len: 0,
+    }
+}
+
+pub(crate) fn empty_keyword_result_buffer() -> VkKeywordResultBuffer {
+    VkKeywordResultBuffer {
+        hits: ptr::null(),
+        count: 0,
+        utf8: ptr::null(),
+        utf8_len: 0,
+        matched_terms: ptr::null(),
+        matched_terms_count: 0,
+    }
+}
+
+pub(crate) fn empty_hybrid_result_buffer() -> VkHybridResultBuffer {
+    VkHybridResultBuffer {
+        hits: ptr::null(),
+        count: 0,
+        utf8: ptr::null(),
+        utf8_len: 0,
+        matched_terms: ptr::null(),
+        matched_terms_count: 0,
+    }
+}
+
+pub(crate) fn packed_search_result_buffer<'a, F>(
+    hits: Vec<SearchHit>,
+    resolve: F,
+) -> std::result::Result<VkSearchResultBuffer, FfiError>
+where
+    F: Fn(u64) -> PackedResultText<'a>,
+{
+    let utf8_capacity = hits.iter().try_fold(0, |total, hit| {
+        packed_text_size(total, &hit.document_id, resolve(hit.chunk_id))
+    })?;
+    let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
+    let mut packed_hits = Vec::with_capacity(hits.len());
+    for hit in &hits {
+        let (document_id, has_record_id, record_id, text) =
+            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
+        packed_hits.push(VkSearchHit {
+            chunk_id: hit.chunk_id,
+            document_id,
+            has_record_id,
+            record_id,
+            text,
+            score: hit.score,
+            vector_score: hit.trace.vector_score,
+            filter_matched: hit.trace.filter_matched,
+        });
+    }
+    debug_assert_eq!(arena.bytes.len(), utf8_capacity);
+    let (hits, count) = into_ffi_slice(packed_hits);
+    let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
+    Ok(VkSearchResultBuffer {
+        hits,
+        count,
+        utf8,
+        utf8_len,
+    })
+}
+
+pub(crate) fn packed_keyword_result_buffer<'a, F>(
+    hits: Vec<KeywordHit>,
+    resolve: F,
+) -> std::result::Result<VkKeywordResultBuffer, FfiError>
+where
+    F: Fn(u64) -> PackedResultText<'a>,
+{
+    let mut utf8_capacity = 0;
+    let mut term_capacity: usize = 0;
+    for hit in &hits {
+        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, resolve(hit.chunk_id))?;
+        term_capacity = term_capacity
+            .checked_add(hit.matched_terms.len())
+            .ok_or_else(FfiError::result_buffer_overflow)?;
+        for term in &hit.matched_terms {
+            utf8_capacity = checked_result_bytes(utf8_capacity, term)?;
+        }
+    }
+
+    let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
+    let mut matched_terms = Vec::with_capacity(term_capacity);
+    let mut packed_hits = Vec::with_capacity(hits.len());
+    for hit in &hits {
+        let (document_id, has_record_id, record_id, text) =
+            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
+        let matched_terms_start = matched_terms.len();
+        matched_terms.extend(hit.matched_terms.iter().map(|term| arena.push(term)));
+        packed_hits.push(VkKeywordHit {
+            chunk_id: hit.chunk_id,
+            document_id,
+            has_record_id,
+            record_id,
+            text,
+            score: hit.score,
+            matched_terms_start,
+            matched_terms_count: hit.matched_terms.len(),
+        });
+    }
+    debug_assert_eq!(arena.bytes.len(), utf8_capacity);
+    debug_assert_eq!(matched_terms.len(), term_capacity);
+    let (hits, count) = into_ffi_slice(packed_hits);
+    let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
+    let (matched_terms, matched_terms_count) = into_ffi_slice(matched_terms);
+    Ok(VkKeywordResultBuffer {
+        hits,
+        count,
+        utf8,
+        utf8_len,
+        matched_terms,
+        matched_terms_count,
+    })
+}
+
+pub(crate) fn packed_hybrid_result_buffer<'a, F>(
+    hits: Vec<HybridHit>,
+    resolve: F,
+) -> std::result::Result<VkHybridResultBuffer, FfiError>
+where
+    F: Fn(u64) -> PackedResultText<'a>,
+{
+    let mut utf8_capacity = 0;
+    let mut term_capacity: usize = 0;
+    for hit in &hits {
+        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, resolve(hit.chunk_id))?;
+        term_capacity = term_capacity
+            .checked_add(hit.trace.matched_terms.len())
+            .ok_or_else(FfiError::result_buffer_overflow)?;
+        for term in &hit.trace.matched_terms {
+            utf8_capacity = checked_result_bytes(utf8_capacity, term)?;
+        }
+    }
+
+    let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
+    let mut matched_terms = Vec::with_capacity(term_capacity);
+    let mut packed_hits = Vec::with_capacity(hits.len());
+    for hit in &hits {
+        let (document_id, has_record_id, record_id, text) =
+            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
+        let matched_terms_start = matched_terms.len();
+        matched_terms.extend(hit.trace.matched_terms.iter().map(|term| arena.push(term)));
+        packed_hits.push(VkHybridHit {
+            chunk_id: hit.chunk_id,
+            document_id,
+            has_record_id,
+            record_id,
+            text,
+            score: hit.score,
+            has_vector_score: hit.vector_score.is_some(),
+            vector_score: hit.vector_score.unwrap_or_default(),
+            has_keyword_score: hit.keyword_score.is_some(),
+            keyword_score: hit.keyword_score.unwrap_or_default(),
+            has_vector_rank: hit.trace.vector_rank.is_some(),
+            vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+            has_keyword_rank: hit.trace.keyword_rank.is_some(),
+            keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+            has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+            normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+            has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+            normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+            matched_terms_start,
+            matched_terms_count: hit.trace.matched_terms.len(),
+            filter_matched: hit.trace.filter_matched,
+        });
+    }
+    debug_assert_eq!(arena.bytes.len(), utf8_capacity);
+    debug_assert_eq!(matched_terms.len(), term_capacity);
+    let (hits, count) = into_ffi_slice(packed_hits);
+    let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
+    let (matched_terms, matched_terms_count) = into_ffi_slice(matched_terms);
+    Ok(VkHybridResultBuffer {
+        hits,
+        count,
+        utf8,
+        utf8_len,
+        matched_terms,
+        matched_terms_count,
+    })
+}
+
+fn search_result_buffer(
+    index: &VkIndex,
+    hits: Vec<SearchHit>,
+) -> std::result::Result<VkSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: index
+            .index
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
 fn retrieval_search_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<SearchHit>,
-) -> VkSearchResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = database
-                .chunk(hit.chunk_id)
-                .map_or("", |chunk| chunk.text.as_str());
-            VkSearchHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                vector_score: hit.trace.vector_score,
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkSearchResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
-    };
-    std::mem::forget(hits);
-    buffer
+) -> std::result::Result<VkSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: database
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
-fn keyword_result_buffer(index: &VkIndex, hits: Vec<KeywordHit>) -> VkKeywordResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = index
-                .index
-                .chunk(hit.chunk_id)
-                .map(|chunk| chunk.text.as_str())
-                .unwrap_or("");
-            VkKeywordHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                matched_terms: string_array(hit.matched_terms),
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkKeywordResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
-    };
-    std::mem::forget(hits);
-    buffer
+fn keyword_result_buffer(
+    index: &VkIndex,
+    hits: Vec<KeywordHit>,
+) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: index
+            .index
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
 fn retrieval_keyword_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<KeywordHit>,
-) -> VkKeywordResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = database
-                .chunk(hit.chunk_id)
-                .map_or("", |chunk| chunk.text.as_str());
-            VkKeywordHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                matched_terms: string_array(hit.matched_terms),
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkKeywordResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
-    };
-    std::mem::forget(hits);
-    buffer
+) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: database
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
-fn hybrid_result_buffer(index: &VkIndex, hits: Vec<HybridHit>) -> VkHybridResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = index
-                .index
-                .chunk(hit.chunk_id)
-                .map(|chunk| chunk.text.as_str())
-                .unwrap_or("");
-            VkHybridHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                has_vector_score: hit.vector_score.is_some(),
-                vector_score: hit.vector_score.unwrap_or_default(),
-                has_keyword_score: hit.keyword_score.is_some(),
-                keyword_score: hit.keyword_score.unwrap_or_default(),
-                has_vector_rank: hit.trace.vector_rank.is_some(),
-                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
-                has_keyword_rank: hit.trace.keyword_rank.is_some(),
-                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
-                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
-                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
-                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
-                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
-                matched_terms: string_array(hit.trace.matched_terms),
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkHybridResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
-    };
-    std::mem::forget(hits);
-    buffer
+fn hybrid_result_buffer(
+    index: &VkIndex,
+    hits: Vec<HybridHit>,
+) -> std::result::Result<VkHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: index
+            .index
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
 fn retrieval_hybrid_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<HybridHit>,
-) -> VkHybridResultBuffer {
-    let mut hits = hits
-        .into_iter()
-        .map(|hit| {
-            let text = database
-                .chunk(hit.chunk_id)
-                .map_or("", |chunk| chunk.text.as_str());
-            VkHybridHit {
-                chunk_id: hit.chunk_id,
-                document_id: string_to_owned_ptr(&hit.document_id),
-                record_id: ptr::null_mut(),
-                text: string_to_owned_ptr(text),
-                score: hit.score,
-                has_vector_score: hit.vector_score.is_some(),
-                vector_score: hit.vector_score.unwrap_or_default(),
-                has_keyword_score: hit.keyword_score.is_some(),
-                keyword_score: hit.keyword_score.unwrap_or_default(),
-                has_vector_rank: hit.trace.vector_rank.is_some(),
-                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
-                has_keyword_rank: hit.trace.keyword_rank.is_some(),
-                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
-                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
-                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
-                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
-                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
-                matched_terms: string_array(hit.trace.matched_terms),
-                filter_matched: hit.trace.filter_matched,
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let buffer = VkHybridResultBuffer {
-        hits: hits.as_mut_ptr(),
-        count: hits.len(),
-    };
-    std::mem::forget(hits);
-    buffer
+) -> std::result::Result<VkHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
+        document_id: None,
+        record_id: PackedRecordId::None,
+        text: database
+            .chunk(chunk_id)
+            .map_or("", |chunk| chunk.text.as_str()),
+    })
 }
 
 fn string_to_owned_ptr(value: &str) -> *mut c_char {
     json_to_c_string(value)
 }
 
+#[cfg(feature = "graph")]
 fn string_array(values: Vec<String>) -> VkStringArray {
     let mut pointers = values
         .into_iter()
@@ -1812,6 +1997,7 @@ fn string_array(values: Vec<String>) -> VkStringArray {
     array
 }
 
+#[cfg(feature = "graph")]
 unsafe fn string_array_free(array: VkStringArray) {
     if array.values.is_null() {
         return;
@@ -2125,10 +2311,7 @@ mod tests {
         assert_status_ok(&status);
 
         let query = [1.0_f32, 0.0];
-        let mut results = VkSearchResultBuffer {
-            hits: ptr::null_mut(),
-            count: 0,
-        };
+        let mut results = empty_search_result_buffer();
         let searched = unsafe {
             retrievalkit_index_search(
                 index,
@@ -2144,10 +2327,7 @@ mod tests {
         assert_status_ok(&status);
         assert_eq!(results.count, 1);
         let hit = unsafe { &*results.hits };
-        assert_eq!(
-            unsafe { CStr::from_ptr(hit.text) }.to_str().unwrap(),
-            "skip"
-        );
+        assert_eq!(unsafe { packed_string(&results, hit.text) }, "skip");
         unsafe { retrievalkit_search_results_free(results) };
 
         let mut deleted_count = 0;
@@ -2198,10 +2378,7 @@ mod tests {
         assert!(!index.is_null());
 
         let query = [1.0_f32];
-        let mut results = VkSearchResultBuffer {
-            hits: ptr::null_mut(),
-            count: 0,
-        };
+        let mut results = empty_search_result_buffer();
         let searched = unsafe {
             retrievalkit_index_search(
                 index,
@@ -2282,10 +2459,7 @@ mod tests {
         assert_eq!(unsafe { retrievalkit_index_dimension(loaded) }, 2);
         assert_eq!(unsafe { retrievalkit_index_active_chunk_count(loaded) }, 1);
 
-        let mut results = VkSearchResultBuffer {
-            hits: ptr::null_mut(),
-            count: 0,
-        };
+        let mut results = empty_search_result_buffer();
         assert!(unsafe {
             retrievalkit_index_search(
                 loaded,
@@ -2299,10 +2473,7 @@ mod tests {
         });
         assert_eq!(results.count, 1);
         let hit = unsafe { &*results.hits };
-        assert_eq!(
-            unsafe { CStr::from_ptr(hit.text) }.to_str().unwrap(),
-            "persisted"
-        );
+        assert_eq!(unsafe { packed_string(&results, hit.text) }, "persisted");
 
         unsafe {
             retrievalkit_search_results_free(results);
@@ -2311,6 +2482,166 @@ mod tests {
             retrievalkit_status_clear(&mut status);
         }
         let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn packed_result_buffers_round_trip_utf8_identities_terms_and_traces() {
+        let long_text = "ö".repeat(32 * 1024);
+        let search = packed_search_result_buffer(
+            vec![
+                SearchHit {
+                    chunk_id: 1,
+                    document_id: "fallback-1".to_owned(),
+                    score: 0.9,
+                    trace: retrievalkit_core::SearchTrace {
+                        vector_score: 0.8,
+                        keyword_score: None,
+                        filter_matched: true,
+                    },
+                },
+                SearchHit {
+                    chunk_id: 2,
+                    document_id: "fallback-2".to_owned(),
+                    score: 0.7,
+                    trace: retrievalkit_core::SearchTrace {
+                        vector_score: 0.6,
+                        keyword_score: None,
+                        filter_matched: false,
+                    },
+                },
+            ],
+            |chunk_id| {
+                if chunk_id == 1 {
+                    PackedResultText {
+                        document_id: Some("belge-ğ"),
+                        record_id: PackedRecordId::Value("kayıt-1"),
+                        text: "Swift için özel metin",
+                    }
+                } else {
+                    PackedResultText {
+                        document_id: None,
+                        record_id: PackedRecordId::None,
+                        text: &long_text,
+                    }
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(search.count, 2);
+        let search_hits = unsafe { slice::from_raw_parts(search.hits, search.count) };
+        assert_eq!(
+            unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[0].document_id) },
+            "belge-ğ"
+        );
+        assert!(search_hits[0].has_record_id);
+        assert_eq!(
+            unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[0].record_id) },
+            "kayıt-1"
+        );
+        assert_eq!(
+            unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[0].text) },
+            "Swift için özel metin"
+        );
+        assert!(!search_hits[1].has_record_id);
+        assert_eq!(
+            unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[1].document_id) },
+            "fallback-2"
+        );
+        assert_eq!(
+            unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[1].text) },
+            long_text
+        );
+        unsafe { retrievalkit_search_results_free(search) };
+
+        let keyword = packed_keyword_result_buffer(
+            vec![KeywordHit {
+                chunk_id: 3,
+                document_id: "note-3".to_owned(),
+                score: 4.2,
+                matched_terms: vec!["swift".to_owned(), "özel".to_owned()],
+            }],
+            |_| PackedResultText {
+                document_id: None,
+                record_id: PackedRecordId::None,
+                text: "Swift özel arama",
+            },
+        )
+        .unwrap();
+        assert_eq!(keyword.matched_terms_count, 2);
+        let keyword_hit = unsafe { &*keyword.hits };
+        assert_eq!(keyword_hit.matched_terms_start, 0);
+        assert_eq!(keyword_hit.matched_terms_count, 2);
+        let terms =
+            unsafe { slice::from_raw_parts(keyword.matched_terms, keyword.matched_terms_count) };
+        assert_eq!(
+            unsafe { packed_utf8(keyword.utf8, keyword.utf8_len, terms[0]) },
+            "swift"
+        );
+        assert_eq!(
+            unsafe { packed_utf8(keyword.utf8, keyword.utf8_len, terms[1]) },
+            "özel"
+        );
+        unsafe { retrievalkit_keyword_results_free(keyword) };
+
+        let hybrid = packed_hybrid_result_buffer(
+            vec![HybridHit {
+                chunk_id: 4,
+                document_id: "note-4".to_owned(),
+                score: 0.75,
+                vector_score: Some(0.8),
+                keyword_score: Some(3.0),
+                trace: retrievalkit_core::HybridTrace {
+                    vector_rank: Some(1),
+                    keyword_rank: Some(2),
+                    normalized_vector_score: Some(1.0),
+                    normalized_keyword_score: Some(0.5),
+                    matched_terms: vec!["arama".to_owned()],
+                    fusion: retrievalkit_core::HybridFusionTrace::WeightedNormalizedScore {
+                        vector_weight: 0.6,
+                        keyword_weight: 0.4,
+                    },
+                    filter_matched: true,
+                },
+            }],
+            |_| PackedResultText {
+                document_id: None,
+                record_id: PackedRecordId::DocumentId,
+                text: "hybrid arama",
+            },
+        )
+        .unwrap();
+        let hybrid_hit = unsafe { &*hybrid.hits };
+        assert!(hybrid_hit.has_record_id);
+        assert!(hybrid_hit.has_vector_score);
+        assert!(hybrid_hit.has_keyword_score);
+        assert_eq!(hybrid_hit.vector_rank, 1);
+        assert_eq!(hybrid_hit.keyword_rank, 2);
+        assert_eq!(hybrid_hit.matched_terms_count, 1);
+        assert_eq!(
+            unsafe { packed_utf8(hybrid.utf8, hybrid.utf8_len, hybrid_hit.record_id) },
+            "note-4"
+        );
+        unsafe { retrievalkit_hybrid_results_free(hybrid) };
+    }
+
+    #[test]
+    fn empty_packed_result_buffers_are_null_and_freeable() {
+        let search = empty_search_result_buffer();
+        assert!(search.hits.is_null());
+        assert!(search.utf8.is_null());
+        unsafe { retrievalkit_search_results_free(search) };
+
+        let keyword = empty_keyword_result_buffer();
+        assert!(keyword.hits.is_null());
+        assert!(keyword.utf8.is_null());
+        assert!(keyword.matched_terms.is_null());
+        unsafe { retrievalkit_keyword_results_free(keyword) };
+
+        let hybrid = empty_hybrid_result_buffer();
+        assert!(hybrid.hits.is_null());
+        assert!(hybrid.utf8.is_null());
+        assert!(hybrid.matched_terms.is_null());
+        unsafe { retrievalkit_hybrid_results_free(hybrid) };
     }
 
     fn empty_status() -> VkStatus {
@@ -2323,5 +2654,16 @@ mod tests {
     fn assert_status_ok(status: &VkStatus) {
         assert_eq!(status.code, VK_STATUS_OK);
         assert!(status.message.is_null());
+    }
+
+    unsafe fn packed_string(buffer: &VkSearchResultBuffer, range: VkUtf8Range) -> String {
+        unsafe { packed_utf8(buffer.utf8, buffer.utf8_len, range) }
+    }
+
+    unsafe fn packed_utf8(utf8: *const u8, utf8_len: usize, range: VkUtf8Range) -> String {
+        assert!(range.offset <= utf8_len);
+        assert!(range.length <= utf8_len - range.offset);
+        let bytes = unsafe { slice::from_raw_parts(utf8.add(range.offset), range.length) };
+        std::str::from_utf8(bytes).unwrap().to_owned()
     }
 }

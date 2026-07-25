@@ -539,7 +539,7 @@ impl PyGraphRetrievalDatabase {
                 None => database.hybrid_search(&query),
             })
             .map_err(graph_error)?;
-        graph_hybrid_hits_to_py(py, database.corpus(), &hits)
+        graph_hybrid_hits_to_py(py, database.corpus(), &hits, alpha)
     }
 
     fn records_json(&self, record_ids: Vec<String>) -> PyResult<String> {
@@ -813,6 +813,7 @@ fn graph_hybrid_hits_to_py(
     py: Python<'_>,
     corpus: &CorpusIndex,
     hits: &[HybridHit],
+    alpha: f32,
 ) -> PyResult<Py<PyAny>> {
     let result = PyList::empty(py);
     for hit in hits {
@@ -828,7 +829,7 @@ fn graph_hybrid_hits_to_py(
         item.set_item("vector_score", hit.vector_score)?;
         item.set_item("keyword_score", hit.keyword_score)?;
         item.set_item("matched_terms", &hit.trace.matched_terms)?;
-        item.set_item("trace", hybrid_trace_to_py(py, hit)?)?;
+        item.set_item("trace", hybrid_trace_to_py(py, hit, alpha)?)?;
         result.append(item)?;
     }
     Ok(result.into_any().unbind())

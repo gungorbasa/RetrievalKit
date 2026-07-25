@@ -55,9 +55,22 @@ and replacement structures to guarantee an all-or-nothing swap.
 ### Compatibility
 
 - Search result buffers now use a packed UTF-8 arena and offset/length ranges
-  instead of separately allocated C strings. The graph aggregate ABI version is
-  10. Native libraries, headers, and Swift wrappers from different ABI versions
-  must not be mixed.
+  instead of separately allocated C strings. Effective result metadata uses a
+  flat packed entry table referencing the same arena, and hybrid `alpha` is
+  stored once per buffer. Native boundary types and constants now use the
+  product-aligned `RetrievalKit`/`RETRIEVALKIT_` prefixes instead of the stale
+  pre-rename `Vk`/`VK_` prefixes. The graph aggregate ABI version is 12. Native
+  libraries, headers, and wrappers from different ABI versions must not be
+  mixed.
+- Public hybrid `alpha` endpoints now disable candidate generation from the
+  zero-weight source: `alpha = 1` is truly vector-only and `alpha = 0` is truly
+  BM25-only. Generic C fusion/RRF entrypoints were removed; RRF remains an
+  internal Rust benchmark option.
+- Swift and Python exact, BM25, and hybrid hits now share the canonical result
+  metadata contract. Hybrid traces expose `alpha`; the constant
+  `filterMatched`/`filter_matched` field and public fusion dictionaries were
+  removed. Swift graph metadata now uses the shared `MetadataValue`;
+  `GraphMetadataValue` remains as a deprecated compatibility alias.
 - Swift base and graph products use separate package manifests so a base-only
   consumer never resolves or downloads the graph native aggregate.
 - Invalid hybrid `alpha` values are query-argument errors in Rust, Swift, and
@@ -72,7 +85,9 @@ and replacement structures to guarantee an all-or-nothing swap.
 
 ### Upgrade
 
-No Swift application source changes are required. Rebuild and upgrade the Rust
-native artifact, C headers, and Swift wrapper together. Then load the existing
-index normally and call the existing save API when ready to migrate its
-persistence format.
+Rebuild and upgrade the Rust native artifact, C headers, and language wrapper
+together. Swift callers should replace `filterMatched` reads with the fact that
+every returned hit already passed the filter, and read `trace.alpha` instead of
+an internal fusion shape. Python callers should make the equivalent
+`filter_matched`/`fusion` migration. Existing indexes remain readable; load and
+save normally when ready to migrate their persistence format.

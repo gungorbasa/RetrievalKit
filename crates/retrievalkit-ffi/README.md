@@ -33,9 +33,9 @@ The returned string is UTF-8 JSON and must be released with
 `retrievalkit_string_free`.
 
 The optional graph aggregate also provides typed candidate projection for
-`VkGraphDatabase` and `VkGraphRetrievalDatabase`. These calls accept a native
-`VkGraphResult` plus an optional `VkFilter` and return lexical stable chunk
-identities and source/before/after counts in `VkGraphCandidateProjection`; no
+`RetrievalKitGraphDatabase` and `RetrievalKitGraphRetrievalDatabase`. These calls accept a native
+`RetrievalKitGraphResult` plus an optional `RetrievalKitFilter` and return lexical stable chunk
+identities and source/before/after counts in `RetrievalKitGraphCandidateProjection`; no
 JSON or internal chunk IDs cross this boundary. Initialize the output to zero,
 then release it exactly once with
 `retrievalkit_graph_candidate_projection_free`, or use the idempotent
@@ -69,7 +69,7 @@ process. See `docs/product/memory-benchmark.md` for the schema and commands.
 ## Threading Contract
 
 After construction or loading, exact, keyword, and hybrid search plus the
-dimension/count accessors may use one `VkIndex` concurrently. Every call must
+dimension/count accessors may use one `RetrievalKitIndex` concurrently. Every call must
 own its status, output storage, and filter handle. Save, upsert, delete,
 compaction, and free require exclusive access, and the handle must outlive all
 calls. The C ABI intentionally adds no hidden locks; callers enforce this

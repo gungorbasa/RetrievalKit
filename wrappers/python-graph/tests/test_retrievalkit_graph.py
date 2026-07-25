@@ -140,6 +140,8 @@ def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None
         "gamma", [0.0, 1.0], within=selection, where={"tenant": "blue"}
     )
     assert hybrid[0]["document_id"] == "gamma"
+    assert hybrid[0]["metadata"]["tenant"] == "blue"
+    assert hybrid[0]["trace"]["alpha"] == pytest.approx(0.6)
     with pytest.raises(ValueError, match="invalid query parameter 'alpha'"):
         database.retrieval.hybrid_search(
             "gamma", [0.0, 1.0], within=selection, alpha=-0.1

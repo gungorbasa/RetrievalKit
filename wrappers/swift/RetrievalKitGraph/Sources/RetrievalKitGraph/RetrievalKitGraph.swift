@@ -90,88 +90,55 @@ public enum GraphValue: Equatable, Sendable, Codable {
   }
 }
 
-public enum GraphMetadataValue: Equatable, Sendable, Codable {
-  case string(String)
-  case integer(Int64)
-  case double(Double)
-  case boolean(Bool)
-  case timestampMillis(Int64)
-  public func encode(to encoder: Encoder) throws {
-    switch self {
-    case .string(let v): try tagged("String", v, encoder)
-    case .integer(let v): try tagged("Integer", v, encoder)
-    case .double(let v): try tagged("Float", v, encoder)
-    case .boolean(let v): try tagged("Boolean", v, encoder)
-    case .timestampMillis(let v): try tagged("TimestampMillis", v, encoder)
-    }
-  }
-  public init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: DynamicKey.self)
-    if let key = DynamicKey(stringValue: "String"), container.contains(key) {
-      self = .string(try container.decode(String.self, forKey: key))
-      return
-    }
-    if let key = DynamicKey(stringValue: "Integer"), container.contains(key) {
-      self = .integer(try container.decode(Int64.self, forKey: key))
-      return
-    }
-    if let key = DynamicKey(stringValue: "Float"), container.contains(key) {
-      self = .double(try container.decode(Double.self, forKey: key))
-      return
-    }
-    if let key = DynamicKey(stringValue: "Boolean"), container.contains(key) {
-      self = .boolean(try container.decode(Bool.self, forKey: key))
-      return
-    }
-    if let key = DynamicKey(stringValue: "TimestampMillis"), container.contains(key) {
-      self = .timestampMillis(try container.decode(Int64.self, forKey: key))
-      return
-    }
-    throw DecodingError.dataCorrupted(
-      .init(codingPath: decoder.codingPath, debugDescription: "unsupported graph metadata tag"))
-  }
-  fileprivate func ffiValue(arena: GraphCStringArena) -> VkMetadataValue {
+@available(*, deprecated, renamed: "MetadataValue")
+public typealias GraphMetadataValue = MetadataValue
+
+extension RetrievalKitShared.MetadataValue {
+  /// Compatibility spelling for the former graph-only metadata type.
+  public static func double(_ value: Double) -> Self { .float(value) }
+
+  fileprivate func ffiValue(arena: GraphCStringArena) -> RetrievalKitMetadataValue {
     switch self {
     case .string(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 0, string_value: arena.copy(value), integer_value: 0, float_value: 0,
         bool_value: false)
     case .integer(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 1, string_value: nil, integer_value: value, float_value: 0, bool_value: false)
-    case .double(let value):
-      VkMetadataValue(
+    case .float(let value):
+      RetrievalKitMetadataValue(
         value_type: 2, string_value: nil, integer_value: 0, float_value: value, bool_value: false)
     case .boolean(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 3, string_value: nil, integer_value: 0, float_value: 0, bool_value: value)
     case .timestampMillis(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 4, string_value: nil, integer_value: value, float_value: 0, bool_value: false)
     }
   }
 }
 
 public indirect enum GraphFilter: Equatable, Sendable {
-  case equals(field: String, value: GraphMetadataValue)
-  case notEquals(field: String, value: GraphMetadataValue)
+  case equals(field: String, value: MetadataValue)
+  case notEquals(field: String, value: MetadataValue)
   case exists(field: String)
-  case range(field: String, lower: GraphMetadataValue?, upper: GraphMetadataValue?)
-  case inValues(field: String, values: [GraphMetadataValue])
+  case range(field: String, lower: MetadataValue?, upper: MetadataValue?)
+  case inValues(field: String, values: [MetadataValue])
   case all([GraphFilter])
   case any([GraphFilter])
 
-  public static func equals(_ field: String, _ value: GraphMetadataValue) -> Self {
+  public static func equals(_ field: String, _ value: MetadataValue) -> Self {
     .equals(field: field, value: value)
   }
-  public static func notEquals(_ field: String, _ value: GraphMetadataValue) -> Self {
+  public static func notEquals(_ field: String, _ value: MetadataValue) -> Self {
     .notEquals(field: field, value: value)
   }
   public static func exists(_ field: String) -> Self { .exists(field: field) }
   public static func range(
-    _ field: String, lower: GraphMetadataValue? = nil, upper: GraphMetadataValue? = nil
+    _ field: String, lower: MetadataValue? = nil, upper: MetadataValue? = nil
   ) -> Self { .range(field: field, lower: lower, upper: upper) }
-  public static func inValues(_ field: String, _ values: [GraphMetadataValue]) -> Self {
+  public static func inValues(_ field: String, _ values: [MetadataValue]) -> Self {
     .inValues(field: field, values: values)
   }
 }
@@ -183,8 +150,8 @@ public struct GraphHybridOptions: Equatable, Sendable {
     self.vectorTopK = vectorTopK
     self.keywordTopK = keywordTopK
   }
-  fileprivate func ffiValue(alpha: Float) -> VkHybridQueryOptions {
-    VkHybridQueryOptions(
+  fileprivate func ffiValue(alpha: Float) -> RetrievalKitHybridQueryOptions {
+    RetrievalKitHybridQueryOptions(
       vector_top_k: vectorTopK, keyword_top_k: keywordTopK, alpha: alpha)
   }
 }
@@ -225,9 +192,9 @@ public struct GraphChunk: Equatable, Sendable, Codable {
   public var key: String
   public var text: String
   public var embedding: [Float]
-  public var metadata: [String: GraphMetadataValue]
+  public var metadata: [String: MetadataValue]
   public init(
-    key: String, text: String, embedding: [Float], metadata: [String: GraphMetadataValue] = [:]
+    key: String, text: String, embedding: [Float], metadata: [String: MetadataValue] = [:]
   ) {
     self.key = key
     self.text = text
@@ -238,10 +205,10 @@ public struct GraphChunk: Equatable, Sendable, Codable {
 
 public struct GraphRecordBatch: Equatable, Sendable, Codable {
   public var record: GraphRecord
-  public var projectedMetadata: [String: GraphMetadataValue]
+  public var projectedMetadata: [String: MetadataValue]
   public var chunks: [GraphChunk]
   public init(
-    record: GraphRecord, projectedMetadata: [String: GraphMetadataValue] = [:], chunks: [GraphChunk]
+    record: GraphRecord, projectedMetadata: [String: MetadataValue] = [:], chunks: [GraphChunk]
   ) {
     self.record = record
     self.projectedMetadata = projectedMetadata
@@ -571,25 +538,27 @@ public struct GraphSearchHit: Equatable, Sendable {
   public let chunkID: UInt64
   public let documentID, recordID, text: String
   public let score, vectorScore: Float
-  public let filterMatched: Bool
+  public let metadata: [String: MetadataValue]
 }
 public struct GraphKeywordHit: Equatable, Sendable {
   public let chunkID: UInt64
   public let documentID, recordID, text: String
   public let score: Float
   public let matchedTerms: [String]
+  public let metadata: [String: MetadataValue]
 }
 public struct GraphHybridTrace: Equatable, Sendable {
+  public let alpha: Float
   public let vectorRank, keywordRank: Int?
   public let normalizedVectorScore, normalizedKeywordScore: Float?
   public let matchedTerms: [String]
-  public let filterMatched: Bool
 }
 public struct GraphHybridHit: Equatable, Sendable {
   public let chunkID: UInt64
   public let documentID, recordID, text: String
   public let score: Float
   public let vectorScore, keywordScore: Float?
+  public let metadata: [String: MetadataValue]
   public let trace: GraphHybridTrace
   public var matchedTerms: [String] { trace.matchedTerms }
 }
@@ -646,48 +615,48 @@ private final class GraphCStringArena {
 }
 
 private enum Native {
-  static func error(_ status: VkStatus, fallback: String) -> RetrievalKitGraphError {
+  static func error(_ status: RetrievalKitStatus, fallback: String) -> RetrievalKitGraphError {
     let message = status.message.map { String(cString: $0) } ?? fallback
     switch status.code {
-    case VK_STATUS_INVALID_ARGUMENT: return .invalidArgument(message)
-    case VK_GRAPH_STATUS_INVALID_SCHEMA: return .invalidSchema(message)
-    case VK_GRAPH_STATUS_INVALID_IDENTITY: return .invalidIdentity(message)
-    case VK_GRAPH_STATUS_STALE_GENERATION: return .staleGeneration(message)
-    case VK_GRAPH_STATUS_INCOMPATIBLE_VERSION: return .incompatibleVersion(message)
-    case VK_GRAPH_STATUS_GRAPH_UNAVAILABLE: return .graphUnavailable(message)
-    case VK_GRAPH_STATUS_CORRUPT_SNAPSHOT, VK_STATUS_CORRUPT_INDEX: return .corruptSnapshot(message)
-    case VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: return .queryLimitExceeded(message)
-    case VK_GRAPH_STATUS_CANCELLED: return .cancelled(message)
-    case VK_GRAPH_STATUS_TIMED_OUT: return .timedOut(message)
-    case VK_GRAPH_STATUS_LOCK_UNAVAILABLE: return .lockUnavailable(message)
-    case VK_GRAPH_STATUS_INVALID_DIMENSION: return .invalidDimension(message)
-    case VK_GRAPH_STATUS_MISSING_EMBEDDING: return .missingEmbedding(message)
-    case VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE:
+    case RETRIEVALKIT_STATUS_INVALID_ARGUMENT: return .invalidArgument(message)
+    case RETRIEVALKIT_GRAPH_STATUS_INVALID_SCHEMA: return .invalidSchema(message)
+    case RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY: return .invalidIdentity(message)
+    case RETRIEVALKIT_GRAPH_STATUS_STALE_GENERATION: return .staleGeneration(message)
+    case RETRIEVALKIT_GRAPH_STATUS_INCOMPATIBLE_VERSION: return .incompatibleVersion(message)
+    case RETRIEVALKIT_GRAPH_STATUS_GRAPH_UNAVAILABLE: return .graphUnavailable(message)
+    case RETRIEVALKIT_GRAPH_STATUS_CORRUPT_SNAPSHOT, RETRIEVALKIT_STATUS_CORRUPT_INDEX: return .corruptSnapshot(message)
+    case RETRIEVALKIT_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: return .queryLimitExceeded(message)
+    case RETRIEVALKIT_GRAPH_STATUS_CANCELLED: return .cancelled(message)
+    case RETRIEVALKIT_GRAPH_STATUS_TIMED_OUT: return .timedOut(message)
+    case RETRIEVALKIT_GRAPH_STATUS_LOCK_UNAVAILABLE: return .lockUnavailable(message)
+    case RETRIEVALKIT_GRAPH_STATUS_INVALID_DIMENSION: return .invalidDimension(message)
+    case RETRIEVALKIT_GRAPH_STATUS_MISSING_EMBEDDING: return .missingEmbedding(message)
+    case RETRIEVALKIT_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE:
       return .retrievalCapabilityUnavailable(message)
-    case VK_GRAPH_STATUS_INTERNAL, VK_STATUS_CORE_ERROR: return .internalError(message)
+    case RETRIEVALKIT_GRAPH_STATUS_INTERNAL, RETRIEVALKIT_STATUS_CORE_ERROR: return .internalError(message)
     default: return .internalError(message)
     }
   }
-  static func pointer(_ body: (UnsafeMutablePointer<VkStatus>) -> OpaquePointer?) throws
+  static func pointer(_ body: (UnsafeMutablePointer<RetrievalKitStatus>) -> OpaquePointer?) throws
     -> OpaquePointer
   {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard let result = body(&status) else { throw error(status, fallback: "unknown graph error") }
     return result
   }
-  static func bool(_ body: (UnsafeMutablePointer<VkStatus>) -> Bool) throws {
-    var status = VkStatus(code: 0, message: nil)
+  static func bool(_ body: (UnsafeMutablePointer<RetrievalKitStatus>) -> Bool) throws {
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard body(&status) else { throw error(status, fallback: "unknown graph error") }
   }
-  static func filterPointer(_ body: (UnsafeMutablePointer<VkStatus>) -> OpaquePointer?) throws
+  static func filterPointer(_ body: (UnsafeMutablePointer<RetrievalKitStatus>) -> OpaquePointer?) throws
     -> OpaquePointer
   {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard let pointer = body(&status) else {
-      if status.code == VK_STATUS_INVALID_ARGUMENT {
+      if status.code == RETRIEVALKIT_STATUS_INVALID_ARGUMENT {
         throw RetrievalKitGraphError.invalidIdentity(
           status.message.map { String(cString: $0) } ?? "invalid metadata filter")
       }
@@ -741,14 +710,14 @@ extension GraphFilter {
   }
 
   fileprivate func makeLeaf(
-    _ body: (UnsafeMutablePointer<VkStatus>, GraphCStringArena) -> OpaquePointer?
+    _ body: (UnsafeMutablePointer<RetrievalKitStatus>, GraphCStringArena) -> OpaquePointer?
   ) throws -> OpaquePointer {
     try Native.filterPointer { status in body(status, GraphCStringArena()) }
   }
 
   fileprivate func makeComposite(
     _ filters: [GraphFilter],
-    builder: (UnsafePointer<OpaquePointer?>?, Int, UnsafeMutablePointer<VkStatus>?) ->
+    builder: (UnsafePointer<OpaquePointer?>?, Int, UnsafeMutablePointer<RetrievalKitStatus>?) ->
       OpaquePointer?
   ) throws -> OpaquePointer {
     let children = try filters.map { try $0.makeFFI() }
@@ -997,18 +966,18 @@ public actor GraphIndex {
     try validateQuerySizes(steps: steps, limits: limits)
     let arena = GraphCStringArena()
     let nativeSeeds = seeds.map { seed in
-      VkGraphNodeRef(
+      RetrievalKitGraphNodeRef(
         node_type: arena.copy(seed.nodeType), source_type: seed.chunkKey == nil ? 0 : 1,
         record_id: arena.copy(seed.recordID), chunk_key: seed.chunkKey.map(arena.copy))
     }
     let nativeSteps = steps.map { step in
-      VkGraphStep(
+      RetrievalKitGraphStep(
         relationship: arena.copy(step.relationship), direction: step.direction == .outgoing ? 0 : 1,
         min_hops: step.minHops, max_hops: step.maxHops)
     }
-    let seedPointer = UnsafeMutablePointer<VkGraphNodeRef>.allocate(
+    let seedPointer = UnsafeMutablePointer<RetrievalKitGraphNodeRef>.allocate(
       capacity: max(1, nativeSeeds.count))
-    let stepPointer = UnsafeMutablePointer<VkGraphStep>.allocate(
+    let stepPointer = UnsafeMutablePointer<RetrievalKitGraphStep>.allocate(
       capacity: max(1, nativeSteps.count))
     for (index, value) in nativeSeeds.enumerated() {
       seedPointer.advanced(by: index).initialize(to: value)
@@ -1022,7 +991,7 @@ public actor GraphIndex {
       stepPointer.deinitialize(count: nativeSteps.count)
       stepPointer.deallocate()
     }
-    let query = VkGraphQuery(
+    let query = RetrievalKitGraphQuery(
       seed_type: 0, node_ids: nativeSeeds.isEmpty ? nil : seedPointer,
       node_id_count: nativeSeeds.count, seed_node_type: nil, field_segments: nil,
       field_segment_count: 0, values: nil, value_count: 0,
@@ -1041,24 +1010,24 @@ public actor GraphIndex {
     let nativeValues = values.map { value in
       switch value {
       case .string(let string):
-        VkGraphScalar(
+        RetrievalKitGraphScalar(
           value_type: 0, string_value: arena.copy(string), integer_value: 0, bool_value: false)
       case .integer(let integer):
-        VkGraphScalar(value_type: 1, string_value: nil, integer_value: integer, bool_value: false)
+        RetrievalKitGraphScalar(value_type: 1, string_value: nil, integer_value: integer, bool_value: false)
       case .boolean(let boolean):
-        VkGraphScalar(value_type: 2, string_value: nil, integer_value: 0, bool_value: boolean)
+        RetrievalKitGraphScalar(value_type: 2, string_value: nil, integer_value: 0, bool_value: boolean)
       }
     }
     let nativeSteps = steps.map { step in
-      VkGraphStep(
+      RetrievalKitGraphStep(
         relationship: arena.copy(step.relationship), direction: step.direction == .outgoing ? 0 : 1,
         min_hops: step.minHops, max_hops: step.maxHops)
     }
     let fieldPointer = UnsafeMutablePointer<UnsafePointer<CChar>?>.allocate(
       capacity: max(1, nativeFields.count))
-    let valuePointer = UnsafeMutablePointer<VkGraphScalar>.allocate(
+    let valuePointer = UnsafeMutablePointer<RetrievalKitGraphScalar>.allocate(
       capacity: max(1, nativeValues.count))
-    let stepPointer = UnsafeMutablePointer<VkGraphStep>.allocate(
+    let stepPointer = UnsafeMutablePointer<RetrievalKitGraphStep>.allocate(
       capacity: max(1, nativeSteps.count))
     for (index, value) in nativeFields.enumerated() {
       fieldPointer.advanced(by: index).initialize(to: value)
@@ -1077,7 +1046,7 @@ public actor GraphIndex {
       stepPointer.deinitialize(count: nativeSteps.count)
       stepPointer.deallocate()
     }
-    let query = VkGraphQuery(
+    let query = RetrievalKitGraphQuery(
       seed_type: 1, node_ids: nil, node_id_count: 0, seed_node_type: arena.copy(nodeType),
       field_segments: nativeFields.isEmpty ? nil : fieldPointer,
       field_segment_count: nativeFields.count, values: nativeValues.isEmpty ? nil : valuePointer,
@@ -1087,9 +1056,9 @@ public actor GraphIndex {
   }
 
   private nonisolated static func execute(
-    handle: UInt, _ query: VkGraphQuery, cancellation: GraphCancellationToken?
+    handle: UInt, _ query: RetrievalKitGraphQuery, cancellation: GraphCancellationToken?
   ) throws -> GraphQueryResult {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     let result: OpaquePointer? =
       if let cancellation {
         try cancellation.withPointer { pointer in
@@ -1118,7 +1087,7 @@ public actor GraphIndex {
     let execution = NativeGraphExecution(result: result, scope: scope)
     var matches: [GraphMatch] = []
     for index in 0..<retrievalkit_graph_result_count(result) {
-      var value = VkGraphMatch(
+      var value = RetrievalKitGraphMatch(
         node_type: nil, source_type: 0, record_id: nil, chunk_key: nil, depth: 0, path_length: 0)
       try Native.bool { status in retrievalkit_graph_result_match(result, index, &value, status) }
       let nodeID = graphNodeID(
@@ -1168,7 +1137,7 @@ public actor GraphIndex {
     try requireNonnegative(topK, name: "topK")
     let nativeFilter = try filter?.makeFFI()
     var output = emptySearchResultBuffer()
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     let succeeded = try embedding.withUnsafeBufferPointer { vector in
       try result.native.withScope { scope in
@@ -1188,7 +1157,7 @@ public actor GraphIndex {
     try requireNonnegative(topK, name: "topK")
     let nativeFilter = try filter?.makeFFI()
     var output = emptyKeywordResultBuffer()
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     let arena = GraphCStringArena()
     let ok = try result.native.withScope { scope in
@@ -1211,7 +1180,7 @@ public actor GraphIndex {
     let nativeFilter = try filter?.makeFFI()
     let arena = GraphCStringArena()
     var output = emptyHybridResultBuffer()
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     let succeeded = try embedding.withUnsafeBufferPointer { vector in
       try result.native.withScope { scope in
@@ -1230,31 +1199,39 @@ public actor GraphIndex {
 private struct PackedResultDecoder {
   private let utf8: UnsafePointer<UInt8>?
   private let utf8Count: Int
-  private let matchedTerms: UnsafePointer<VkUtf8Range>?
+  private let matchedTerms: UnsafePointer<RetrievalKitUtf8Range>?
   private let matchedTermsCount: Int
+  private let metadataEntries: UnsafePointer<RetrievalKitPackedMetadataEntry>?
+  private let metadataCount: Int
 
-  init(_ output: VkSearchResultBuffer) {
+  init(_ output: RetrievalKitSearchResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = nil
     matchedTermsCount = 0
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  init(_ output: VkKeywordResultBuffer) {
+  init(_ output: RetrievalKitKeywordResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = output.matched_terms
     matchedTermsCount = output.matched_terms_count
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  init(_ output: VkHybridResultBuffer) {
+  init(_ output: RetrievalKitHybridResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = output.matched_terms
     matchedTermsCount = output.matched_terms_count
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  func string(_ range: VkUtf8Range) throws -> String {
+  func string(_ range: RetrievalKitUtf8Range) throws -> String {
     guard
       utf8Count >= 0,
       range.offset >= 0,
@@ -1296,9 +1273,47 @@ private struct PackedResultDecoder {
       try string($0)
     }
   }
+
+  func metadata(start: Int, count: Int) throws -> [String: MetadataValue] {
+    guard
+      metadataCount >= 0,
+      start >= 0,
+      count >= 0,
+      start <= metadataCount,
+      count <= metadataCount - start
+    else {
+      throw RetrievalKitGraphError.internalError(
+        "native result contains an invalid metadata range")
+    }
+    guard count > 0 else { return [:] }
+    guard let metadataEntries else {
+      throw RetrievalKitGraphError.internalError("native result metadata entries are missing")
+    }
+    var values: [String: MetadataValue] = [:]
+    values.reserveCapacity(count)
+    for entry in UnsafeBufferPointer(start: metadataEntries.advanced(by: start), count: count) {
+      let key = try string(entry.key)
+      switch entry.value_type {
+      case 0:
+        values[key] = .string(try string(entry.string_value))
+      case 1:
+        values[key] = .integer(entry.integer_value)
+      case 2:
+        values[key] = .float(entry.float_value)
+      case 3:
+        values[key] = .boolean(entry.bool_value)
+      case 4:
+        values[key] = .timestampMillis(entry.integer_value)
+      default:
+        throw RetrievalKitGraphError.internalError(
+          "native result contains unsupported metadata type \(entry.value_type)")
+      }
+    }
+    return values
+  }
 }
 
-private func decodeSearchResults(_ output: VkSearchResultBuffer) throws -> [GraphSearchHit] {
+private func decodeSearchResults(_ output: RetrievalKitSearchResultBuffer) throws -> [GraphSearchHit] {
   guard output.count > 0 else { return [] }
   guard let hits = output.hits else {
     throw RetrievalKitGraphError.internalError("native result hit buffer is missing")
@@ -1313,12 +1328,12 @@ private func decodeSearchResults(_ output: VkSearchResultBuffer) throws -> [Grap
       text: try decoder.string(hit.text),
       score: hit.score,
       vectorScore: hit.vector_score,
-      filterMatched: hit.filter_matched
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count)
     )
   }
 }
 
-private func decodeKeywordResults(_ output: VkKeywordResultBuffer) throws -> [GraphKeywordHit] {
+private func decodeKeywordResults(_ output: RetrievalKitKeywordResultBuffer) throws -> [GraphKeywordHit] {
   guard output.count > 0 else { return [] }
   guard let hits = output.hits else {
     throw RetrievalKitGraphError.internalError("native result hit buffer is missing")
@@ -1335,12 +1350,13 @@ private func decodeKeywordResults(_ output: VkKeywordResultBuffer) throws -> [Gr
       matchedTerms: try decoder.strings(
         start: hit.matched_terms_start,
         count: hit.matched_terms_count
-      )
+      ),
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count)
     )
   }
 }
 
-private func decodeHybridResults(_ output: VkHybridResultBuffer) throws -> [GraphHybridHit] {
+private func decodeHybridResults(_ output: RetrievalKitHybridResultBuffer) throws -> [GraphHybridHit] {
   guard output.count > 0 else { return [] }
   guard let hits = output.hits else {
     throw RetrievalKitGraphError.internalError("native result hit buffer is missing")
@@ -1356,7 +1372,9 @@ private func decodeHybridResults(_ output: VkHybridResultBuffer) throws -> [Grap
       score: hit.score,
       vectorScore: hit.has_vector_score ? hit.vector_score : nil,
       keywordScore: hit.has_keyword_score ? hit.keyword_score : nil,
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count),
       trace: GraphHybridTrace(
+        alpha: output.alpha,
         vectorRank: hit.has_vector_rank ? hit.vector_rank : nil,
         keywordRank: hit.has_keyword_rank ? hit.keyword_rank : nil,
         normalizedVectorScore: hit.has_normalized_vector_score
@@ -1366,41 +1384,46 @@ private func decodeHybridResults(_ output: VkHybridResultBuffer) throws -> [Grap
         matchedTerms: try decoder.strings(
           start: hit.matched_terms_start,
           count: hit.matched_terms_count
-        ),
-        filterMatched: hit.filter_matched
+        )
       )
     )
   }
 }
 
-private func emptySearchResultBuffer() -> VkSearchResultBuffer {
-  VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
+private func emptySearchResultBuffer() -> RetrievalKitSearchResultBuffer {
+  RetrievalKitSearchResultBuffer(
+    hits: nil, count: 0, utf8: nil, utf8_len: 0, metadata: nil, metadata_count: 0)
 }
 
-private func emptyKeywordResultBuffer() -> VkKeywordResultBuffer {
-  VkKeywordResultBuffer(
+private func emptyKeywordResultBuffer() -> RetrievalKitKeywordResultBuffer {
+  RetrievalKitKeywordResultBuffer(
     hits: nil,
     count: 0,
     utf8: nil,
     utf8_len: 0,
     matched_terms: nil,
-    matched_terms_count: 0
+    matched_terms_count: 0,
+    metadata: nil,
+    metadata_count: 0
   )
 }
 
-private func emptyHybridResultBuffer() -> VkHybridResultBuffer {
-  VkHybridResultBuffer(
+private func emptyHybridResultBuffer() -> RetrievalKitHybridResultBuffer {
+  RetrievalKitHybridResultBuffer(
     hits: nil,
     count: 0,
     utf8: nil,
     utf8_len: 0,
     matched_terms: nil,
-    matched_terms_count: 0
+    matched_terms_count: 0,
+    metadata: nil,
+    metadata_count: 0,
+    alpha: 0
   )
 }
 
-private func nativeLimits(_ limits: GraphQueryLimits) -> VkGraphLimits {
-  VkGraphLimits(
+private func nativeLimits(_ limits: GraphQueryLimits) -> RetrievalKitGraphLimits {
+  RetrievalKitGraphLimits(
     max_hops: limits.maxHops, max_visited: limits.maxVisited, max_results: limits.maxResults,
     max_working_bytes: limits.maxWorkingBytes)
 }
@@ -1431,19 +1454,19 @@ private func graphNodeID(
     chunkKey: chunkKey.map { String(cString: $0) })
 }
 
-private func graphNodeID(_ value: VkGraphOwnedNode) -> GraphNodeID {
+private func graphNodeID(_ value: RetrievalKitGraphOwnedNode) -> GraphNodeID {
   graphNodeID(nodeType: value.node_type, recordID: value.record_id, chunkKey: value.chunk_key)
 }
 
-private func emptyOwnedNode() -> VkGraphOwnedNode {
-  VkGraphOwnedNode(node_type: nil, source_type: 0, record_id: nil, chunk_key: nil)
+private func emptyOwnedNode() -> RetrievalKitGraphOwnedNode {
+  RetrievalKitGraphOwnedNode(node_type: nil, source_type: 0, record_id: nil, chunk_key: nil)
 }
 
-private func emptyPathEdge() -> VkGraphPathEdge {
-  VkGraphPathEdge(
+private func emptyPathEdge() -> RetrievalKitGraphPathEdge {
+  RetrievalKitGraphPathEdge(
     relationship_type: nil, source: emptyOwnedNode(), target: emptyOwnedNode(),
     occurrence_ordinal: 0, schema_rule_index: 0, source_record_id: nil,
-    source_field_segments: VkStringArray(values: nil, count: 0), derived_inverse: false,
+    source_field_segments: RetrievalKitStringArray(values: nil, count: 0), derived_inverse: false,
     built_in: false)
 }
 
@@ -1627,12 +1650,12 @@ public actor GraphQueries {
   ) throws -> GraphSelection {
     let arena = GraphCStringArena()
     let nativeSeeds = seeds.map {
-      VkGraphNodeRef(
+      RetrievalKitGraphNodeRef(
         node_type: arena.copy($0.nodeType), source_type: $0.chunkKey == nil ? 0 : 1,
         record_id: arena.copy($0.recordID), chunk_key: $0.chunkKey.map(arena.copy))
     }
     let nativeSteps = steps.map {
-      VkGraphStep(
+      RetrievalKitGraphStep(
         relationship: arena.copy($0.relationship), direction: $0.direction == .outgoing ? 0 : 1,
         min_hops: $0.minHops, max_hops: $0.maxHops)
     }
@@ -1640,7 +1663,7 @@ public actor GraphQueries {
       try nativeSteps.withUnsafeBufferPointer { stepBuffer in
         try execute(
           owner: owner,
-          query: VkGraphQuery(
+          query: RetrievalKitGraphQuery(
             seed_type: 0, node_ids: seedBuffer.baseAddress, node_id_count: seedBuffer.count,
             seed_node_type: nil, field_segments: nil, field_segment_count: 0, values: nil,
             value_count: 0, steps: stepBuffer.baseAddress, step_count: stepBuffer.count,
@@ -1657,16 +1680,16 @@ public actor GraphQueries {
     let scalars = values.map { value in
       switch value {
       case .string(let v):
-        VkGraphScalar(
+        RetrievalKitGraphScalar(
           value_type: 0, string_value: arena.copy(v), integer_value: 0, bool_value: false)
       case .integer(let v):
-        VkGraphScalar(value_type: 1, string_value: nil, integer_value: v, bool_value: false)
+        RetrievalKitGraphScalar(value_type: 1, string_value: nil, integer_value: v, bool_value: false)
       case .boolean(let v):
-        VkGraphScalar(value_type: 2, string_value: nil, integer_value: 0, bool_value: v)
+        RetrievalKitGraphScalar(value_type: 2, string_value: nil, integer_value: 0, bool_value: v)
       }
     }
     let nativeSteps = steps.map {
-      VkGraphStep(
+      RetrievalKitGraphStep(
         relationship: arena.copy($0.relationship), direction: $0.direction == .outgoing ? 0 : 1,
         min_hops: $0.minHops, max_hops: $0.maxHops)
     }
@@ -1675,7 +1698,7 @@ public actor GraphQueries {
         try nativeSteps.withUnsafeBufferPointer { stepBuffer in
           try execute(
             owner: owner,
-            query: VkGraphQuery(
+            query: RetrievalKitGraphQuery(
               seed_type: 1, node_ids: nil, node_id_count: 0, seed_node_type: arena.copy(nodeType),
               field_segments: fieldBuffer.baseAddress, field_segment_count: fieldBuffer.count,
               values: scalarBuffer.baseAddress, value_count: scalarBuffer.count,
@@ -1686,10 +1709,10 @@ public actor GraphQueries {
     }
   }
   private nonisolated static func execute(
-    owner: NativeCapabilityDatabase, query: VkGraphQuery, cancellation: GraphCancellationToken?
+    owner: NativeCapabilityDatabase, query: RetrievalKitGraphQuery, cancellation: GraphCancellationToken?
   ) throws -> GraphSelection {
     let handle = try owner.requireHandle()
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     let call: (OpaquePointer?) throws -> OpaquePointer? = { cancellationPointer in
       switch owner.kind {
@@ -1714,7 +1737,7 @@ public actor GraphQueries {
 private func materializeSelection(_ result: OpaquePointer) throws -> GraphSelection {
   var matches: [GraphMatch] = []
   for index in 0..<retrievalkit_graph_result_count(result) {
-    var value = VkGraphMatch(
+    var value = RetrievalKitGraphMatch(
       node_type: nil, source_type: 0, record_id: nil, chunk_key: nil, depth: 0, path_length: 0)
     try Native.bool { retrievalkit_graph_result_match(result, index, &value, $0) }
     let node = graphNodeID(
@@ -1760,10 +1783,10 @@ private func materializeCandidateProjection(
   owner: NativeCapabilityDatabase, selection: GraphSelection, filter: GraphFilter?
 ) throws -> GraphCandidateProjection {
   let nativeFilter = try filter?.makeFFI()
-  var output = VkGraphCandidateProjection(
+  var output = RetrievalKitGraphCandidateProjection(
     candidates: nil, count: 0, source_nodes: 0, projected_chunks_before_filter: 0,
     projected_chunks_after_filter: 0)
-  var status = VkStatus(code: 0, message: nil)
+  var status = RetrievalKitStatus(code: 0, message: nil)
   defer {
     retrievalkit_graph_candidate_projection_clear(&output)
     retrievalkit_status_clear(&status)
@@ -1912,7 +1935,7 @@ public actor GraphDatabase {
   public func save(to directory: URL) async throws {
     let handle = try owner.requireHandle()
     try await Task.detached {
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       guard
         directory.path.withCString({
@@ -1946,7 +1969,7 @@ public actor GraphRetrievalQueries {
       let values = embedding
       let nativeFilter = try filter?.makeFFI()
       var output = emptySearchResultBuffer()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let succeeded = try values.withUnsafeBufferPointer { buffer in
         retrievalkit_graph_retrieval_semantic_search(
@@ -1971,7 +1994,7 @@ public actor GraphRetrievalQueries {
       let arena = GraphCStringArena()
       let nativeFilter = try filter?.makeFFI()
       var output = emptyKeywordResultBuffer()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let succeeded = retrievalkit_graph_retrieval_keyword_search(
         OpaquePointer(bitPattern: try owner.requireHandle()),
@@ -1998,7 +2021,7 @@ public actor GraphRetrievalQueries {
       let arena = GraphCStringArena()
       let nativeFilter = try filter?.makeFFI()
       var output = emptyHybridResultBuffer()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let succeeded = try values.withUnsafeBufferPointer { buffer in
         retrievalkit_graph_retrieval_hybrid_search_alpha(
@@ -2224,7 +2247,7 @@ public actor GraphRetrievalDatabase {
   public func save(to directory: URL) async throws {
     let handle = try owner.requireHandle()
     try await Task.detached {
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       guard
         directory.path.withCString({

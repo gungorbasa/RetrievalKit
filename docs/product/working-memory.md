@@ -23,10 +23,16 @@ implemented, or superseded by the product spec.
   retrieval upsert and every query path use typed C ABI values with contiguous
   float buffers; JSON remains limited to cold schema-rich graph ingestion. Do
   not add wrapper-side fallbacks or duplicate these rules in Python/Node.
-  Result hydration uses fixed hit arrays, one packed UTF-8 arena, and one flat
-  matched-term range array for BM25/hybrid; Swift validates and decodes ranges
-  without owning retrieval semantics. The graph aggregate ABI version for this
-  contract is 10. Remaining boundary performance debt is explicit: the Rust
+  Result hydration uses fixed hit arrays, one packed UTF-8 arena, one flat
+  metadata-entry array, and one flat matched-term range array for BM25/hybrid;
+  Swift validates and decodes ranges without owning retrieval semantics. Exact,
+  BM25, and hybrid hits expose effective metadata; hybrid traces expose one
+  buffer-level alpha and no constant filter-match field. Alpha endpoints skip
+  candidate generation for the zero-weight source. Public wrapper FFI no longer
+  exposes generic fusion/RRF. Native ABI types/constants use the
+  `RetrievalKit`/`RETRIEVALKIT_` product prefixes; the stale pre-rename
+  `Vk`/`VK_` names are removed. The graph aggregate ABI version for this
+  contract is 12. Remaining boundary performance debt is explicit: the Rust
   query object still owns one vector copy, and advanced multi-document graph
   upsert serializes embeddings on the cold JSON path. Optimize those only with
   measured, compatibility-tested ABI changes; they are not wrapper semantics.
@@ -734,9 +740,9 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   document frequency. Persistence remains deterministic through the existing
   sorted binary format.
 - High-level hybrid search defaults to weighted normalized fusion with
-  `alpha=0.6`. Internal Rust benchmarks may still exercise RRF. Result traces
-  expose vector/keyword ranks, raw scores, normalized scores, matched terms,
-  and fusion configuration.
+  `alpha=0.6`. Internal Rust benchmarks may still exercise RRF. Public result
+  traces expose alpha, vector/keyword ranks, raw scores, normalized scores, and
+  matched terms without exposing the internal fusion enum.
 - Hybrid candidate limits are exposed through the Rust public API with
   `HybridQuery::with_candidate_limits(vector_top_k, keyword_top_k)`.
 - The CLI matrix benchmark can now vary filter selectivity and hybrid candidate
@@ -782,22 +788,23 @@ the release-candidate implementation are preserved but intentionally parked.
 Do not resume candidate rebuilding, release-evidence provisioning, publication,
 or physical-device work without a new explicit owner task.
 
-The known SDK-completion gaps, in dependency order, are:
+The remaining SDK-completion gaps, in dependency order, are:
 
-1. Freeze one canonical public result and trace contract across Rust, FFI,
-   Swift, and Python. Swift capability results still omit metadata and hybrid
-   fusion configuration that Python exposes.
-2. Expose corpus-owned stable candidate-identity projection through Python
+1. Expose corpus-owned stable candidate-identity projection through Python
    graph APIs, matching the existing Rust and Swift operation rather than
    reproducing filtering or generation checks in Python.
-3. Add a retrieval-only cross-wrapper conformance fixture covering compact
-   persistence with BM25 rebuild, metadata filters, alpha-controlled hybrid
-   ordering, and exact result/trace equality.
-4. Replace JSON transport on the Python graph query path with typed PyO3
+2. Replace JSON transport on the Python graph query path with typed PyO3
    conversion. Wrapper-overhead benchmarking remains deferred with the broader
    benchmark pause.
-5. Run a focused public-API and developer-experience closure audit after these
+3. Run a focused public-API and developer-experience closure audit after these
    contracts land; fix only SDK implementation/documentation gaps found there.
+
+The canonical result/trace contract and the retrieval-only Rust/Swift/Python
+conformance fixture are implemented. The fixture covers Unicode and all
+metadata value types, chunk-over-document metadata precedence, exact/BM25/
+hybrid ordering, alpha endpoints, trace fields, and compact persistence with
+BM25 rebuild. Base and graph fixture runners remain separate because their
+native aggregates are intentionally mutually exclusive.
 
 The formal gap source is
 `docs/product/reports/cross-language-wrapper-parity-audit.md`.
@@ -817,3 +824,11 @@ Optional post-release work, ordered by evidence need:
 - explore parallel exact scanning only after measured CPU pressure, and begin
   ANN research only if exact search still misses the frozen latency/recall
   targets.
+
+## External Naming Risk
+
+- 2026-07-25: an unrelated `retrieval-kit` crate was published on crates.io on
+  2026-04-27. It describes a Rust library for local document ingestion, vector
+  search, and keyword search, so the overlap is close enough to require
+  package-name and trademark clearance before RetrievalKit is publicly
+  released. Exact-match domain availability does not resolve this collision.

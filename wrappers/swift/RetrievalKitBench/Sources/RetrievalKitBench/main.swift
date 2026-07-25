@@ -429,7 +429,7 @@ func firstModelPackage(in directory: URL) throws -> URL {
 }
 
 func loadIndex(path: String) throws -> OpaquePointer {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard let index = path.withCString({ retrievalkit_index_load($0, &status) }) else {
         throw BenchHarnessError.retrievalKit(statusMessage(status))
@@ -438,8 +438,9 @@ func loadIndex(path: String) throws -> OpaquePointer {
 }
 
 func search(index: OpaquePointer, embedding: [Float], topK: Int) throws -> [RealSearchHit] {
-    var output = VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
-    var status = VkStatus(code: 0, message: nil)
+    var output = RetrievalKitSearchResultBuffer(
+      hits: nil, count: 0, utf8: nil, utf8_len: 0, metadata: nil, metadata_count: 0)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
 
     let succeeded = embedding.withUnsafeBufferPointer { buffer in
@@ -471,7 +472,7 @@ func search(index: OpaquePointer, embedding: [Float], topK: Int) throws -> [Real
 }
 
 func packedString(
-    _ range: VkUtf8Range,
+    _ range: RetrievalKitUtf8Range,
     utf8: UnsafePointer<UInt8>?,
     count: Int
 ) throws -> String {
@@ -497,7 +498,7 @@ func packedString(
     return value
 }
 
-func statusMessage(_ status: VkStatus) -> String {
+func statusMessage(_ status: RetrievalKitStatus) -> String {
     status.message.map { String(cString: $0) } ?? "unknown RetrievalKit error"
 }
 

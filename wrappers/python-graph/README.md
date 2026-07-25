@@ -94,6 +94,9 @@ hybrid retrieval through `within=`. Metadata filtering is supported by both
 retrieval methods through `where=`.
 Hybrid `alpha` is query-time: `1` is vector-only, `0` is BM25-only, and the
 default is `0.6`.
+Every retrieval hit includes effective metadata. Hybrid traces expose `alpha`,
+source ranks, normalized scores, and matched terms; graph scope only constrains
+the candidate set.
 
 Databases and selections support `close()` and context managers. Graph queries
 also support cooperative cancellation and second-based timeouts. Rust performs

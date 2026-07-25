@@ -2,6 +2,15 @@
 
 Date: 2026-07-12
 
+Status update: 2026-07-25
+
+The progressive public ingestion API described in the active product spec
+supersedes this report's older keyed-embedding examples. Canonical result/trace
+parity and the retrieval-only cross-wrapper fixture are now implemented. The
+remaining open parity items are Python stable candidate projection and typed
+Python graph-query transport; performance qualification remains intentionally
+paused.
+
 ## Verdict
 
 Rust, Swift, and Python now share the same capability-separated database
@@ -42,6 +51,8 @@ FFI work rather than wrapper-only changes.
 | Closed/consumed lifecycle safety | Rust ownership and typed results | ARC, actors, and explicit `close()` | native ownership, `close()`, and context managers | Aligned, idiomatic |
 | Dimension and unavailable-capability errors | Typed Rust variants | Typed Swift cases | Typed Python exceptions | Aligned |
 | Cross-wrapper graph fixture | Canonical fixture assertions | Canonical fixture assertions | Canonical fixture assertions | Aligned |
+| Effective result metadata and alpha trace | Rust-owned assembly | Packed C ABI decoding | Direct PyO3 conversion | Aligned |
+| Cross-wrapper retrieval fixture | Canonical fixture assertions | Canonical fixture assertions | Canonical fixture assertions | Aligned |
 
 ## Intentional Native-Language Differences
 
@@ -88,26 +99,20 @@ These are not architectural ownership differences, but they matter for the
 speed-and-quality bar and must be completed before claiming exhaustive wrapper
 parity:
 
-1. **P1: remove JSON from the Python graph query path.** Python currently
+1. **P1: expose stable candidate projection in Python.** Call the existing
+   corpus-owned Rust operation and preserve its filtering, generation, lexical
+   ordering, and count semantics.
+2. **P1: remove JSON from the Python graph query path.** Python currently
    serializes graph query requests and materialized selections through JSON at
    the PyO3 boundary. Swift uses typed C values. Replace the Python graph query
    transport with typed PyO3 conversion and benchmark wrapper overhead
    separately from Rust traversal.
-2. **P1: unify result and trace payloads.** Python returns hydrated metadata and
-   the complete Rust hybrid fusion trace. The current Swift capability result
-   structs omit metadata and fusion configuration. Decide the canonical public
-   result contract, extend the FFI once, and qualify both Swift packages against
-   it. Do not reconstruct Rust ranking traces in wrapper code.
-3. **P1: add a retrieval-only cross-wrapper fixture.** Graph retrieval already
-   shares a canonical fixture across Rust, Swift, and Python. Add an equivalent
-   retrieval-only fixture covering compact persistence with BM25 rebuild,
-   metadata filters, alpha-controlled hybrid ordering, and trace equality.
-4. **P2: benchmark Python wrapper overhead.** The Rust retrieval path remains
+3. **P2: benchmark Python wrapper overhead.** The Rust retrieval path remains
    native and releases the GIL, but the new Python builder and query view need a
    pinned release-mode wrapper-overhead report before performance claims.
 
-Until these items are complete, describe the state as **architecture parity
-with qualified graph behavior**, not exhaustive result/performance parity.
+Result-shape parity is complete. Do not claim exhaustive wrapper performance
+parity until the paused measurement work resumes.
 
 The stable candidate-identity projection added after this audit is deliberately
 not counted as Python parity. Its filtering and generation semantics are
@@ -124,3 +129,5 @@ Python.
 - Graph-free wheel content inspection and Cargo dependency-tree inspection.
 - Existing shared graph-conformance fixture through Python; Rust and Swift
   coverage remains in their existing qualification suites.
+- Shared retrieval-conformance fixture through Rust, Swift, and Python,
+  including compact persistence/BM25 rebuild and alpha endpoints.

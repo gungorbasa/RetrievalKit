@@ -64,7 +64,7 @@ pub fn project_candidate_identities(
 
 The projection contains lexically ordered `(record_id, chunk_key)` identities
 and source/before-filter/after-filter counts. The C ABI v7 exposes typed
-`VkGraphChunkIdentity` and `VkGraphCandidateProjection` values through the two
+`RetrievalKitGraphChunkIdentity` and `RetrievalKitGraphCandidateProjection` values through the two
 database projection functions, with explicit free/clear functions. Swift
 exposes native `GraphChunkIdentity`, `GraphCandidateProjection`, and async
 `projectCandidates(from:filter:)` on both database actors. Python projection

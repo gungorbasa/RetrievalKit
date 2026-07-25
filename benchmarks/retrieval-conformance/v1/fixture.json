@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "fixture_id": "retrieval-results-v1",
+  "dimension": 2,
+  "metric": "dot_product",
+  "documents": [
+    {
+      "id": "vector-doc",
+      "metadata": {
+        "title": { "String": "Belge ğ" },
+        "count": { "Integer": 7 },
+        "weight": { "Float": 2.5 },
+        "active": { "Boolean": true },
+        "created_at": { "TimestampMillis": 1700000000000 },
+        "scope": { "String": "document" }
+      },
+      "chunks": [
+        {
+          "text": "semantic local result",
+          "embedding": [1.0, 0.0],
+          "metadata": {
+            "scope": { "String": "chunk" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "keyword-doc",
+      "metadata": {
+        "title": { "String": "Keyword" }
+      },
+      "chunks": [
+        {
+          "text": "rare keyword özel",
+          "embedding": [0.0, 1.0],
+          "metadata": {}
+        }
+      ]
+    }
+  ],
+  "expectations": {
+    "exact": {
+      "embedding": [1.0, 0.0],
+      "document_ids": ["vector-doc"],
+      "text": "semantic local result",
+      "metadata": {
+        "title": { "String": "Belge ğ" },
+        "count": { "Integer": 7 },
+        "weight": { "Float": 2.5 },
+        "active": { "Boolean": true },
+        "created_at": { "TimestampMillis": 1700000000000 },
+        "scope": { "String": "chunk" }
+      }
+    },
+    "keyword": {
+      "text": "rare keyword",
+      "document_ids": ["keyword-doc"],
+      "matched_terms": ["keyword", "rare"]
+    },
+    "hybrid": {
+      "text": "rare keyword",
+      "embedding": [1.0, 0.0],
+      "alpha": 0.25,
+      "document_ids": ["keyword-doc", "vector-doc"]
+    },
+    "alpha_one": {
+      "document_ids": ["vector-doc"]
+    },
+    "alpha_zero": {
+      "document_ids": ["keyword-doc"]
+    },
+    "compact_reload_keyword": {
+      "document_ids": ["keyword-doc"]
+    }
+  }
+}

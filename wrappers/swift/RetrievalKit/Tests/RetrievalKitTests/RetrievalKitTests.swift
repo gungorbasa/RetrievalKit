@@ -97,6 +97,7 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertEqual(results.count, 1)
     XCTAssertEqual(results[0].documentID, "doc-1")
     XCTAssertEqual(results[0].text, "alpha topic")
+    XCTAssertEqual(results[0].metadata, ["source": .string("notes")])
   }
 
   func testMetadataFilterRestrictsSearchResults() async throws {
@@ -136,7 +137,7 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertEqual(hybridResults.first?.text, "local private notes")
     XCTAssertNotNil(hybridResults.first?.vectorScore)
     XCTAssertNotNil(hybridResults.first?.keywordScore)
-    XCTAssertEqual(hybridResults.first?.trace.filterMatched, true)
+    XCTAssertEqual(hybridResults.first?.trace.alpha, 0.6)
   }
 
   func testPackedResultsPreserveUnicodeAcrossEverySearchMode() async throws {
@@ -166,6 +167,84 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertTrue(hybrid[0].trace.matchedTerms.contains("swift"))
   }
 
+  func testSwiftMatchesRetrievalCrossWrapperFixture() async throws {
+    let fixture = try JSONDecoder().decode(
+      RetrievalConformanceFixture.self,
+      from: Data(contentsOf: retrievalConformanceFixtureURL())
+    )
+    XCTAssertEqual(fixture.schemaVersion, 1)
+    XCTAssertEqual(fixture.fixtureID, "retrieval-results-v1")
+    XCTAssertEqual(fixture.metric, "dot_product")
+
+    let index = try VectorIndex(
+      dimension: fixture.dimension, metric: .dotProduct, encoding: .f32)
+    for document in fixture.documents {
+      try await index.upsert(
+        document: Document(id: DocumentID(document.id), metadata: document.metadata),
+        chunks: document.chunks.map {
+          ChunkInput(text: $0.text, embedding: $0.embedding, metadata: $0.metadata)
+        }
+      )
+    }
+
+    let exact = try await index.search(
+      embedding: fixture.expectations.exact.embedding, topK: 1)
+    XCTAssertEqual(exact.map(\.documentID), fixture.expectations.exact.documentIDs)
+    XCTAssertEqual(exact[0].text, fixture.expectations.exact.text)
+    XCTAssertEqual(exact[0].metadata, fixture.expectations.exact.metadata)
+
+    let keyword = try await index.keywordSearch(
+      text: fixture.expectations.keyword.text, topK: 10)
+    XCTAssertEqual(keyword.map(\.documentID), fixture.expectations.keyword.documentIDs)
+    XCTAssertEqual(keyword[0].matchedTerms, fixture.expectations.keyword.matchedTerms)
+
+    let hybridExpectation = fixture.expectations.hybrid
+    let options = HybridOptions(vectorTopK: 1, keywordTopK: 1)
+    let hybrid = try await index.hybridSearch(
+      text: hybridExpectation.text,
+      embedding: hybridExpectation.embedding,
+      topK: 10,
+      alpha: hybridExpectation.alpha,
+      options: options
+    )
+    XCTAssertEqual(hybrid.map(\.documentID), hybridExpectation.documentIDs)
+    XCTAssertTrue(hybrid.allSatisfy { $0.trace.alpha == hybridExpectation.alpha })
+
+    let alphaOne = try await index.hybridSearch(
+      text: hybridExpectation.text,
+      embedding: hybridExpectation.embedding,
+      topK: 10,
+      alpha: 1,
+      options: options
+    )
+    XCTAssertEqual(alphaOne.map(\.documentID), fixture.expectations.alphaOne.documentIDs)
+    XCTAssertNil(alphaOne[0].keywordScore)
+    XCTAssertNil(alphaOne[0].trace.keywordRank)
+
+    let alphaZero = try await index.hybridSearch(
+      text: hybridExpectation.text,
+      embedding: [],
+      topK: 10,
+      alpha: 0,
+      options: options
+    )
+    XCTAssertEqual(alphaZero.map(\.documentID), fixture.expectations.alphaZero.documentIDs)
+    XCTAssertNil(alphaZero[0].vectorScore)
+    XCTAssertNil(alphaZero[0].trace.vectorRank)
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "retrievalkit-conformance-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try await index.save(to: directory, includeBM25: false)
+    let loaded = try VectorIndex.load(from: directory)
+    let rebuiltKeyword = try await loaded.keywordSearch(
+      text: fixture.expectations.keyword.text, topK: 10)
+    XCTAssertEqual(
+      rebuiltKeyword.map(\.documentID),
+      fixture.expectations.compactReloadKeyword.documentIDs
+    )
+  }
+
   func testDeleteRemovesDocumentFromResults() async throws {
     let index = try VectorIndex(dimension: 2)
 
@@ -179,6 +258,12 @@ final class RetrievalKitTests: XCTestCase {
 
     XCTAssertEqual(deletedCount, 1)
     XCTAssertTrue(results.isEmpty)
+  }
+
+  private func retrievalConformanceFixtureURL() -> URL {
+    var root = URL(fileURLWithPath: #filePath)
+    for _ in 0..<6 { root.deleteLastPathComponent() }
+    return root.appendingPathComponent("benchmarks/retrieval-conformance/v1/fixture.json")
   }
 
   func testCompactionReclaimsTombstonesAndPreservesResults() async throws {
@@ -566,6 +651,93 @@ final class RetrievalKitTests: XCTestCase {
       .appendingPathComponent("RetrievalKitIOSBench")
       .appendingPathComponent("RetrievalKitIOSBench")
       .appendingPathComponent("Resources")
+  }
+}
+
+private struct RetrievalConformanceFixture: Decodable {
+  let schemaVersion: Int
+  let fixtureID: String
+  let dimension: Int
+  let metric: String
+  let documents: [RetrievalFixtureDocument]
+  let expectations: RetrievalFixtureExpectations
+
+  enum CodingKeys: String, CodingKey {
+    case schemaVersion = "schema_version"
+    case fixtureID = "fixture_id"
+    case dimension, metric, documents, expectations
+  }
+}
+
+private struct RetrievalFixtureDocument: Decodable {
+  let id: String
+  let metadata: [String: MetadataValue]
+  let chunks: [RetrievalFixtureChunk]
+}
+
+private struct RetrievalFixtureChunk: Decodable {
+  let text: String
+  let embedding: [Float]
+  let metadata: [String: MetadataValue]
+}
+
+private struct RetrievalFixtureExpectations: Decodable {
+  let exact: RetrievalExactExpectation
+  let keyword: RetrievalKeywordExpectation
+  let hybrid: RetrievalHybridExpectation
+  let alphaOne: RetrievalIDExpectation
+  let alphaZero: RetrievalIDExpectation
+  let compactReloadKeyword: RetrievalIDExpectation
+
+  enum CodingKeys: String, CodingKey {
+    case exact, keyword, hybrid
+    case alphaOne = "alpha_one"
+    case alphaZero = "alpha_zero"
+    case compactReloadKeyword = "compact_reload_keyword"
+  }
+}
+
+private struct RetrievalExactExpectation: Decodable {
+  let embedding: [Float]
+  let documentIDs: [String]
+  let text: String
+  let metadata: [String: MetadataValue]
+
+  enum CodingKeys: String, CodingKey {
+    case embedding, text, metadata
+    case documentIDs = "document_ids"
+  }
+}
+
+private struct RetrievalKeywordExpectation: Decodable {
+  let text: String
+  let documentIDs: [String]
+  let matchedTerms: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case text
+    case documentIDs = "document_ids"
+    case matchedTerms = "matched_terms"
+  }
+}
+
+private struct RetrievalHybridExpectation: Decodable {
+  let text: String
+  let embedding: [Float]
+  let alpha: Float
+  let documentIDs: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case text, embedding, alpha
+    case documentIDs = "document_ids"
+  }
+}
+
+private struct RetrievalIDExpectation: Decodable {
+  let documentIDs: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case documentIDs = "document_ids"
   }
 }
 

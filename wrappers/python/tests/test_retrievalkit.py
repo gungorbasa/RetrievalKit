@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import sys
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -66,6 +67,18 @@ def embed(texts: list[str]) -> list[list[float]]:
         "query alpha": [1.0, 0.0, 0.0, 0.0],
     }
     return [values.get(text, [0.0, 0.0, 1.0, 0.0]) for text in texts]
+
+
+def _decode_fixture_metadata(
+    metadata: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    decoded: dict[str, object] = {}
+    for key, tagged in metadata.items():
+        tag, value = next(iter(tagged.items()))
+        decoded[key] = (
+            TimestampMillis(int(value)) if tag == "TimestampMillis" else value
+        )
+    return decoded
 
 
 def test_timestamp_metadata_remains_typed_and_filters() -> None:
@@ -317,7 +330,6 @@ def test_add_search_filter_and_delete() -> None:
     assert hits[0]["document_id"] == "doc-alpha"
     assert hits[0]["text"] == "alpha"
     assert hits[0]["metadata"]["kind"] == "note"
-    assert hits[0]["trace"]["filter_matched"] is True
 
     assert index.delete_document("doc-alpha") == 1
     assert (
@@ -437,11 +449,7 @@ def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
     assert keyword_hit["matched_terms"] == ["keyword", "rare"]
     assert keyword_hit["trace"]["keyword_rank"] == 1
     assert keyword_hit["trace"]["vector_rank"] is None
-    assert keyword_hit["trace"]["fusion"] == {
-        "kind": "weighted_normalized",
-        "vector_weight": 0.25,
-        "keyword_weight": 0.75,
-    }
+    assert keyword_hit["trace"]["alpha"] == pytest.approx(0.25)
 
     vector_only = index.hybrid_search(
         "missing",
@@ -451,6 +459,30 @@ def test_hybrid_search_returns_scores_trace_and_candidate_limits() -> None:
         keyword_candidates=0,
     )
     assert [hit["document_id"] for hit in vector_only] == ["doc-vector"]
+
+    alpha_one = index.hybrid_search(
+        "rare keyword",
+        [1.0, 0.0, 0.0, 0.0],
+        vector_candidates=1,
+        keyword_candidates=1,
+        alpha=1,
+    )
+    assert [hit["document_id"] for hit in alpha_one] == ["doc-vector"]
+    assert alpha_one[0]["keyword_score"] is None
+    assert alpha_one[0]["trace"]["keyword_rank"] is None
+    assert alpha_one[0]["trace"]["alpha"] == 1
+
+    alpha_zero = index.hybrid_search(
+        "rare keyword",
+        [],
+        vector_candidates=1,
+        keyword_candidates=1,
+        alpha=0,
+    )
+    assert [hit["document_id"] for hit in alpha_zero] == ["doc-keyword"]
+    assert alpha_zero[0]["vector_score"] is None
+    assert alpha_zero[0]["trace"]["vector_rank"] is None
+    assert alpha_zero[0]["trace"]["alpha"] == 0
 
 
 def test_hybrid_search_supports_alpha_and_filters() -> None:
@@ -488,11 +520,109 @@ def test_hybrid_search_supports_alpha_and_filters() -> None:
     )
 
     assert [hit["document_id"] for hit in hits] == ["doc-1"]
-    assert hits[0]["trace"]["filter_matched"] is True
-    fusion = hits[0]["trace"]["fusion"]
-    assert fusion["kind"] == "weighted_normalized"
-    assert fusion["vector_weight"] == pytest.approx(0.6)
-    assert fusion["keyword_weight"] == pytest.approx(0.4)
+    assert hits[0]["trace"]["alpha"] == pytest.approx(0.6)
+
+
+def test_python_matches_retrieval_cross_wrapper_fixture(tmp_path: Path) -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3]
+        / "benchmarks"
+        / "retrieval-conformance"
+        / "v1"
+        / "fixture.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+    assert fixture["schema_version"] == 1
+    assert fixture["fixture_id"] == "retrieval-results-v1"
+
+    index = Index(
+        dimension=fixture["dimension"],
+        metric=fixture["metric"],
+        encoding="f32",
+    )
+    index.add(
+        [
+            {
+                "id": document["id"],
+                "metadata": _decode_fixture_metadata(document["metadata"]),
+                "chunks": [
+                    {
+                        "text": chunk["text"],
+                        "embedding": chunk["embedding"],
+                        "metadata": _decode_fixture_metadata(chunk["metadata"]),
+                    }
+                    for chunk in document["chunks"]
+                ],
+            }
+            for document in fixture["documents"]
+        ]
+    )
+    expectations = fixture["expectations"]
+
+    exact = index.search(expectations["exact"]["embedding"], limit=1)
+    assert [hit["document_id"] for hit in exact] == expectations["exact"][
+        "document_ids"
+    ]
+    assert exact[0]["text"] == expectations["exact"]["text"]
+    assert exact[0]["metadata"] == _decode_fixture_metadata(
+        expectations["exact"]["metadata"]
+    )
+
+    keyword = index.keyword_search(expectations["keyword"]["text"])
+    assert [hit["document_id"] for hit in keyword] == expectations["keyword"][
+        "document_ids"
+    ]
+    assert keyword[0]["matched_terms"] == expectations["keyword"]["matched_terms"]
+
+    hybrid_expectation = expectations["hybrid"]
+    hybrid = index.hybrid_search(
+        hybrid_expectation["text"],
+        hybrid_expectation["embedding"],
+        vector_candidates=1,
+        keyword_candidates=1,
+        alpha=hybrid_expectation["alpha"],
+    )
+    assert [hit["document_id"] for hit in hybrid] == hybrid_expectation[
+        "document_ids"
+    ]
+    assert all(
+        hit["trace"]["alpha"] == pytest.approx(hybrid_expectation["alpha"])
+        for hit in hybrid
+    )
+
+    alpha_one = index.hybrid_search(
+        hybrid_expectation["text"],
+        hybrid_expectation["embedding"],
+        vector_candidates=1,
+        keyword_candidates=1,
+        alpha=1,
+    )
+    assert [hit["document_id"] for hit in alpha_one] == expectations["alpha_one"][
+        "document_ids"
+    ]
+    assert alpha_one[0]["keyword_score"] is None
+    assert alpha_one[0]["trace"]["keyword_rank"] is None
+
+    alpha_zero = index.hybrid_search(
+        hybrid_expectation["text"],
+        [],
+        vector_candidates=1,
+        keyword_candidates=1,
+        alpha=0,
+    )
+    assert [hit["document_id"] for hit in alpha_zero] == expectations["alpha_zero"][
+        "document_ids"
+    ]
+    assert alpha_zero[0]["vector_score"] is None
+    assert alpha_zero[0]["trace"]["vector_rank"] is None
+
+    index.save(tmp_path, include_bm25=False)
+    rebuilt_keyword = Index.load(tmp_path).keyword_search(
+        expectations["keyword"]["text"]
+    )
+    assert [
+        hit["document_id"] for hit in rebuilt_keyword
+    ] == expectations["compact_reload_keyword"]["document_ids"]
 
 
 def test_save_load_round_trip(tmp_path) -> None:

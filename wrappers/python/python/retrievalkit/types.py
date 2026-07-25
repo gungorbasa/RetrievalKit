@@ -110,9 +110,7 @@ class AddDocumentResult(TypedDict):
 
 
 class SearchTrace(TypedDict):
-    vector_score: float | None
-    keyword_score: float | None
-    filter_matched: bool
+    vector_score: float
 
 
 class SearchHit(TypedDict):
@@ -133,28 +131,13 @@ class KeywordHit(TypedDict):
     matched_terms: list[str]
 
 
-class RrfFusionTrace(TypedDict):
-    kind: Literal["rrf"]
-    rrf_k: float
-
-
-class WeightedNormalizedFusionTrace(TypedDict):
-    kind: Literal["weighted_normalized"]
-    vector_weight: float
-    keyword_weight: float
-
-
-HybridFusionTrace: TypeAlias = RrfFusionTrace | WeightedNormalizedFusionTrace
-
-
 class HybridTrace(TypedDict):
+    alpha: float
     vector_rank: int | None
     keyword_rank: int | None
     normalized_vector_score: float | None
     normalized_keyword_score: float | None
     matched_terms: list[str]
-    filter_matched: bool
-    fusion: HybridFusionTrace
 
 
 class HybridHit(TypedDict):
@@ -197,13 +180,11 @@ __all__ = [
     "FilterCondition",
     "FilterOperatorSpec",
     "FileSizeReport",
-    "HybridFusionTrace",
     "HybridHit",
     "HybridTrace",
     "KeywordHit",
     "Metadata",
     "MetadataValue",
-    "RrfFusionTrace",
     "Record",
     "RecordChunk",
     "RecordInput",
@@ -214,5 +195,4 @@ __all__ = [
     "TextChunk",
     "TimestampMillis",
     "VectorIndexConfiguration",
-    "WeightedNormalizedFusionTrace",
 ]

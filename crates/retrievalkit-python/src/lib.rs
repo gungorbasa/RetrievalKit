@@ -9,10 +9,10 @@ use pyo3::exceptions::{PyException, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 use retrievalkit_core::{
-    ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridFusionTrace, HybridHit,
-    HybridQuery, IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata,
-    MetadataValue, RetrievalKitError as CoreError, SearchHit, SearchQuery, StoredChunk,
-    VectorEncoding, VectorMetric,
+    ChunkInput, CompactionReport, Document, ExactVectorIndex, Filter, HybridHit, HybridQuery,
+    IndexConfig, IndexFileSizeReport, KeywordHit, KeywordQuery, Metadata, MetadataValue,
+    RetrievalKitError as CoreError, SearchHit, SearchQuery, StoredChunk, VectorEncoding,
+    VectorMetric,
 };
 use retrievalkit_ingest::{chunk_text as split_text, ChunkingConfig, ChunkingStrategy};
 
@@ -267,7 +267,7 @@ impl PyIndex {
         query = query.try_with_alpha(alpha).map_err(py_error)?;
 
         let hits = py.detach(move || self.inner.hybrid_search(&query).map_err(py_error))?;
-        hybrid_hits_to_py(py, &self.inner, &hits)
+        hybrid_hits_to_py(py, &self.inner, &hits, alpha)
     }
 
     #[pyo3(signature = (path, *, include_bm25 = true))]
@@ -599,8 +599,6 @@ pub(crate) fn search_hit_to_py(
 
     let trace = PyDict::new(py);
     trace.set_item("vector_score", hit.trace.vector_score)?;
-    trace.set_item("keyword_score", hit.trace.keyword_score)?;
-    trace.set_item("filter_matched", hit.trace.filter_matched)?;
     item.set_item("trace", trace)?;
 
     Ok(item.into_any().unbind())
@@ -632,6 +630,7 @@ fn hybrid_hits_to_py(
     py: Python<'_>,
     index: &ExactVectorIndex,
     hits: &[HybridHit],
+    alpha: f32,
 ) -> PyResult<Py<PyAny>> {
     let result = PyList::empty(py);
     for hit in hits {
@@ -647,14 +646,19 @@ fn hybrid_hits_to_py(
         item.set_item("vector_score", hit.vector_score)?;
         item.set_item("keyword_score", hit.keyword_score)?;
         item.set_item("matched_terms", &hit.trace.matched_terms)?;
-        item.set_item("trace", hybrid_trace_to_py(py, hit)?)?;
+        item.set_item("trace", hybrid_trace_to_py(py, hit, alpha)?)?;
         result.append(item)?;
     }
     Ok(result.into_any().unbind())
 }
 
-pub(crate) fn hybrid_trace_to_py(py: Python<'_>, hit: &HybridHit) -> PyResult<Py<PyAny>> {
+pub(crate) fn hybrid_trace_to_py(
+    py: Python<'_>,
+    hit: &HybridHit,
+    alpha: f32,
+) -> PyResult<Py<PyAny>> {
     let trace = PyDict::new(py);
+    trace.set_item("alpha", alpha)?;
     trace.set_item("vector_rank", hit.trace.vector_rank)?;
     trace.set_item("keyword_rank", hit.trace.keyword_rank)?;
     trace.set_item("normalized_vector_score", hit.trace.normalized_vector_score)?;
@@ -663,28 +667,7 @@ pub(crate) fn hybrid_trace_to_py(py: Python<'_>, hit: &HybridHit) -> PyResult<Py
         hit.trace.normalized_keyword_score,
     )?;
     trace.set_item("matched_terms", &hit.trace.matched_terms)?;
-    trace.set_item("filter_matched", hit.trace.filter_matched)?;
-    trace.set_item("fusion", fusion_trace_to_py(py, hit.trace.fusion)?)?;
     Ok(trace.into_any().unbind())
-}
-
-fn fusion_trace_to_py(py: Python<'_>, fusion: HybridFusionTrace) -> PyResult<Py<PyAny>> {
-    let dict = PyDict::new(py);
-    match fusion {
-        HybridFusionTrace::ReciprocalRank { rrf_k } => {
-            dict.set_item("kind", "rrf")?;
-            dict.set_item("rrf_k", rrf_k)?;
-        }
-        HybridFusionTrace::WeightedNormalizedScore {
-            vector_weight,
-            keyword_weight,
-        } => {
-            dict.set_item("kind", "weighted_normalized")?;
-            dict.set_item("vector_weight", vector_weight)?;
-            dict.set_item("keyword_weight", keyword_weight)?;
-        }
-    }
-    Ok(dict.into_any().unbind())
 }
 
 pub(crate) fn metadata_to_py(py: Python<'_>, metadata: &Metadata) -> PyResult<Py<PyAny>> {

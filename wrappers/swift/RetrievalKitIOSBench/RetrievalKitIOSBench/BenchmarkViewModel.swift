@@ -646,7 +646,7 @@ private func runRealDataSearch() throws -> String {
         throw BenchmarkError.ffi("query embedding dimension \(query.embedding.count) does not match declared dimension \(query.dimension)")
     }
 
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     let loadStart = DispatchTime.now()
     let index = indexURL.path.withCString { path in
         retrievalkit_index_load(path, &status)
@@ -754,8 +754,9 @@ private func vectorSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
-    var status = VkStatus(code: 0, message: nil)
+    var output = RetrievalKitSearchResultBuffer(
+        hits: nil, count: 0, utf8: nil, utf8_len: 0, metadata: nil, metadata_count: 0)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer {
         retrievalkit_status_clear(&status)
     }
@@ -802,10 +803,11 @@ private func keywordSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkKeywordResultBuffer(
+    var output = RetrievalKitKeywordResultBuffer(
         hits: nil, count: 0, utf8: nil, utf8_len: 0,
-        matched_terms: nil, matched_terms_count: 0)
-    var status = VkStatus(code: 0, message: nil)
+        matched_terms: nil, matched_terms_count: 0,
+        metadata: nil, metadata_count: 0)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer {
         retrievalkit_status_clear(&status)
     }
@@ -846,17 +848,15 @@ private func hybridSearch(
     topK: Int,
     filter: OpaquePointer?
 ) throws -> [RealDataHit] {
-    var output = VkHybridResultBuffer(
+    var output = RetrievalKitHybridResultBuffer(
         hits: nil, count: 0, utf8: nil, utf8_len: 0,
-        matched_terms: nil, matched_terms_count: 0)
-    var status = VkStatus(code: 0, message: nil)
-    let options = VkHybridOptions(
+        matched_terms: nil, matched_terms_count: 0,
+        metadata: nil, metadata_count: 0, alpha: 0)
+    var status = RetrievalKitStatus(code: 0, message: nil)
+    let options = RetrievalKitHybridQueryOptions(
         vector_top_k: 50,
         keyword_top_k: 50,
-        fusion_type: 0,
-        vector_weight: 0.6,
-        keyword_weight: 0.4,
-        rrf_k: 0
+        alpha: 0.6
     )
     defer {
         retrievalkit_status_clear(&status)
@@ -864,7 +864,7 @@ private func hybridSearch(
 
     let succeeded = text.withCString { query in
         embedding.withUnsafeBufferPointer { buffer in
-            retrievalkit_index_hybrid_search(
+            retrievalkit_index_hybrid_search_alpha(
                 index,
                 query,
                 buffer.baseAddress,
@@ -904,12 +904,12 @@ private func hybridSearch(
 }
 
 private func withKindFilter<T>(_ kind: String, body: (OpaquePointer) throws -> T) throws -> T {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     let filter = "kind".withCString { field in
         kind.withCString { value in
             retrievalkit_filter_equals(
                 field,
-                VkMetadataValue(
+                RetrievalKitMetadataValue(
                     value_type: 0,
                     string_value: value,
                     integer_value: 0,
@@ -943,38 +943,38 @@ private func elapsedMilliseconds(since start: DispatchTime) -> Double {
     return Double(elapsed) / 1_000_000
 }
 
-private func statusDescription(_ status: VkStatus) -> String {
+private func statusDescription(_ status: RetrievalKitStatus) -> String {
     status.message.map { String(cString: $0) } ?? "unknown RetrievalKit FFI error"
 }
 
 private struct PackedResultDecoder {
     private let utf8: UnsafePointer<UInt8>?
     private let utf8Count: Int
-    private let matchedTerms: UnsafePointer<VkUtf8Range>?
+    private let matchedTerms: UnsafePointer<RetrievalKitUtf8Range>?
     private let matchedTermsCount: Int
 
-    init(_ output: VkSearchResultBuffer) {
+    init(_ output: RetrievalKitSearchResultBuffer) {
         utf8 = output.utf8
         utf8Count = output.utf8_len
         matchedTerms = nil
         matchedTermsCount = 0
     }
 
-    init(_ output: VkKeywordResultBuffer) {
+    init(_ output: RetrievalKitKeywordResultBuffer) {
         utf8 = output.utf8
         utf8Count = output.utf8_len
         matchedTerms = output.matched_terms
         matchedTermsCount = output.matched_terms_count
     }
 
-    init(_ output: VkHybridResultBuffer) {
+    init(_ output: RetrievalKitHybridResultBuffer) {
         utf8 = output.utf8
         utf8Count = output.utf8_len
         matchedTerms = output.matched_terms
         matchedTermsCount = output.matched_terms_count
     }
 
-    func string(_ range: VkUtf8Range) throws -> String {
+    func string(_ range: RetrievalKitUtf8Range) throws -> String {
         guard
             utf8Count >= 0,
             range.offset >= 0,

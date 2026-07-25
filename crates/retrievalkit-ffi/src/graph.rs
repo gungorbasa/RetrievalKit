@@ -18,79 +18,79 @@ use serde::Deserialize;
 use super::{
     empty_hybrid_result_buffer, empty_keyword_result_buffer, empty_search_result_buffer, ffi_bool,
     ffi_ptr, optional_filter, packed_hybrid_result_buffer, packed_keyword_result_buffer,
-    packed_search_result_buffer, parse_encoding_code, parse_hybrid_fusion, parse_metric,
-    read_c_string, read_f32_slice, string_array, string_to_owned_ptr, FfiError, PackedRecordId,
-    PackedResultText, VkFilter, VkHybridOptions, VkHybridQueryOptions, VkHybridResultBuffer,
-    VkKeywordResultBuffer, VkSearchResultBuffer, VkStatus,
+    packed_search_result_buffer, parse_encoding_code, parse_metric, read_c_string, read_f32_slice,
+    string_array, string_to_owned_ptr, FfiError, PackedRecordId, PackedResultPayload,
+    RetrievalKitFilter, RetrievalKitHybridQueryOptions, RetrievalKitHybridResultBuffer,
+    RetrievalKitKeywordResultBuffer, RetrievalKitSearchResultBuffer, RetrievalKitStatus,
 };
 
-const VK_GRAPH_STATUS_INVALID_SCHEMA: i32 = 100;
-const VK_GRAPH_STATUS_INVALID_IDENTITY: i32 = 101;
-const VK_GRAPH_STATUS_STALE_GENERATION: i32 = 102;
-const VK_GRAPH_STATUS_INCOMPATIBLE_VERSION: i32 = 103;
-const VK_GRAPH_STATUS_GRAPH_UNAVAILABLE: i32 = 104;
-const VK_GRAPH_STATUS_CORRUPT_SNAPSHOT: i32 = 105;
-const VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: i32 = 106;
-const VK_GRAPH_STATUS_CANCELLED: i32 = 107;
-const VK_GRAPH_STATUS_TIMED_OUT: i32 = 108;
-const VK_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
-const VK_GRAPH_STATUS_INTERNAL: i32 = 110;
-const VK_GRAPH_STATUS_INVALID_DIMENSION: i32 = 111;
-const VK_GRAPH_STATUS_MISSING_EMBEDDING: i32 = 112;
-const VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 113;
+const RETRIEVALKIT_GRAPH_STATUS_INVALID_SCHEMA: i32 = 100;
+const RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY: i32 = 101;
+const RETRIEVALKIT_GRAPH_STATUS_STALE_GENERATION: i32 = 102;
+const RETRIEVALKIT_GRAPH_STATUS_INCOMPATIBLE_VERSION: i32 = 103;
+const RETRIEVALKIT_GRAPH_STATUS_GRAPH_UNAVAILABLE: i32 = 104;
+const RETRIEVALKIT_GRAPH_STATUS_CORRUPT_SNAPSHOT: i32 = 105;
+const RETRIEVALKIT_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED: i32 = 106;
+const RETRIEVALKIT_GRAPH_STATUS_CANCELLED: i32 = 107;
+const RETRIEVALKIT_GRAPH_STATUS_TIMED_OUT: i32 = 108;
+const RETRIEVALKIT_GRAPH_STATUS_LOCK_UNAVAILABLE: i32 = 109;
+const RETRIEVALKIT_GRAPH_STATUS_INTERNAL: i32 = 110;
+const RETRIEVALKIT_GRAPH_STATUS_INVALID_DIMENSION: i32 = 111;
+const RETRIEVALKIT_GRAPH_STATUS_MISSING_EMBEDDING: i32 = 112;
+const RETRIEVALKIT_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 113;
 
-pub struct VkGraphBuilder {
+pub struct RetrievalKitGraphBuilder {
     core: ExactVectorIndex,
 }
 
-pub struct VkGraphIndex {
+pub struct RetrievalKitGraphIndex {
     index: GraphIndex,
 }
 
-pub struct VkGraphDatabaseBuilder {
+pub struct RetrievalKitGraphDatabaseBuilder {
     builder: GraphDatabaseBuilder,
 }
 
-pub struct VkGraphDatabase {
+pub struct RetrievalKitGraphDatabase {
     database: GraphDatabase,
 }
 
-pub struct VkGraphRetrievalBuilder {
+pub struct RetrievalKitGraphRetrievalBuilder {
     builder: GraphRetrievalDatabaseBuilder,
 }
 
-pub struct VkGraphRetrievalDatabase {
+pub struct RetrievalKitGraphRetrievalDatabase {
     database: GraphRetrievalDatabase,
 }
 
-pub struct VkGraphResult {
+pub struct RetrievalKitGraphResult {
     result: GraphResult,
 }
-pub struct VkGraphCancellation {
+pub struct RetrievalKitGraphCancellation {
     token: CancellationToken,
 }
-pub struct VkGraphScope {
+pub struct RetrievalKitGraphScope {
     scope: CandidateScope,
     pub source_nodes: usize,
     pub resolved_chunks: usize,
 }
 
 #[repr(C)]
-pub struct VkGraphChunkIdentity {
+pub struct RetrievalKitGraphChunkIdentity {
     pub record_id: *mut c_char,
     pub chunk_key: *mut c_char,
 }
 
 #[repr(C)]
-pub struct VkGraphCandidateProjection {
-    pub candidates: *mut VkGraphChunkIdentity,
+pub struct RetrievalKitGraphCandidateProjection {
+    pub candidates: *mut RetrievalKitGraphChunkIdentity,
     pub count: usize,
     pub source_nodes: usize,
     pub projected_chunks_before_filter: usize,
     pub projected_chunks_after_filter: usize,
 }
 
-impl Default for VkGraphCandidateProjection {
+impl Default for RetrievalKitGraphCandidateProjection {
     fn default() -> Self {
         Self {
             candidates: std::ptr::null_mut(),
@@ -104,7 +104,7 @@ impl Default for VkGraphCandidateProjection {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkGraphNodeRef {
+pub struct RetrievalKitGraphNodeRef {
     pub node_type: *const c_char,
     pub source_type: u32,
     pub record_id: *const c_char,
@@ -112,7 +112,7 @@ pub struct VkGraphNodeRef {
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkGraphScalar {
+pub struct RetrievalKitGraphScalar {
     pub value_type: u32,
     pub string_value: *const c_char,
     pub integer_value: i64,
@@ -120,7 +120,7 @@ pub struct VkGraphScalar {
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkGraphStep {
+pub struct RetrievalKitGraphStep {
     pub relationship: *const c_char,
     pub direction: u32,
     pub min_hops: usize,
@@ -128,7 +128,7 @@ pub struct VkGraphStep {
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkGraphLimits {
+pub struct RetrievalKitGraphLimits {
     pub max_hops: usize,
     pub max_visited: usize,
     pub max_results: usize,
@@ -136,21 +136,21 @@ pub struct VkGraphLimits {
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkGraphQuery {
+pub struct RetrievalKitGraphQuery {
     pub seed_type: u32,
-    pub node_ids: *const VkGraphNodeRef,
+    pub node_ids: *const RetrievalKitGraphNodeRef,
     pub node_id_count: usize,
     pub seed_node_type: *const c_char,
     pub field_segments: *const *const c_char,
     pub field_segment_count: usize,
-    pub values: *const VkGraphScalar,
+    pub values: *const RetrievalKitGraphScalar,
     pub value_count: usize,
-    pub steps: *const VkGraphStep,
+    pub steps: *const RetrievalKitGraphStep,
     pub step_count: usize,
-    pub limits: VkGraphLimits,
+    pub limits: RetrievalKitGraphLimits,
 }
 #[repr(C)]
-pub struct VkGraphMatch {
+pub struct RetrievalKitGraphMatch {
     pub node_type: *mut c_char,
     pub source_type: u32,
     pub record_id: *mut c_char,
@@ -159,27 +159,27 @@ pub struct VkGraphMatch {
     pub path_length: usize,
 }
 #[repr(C)]
-pub struct VkGraphOwnedNode {
+pub struct RetrievalKitGraphOwnedNode {
     pub node_type: *mut c_char,
     pub source_type: u32,
     pub record_id: *mut c_char,
     pub chunk_key: *mut c_char,
 }
 #[repr(C)]
-pub struct VkGraphPathEdge {
+pub struct RetrievalKitGraphPathEdge {
     pub relationship_type: *mut c_char,
-    pub source: VkGraphOwnedNode,
-    pub target: VkGraphOwnedNode,
+    pub source: RetrievalKitGraphOwnedNode,
+    pub target: RetrievalKitGraphOwnedNode,
     pub occurrence_ordinal: u32,
     pub schema_rule_index: u32,
     pub source_record_id: *mut c_char,
-    pub source_field_segments: super::VkStringArray,
+    pub source_field_segments: super::RetrievalKitStringArray,
     pub derived_inverse: bool,
     pub built_in: bool,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct VkGraphTrace {
+pub struct RetrievalKitGraphTrace {
     pub seed_count: usize,
     pub visited_states: usize,
     pub traversed_edges: usize,
@@ -231,19 +231,19 @@ struct EmbeddedRecordBatch {
 
 #[no_mangle]
 pub extern "C" fn retrievalkit_graph_ffi_abi_version() -> u32 {
-    10
+    12
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_builder_new(
     corpus_id: *const c_char,
     schema_json: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphDatabaseBuilder {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphDatabaseBuilder {
     ffi_ptr(status, || {
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
-        Ok(Box::into_raw(Box::new(VkGraphDatabaseBuilder {
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphDatabaseBuilder {
             builder: GraphDatabaseBuilder::new(corpus_id, schema),
         })))
     })
@@ -251,9 +251,9 @@ pub unsafe extern "C" fn retrievalkit_graph_database_builder_new(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_builder_upsert_record_json(
-    builder: *mut VkGraphDatabaseBuilder,
+    builder: *mut RetrievalKitGraphDatabaseBuilder,
     record_json: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }
@@ -287,22 +287,24 @@ pub unsafe extern "C" fn retrievalkit_graph_database_builder_upsert_record_json(
 /// Consumes `builder` whether graph construction succeeds or fails.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_builder_build(
-    builder: *mut VkGraphDatabaseBuilder,
-    status: *mut VkStatus,
-) -> *mut VkGraphDatabase {
+    builder: *mut RetrievalKitGraphDatabaseBuilder,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphDatabase {
     ffi_ptr(status, || {
         if builder.is_null() {
             return Err(FfiError::invalid_argument("graph builder must not be null"));
         }
         let builder = unsafe { Box::from_raw(builder) };
         let database = builder.builder.build()?;
-        Ok(Box::into_raw(Box::new(VkGraphDatabase { database })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphDatabase {
+            database,
+        })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_builder_free(
-    builder: *mut VkGraphDatabaseBuilder,
+    builder: *mut RetrievalKitGraphDatabaseBuilder,
 ) {
     if !builder.is_null() {
         drop(unsafe { Box::from_raw(builder) });
@@ -315,8 +317,8 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_new(
     encoding: u32,
     corpus_id: *const c_char,
     schema_json: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphRetrievalBuilder {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphRetrievalBuilder {
     ffi_ptr(status, || {
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
@@ -326,15 +328,17 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_new(
             parse_metric(metric)?,
             parse_encoding_code(encoding)?,
         );
-        Ok(Box::into_raw(Box::new(VkGraphRetrievalBuilder { builder })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphRetrievalBuilder {
+            builder,
+        })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_record_json(
-    builder: *mut VkGraphRetrievalBuilder,
+    builder: *mut RetrievalKitGraphRetrievalBuilder,
     record_json: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }.ok_or_else(|| {
@@ -343,9 +347,9 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_record_json
         let json = unsafe { read_c_string(record_json, "record_json") }?;
         let batch: RecordBatch = serde_json::from_str(&json).map_err(|error| {
             let code = if error.to_string().contains("missing field `embedding`") {
-                VK_GRAPH_STATUS_MISSING_EMBEDDING
+                RETRIEVALKIT_GRAPH_STATUS_MISSING_EMBEDDING
             } else {
-                super::VK_STATUS_INVALID_ARGUMENT
+                super::RETRIEVALKIT_STATUS_INVALID_ARGUMENT
             };
             FfiError {
                 code,
@@ -378,11 +382,11 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_record_json
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_record_with_embedding_json(
-    builder: *mut VkGraphRetrievalBuilder,
+    builder: *mut RetrievalKitGraphRetrievalBuilder,
     record_json: *const c_char,
     embedding: *const f32,
     embedding_len: usize,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }.ok_or_else(|| {
@@ -403,9 +407,9 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_record_with
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_documents_json(
-    builder: *mut VkGraphRetrievalBuilder,
+    builder: *mut RetrievalKitGraphRetrievalBuilder,
     batch_json: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }.ok_or_else(|| {
@@ -427,9 +431,9 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_upsert_documents_j
 /// Consumes `builder` whether graph construction succeeds or fails.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_build(
-    builder: *mut VkGraphRetrievalBuilder,
-    status: *mut VkStatus,
-) -> *mut VkGraphRetrievalDatabase {
+    builder: *mut RetrievalKitGraphRetrievalBuilder,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphRetrievalDatabase {
     ffi_ptr(status, || {
         if builder.is_null() {
             return Err(FfiError::invalid_argument(
@@ -438,15 +442,15 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_build(
         }
         let builder = unsafe { Box::from_raw(builder) };
         let database = builder.builder.build()?;
-        Ok(Box::into_raw(Box::new(VkGraphRetrievalDatabase {
-            database,
-        })))
+        Ok(Box::into_raw(Box::new(
+            RetrievalKitGraphRetrievalDatabase { database },
+        )))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_free(
-    builder: *mut VkGraphRetrievalBuilder,
+    builder: *mut RetrievalKitGraphRetrievalBuilder,
 ) {
     if !builder.is_null() {
         drop(unsafe { Box::from_raw(builder) });
@@ -456,20 +460,22 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_free(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_load(
     directory: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphDatabase {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphDatabase {
     ffi_ptr(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
         let database = GraphDatabase::load_from_dir(Path::new(&path))?;
-        Ok(Box::into_raw(Box::new(VkGraphDatabase { database })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphDatabase {
+            database,
+        })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_save(
-    database: *const VkGraphDatabase,
+    database: *const RetrievalKitGraphDatabase,
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let database = unsafe { database.as_ref() }
@@ -483,7 +489,7 @@ pub unsafe extern "C" fn retrievalkit_graph_database_save(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_validate(
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
@@ -493,7 +499,9 @@ pub unsafe extern "C" fn retrievalkit_graph_database_validate(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_database_free(database: *mut VkGraphDatabase) {
+pub unsafe extern "C" fn retrievalkit_graph_database_free(
+    database: *mut RetrievalKitGraphDatabase,
+) {
     if !database.is_null() {
         drop(unsafe { Box::from_raw(database) });
     }
@@ -502,22 +510,22 @@ pub unsafe extern "C" fn retrievalkit_graph_database_free(database: *mut VkGraph
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_load(
     directory: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphRetrievalDatabase {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphRetrievalDatabase {
     ffi_ptr(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
         let database = GraphRetrievalDatabase::load_from_dir(Path::new(&path))?;
-        Ok(Box::into_raw(Box::new(VkGraphRetrievalDatabase {
-            database,
-        })))
+        Ok(Box::into_raw(Box::new(
+            RetrievalKitGraphRetrievalDatabase { database },
+        )))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_save(
-    database: *const VkGraphRetrievalDatabase,
+    database: *const RetrievalKitGraphRetrievalDatabase,
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
@@ -532,7 +540,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_save(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_validate(
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
@@ -543,7 +551,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_validate(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_free(
-    database: *mut VkGraphRetrievalDatabase,
+    database: *mut RetrievalKitGraphRetrievalDatabase,
 ) {
     if !database.is_null() {
         drop(unsafe { Box::from_raw(database) });
@@ -552,28 +560,28 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_free(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_query(
-    database: *const VkGraphDatabase,
-    query: VkGraphQuery,
-    cancellation: *const VkGraphCancellation,
-    status: *mut VkStatus,
-) -> *mut VkGraphResult {
+    database: *const RetrievalKitGraphDatabase,
+    query: RetrievalKitGraphQuery,
+    cancellation: *const RetrievalKitGraphCancellation,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphResult {
     ffi_ptr(status, || {
         let database = unsafe { database.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("graph database must not be null"))?;
         let query = unsafe { decode_query(query) }?;
         let cancellation = unsafe { cancellation.as_ref() }.map(|value| &value.token);
         let result = database.database.graph_query(&query, cancellation)?;
-        Ok(Box::into_raw(Box::new(VkGraphResult { result })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphResult { result })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_query(
-    database: *const VkGraphRetrievalDatabase,
-    query: VkGraphQuery,
-    cancellation: *const VkGraphCancellation,
-    status: *mut VkStatus,
-) -> *mut VkGraphResult {
+    database: *const RetrievalKitGraphRetrievalDatabase,
+    query: RetrievalKitGraphQuery,
+    cancellation: *const RetrievalKitGraphCancellation,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphResult {
     ffi_ptr(status, || {
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
             FfiError::invalid_argument("graph retrieval database must not be null")
@@ -581,17 +589,17 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_query(
         let query = unsafe { decode_query(query) }?;
         let cancellation = unsafe { cancellation.as_ref() }.map(|value| &value.token);
         let result = database.database.graph_query(&query, cancellation)?;
-        Ok(Box::into_raw(Box::new(VkGraphResult { result })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphResult { result })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_database_project_candidates(
-    database: *const VkGraphDatabase,
-    result: *const VkGraphResult,
-    filter: *const VkFilter,
-    out_projection: *mut VkGraphCandidateProjection,
-    status: *mut VkStatus,
+    database: *const RetrievalKitGraphDatabase,
+    result: *const RetrievalKitGraphResult,
+    filter: *const RetrievalKitFilter,
+    out_projection: *mut RetrievalKitGraphCandidateProjection,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let database = unsafe { database.as_ref() }
@@ -611,11 +619,11 @@ pub unsafe extern "C" fn retrievalkit_graph_database_project_candidates(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_project_candidates(
-    database: *const VkGraphRetrievalDatabase,
-    result: *const VkGraphResult,
-    filter: *const VkFilter,
-    out_projection: *mut VkGraphCandidateProjection,
-    status: *mut VkStatus,
+    database: *const RetrievalKitGraphRetrievalDatabase,
+    result: *const RetrievalKitGraphResult,
+    filter: *const RetrievalKitFilter,
+    out_projection: *mut RetrievalKitGraphCandidateProjection,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let database = unsafe { database.as_ref() }.ok_or_else(|| {
@@ -636,7 +644,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_database_project_candidate
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_candidate_projection_free(
-    projection: VkGraphCandidateProjection,
+    projection: RetrievalKitGraphCandidateProjection,
 ) {
     if projection.candidates.is_null() {
         return;
@@ -657,7 +665,7 @@ pub unsafe extern "C" fn retrievalkit_graph_candidate_projection_free(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_candidate_projection_clear(
-    projection: *mut VkGraphCandidateProjection,
+    projection: *mut RetrievalKitGraphCandidateProjection,
 ) {
     let Some(projection) = (unsafe { projection.as_mut() }) else {
         return;
@@ -668,14 +676,14 @@ pub unsafe extern "C" fn retrievalkit_graph_candidate_projection_clear(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_semantic_search(
-    database: *const VkGraphRetrievalDatabase,
-    within: *const VkGraphResult,
+    database: *const RetrievalKitGraphRetrievalDatabase,
+    within: *const RetrievalKitGraphResult,
     embedding: *const f32,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkSearchResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitSearchResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -708,13 +716,13 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_semantic_search(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_keyword_search(
-    database: *const VkGraphRetrievalDatabase,
-    within: *const VkGraphResult,
+    database: *const RetrievalKitGraphRetrievalDatabase,
+    within: *const RetrievalKitGraphResult,
     text: *const c_char,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkKeywordResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitKeywordResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -743,62 +751,17 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_keyword_search(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search(
-    database: *const VkGraphRetrievalDatabase,
-    within: *const VkGraphResult,
-    text: *const c_char,
-    embedding: *const f32,
-    embedding_len: usize,
-    top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
-) -> bool {
-    ffi_bool(status, || {
-        if out_results.is_null() {
-            return Err(FfiError::invalid_argument("out_results must not be null"));
-        }
-        unsafe { *out_results = empty_hybrid_result_buffer() };
-        let database = unsafe { database.as_ref() }.ok_or_else(|| {
-            FfiError::invalid_argument("graph retrieval database must not be null")
-        })?;
-        let mut query = HybridQuery::new(
-            unsafe { read_c_string(text, "text") }?,
-            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
-            top_k,
-        )
-        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
-        if let Some(filter) = unsafe { optional_filter(filter) } {
-            query = query.with_filter(filter);
-        }
-        query.fusion = parse_hybrid_fusion(options)?;
-        let hits = if let Some(selection) = unsafe { within.as_ref() } {
-            database
-                .database
-                .hybrid_search_in_selection(&query, &selection.result)?
-        } else {
-            database.database.hybrid_search(&query)?
-        };
-        unsafe {
-            *out_results = capability_hybrid_buffer(&database.database, hits)?;
-        }
-        Ok(())
-    })
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
-    database: *const VkGraphRetrievalDatabase,
-    within: *const VkGraphResult,
+    database: *const RetrievalKitGraphRetrievalDatabase,
+    within: *const RetrievalKitGraphResult,
     text: *const c_char,
     embedding: *const f32,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridQueryOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    options: RetrievalKitHybridQueryOptions,
+    out_results: *mut RetrievalKitHybridResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -816,7 +779,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
         .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
         .try_with_alpha(options.alpha)
         .map_err(|error| FfiError {
-            code: super::VK_STATUS_INVALID_ARGUMENT,
+            code: super::RETRIEVALKIT_STATUS_INVALID_ARGUMENT,
             message: error.to_string(),
         })?;
         if let Some(filter) = unsafe { optional_filter(filter) } {
@@ -830,7 +793,7 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search_alpha(
             database.database.hybrid_search(&query)?
         };
         unsafe {
-            *out_results = capability_hybrid_buffer(&database.database, hits)?;
+            *out_results = capability_hybrid_buffer(&database.database, hits, options.alpha)?;
         }
         Ok(())
     })
@@ -842,22 +805,22 @@ pub unsafe extern "C" fn retrievalkit_graph_builder_new(
     metric: u32,
     encoding: u32,
     corpus_id: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphBuilder {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphBuilder {
     ffi_ptr(status, || {
         let config = IndexConfig::new(dimension, parse_metric(metric)?)
             .with_vector_encoding(parse_encoding_code(encoding)?);
         let corpus = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let core = ExactVectorIndex::try_with_config_in_corpus(config, corpus)?;
-        Ok(Box::into_raw(Box::new(VkGraphBuilder { core })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphBuilder { core })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_builder_upsert_record_json(
-    builder: *mut VkGraphBuilder,
+    builder: *mut RetrievalKitGraphBuilder,
     record_json: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }
@@ -885,10 +848,10 @@ pub unsafe extern "C" fn retrievalkit_graph_builder_upsert_record_json(
 /// Consumes `builder` whether graph construction succeeds or fails.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_builder_build_json(
-    builder: *mut VkGraphBuilder,
+    builder: *mut RetrievalKitGraphBuilder,
     schema_json: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphIndex {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphIndex {
     ffi_ptr(status, || {
         if builder.is_null() {
             return Err(FfiError::invalid_argument("graph builder must not be null"));
@@ -898,12 +861,12 @@ pub unsafe extern "C" fn retrievalkit_graph_builder_build_json(
         let schema: GraphSchema = serde_json::from_str(&json)
             .map_err(|error| FfiError::invalid_argument(format!("invalid schema JSON: {error}")))?;
         let index = GraphIndex::build(builder.core, schema)?;
-        Ok(Box::into_raw(Box::new(VkGraphIndex { index })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphIndex { index })))
     })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_builder_free(builder: *mut VkGraphBuilder) {
+pub unsafe extern "C" fn retrievalkit_graph_builder_free(builder: *mut RetrievalKitGraphBuilder) {
     if !builder.is_null() {
         drop(unsafe { Box::from_raw(builder) });
     }
@@ -912,20 +875,20 @@ pub unsafe extern "C" fn retrievalkit_graph_builder_free(builder: *mut VkGraphBu
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_index_load(
     directory: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkGraphIndex {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphIndex {
     ffi_ptr(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
         let index = GraphIndex::load_from_dir(Path::new(&path))?;
-        Ok(Box::into_raw(Box::new(VkGraphIndex { index })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphIndex { index })))
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_index_save(
-    index: *const VkGraphIndex,
+    index: *const RetrievalKitGraphIndex,
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let index = unsafe { index.as_ref() }
@@ -939,7 +902,7 @@ pub unsafe extern "C" fn retrievalkit_graph_index_save(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_index_validate(
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let path = unsafe { read_c_string(directory, "directory") }?;
@@ -949,7 +912,7 @@ pub unsafe extern "C" fn retrievalkit_graph_index_validate(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_index_free(index: *mut VkGraphIndex) {
+pub unsafe extern "C" fn retrievalkit_graph_index_free(index: *mut RetrievalKitGraphIndex) {
     if !index.is_null() {
         drop(unsafe { Box::from_raw(index) });
     }
@@ -957,32 +920,34 @@ pub unsafe extern "C" fn retrievalkit_graph_index_free(index: *mut VkGraphIndex)
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_query(
-    index: *const VkGraphIndex,
-    query: VkGraphQuery,
-    cancellation: *const VkGraphCancellation,
-    status: *mut VkStatus,
-) -> *mut VkGraphResult {
+    index: *const RetrievalKitGraphIndex,
+    query: RetrievalKitGraphQuery,
+    cancellation: *const RetrievalKitGraphCancellation,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphResult {
     ffi_ptr(status, || {
         let index = unsafe { index.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("graph index must not be null"))?;
         let query = unsafe { decode_query(query) }?;
         let cancellation = unsafe { cancellation.as_ref() }.map(|value| &value.token);
         let result = index.index.graph_query(&query, cancellation)?;
-        Ok(Box::into_raw(Box::new(VkGraphResult { result })))
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphResult { result })))
     })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_result_count(result: *const VkGraphResult) -> usize {
+pub unsafe extern "C" fn retrievalkit_graph_result_count(
+    result: *const RetrievalKitGraphResult,
+) -> usize {
     unsafe { result.as_ref() }.map_or(0, |value| value.result.matches.len())
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_result_match(
-    result: *const VkGraphResult,
+    result: *const RetrievalKitGraphResult,
     index: usize,
-    out_match: *mut VkGraphMatch,
-    status: *mut VkStatus,
+    out_match: *mut RetrievalKitGraphMatch,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_match.is_null() {
@@ -1008,7 +973,7 @@ pub unsafe extern "C" fn retrievalkit_graph_result_match(
             ),
         };
         unsafe {
-            *out_match = VkGraphMatch {
+            *out_match = RetrievalKitGraphMatch {
                 node_type: super::string_to_owned_ptr(matched.node_id.node_type.as_str()),
                 source_type,
                 record_id,
@@ -1023,11 +988,11 @@ pub unsafe extern "C" fn retrievalkit_graph_result_match(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_result_path_edge(
-    result: *const VkGraphResult,
+    result: *const RetrievalKitGraphResult,
     match_index: usize,
     edge_index: usize,
-    out_edge: *mut VkGraphPathEdge,
-    status: *mut VkStatus,
+    out_edge: *mut RetrievalKitGraphPathEdge,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_edge.is_null() {
@@ -1055,7 +1020,7 @@ pub unsafe extern "C" fn retrievalkit_graph_result_path_edge(
                         .collect()
                 });
         unsafe {
-            *out_edge = VkGraphPathEdge {
+            *out_edge = RetrievalKitGraphPathEdge {
                 relationship_type: string_to_owned_ptr(edge.edge_id.relationship_type.as_str()),
                 source: owned_node(&edge.edge_id.source),
                 target: owned_node(&edge.edge_id.target),
@@ -1072,7 +1037,7 @@ pub unsafe extern "C" fn retrievalkit_graph_result_path_edge(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_path_edge_clear(value: *mut VkGraphPathEdge) {
+pub unsafe extern "C" fn retrievalkit_graph_path_edge_clear(value: *mut RetrievalKitGraphPathEdge) {
     if let Some(value) = unsafe { value.as_mut() } {
         unsafe {
             super::retrievalkit_string_free(value.relationship_type);
@@ -1083,7 +1048,7 @@ pub unsafe extern "C" fn retrievalkit_graph_path_edge_clear(value: *mut VkGraphP
         }
         value.relationship_type = std::ptr::null_mut();
         value.source_record_id = std::ptr::null_mut();
-        value.source_field_segments = super::VkStringArray {
+        value.source_field_segments = super::RetrievalKitStringArray {
             values: std::ptr::null_mut(),
             count: 0,
         };
@@ -1091,7 +1056,7 @@ pub unsafe extern "C" fn retrievalkit_graph_path_edge_clear(value: *mut VkGraphP
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_match_clear(value: *mut VkGraphMatch) {
+pub unsafe extern "C" fn retrievalkit_graph_match_clear(value: *mut RetrievalKitGraphMatch) {
     if let Some(value) = unsafe { value.as_mut() } {
         unsafe {
             super::retrievalkit_string_free(value.node_type);
@@ -1106,13 +1071,13 @@ pub unsafe extern "C" fn retrievalkit_graph_match_clear(value: *mut VkGraphMatch
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_result_trace(
-    result: *const VkGraphResult,
-) -> VkGraphTrace {
+    result: *const RetrievalKitGraphResult,
+) -> RetrievalKitGraphTrace {
     let Some(result) = (unsafe { result.as_ref() }) else {
-        return VkGraphTrace::default();
+        return RetrievalKitGraphTrace::default();
     };
     let trace = &result.result.trace;
-    VkGraphTrace {
+    RetrievalKitGraphTrace {
         seed_count: trace.seed_count,
         visited_states: trace.visited_states,
         traversed_edges: trace.traversed_edges,
@@ -1126,7 +1091,7 @@ pub unsafe extern "C" fn retrievalkit_graph_result_trace(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_result_free(result: *mut VkGraphResult) {
+pub unsafe extern "C" fn retrievalkit_graph_result_free(result: *mut RetrievalKitGraphResult) {
     if !result.is_null() {
         drop(unsafe { Box::from_raw(result) });
     }
@@ -1134,17 +1099,17 @@ pub unsafe extern "C" fn retrievalkit_graph_result_free(result: *mut VkGraphResu
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_result_project(
-    index: *const VkGraphIndex,
-    result: *const VkGraphResult,
-    status: *mut VkStatus,
-) -> *mut VkGraphScope {
+    index: *const RetrievalKitGraphIndex,
+    result: *const RetrievalKitGraphResult,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphScope {
     ffi_ptr(status, || {
         let index = unsafe { index.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("graph index must not be null"))?;
         let result = unsafe { result.as_ref() }
             .ok_or_else(|| FfiError::invalid_argument("graph result must not be null"))?;
         let projected = index.index.project_candidates(&result.result)?;
-        Ok(Box::into_raw(Box::new(VkGraphScope {
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphScope {
             scope: projected.scope,
             source_nodes: projected.trace.source_nodes,
             resolved_chunks: projected.trace.resolved_chunks,
@@ -1153,34 +1118,34 @@ pub unsafe extern "C" fn retrievalkit_graph_result_project(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_scope_free(scope: *mut VkGraphScope) {
+pub unsafe extern "C" fn retrievalkit_graph_scope_free(scope: *mut RetrievalKitGraphScope) {
     if !scope.is_null() {
         drop(unsafe { Box::from_raw(scope) });
     }
 }
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_scope_source_nodes(
-    scope: *const VkGraphScope,
+    scope: *const RetrievalKitGraphScope,
 ) -> usize {
     unsafe { scope.as_ref() }.map_or(0, |value| value.source_nodes)
 }
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_scope_resolved_chunks(
-    scope: *const VkGraphScope,
+    scope: *const RetrievalKitGraphScope,
 ) -> usize {
     unsafe { scope.as_ref() }.map_or(0, |value| value.resolved_chunks)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_scope_search(
-    index: *const VkGraphIndex,
-    scope: *const VkGraphScope,
+    index: *const RetrievalKitGraphIndex,
+    scope: *const RetrievalKitGraphScope,
     embedding: *const f32,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkSearchResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitSearchResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -1208,13 +1173,13 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_search(
 
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_scope_keyword_search(
-    index: *const VkGraphIndex,
-    scope: *const VkGraphScope,
+    index: *const RetrievalKitGraphIndex,
+    scope: *const RetrievalKitGraphScope,
     text: *const c_char,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkKeywordResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitKeywordResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -1240,59 +1205,17 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_keyword_search(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search(
-    index: *const VkGraphIndex,
-    scope: *const VkGraphScope,
-    text: *const c_char,
-    embedding: *const f32,
-    embedding_len: usize,
-    top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
-) -> bool {
-    ffi_bool(status, || {
-        if out_results.is_null() {
-            return Err(FfiError::invalid_argument("out_results must not be null"));
-        }
-        unsafe { *out_results = empty_hybrid_result_buffer() };
-        let index = unsafe { graph_index(index) }?;
-        let scope = unsafe { graph_scope(scope) }?;
-        let mut query = HybridQuery::new(
-            unsafe { read_c_string(text, "text") }?,
-            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
-            top_k,
-        )
-        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
-        if let Some(filter) = unsafe { optional_filter(filter) } {
-            query = query.with_filter(filter);
-        }
-        query.fusion = parse_hybrid_fusion(options)?;
-        unsafe {
-            *out_results = graph_hybrid_buffer(
-                index,
-                index
-                    .index
-                    .hybrid_search_in_candidates(&query, &scope.scope)?,
-            )?
-        };
-        Ok(())
-    })
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
-    index: *const VkGraphIndex,
-    scope: *const VkGraphScope,
+    index: *const RetrievalKitGraphIndex,
+    scope: *const RetrievalKitGraphScope,
     text: *const c_char,
     embedding: *const f32,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridQueryOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    options: RetrievalKitHybridQueryOptions,
+    out_results: *mut RetrievalKitHybridResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -1309,7 +1232,7 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
         .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
         .try_with_alpha(options.alpha)
         .map_err(|error| FfiError {
-            code: super::VK_STATUS_INVALID_ARGUMENT,
+            code: super::RETRIEVALKIT_STATUS_INVALID_ARGUMENT,
             message: error.to_string(),
         })?;
         if let Some(filter) = unsafe { optional_filter(filter) } {
@@ -1321,31 +1244,36 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_hybrid_search_alpha(
                 index
                     .index
                     .hybrid_search_in_candidates(&query, &scope.scope)?,
+                options.alpha,
             )?
         };
         Ok(())
     })
 }
 #[no_mangle]
-pub extern "C" fn retrievalkit_graph_cancellation_new() -> *mut VkGraphCancellation {
-    Box::into_raw(Box::new(VkGraphCancellation {
+pub extern "C" fn retrievalkit_graph_cancellation_new() -> *mut RetrievalKitGraphCancellation {
+    Box::into_raw(Box::new(RetrievalKitGraphCancellation {
         token: CancellationToken::default(),
     }))
 }
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_cancellation_cancel(value: *const VkGraphCancellation) {
+pub unsafe extern "C" fn retrievalkit_graph_cancellation_cancel(
+    value: *const RetrievalKitGraphCancellation,
+) {
     if let Some(value) = unsafe { value.as_ref() } {
         value.token.cancel();
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_cancellation_free(value: *mut VkGraphCancellation) {
+pub unsafe extern "C" fn retrievalkit_graph_cancellation_free(
+    value: *mut RetrievalKitGraphCancellation,
+) {
     if !value.is_null() {
         drop(unsafe { Box::from_raw(value) });
     }
 }
 
-unsafe fn decode_query(value: VkGraphQuery) -> Result<GraphQuery, FfiError> {
+unsafe fn decode_query(value: RetrievalKitGraphQuery) -> Result<GraphQuery, FfiError> {
     let seed = match value.seed_type {
         0 => Seed::NodeIds(
             unsafe { ffi_slice(value.node_ids, value.node_id_count, "node_ids") }?
@@ -1421,7 +1349,7 @@ unsafe fn decode_query(value: VkGraphQuery) -> Result<GraphQuery, FfiError> {
     })
 }
 
-fn owned_node(node: &NodeId) -> VkGraphOwnedNode {
+fn owned_node(node: &NodeId) -> RetrievalKitGraphOwnedNode {
     let (source_type, record_id, chunk_key) = match &node.source {
         NodeSource::Record(id) => (0, string_to_owned_ptr(id.as_str()), std::ptr::null_mut()),
         NodeSource::Chunk(identity) => (
@@ -1430,7 +1358,7 @@ fn owned_node(node: &NodeId) -> VkGraphOwnedNode {
             string_to_owned_ptr(identity.chunk_key.as_str()),
         ),
     };
-    VkGraphOwnedNode {
+    RetrievalKitGraphOwnedNode {
         node_type: string_to_owned_ptr(node.node_type.as_str()),
         source_type,
         record_id,
@@ -1438,7 +1366,7 @@ fn owned_node(node: &NodeId) -> VkGraphOwnedNode {
     }
 }
 
-unsafe fn owned_node_clear(node: &mut VkGraphOwnedNode) {
+unsafe fn owned_node_clear(node: &mut RetrievalKitGraphOwnedNode) {
     unsafe {
         super::retrievalkit_string_free(node.node_type);
         super::retrievalkit_string_free(node.record_id);
@@ -1449,7 +1377,7 @@ unsafe fn owned_node_clear(node: &mut VkGraphOwnedNode) {
     node.chunk_key = std::ptr::null_mut();
 }
 
-unsafe fn decode_node(value: VkGraphNodeRef) -> Result<NodeId, FfiError> {
+unsafe fn decode_node(value: RetrievalKitGraphNodeRef) -> Result<NodeId, FfiError> {
     let node_type = NodeType::new(unsafe { read_c_string(value.node_type, "node_type") }?)
         .map_err(FfiError::from)?;
     let record =
@@ -1468,7 +1396,7 @@ unsafe fn decode_node(value: VkGraphNodeRef) -> Result<NodeId, FfiError> {
         ))),
     }
 }
-unsafe fn decode_scalar(value: VkGraphScalar) -> Result<GraphScalar, FfiError> {
+unsafe fn decode_scalar(value: RetrievalKitGraphScalar) -> Result<GraphScalar, FfiError> {
     match value.value_type {
         0 => Ok(GraphScalar::String(unsafe {
             read_c_string(value.string_value, "scalar string")
@@ -1496,11 +1424,15 @@ unsafe fn ffi_slice<'a, T>(
     Ok(unsafe { slice::from_raw_parts(pointer, count) })
 }
 
-unsafe fn graph_index<'a>(value: *const VkGraphIndex) -> Result<&'a VkGraphIndex, FfiError> {
+unsafe fn graph_index<'a>(
+    value: *const RetrievalKitGraphIndex,
+) -> Result<&'a RetrievalKitGraphIndex, FfiError> {
     unsafe { value.as_ref() }
         .ok_or_else(|| FfiError::invalid_argument("graph index must not be null"))
 }
-unsafe fn graph_scope<'a>(value: *const VkGraphScope) -> Result<&'a VkGraphScope, FfiError> {
+unsafe fn graph_scope<'a>(
+    value: *const RetrievalKitGraphScope,
+) -> Result<&'a RetrievalKitGraphScope, FfiError> {
     unsafe { value.as_ref() }
         .ok_or_else(|| FfiError::invalid_argument("graph scope must not be null"))
 }
@@ -1513,17 +1445,17 @@ fn boxed_buffer<T>(values: Vec<T>) -> (*mut T, usize) {
 
 fn candidate_projection_buffer(
     projection: retrievalkit_graph::GraphCandidateProjection,
-) -> VkGraphCandidateProjection {
+) -> RetrievalKitGraphCandidateProjection {
     let candidates = projection
         .candidates
         .into_iter()
-        .map(|identity| VkGraphChunkIdentity {
+        .map(|identity| RetrievalKitGraphChunkIdentity {
             record_id: string_to_owned_ptr(identity.record_id.as_str()),
             chunk_key: string_to_owned_ptr(identity.chunk_key.as_str()),
         })
         .collect();
     let (candidates, count) = boxed_buffer(candidates);
-    VkGraphCandidateProjection {
+    RetrievalKitGraphCandidateProjection {
         candidates,
         count,
         source_nodes: projection.source_nodes,
@@ -1540,113 +1472,144 @@ fn decode_schema(json: String) -> std::result::Result<GraphSchema, FfiError> {
 fn capability_search_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<SearchHit>,
-) -> std::result::Result<VkSearchResultBuffer, FfiError> {
-    packed_search_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
+) -> std::result::Result<RetrievalKitSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| {
+        capability_result_payload(database, chunk_id)
+    })
 }
 
 fn capability_keyword_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<KeywordHit>,
-) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
-    packed_keyword_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
+) -> std::result::Result<RetrievalKitKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| {
+        capability_result_payload(database, chunk_id)
+    })
 }
 
 fn capability_hybrid_buffer(
     database: &GraphRetrievalDatabase,
     hits: Vec<HybridHit>,
-) -> std::result::Result<VkHybridResultBuffer, FfiError> {
-    packed_hybrid_result_buffer(hits, |chunk_id| capability_result_text(database, chunk_id))
+    alpha: f32,
+) -> std::result::Result<RetrievalKitHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, alpha, |chunk_id| {
+        capability_result_payload(database, chunk_id)
+    })
 }
 
-fn capability_result_text(
+fn capability_result_payload(
     database: &GraphRetrievalDatabase,
     chunk_id: u64,
-) -> PackedResultText<'_> {
-    let identity = database.corpus().chunk_identity(chunk_id);
-    PackedResultText {
-        document_id: identity.map(|value| value.chunk_key.as_str()),
-        record_id: identity.map_or(PackedRecordId::DocumentId, |value| {
-            PackedRecordId::Value(value.record_id.as_str())
-        }),
-        text: database
-            .corpus()
-            .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
-    }
+) -> std::result::Result<PackedResultPayload<'_>, FfiError> {
+    let identity = database.corpus().chunk_identity(chunk_id).ok_or_else(|| {
+        FfiError::missing_result_payload("graph retrieval result", chunk_id, "stable identity")
+    })?;
+    let chunk = database.corpus().chunk(chunk_id).ok_or_else(|| {
+        FfiError::missing_result_payload("graph retrieval result", chunk_id, "chunk")
+    })?;
+    Ok(PackedResultPayload {
+        document_id: Some(identity.chunk_key.as_str()),
+        record_id: PackedRecordId::Value(identity.record_id.as_str()),
+        text: &chunk.text,
+        metadata: &chunk.metadata,
+    })
 }
 
 fn graph_search_buffer(
-    index: &VkGraphIndex,
+    index: &RetrievalKitGraphIndex,
     hits: Vec<SearchHit>,
-) -> std::result::Result<VkSearchResultBuffer, FfiError> {
-    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::DocumentId,
-        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+) -> std::result::Result<RetrievalKitSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| {
+        let (text, metadata) = index.index.chunk_payload(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("graph search result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::DocumentId,
+            text,
+            metadata,
+        })
     })
 }
 
 fn graph_keyword_buffer(
-    index: &VkGraphIndex,
+    index: &RetrievalKitGraphIndex,
     hits: Vec<KeywordHit>,
-) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
-    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::DocumentId,
-        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+) -> std::result::Result<RetrievalKitKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| {
+        let (text, metadata) = index.index.chunk_payload(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("graph keyword result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::DocumentId,
+            text,
+            metadata,
+        })
     })
 }
 
 fn graph_hybrid_buffer(
-    index: &VkGraphIndex,
+    index: &RetrievalKitGraphIndex,
     hits: Vec<HybridHit>,
-) -> std::result::Result<VkHybridResultBuffer, FfiError> {
-    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::DocumentId,
-        text: index.index.chunk_text(chunk_id).unwrap_or(""),
+    alpha: f32,
+) -> std::result::Result<RetrievalKitHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, alpha, |chunk_id| {
+        let (text, metadata) = index.index.chunk_payload(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("graph hybrid result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::DocumentId,
+            text,
+            metadata,
+        })
     })
 }
 
 impl From<retrievalkit_graph::GraphError> for FfiError {
     fn from(error: retrievalkit_graph::GraphError) -> Self {
         let code = match &error {
-            retrievalkit_graph::GraphError::InvalidSchema { .. } => VK_GRAPH_STATUS_INVALID_SCHEMA,
+            retrievalkit_graph::GraphError::InvalidSchema { .. } => {
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_SCHEMA
+            }
             retrievalkit_graph::GraphError::InvalidRecord { .. }
             | retrievalkit_graph::GraphError::InvalidQuery { .. }
             | retrievalkit_graph::GraphError::MissingTarget { .. } => {
-                VK_GRAPH_STATUS_INVALID_IDENTITY
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY
             }
             retrievalkit_graph::GraphError::InvalidDimension { .. } => {
-                VK_GRAPH_STATUS_INVALID_DIMENSION
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_DIMENSION
             }
             retrievalkit_graph::GraphError::MissingEmbedding { .. } => {
-                VK_GRAPH_STATUS_MISSING_EMBEDDING
+                RETRIEVALKIT_GRAPH_STATUS_MISSING_EMBEDDING
             }
             retrievalkit_graph::GraphError::InvalidSnapshot { .. } => {
-                VK_GRAPH_STATUS_CORRUPT_SNAPSHOT
+                RETRIEVALKIT_GRAPH_STATUS_CORRUPT_SNAPSHOT
             }
             retrievalkit_graph::GraphError::StaleGeneration { .. } => {
-                VK_GRAPH_STATUS_STALE_GENERATION
+                RETRIEVALKIT_GRAPH_STATUS_STALE_GENERATION
             }
             retrievalkit_graph::GraphError::IncompatibleVersion { .. } => {
-                VK_GRAPH_STATUS_INCOMPATIBLE_VERSION
+                RETRIEVALKIT_GRAPH_STATUS_INCOMPATIBLE_VERSION
             }
             retrievalkit_graph::GraphError::GraphUnavailable { .. } => {
-                VK_GRAPH_STATUS_GRAPH_UNAVAILABLE
+                RETRIEVALKIT_GRAPH_STATUS_GRAPH_UNAVAILABLE
             }
-            retrievalkit_graph::GraphError::WriterBusy { .. } => VK_GRAPH_STATUS_LOCK_UNAVAILABLE,
+            retrievalkit_graph::GraphError::WriterBusy { .. } => {
+                RETRIEVALKIT_GRAPH_STATUS_LOCK_UNAVAILABLE
+            }
             retrievalkit_graph::GraphError::QueryLimitExceeded { .. } => {
-                VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED
+                RETRIEVALKIT_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED
             }
-            retrievalkit_graph::GraphError::Cancelled => VK_GRAPH_STATUS_CANCELLED,
-            retrievalkit_graph::GraphError::TimedOut { .. } => VK_GRAPH_STATUS_TIMED_OUT,
+            retrievalkit_graph::GraphError::Cancelled => RETRIEVALKIT_GRAPH_STATUS_CANCELLED,
+            retrievalkit_graph::GraphError::TimedOut { .. } => RETRIEVALKIT_GRAPH_STATUS_TIMED_OUT,
             retrievalkit_graph::GraphError::Core { message }
                 if message.contains("hybrid retrieval is unavailable") =>
             {
-                VK_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
+                RETRIEVALKIT_GRAPH_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
             }
-            retrievalkit_graph::GraphError::Core { .. } => VK_GRAPH_STATUS_INTERNAL,
+            retrievalkit_graph::GraphError::Core { .. } => RETRIEVALKIT_GRAPH_STATUS_INTERNAL,
         };
         Self {
             code,
@@ -1675,68 +1638,68 @@ mod tests {
     fn graph_errors_map_to_the_stable_public_status_taxonomy() {
         use retrievalkit_graph::GraphError;
 
-        assert_eq!(retrievalkit_graph_ffi_abi_version(), 10);
+        assert_eq!(retrievalkit_graph_ffi_abi_version(), 12);
         let cases = [
             (
                 GraphError::InvalidSchema {
                     message: "schema".to_owned(),
                 },
-                VK_GRAPH_STATUS_INVALID_SCHEMA,
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_SCHEMA,
             ),
             (
                 GraphError::InvalidRecord {
                     record_id: "record".to_owned(),
                     message: "record".to_owned(),
                 },
-                VK_GRAPH_STATUS_INVALID_IDENTITY,
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY,
             ),
             (
                 GraphError::InvalidQuery {
                     message: "query".to_owned(),
                 },
-                VK_GRAPH_STATUS_INVALID_IDENTITY,
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY,
             ),
             (
                 GraphError::InvalidDimension {
                     message: "dimension".to_owned(),
                 },
-                VK_GRAPH_STATUS_INVALID_DIMENSION,
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_DIMENSION,
             ),
             (
                 GraphError::MissingEmbedding {
                     message: "embedding".to_owned(),
                 },
-                VK_GRAPH_STATUS_MISSING_EMBEDDING,
+                RETRIEVALKIT_GRAPH_STATUS_MISSING_EMBEDDING,
             ),
             (
                 GraphError::InvalidSnapshot {
                     message: "snapshot".to_owned(),
                 },
-                VK_GRAPH_STATUS_CORRUPT_SNAPSHOT,
+                RETRIEVALKIT_GRAPH_STATUS_CORRUPT_SNAPSHOT,
             ),
             (
                 GraphError::StaleGeneration {
                     message: "stale".to_owned(),
                 },
-                VK_GRAPH_STATUS_STALE_GENERATION,
+                RETRIEVALKIT_GRAPH_STATUS_STALE_GENERATION,
             ),
             (
                 GraphError::IncompatibleVersion {
                     message: "version".to_owned(),
                 },
-                VK_GRAPH_STATUS_INCOMPATIBLE_VERSION,
+                RETRIEVALKIT_GRAPH_STATUS_INCOMPATIBLE_VERSION,
             ),
             (
                 GraphError::GraphUnavailable {
                     message: "unavailable".to_owned(),
                 },
-                VK_GRAPH_STATUS_GRAPH_UNAVAILABLE,
+                RETRIEVALKIT_GRAPH_STATUS_GRAPH_UNAVAILABLE,
             ),
             (
                 GraphError::WriterBusy {
                     path: "database".to_owned(),
                 },
-                VK_GRAPH_STATUS_LOCK_UNAVAILABLE,
+                RETRIEVALKIT_GRAPH_STATUS_LOCK_UNAVAILABLE,
             ),
             (
                 GraphError::MissingTarget {
@@ -1744,26 +1707,26 @@ mod tests {
                     source_record_id: "source".to_owned(),
                     target_record_id: "target".to_owned(),
                 },
-                VK_GRAPH_STATUS_INVALID_IDENTITY,
+                RETRIEVALKIT_GRAPH_STATUS_INVALID_IDENTITY,
             ),
             (
                 GraphError::QueryLimitExceeded {
                     message: "limit".to_owned(),
                 },
-                VK_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED,
+                RETRIEVALKIT_GRAPH_STATUS_QUERY_LIMIT_EXCEEDED,
             ),
-            (GraphError::Cancelled, VK_GRAPH_STATUS_CANCELLED),
+            (GraphError::Cancelled, RETRIEVALKIT_GRAPH_STATUS_CANCELLED),
             (
                 GraphError::TimedOut {
                     message: "deadline".to_owned(),
                 },
-                VK_GRAPH_STATUS_TIMED_OUT,
+                RETRIEVALKIT_GRAPH_STATUS_TIMED_OUT,
             ),
             (
                 GraphError::Core {
                     message: "core".to_owned(),
                 },
-                VK_GRAPH_STATUS_INTERNAL,
+                RETRIEVALKIT_GRAPH_STATUS_INTERNAL,
             ),
         ];
         for (error, expected) in cases {
@@ -1787,7 +1750,7 @@ mod tests {
             fields: BTreeMap::new(),
             content: None,
         };
-        let mut status = VkStatus {
+        let mut status = RetrievalKitStatus {
             code: 0,
             message: std::ptr::null_mut(),
         };
@@ -1864,7 +1827,7 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, VK_GRAPH_STATUS_INVALID_DIMENSION);
+        assert_eq!(status.code, RETRIEVALKIT_GRAPH_STATUS_INVALID_DIMENSION);
         let database =
             unsafe { retrievalkit_graph_retrieval_builder_build(retrieval_builder, &mut status) };
         assert!(!database.is_null());
@@ -1880,7 +1843,7 @@ mod tests {
                 embedding.len(),
                 1,
                 std::ptr::null(),
-                VkHybridQueryOptions {
+                RetrievalKitHybridQueryOptions {
                     vector_top_k: 1,
                     keyword_top_k: 1,
                     alpha: 0.6,
@@ -1889,7 +1852,7 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, super::super::VK_STATUS_OK);
+        assert_eq!(status.code, super::super::RETRIEVALKIT_STATUS_OK);
         assert_eq!(results.count, 1);
         let hit = unsafe { &*results.hits };
         assert!(hit.has_record_id);
@@ -1904,8 +1867,8 @@ mod tests {
     }
 
     unsafe fn result_string(
-        buffer: &VkHybridResultBuffer,
-        range: super::super::VkUtf8Range,
+        buffer: &RetrievalKitHybridResultBuffer,
+        range: super::super::RetrievalKitUtf8Range,
     ) -> &str {
         assert!(range.offset <= buffer.utf8_len);
         assert!(range.length <= buffer.utf8_len - range.offset);
@@ -1923,7 +1886,7 @@ mod tests {
                 queryable_fields: vec![],
             }])
         }
-        fn graph_database(corpus_id: &str) -> VkGraphDatabase {
+        fn graph_database(corpus_id: &str) -> RetrievalKitGraphDatabase {
             let mut corpus = CorpusIndex::new(CorpusId::new(corpus_id).unwrap());
             for (record_id, team) in [("z-item", "platform"), ("a-item", "mobile")] {
                 corpus
@@ -1943,11 +1906,11 @@ mod tests {
                     })
                     .unwrap();
             }
-            VkGraphDatabase {
+            RetrievalKitGraphDatabase {
                 database: GraphDatabase::build(corpus, schema()).unwrap(),
             }
         }
-        fn selection(database: &VkGraphDatabase) -> VkGraphResult {
+        fn selection(database: &RetrievalKitGraphDatabase) -> RetrievalKitGraphResult {
             let nodes = ["z-item", "a-item"]
                 .into_iter()
                 .map(|record_id| {
@@ -1957,7 +1920,7 @@ mod tests {
                     )
                 })
                 .collect();
-            VkGraphResult {
+            RetrievalKitGraphResult {
                 result: database
                     .database
                     .graph_query(&GraphQuery::new(Seed::NodeIds(nodes)), None)
@@ -1967,14 +1930,14 @@ mod tests {
 
         let database = graph_database("projection");
         let result = selection(&database);
-        let filter = VkFilter {
+        let filter = RetrievalKitFilter {
             filter: Filter::eq("team", "mobile"),
         };
-        let mut status = VkStatus {
+        let mut status = RetrievalKitStatus {
             code: 0,
             message: std::ptr::null_mut(),
         };
-        let mut output = VkGraphCandidateProjection::default();
+        let mut output = RetrievalKitGraphCandidateProjection::default();
         assert!(unsafe {
             retrievalkit_graph_database_project_candidates(
                 &database,
@@ -2012,7 +1975,7 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, VK_GRAPH_STATUS_STALE_GENERATION);
+        assert_eq!(status.code, RETRIEVALKIT_GRAPH_STATUS_STALE_GENERATION);
         assert!(output.candidates.is_null());
         assert!(!unsafe {
             retrievalkit_graph_database_project_candidates(
@@ -2023,7 +1986,10 @@ mod tests {
                 &mut status,
             )
         });
-        assert_eq!(status.code, super::super::VK_STATUS_INVALID_ARGUMENT);
+        assert_eq!(
+            status.code,
+            super::super::RETRIEVALKIT_STATUS_INVALID_ARGUMENT
+        );
 
         let mut retrieval = RetrievalDatabase::new(
             RetrievalConfiguration::semantic(IndexConfig::new(1, VectorMetric::DotProduct)),
@@ -2047,10 +2013,10 @@ mod tests {
                 }],
             )
             .unwrap();
-        let retrieval = VkGraphRetrievalDatabase {
+        let retrieval = RetrievalKitGraphRetrievalDatabase {
             database: GraphRetrievalDatabase::build(retrieval, schema()).unwrap(),
         };
-        let retrieval_result = VkGraphResult {
+        let retrieval_result = RetrievalKitGraphResult {
             result: retrieval
                 .database
                 .graph_query(
@@ -2081,7 +2047,7 @@ mod tests {
     #[test]
     fn builder_finalization_and_composite_persistence_round_trip() {
         let corpus = CString::new("swift-generic").unwrap();
-        let mut status = VkStatus {
+        let mut status = RetrievalKitStatus {
             code: 0,
             message: std::ptr::null_mut(),
         };
@@ -2130,13 +2096,13 @@ mod tests {
 
         let node_type = CString::new("Item").unwrap();
         let record_id = CString::new("item-1").unwrap();
-        let nodes = [VkGraphNodeRef {
+        let nodes = [RetrievalKitGraphNodeRef {
             node_type: node_type.as_ptr(),
             source_type: 0,
             record_id: record_id.as_ptr(),
             chunk_key: std::ptr::null(),
         }];
-        let query = VkGraphQuery {
+        let query = RetrievalKitGraphQuery {
             seed_type: 0,
             node_ids: nodes.as_ptr(),
             node_id_count: 1,
@@ -2147,7 +2113,7 @@ mod tests {
             value_count: 0,
             steps: std::ptr::null(),
             step_count: 0,
-            limits: VkGraphLimits {
+            limits: RetrievalKitGraphLimits {
                 max_hops: 8,
                 max_visited: 100,
                 max_results: 10,
@@ -2158,7 +2124,7 @@ mod tests {
             unsafe { retrievalkit_graph_query(index, query, std::ptr::null(), &mut status) };
         assert!(!result.is_null());
         assert_eq!(unsafe { retrievalkit_graph_result_count(result) }, 1);
-        let mut matched = VkGraphMatch {
+        let mut matched = RetrievalKitGraphMatch {
             node_type: std::ptr::null_mut(),
             source_type: 0,
             record_id: std::ptr::null_mut(),
@@ -2221,13 +2187,13 @@ mod tests {
         let name = CString::new("name").unwrap();
         let fields = [name.as_ptr()];
         let generic_item = CString::new("Generic item").unwrap();
-        let values = [VkGraphScalar {
+        let values = [RetrievalKitGraphScalar {
             value_type: 0,
             string_value: generic_item.as_ptr(),
             integer_value: 0,
             bool_value: false,
         }];
-        let equality_query = VkGraphQuery {
+        let equality_query = RetrievalKitGraphQuery {
             seed_type: 1,
             node_ids: std::ptr::null(),
             node_id_count: 0,
@@ -2249,13 +2215,13 @@ mod tests {
         unsafe { retrievalkit_graph_result_free(equality_result) };
 
         let owns = CString::new("owns").unwrap();
-        let steps = [VkGraphStep {
+        let steps = [RetrievalKitGraphStep {
             relationship: owns.as_ptr(),
             direction: 0,
             min_hops: 1,
             max_hops: 1,
         }];
-        let traversal_query = VkGraphQuery {
+        let traversal_query = RetrievalKitGraphQuery {
             steps: steps.as_ptr(),
             step_count: steps.len(),
             ..query
@@ -2268,15 +2234,15 @@ mod tests {
             unsafe { retrievalkit_graph_result_count(traversal_result) },
             1
         );
-        let mut edge = VkGraphPathEdge {
+        let mut edge = RetrievalKitGraphPathEdge {
             relationship_type: std::ptr::null_mut(),
-            source: VkGraphOwnedNode {
+            source: RetrievalKitGraphOwnedNode {
                 node_type: std::ptr::null_mut(),
                 source_type: 0,
                 record_id: std::ptr::null_mut(),
                 chunk_key: std::ptr::null_mut(),
             },
-            target: VkGraphOwnedNode {
+            target: RetrievalKitGraphOwnedNode {
                 node_type: std::ptr::null_mut(),
                 source_type: 0,
                 record_id: std::ptr::null_mut(),
@@ -2285,7 +2251,7 @@ mod tests {
             occurrence_ordinal: 0,
             schema_rule_index: 0,
             source_record_id: std::ptr::null_mut(),
-            source_field_segments: super::super::VkStringArray {
+            source_field_segments: super::super::RetrievalKitStringArray {
                 values: std::ptr::null_mut(),
                 count: 0,
             },
@@ -2323,7 +2289,7 @@ mod tests {
         assert!(
             unsafe { retrievalkit_graph_query(index, query, cancellation, &mut status) }.is_null()
         );
-        assert_eq!(status.code, VK_GRAPH_STATUS_CANCELLED);
+        assert_eq!(status.code, RETRIEVALKIT_GRAPH_STATUS_CANCELLED);
         unsafe {
             retrievalkit_graph_cancellation_free(cancellation);
             super::super::retrievalkit_status_clear(&mut status)

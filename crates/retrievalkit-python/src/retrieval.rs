@@ -175,7 +175,7 @@ impl PyRetrievalDatabase {
         query = query.try_with_alpha(alpha).map_err(py_error)?;
         let database = self.require_database()?;
         let hits = py.detach(move || database.hybrid_search(&query).map_err(py_error))?;
-        hybrid_hits_to_py(py, database, &hits)
+        hybrid_hits_to_py(py, database, &hits, alpha)
     }
 
     fn close(&mut self) {
@@ -215,6 +215,7 @@ fn hybrid_hits_to_py(
     py: Python<'_>,
     database: &RetrievalDatabase,
     hits: &[HybridHit],
+    alpha: f32,
 ) -> PyResult<Py<PyAny>> {
     let result = PyList::empty(py);
     for hit in hits {
@@ -230,7 +231,7 @@ fn hybrid_hits_to_py(
         item.set_item("vector_score", hit.vector_score)?;
         item.set_item("keyword_score", hit.keyword_score)?;
         item.set_item("matched_terms", &hit.trace.matched_terms)?;
-        item.set_item("trace", hybrid_trace_to_py(py, hit)?)?;
+        item.set_item("trace", hybrid_trace_to_py(py, hit, alpha)?)?;
         result.append(item)?;
     }
     Ok(result.into_any().unbind())

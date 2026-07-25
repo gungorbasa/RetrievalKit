@@ -6,9 +6,9 @@ use std::slice;
 
 use retrievalkit_core::{
     ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex, Filter,
-    HybridFusion, HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit,
-    KeywordQuery, Metadata, MetadataValue, Record, RecordChunkInput, RetrievalDatabase,
-    RetrievalDatabaseBuilder, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery,
+    Metadata, MetadataValue, Record, RecordChunkInput, RetrievalDatabase, RetrievalDatabaseBuilder,
+    SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 use retrievalkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 use serde::Deserialize;
@@ -31,45 +31,42 @@ pub use graph::retrievalkit_graph_ffi_abi_version;
 pub use memory_bench::{memory_benchmark_json, retrievalkit_bench_memory_json};
 pub use phase4_graph_free::retrievalkit_phase4_graph_free_regression_json;
 
-const VK_STATUS_OK: i32 = 0;
-const VK_STATUS_INVALID_ARGUMENT: i32 = 1;
-const VK_STATUS_CORE_ERROR: i32 = 2;
-const VK_STATUS_PANIC: i32 = 3;
-const VK_STATUS_CORRUPT_INDEX: i32 = 4;
-const VK_STATUS_INVALID_DIMENSION: i32 = 5;
-const VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 6;
-const VK_STATUS_INVALID_IDENTITY: i32 = 7;
-const VK_STATUS_MISSING_EMBEDDING: i32 = 8;
+const RETRIEVALKIT_STATUS_OK: i32 = 0;
+const RETRIEVALKIT_STATUS_INVALID_ARGUMENT: i32 = 1;
+const RETRIEVALKIT_STATUS_CORE_ERROR: i32 = 2;
+const RETRIEVALKIT_STATUS_PANIC: i32 = 3;
+const RETRIEVALKIT_STATUS_CORRUPT_INDEX: i32 = 4;
+const RETRIEVALKIT_STATUS_INVALID_DIMENSION: i32 = 5;
+const RETRIEVALKIT_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE: i32 = 6;
+const RETRIEVALKIT_STATUS_INVALID_IDENTITY: i32 = 7;
+const RETRIEVALKIT_STATUS_MISSING_EMBEDDING: i32 = 8;
 
-const VK_METRIC_COSINE: u32 = 0;
-const VK_METRIC_DOT_PRODUCT: u32 = 1;
+const RETRIEVALKIT_METRIC_COSINE: u32 = 0;
+const RETRIEVALKIT_METRIC_DOT_PRODUCT: u32 = 1;
 
-const VK_ENCODING_F32: u32 = 0;
-const VK_ENCODING_F16: u32 = 1;
-const VK_ENCODING_BF16: u32 = 2;
-const VK_ENCODING_I8_SCALAR_QUANTIZED: u32 = 3;
+const RETRIEVALKIT_ENCODING_F32: u32 = 0;
+const RETRIEVALKIT_ENCODING_F16: u32 = 1;
+const RETRIEVALKIT_ENCODING_BF16: u32 = 2;
+const RETRIEVALKIT_ENCODING_I8_SCALAR_QUANTIZED: u32 = 3;
 
-const VK_METADATA_STRING: u32 = 0;
-const VK_METADATA_INTEGER: u32 = 1;
-const VK_METADATA_FLOAT: u32 = 2;
-const VK_METADATA_BOOLEAN: u32 = 3;
-const VK_METADATA_TIMESTAMP_MILLIS: u32 = 4;
+const RETRIEVALKIT_METADATA_STRING: u32 = 0;
+const RETRIEVALKIT_METADATA_INTEGER: u32 = 1;
+const RETRIEVALKIT_METADATA_FLOAT: u32 = 2;
+const RETRIEVALKIT_METADATA_BOOLEAN: u32 = 3;
+const RETRIEVALKIT_METADATA_TIMESTAMP_MILLIS: u32 = 4;
 
-const VK_FUSION_WEIGHTED_NORMALIZED_SCORE: u32 = 0;
-const VK_FUSION_RECIPROCAL_RANK: u32 = 1;
-
-const VK_CHUNKING_FIXED: u32 = 0;
-const VK_CHUNKING_SENTENCE: u32 = 1;
+const RETRIEVALKIT_CHUNKING_FIXED: u32 = 0;
+const RETRIEVALKIT_CHUNKING_SENTENCE: u32 = 1;
 
 #[repr(C)]
-pub struct VkStatus {
+pub struct RetrievalKitStatus {
     pub code: i32,
     pub message: *mut c_char,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct VkCompactionReport {
+pub struct RetrievalKitCompactionReport {
     pub chunks_before: usize,
     pub chunks_after: usize,
     pub chunks_removed: usize,
@@ -78,7 +75,7 @@ pub struct VkCompactionReport {
     pub estimated_bytes_reclaimed: usize,
 }
 
-impl From<CompactionReport> for VkCompactionReport {
+impl From<CompactionReport> for RetrievalKitCompactionReport {
     fn from(report: CompactionReport) -> Self {
         Self {
             chunks_before: report.chunks_before,
@@ -93,7 +90,7 @@ impl From<CompactionReport> for VkCompactionReport {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkMetadataValue {
+pub struct RetrievalKitMetadataValue {
     pub value_type: u32,
     pub string_value: *const c_char,
     pub integer_value: i64,
@@ -103,106 +100,124 @@ pub struct VkMetadataValue {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkMetadataEntry {
+pub struct RetrievalKitMetadataEntry {
     pub field: *const c_char,
-    pub value: VkMetadataValue,
+    pub value: RetrievalKitMetadataValue,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkChunkInput {
+pub struct RetrievalKitChunkInput {
     pub text: *const c_char,
     pub embedding: *const c_float,
     pub embedding_len: usize,
-    pub metadata: *const VkMetadataEntry,
+    pub metadata: *const RetrievalKitMetadataEntry,
     pub metadata_len: usize,
 }
 
 #[repr(C)]
-pub struct VkChunkIdBuffer {
+pub struct RetrievalKitChunkIdBuffer {
     pub values: *mut u64,
     pub count: usize,
 }
 
 #[repr(C)]
-pub struct VkTextChunk {
+pub struct RetrievalKitTextChunk {
     pub text: *mut c_char,
     pub start_byte: usize,
     pub end_byte: usize,
 }
 
 #[repr(C)]
-pub struct VkTextChunkBuffer {
-    pub chunks: *mut VkTextChunk,
+pub struct RetrievalKitTextChunkBuffer {
+    pub chunks: *mut RetrievalKitTextChunk,
     pub count: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct VkUtf8Range {
+pub struct RetrievalKitUtf8Range {
     pub offset: usize,
     pub length: usize,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct VkSearchHit {
-    pub chunk_id: u64,
-    pub document_id: VkUtf8Range,
-    pub has_record_id: bool,
-    pub record_id: VkUtf8Range,
-    pub text: VkUtf8Range,
-    pub score: c_float,
-    pub vector_score: c_float,
-    pub filter_matched: bool,
+#[derive(Clone, Copy, Default)]
+pub struct RetrievalKitPackedMetadataEntry {
+    pub key: RetrievalKitUtf8Range,
+    pub value_type: u32,
+    pub string_value: RetrievalKitUtf8Range,
+    pub integer_value: i64,
+    pub float_value: f64,
+    pub bool_value: bool,
 }
 
 #[repr(C)]
-pub struct VkSearchResultBuffer {
-    pub hits: *const VkSearchHit,
+#[derive(Clone, Copy)]
+pub struct RetrievalKitSearchHit {
+    pub chunk_id: u64,
+    pub document_id: RetrievalKitUtf8Range,
+    pub has_record_id: bool,
+    pub record_id: RetrievalKitUtf8Range,
+    pub text: RetrievalKitUtf8Range,
+    pub score: c_float,
+    pub vector_score: c_float,
+    pub metadata_start: usize,
+    pub metadata_count: usize,
+}
+
+#[repr(C)]
+pub struct RetrievalKitSearchResultBuffer {
+    pub hits: *const RetrievalKitSearchHit,
     pub count: usize,
     pub utf8: *const u8,
     pub utf8_len: usize,
+    pub metadata: *const RetrievalKitPackedMetadataEntry,
+    pub metadata_count: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkStringArray {
+pub struct RetrievalKitStringArray {
     pub values: *mut *mut c_char,
     pub count: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkKeywordHit {
+pub struct RetrievalKitKeywordHit {
     pub chunk_id: u64,
-    pub document_id: VkUtf8Range,
+    pub document_id: RetrievalKitUtf8Range,
     pub has_record_id: bool,
-    pub record_id: VkUtf8Range,
-    pub text: VkUtf8Range,
+    pub record_id: RetrievalKitUtf8Range,
+    pub text: RetrievalKitUtf8Range,
     pub score: c_float,
     pub matched_terms_start: usize,
     pub matched_terms_count: usize,
+    pub metadata_start: usize,
+    pub metadata_count: usize,
 }
 
 #[repr(C)]
-pub struct VkKeywordResultBuffer {
-    pub hits: *const VkKeywordHit,
+pub struct RetrievalKitKeywordResultBuffer {
+    pub hits: *const RetrievalKitKeywordHit,
     pub count: usize,
     pub utf8: *const u8,
     pub utf8_len: usize,
-    pub matched_terms: *const VkUtf8Range,
+    pub matched_terms: *const RetrievalKitUtf8Range,
     pub matched_terms_count: usize,
+    pub metadata: *const RetrievalKitPackedMetadataEntry,
+    pub metadata_count: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkHybridHit {
+pub struct RetrievalKitHybridHit {
     pub chunk_id: u64,
-    pub document_id: VkUtf8Range,
+    pub document_id: RetrievalKitUtf8Range,
     pub has_record_id: bool,
-    pub record_id: VkUtf8Range,
-    pub text: VkUtf8Range,
+    pub record_id: RetrievalKitUtf8Range,
+    pub text: RetrievalKitUtf8Range,
     pub score: c_float,
     pub has_vector_score: bool,
     pub vector_score: c_float,
@@ -218,48 +233,41 @@ pub struct VkHybridHit {
     pub normalized_keyword_score: c_float,
     pub matched_terms_start: usize,
     pub matched_terms_count: usize,
-    pub filter_matched: bool,
+    pub metadata_start: usize,
+    pub metadata_count: usize,
 }
 
 #[repr(C)]
-pub struct VkHybridResultBuffer {
-    pub hits: *const VkHybridHit,
+pub struct RetrievalKitHybridResultBuffer {
+    pub hits: *const RetrievalKitHybridHit,
     pub count: usize,
     pub utf8: *const u8,
     pub utf8_len: usize,
-    pub matched_terms: *const VkUtf8Range,
+    pub matched_terms: *const RetrievalKitUtf8Range,
     pub matched_terms_count: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct VkHybridOptions {
-    pub vector_top_k: usize,
-    pub keyword_top_k: usize,
-    pub fusion_type: u32,
-    pub vector_weight: c_float,
-    pub keyword_weight: c_float,
-    pub rrf_k: c_float,
+    pub metadata: *const RetrievalKitPackedMetadataEntry,
+    pub metadata_count: usize,
+    pub alpha: c_float,
 }
 
 /// Public hybrid controls shared by high-level language bindings.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct VkHybridQueryOptions {
+pub struct RetrievalKitHybridQueryOptions {
     pub vector_top_k: usize,
     pub keyword_top_k: usize,
     pub alpha: c_float,
 }
 
-pub struct VkIndex {
+pub struct RetrievalKitIndex {
     index: ExactVectorIndex,
 }
 
-pub struct VkRetrievalBuilder {
+pub struct RetrievalKitRetrievalBuilder {
     builder: RetrievalDatabaseBuilder,
 }
 
-pub struct VkRetrievalDatabase {
+pub struct RetrievalKitRetrievalDatabase {
     database: RetrievalDatabase,
 }
 
@@ -280,7 +288,7 @@ struct RetrievalRecordChunk {
     metadata: Metadata,
 }
 
-pub struct VkFilter {
+pub struct RetrievalKitFilter {
     filter: Filter,
 }
 
@@ -288,10 +296,10 @@ pub struct VkFilter {
 ///
 /// # Safety
 ///
-/// `status`, when non-null, must point to a valid `VkStatus`. Its `message`
+/// `status`, when non-null, must point to a valid `RetrievalKitStatus`. Its `message`
 /// field must be null or a pointer allocated by RetrievalKit FFI.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_status_clear(status: *mut VkStatus) {
+pub unsafe extern "C" fn retrievalkit_status_clear(status: *mut RetrievalKitStatus) {
     if status.is_null() {
         return;
     }
@@ -300,7 +308,7 @@ pub unsafe extern "C" fn retrievalkit_status_clear(status: *mut VkStatus) {
     if !status.message.is_null() {
         unsafe { retrievalkit_string_free(status.message) };
     }
-    status.code = VK_STATUS_OK;
+    status.code = RETRIEVALKIT_STATUS_OK;
     status.message = ptr::null_mut();
 }
 
@@ -311,8 +319,8 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_new(
     metric: u32,
     encoding: u32,
     corpus_id: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkRetrievalBuilder {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitRetrievalBuilder {
     ffi_ptr(status, || {
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
         let builder = RetrievalDatabaseBuilder::new(
@@ -320,7 +328,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_new(
             parse_metric(metric)?,
             parse_encoding_code(encoding)?,
         );
-        Ok(Box::into_raw(Box::new(VkRetrievalBuilder { builder })))
+        Ok(Box::into_raw(Box::new(RetrievalKitRetrievalBuilder {
+            builder,
+        })))
     })
 }
 
@@ -331,14 +341,14 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_new(
 /// Every pointer must remain valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_document(
-    builder: *mut VkRetrievalBuilder,
+    builder: *mut RetrievalKitRetrievalBuilder,
     document_id: *const c_char,
     text: *const c_char,
-    metadata: *const VkMetadataEntry,
+    metadata: *const RetrievalKitMetadataEntry,
     metadata_len: usize,
     embedding: *const c_float,
     embedding_len: usize,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }
@@ -358,9 +368,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_document(
 /// The builder must be live and `record_json` must be valid UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_record_json(
-    builder: *mut VkRetrievalBuilder,
+    builder: *mut RetrievalKitRetrievalBuilder,
     record_json: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let builder = unsafe { builder.as_mut() }
@@ -368,9 +378,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_record_json(
         let json = unsafe { read_c_string(record_json, "record_json") }?;
         let batch: RetrievalRecordBatch = serde_json::from_str(&json).map_err(|error| {
             let code = if error.to_string().contains("missing field `embedding`") {
-                VK_STATUS_MISSING_EMBEDDING
+                RETRIEVALKIT_STATUS_MISSING_EMBEDDING
             } else {
-                VK_STATUS_INVALID_ARGUMENT
+                RETRIEVALKIT_STATUS_INVALID_ARGUMENT
             };
             FfiError {
                 code,
@@ -399,9 +409,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_record_json(
 /// The builder must be live and is consumed by this call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_builder_build(
-    builder: *mut VkRetrievalBuilder,
-    status: *mut VkStatus,
-) -> *mut VkRetrievalDatabase {
+    builder: *mut RetrievalKitRetrievalBuilder,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitRetrievalDatabase {
     ffi_ptr(status, || {
         if builder.is_null() {
             return Err(FfiError::invalid_argument(
@@ -409,7 +419,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_build(
             ));
         }
         let builder = unsafe { Box::from_raw(builder) };
-        Ok(Box::into_raw(Box::new(VkRetrievalDatabase {
+        Ok(Box::into_raw(Box::new(RetrievalKitRetrievalDatabase {
             database: builder.builder.build()?,
         })))
     })
@@ -418,7 +428,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_build(
 /// # Safety
 /// The pointer must be null or a live builder not used elsewhere.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_retrieval_builder_free(builder: *mut VkRetrievalBuilder) {
+pub unsafe extern "C" fn retrievalkit_retrieval_builder_free(
+    builder: *mut RetrievalKitRetrievalBuilder,
+) {
     if !builder.is_null() {
         drop(unsafe { Box::from_raw(builder) });
     }
@@ -429,12 +441,14 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_free(builder: *mut VkRet
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_database_load(
     directory: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkRetrievalDatabase {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitRetrievalDatabase {
     ffi_ptr(status, || {
         let directory = unsafe { read_c_string(directory, "directory") }?;
         let database = RetrievalDatabase::load_from_dir(directory)?;
-        Ok(Box::into_raw(Box::new(VkRetrievalDatabase { database })))
+        Ok(Box::into_raw(Box::new(RetrievalKitRetrievalDatabase {
+            database,
+        })))
     })
 }
 
@@ -442,9 +456,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_database_load(
 /// The database must be live and string/status pointers valid.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_database_save(
-    database: *const VkRetrievalDatabase,
+    database: *const RetrievalKitRetrievalDatabase,
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let database = unsafe { database.as_ref() }
@@ -460,7 +474,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_database_save(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_database_validate(
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let directory = unsafe { read_c_string(directory, "directory") }?;
@@ -472,7 +486,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_database_validate(
 /// # Safety
 /// The pointer must be null or a live database not used elsewhere.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_retrieval_database_free(database: *mut VkRetrievalDatabase) {
+pub unsafe extern "C" fn retrievalkit_retrieval_database_free(
+    database: *mut RetrievalKitRetrievalDatabase,
+) {
     if !database.is_null() {
         drop(unsafe { Box::from_raw(database) });
     }
@@ -482,13 +498,13 @@ pub unsafe extern "C" fn retrievalkit_retrieval_database_free(database: *mut VkR
 /// All input and output pointers must remain valid for the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_semantic_search(
-    database: *const VkRetrievalDatabase,
+    database: *const RetrievalKitRetrievalDatabase,
     embedding: *const c_float,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkSearchResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitSearchResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -514,12 +530,12 @@ pub unsafe extern "C" fn retrievalkit_retrieval_semantic_search(
 /// All input and output pointers must remain valid for the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_keyword_search(
-    database: *const VkRetrievalDatabase,
+    database: *const RetrievalKitRetrievalDatabase,
     text: *const c_char,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkKeywordResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitKeywordResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -538,43 +554,6 @@ pub unsafe extern "C" fn retrievalkit_retrieval_keyword_search(
     })
 }
 
-/// # Safety
-/// All input and output pointers must remain valid for the call.
-#[no_mangle]
-pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search(
-    database: *const VkRetrievalDatabase,
-    text: *const c_char,
-    embedding: *const c_float,
-    embedding_len: usize,
-    top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
-) -> bool {
-    ffi_bool(status, || {
-        if out_results.is_null() {
-            return Err(FfiError::invalid_argument("out_results must not be null"));
-        }
-        unsafe { *out_results = empty_hybrid_result_buffer() };
-        let database = unsafe { database.as_ref() }
-            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
-        let mut query = HybridQuery::new(
-            unsafe { read_c_string(text, "text") }?,
-            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
-            top_k,
-        )
-        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
-        if let Some(filter) = unsafe { optional_filter(filter) } {
-            query = query.with_filter(filter);
-        }
-        query.fusion = parse_hybrid_fusion(options)?;
-        let hits = database.database.hybrid_search(&query)?;
-        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits)? };
-        Ok(())
-    })
-}
-
 /// Performs the public alpha-controlled hybrid query without requiring a
 /// language binding to construct engine fusion weights.
 ///
@@ -582,15 +561,15 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search(
 /// All input and output pointers must remain valid for the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
-    database: *const VkRetrievalDatabase,
+    database: *const RetrievalKitRetrievalDatabase,
     text: *const c_char,
     embedding: *const c_float,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridQueryOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    options: RetrievalKitHybridQueryOptions,
+    out_results: *mut RetrievalKitHybridResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -611,7 +590,9 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
             query = query.with_filter(filter);
         }
         let hits = database.database.hybrid_search(&query)?;
-        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits)? };
+        unsafe {
+            *out_results = retrieval_hybrid_result_buffer(&database.database, hits, options.alpha)?
+        };
         Ok(())
     })
 }
@@ -620,20 +601,20 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
 ///
 /// # Safety
 ///
-/// `status`, when non-null, must point to a valid `VkStatus`.
+/// `status`, when non-null, must point to a valid `RetrievalKitStatus`.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_new(
     dimension: usize,
     metric: u32,
     encoding: u32,
-    status: *mut VkStatus,
-) -> *mut VkIndex {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitIndex {
     ffi_ptr(status, || {
         let metric = parse_metric(metric)?;
         let encoding = parse_encoding_code(encoding)?;
         let config = IndexConfig::new(dimension, metric).with_vector_encoding(encoding);
         let index = ExactVectorIndex::try_with_config(config)?;
-        Ok(Box::into_raw(Box::new(VkIndex { index })))
+        Ok(Box::into_raw(Box::new(RetrievalKitIndex { index })))
     })
 }
 
@@ -645,12 +626,12 @@ pub unsafe extern "C" fn retrievalkit_index_new(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_load(
     directory: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkIndex {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitIndex {
     ffi_ptr(status, || {
         let directory = unsafe { read_c_string(directory, "directory") }?;
         let index = ExactVectorIndex::load_from_dir(directory)?;
-        Ok(Box::into_raw(Box::new(VkIndex { index })))
+        Ok(Box::into_raw(Box::new(RetrievalKitIndex { index })))
     })
 }
 
@@ -662,7 +643,7 @@ pub unsafe extern "C" fn retrievalkit_index_load(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_validate(
     directory: *const c_char,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let directory = unsafe { read_c_string(directory, "directory") }?;
@@ -679,7 +660,7 @@ pub unsafe extern "C" fn retrievalkit_index_validate(
 /// `retrievalkit_index_load` that has not already been freed. No other operation
 /// may be using the handle.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_free(index: *mut VkIndex) {
+pub unsafe extern "C" fn retrievalkit_index_free(index: *mut RetrievalKitIndex) {
     if !index.is_null() {
         unsafe { drop(Box::from_raw(index)) };
     }
@@ -694,10 +675,10 @@ pub unsafe extern "C" fn retrievalkit_index_free(index: *mut VkIndex) {
 /// access to the index for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_save(
-    index: *mut VkIndex,
+    index: *mut RetrievalKitIndex,
     directory: *const c_char,
     include_bm25: bool,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         let index = unsafe { index_mut(index) }?;
@@ -715,7 +696,7 @@ pub unsafe extern "C" fn retrievalkit_index_save(
 ///
 /// `index` must be null or a valid RetrievalKit index pointer.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_dimension(index: *const VkIndex) -> usize {
+pub unsafe extern "C" fn retrievalkit_index_dimension(index: *const RetrievalKitIndex) -> usize {
     if index.is_null() {
         return 0;
     }
@@ -728,7 +709,9 @@ pub unsafe extern "C" fn retrievalkit_index_dimension(index: *const VkIndex) -> 
 ///
 /// `index` must be null or a valid RetrievalKit index pointer.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_active_chunk_count(index: *const VkIndex) -> usize {
+pub unsafe extern "C" fn retrievalkit_index_active_chunk_count(
+    index: *const RetrievalKitIndex,
+) -> usize {
     if index.is_null() {
         return 0;
     }
@@ -741,7 +724,9 @@ pub unsafe extern "C" fn retrievalkit_index_active_chunk_count(index: *const VkI
 ///
 /// `index` must be null or a valid RetrievalKit index pointer.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_total_chunk_count(index: *const VkIndex) -> usize {
+pub unsafe extern "C" fn retrievalkit_index_total_chunk_count(
+    index: *const RetrievalKitIndex,
+) -> usize {
     if index.is_null() {
         return 0;
     }
@@ -754,7 +739,9 @@ pub unsafe extern "C" fn retrievalkit_index_total_chunk_count(index: *const VkIn
 ///
 /// `index` must be null or a valid RetrievalKit index pointer.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_tombstoned_chunk_count(index: *const VkIndex) -> usize {
+pub unsafe extern "C" fn retrievalkit_index_tombstoned_chunk_count(
+    index: *const RetrievalKitIndex,
+) -> usize {
     if index.is_null() {
         return 0;
     }
@@ -774,16 +761,16 @@ pub unsafe extern "C" fn retrievalkit_chunk_text(
     strategy: u32,
     max_characters: usize,
     overlap_characters: usize,
-    out_chunks: *mut VkTextChunkBuffer,
-    status: *mut VkStatus,
+    out_chunks: *mut RetrievalKitTextChunkBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_chunks.is_null() {
             return Err(FfiError::invalid_argument("out_chunks must not be null"));
         }
         let strategy = match strategy {
-            VK_CHUNKING_FIXED => ChunkingStrategy::Fixed,
-            VK_CHUNKING_SENTENCE => ChunkingStrategy::Sentence,
+            RETRIEVALKIT_CHUNKING_FIXED => ChunkingStrategy::Fixed,
+            RETRIEVALKIT_CHUNKING_SENTENCE => ChunkingStrategy::Sentence,
             _ => {
                 return Err(FfiError::invalid_argument(format!(
                     "unsupported chunking strategy code {strategy}"
@@ -795,7 +782,7 @@ pub unsafe extern "C" fn retrievalkit_chunk_text(
         let text = unsafe { read_c_string(text, "text") }?;
         let chunks = chunk_text(&text, config)
             .into_iter()
-            .map(|chunk| VkTextChunk {
+            .map(|chunk| RetrievalKitTextChunk {
                 text: string_to_owned_ptr(&chunk.text),
                 start_byte: chunk.start_byte,
                 end_byte: chunk.end_byte,
@@ -814,15 +801,15 @@ pub unsafe extern "C" fn retrievalkit_chunk_text(
 /// duration of this call. The caller must provide exclusive access to the index.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_upsert_document(
-    index: *mut VkIndex,
+    index: *mut RetrievalKitIndex,
     document_id: *const c_char,
     document_text: *const c_char,
-    document_metadata: *const VkMetadataEntry,
+    document_metadata: *const RetrievalKitMetadataEntry,
     document_metadata_len: usize,
-    chunks: *const VkChunkInput,
+    chunks: *const RetrievalKitChunkInput,
     chunk_count: usize,
-    out_chunk_ids: *mut VkChunkIdBuffer,
-    status: *mut VkStatus,
+    out_chunk_ids: *mut RetrievalKitChunkIdBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_chunk_ids.is_null() {
@@ -851,10 +838,10 @@ pub unsafe extern "C" fn retrievalkit_index_upsert_document(
 /// the index.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_delete_document(
-    index: *mut VkIndex,
+    index: *mut RetrievalKitIndex,
     document_id: *const c_char,
     deleted_count: *mut usize,
-    status: *mut VkStatus,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if deleted_count.is_null() {
@@ -876,9 +863,9 @@ pub unsafe extern "C" fn retrievalkit_index_delete_document(
 /// caller must provide exclusive access to the index.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_compact(
-    index: *mut VkIndex,
-    out_report: *mut VkCompactionReport,
-    status: *mut VkStatus,
+    index: *mut RetrievalKitIndex,
+    out_report: *mut RetrievalKitCompactionReport,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_report.is_null() {
@@ -901,13 +888,13 @@ pub unsafe extern "C" fn retrievalkit_index_compact(
 /// own filter, status, and output storage.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_search(
-    index: *const VkIndex,
+    index: *const RetrievalKitIndex,
     embedding: *const c_float,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkSearchResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitSearchResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -936,12 +923,12 @@ pub unsafe extern "C" fn retrievalkit_index_search(
 /// the same independent filter, status, and output-storage requirements.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_keyword_search(
-    index: *const VkIndex,
+    index: *const RetrievalKitIndex,
     text: *const c_char,
     top_k: usize,
-    filter: *const VkFilter,
-    out_results: *mut VkKeywordResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    out_results: *mut RetrievalKitKeywordResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -960,65 +947,24 @@ pub unsafe extern "C" fn retrievalkit_index_keyword_search(
     })
 }
 
-/// Performs hybrid exact vector + BM25 search.
-///
-/// # Safety
-///
-/// `text` must be valid UTF-8 and `embedding` must point to `embedding_len`
-/// contiguous `float` values. This call may run concurrently with other
-/// read-only calls on the same index, subject to the same independent filter,
-/// status, and output-storage requirements.
-#[no_mangle]
-pub unsafe extern "C" fn retrievalkit_index_hybrid_search(
-    index: *const VkIndex,
-    text: *const c_char,
-    embedding: *const c_float,
-    embedding_len: usize,
-    top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
-) -> bool {
-    ffi_bool(status, || {
-        if out_results.is_null() {
-            return Err(FfiError::invalid_argument("out_results must not be null"));
-        }
-        unsafe { *out_results = empty_hybrid_result_buffer() };
-        let index = unsafe { index_ref(index) }?;
-        let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
-        let mut query = HybridQuery::new(
-            unsafe { read_c_string(text, "text") }?,
-            embedding.to_vec(),
-            top_k,
-        )
-        .with_candidate_limits(options.vector_top_k, options.keyword_top_k);
-        if let Some(filter) = unsafe { optional_filter(filter) } {
-            query = query.with_filter(filter);
-        }
-        query.fusion = parse_hybrid_fusion(options)?;
-        let hits = index.index.hybrid_search(&query)?;
-        let buffer = hybrid_result_buffer(index, hits)?;
-        unsafe { *out_results = buffer };
-        Ok(())
-    })
-}
-
 /// Performs alpha-controlled hybrid search for language bindings.
 ///
 /// # Safety
-/// The safety contract is identical to [`retrievalkit_index_hybrid_search`].
+/// `text` must be valid UTF-8 and `embedding` must point to `embedding_len`
+/// contiguous `float` values. This call may run concurrently with other
+/// read-only calls on the same index, subject to independent filter, status,
+/// and output-storage requirements.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
-    index: *const VkIndex,
+    index: *const RetrievalKitIndex,
     text: *const c_char,
     embedding: *const c_float,
     embedding_len: usize,
     top_k: usize,
-    filter: *const VkFilter,
-    options: VkHybridQueryOptions,
-    out_results: *mut VkHybridResultBuffer,
-    status: *mut VkStatus,
+    filter: *const RetrievalKitFilter,
+    options: RetrievalKitHybridQueryOptions,
+    out_results: *mut RetrievalKitHybridResultBuffer,
+    status: *mut RetrievalKitStatus,
 ) -> bool {
     ffi_bool(status, || {
         if out_results.is_null() {
@@ -1039,7 +985,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
             query = query.with_filter(filter);
         }
         let hits = index.index.hybrid_search(&query)?;
-        let buffer = hybrid_result_buffer(index, hits)?;
+        let buffer = hybrid_result_buffer(index, hits, options.alpha)?;
         unsafe { *out_results = buffer };
         Ok(())
     })
@@ -1051,7 +997,7 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
 ///
 /// `buffer.values` must be null or a pointer allocated by RetrievalKit FFI.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_chunk_id_buffer_free(buffer: VkChunkIdBuffer) {
+pub unsafe extern "C" fn retrievalkit_chunk_id_buffer_free(buffer: RetrievalKitChunkIdBuffer) {
     if !buffer.values.is_null() {
         unsafe {
             drop(Box::from_raw(ptr::slice_from_raw_parts_mut(
@@ -1068,7 +1014,7 @@ pub unsafe extern "C" fn retrievalkit_chunk_id_buffer_free(buffer: VkChunkIdBuff
 ///
 /// `buffer.chunks` must be null or a pointer allocated by RetrievalKit FFI.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_text_chunks_free(buffer: VkTextChunkBuffer) {
+pub unsafe extern "C" fn retrievalkit_text_chunks_free(buffer: RetrievalKitTextChunkBuffer) {
     if buffer.chunks.is_null() {
         return;
     }
@@ -1086,9 +1032,10 @@ pub unsafe extern "C" fn retrievalkit_text_chunks_free(buffer: VkTextChunkBuffer
 /// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
 /// FFI and the buffer must not have been freed before.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_search_results_free(buffer: VkSearchResultBuffer) {
+pub unsafe extern "C" fn retrievalkit_search_results_free(buffer: RetrievalKitSearchResultBuffer) {
     unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
     unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
+    unsafe { drop_ffi_slice(buffer.metadata, buffer.metadata_count) };
 }
 
 /// Frees keyword search results returned by `retrievalkit_index_keyword_search`.
@@ -1098,23 +1045,27 @@ pub unsafe extern "C" fn retrievalkit_search_results_free(buffer: VkSearchResult
 /// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
 /// FFI and the buffer must not have been freed before.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_keyword_results_free(buffer: VkKeywordResultBuffer) {
+pub unsafe extern "C" fn retrievalkit_keyword_results_free(
+    buffer: RetrievalKitKeywordResultBuffer,
+) {
     unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
     unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
     unsafe { drop_ffi_slice(buffer.matched_terms, buffer.matched_terms_count) };
+    unsafe { drop_ffi_slice(buffer.metadata, buffer.metadata_count) };
 }
 
-/// Frees hybrid search results returned by `retrievalkit_index_hybrid_search`.
+/// Frees hybrid search results returned by any `*_hybrid_search_alpha` function.
 ///
 /// # Safety
 ///
 /// Every non-null pointer in `buffer` must have been allocated by RetrievalKit
 /// FFI and the buffer must not have been freed before.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_hybrid_results_free(buffer: VkHybridResultBuffer) {
+pub unsafe extern "C" fn retrievalkit_hybrid_results_free(buffer: RetrievalKitHybridResultBuffer) {
     unsafe { drop_ffi_slice(buffer.hits, buffer.count) };
     unsafe { drop_ffi_slice(buffer.utf8, buffer.utf8_len) };
     unsafe { drop_ffi_slice(buffer.matched_terms, buffer.matched_terms_count) };
+    unsafe { drop_ffi_slice(buffer.metadata, buffer.metadata_count) };
 }
 
 /// Builds an equality metadata filter.
@@ -1125,11 +1076,11 @@ pub unsafe extern "C" fn retrievalkit_hybrid_results_free(buffer: VkHybridResult
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_equals(
     field: *const c_char,
-    value: VkMetadataValue,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    value: RetrievalKitMetadataValue,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::Equals {
                 field: unsafe { read_c_string(field, "field") }?,
                 value: unsafe { read_metadata_value(value) }?,
@@ -1146,11 +1097,11 @@ pub unsafe extern "C" fn retrievalkit_filter_equals(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_not_equals(
     field: *const c_char,
-    value: VkMetadataValue,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    value: RetrievalKitMetadataValue,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::NotEquals {
                 field: unsafe { read_c_string(field, "field") }?,
                 value: unsafe { read_metadata_value(value) }?,
@@ -1167,10 +1118,10 @@ pub unsafe extern "C" fn retrievalkit_filter_not_equals(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_exists(
     field: *const c_char,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::Exists {
                 field: unsafe { read_c_string(field, "field") }?,
             },
@@ -1187,12 +1138,12 @@ pub unsafe extern "C" fn retrievalkit_filter_exists(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_range(
     field: *const c_char,
-    lower: *const VkMetadataValue,
-    upper: *const VkMetadataValue,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    lower: *const RetrievalKitMetadataValue,
+    upper: *const RetrievalKitMetadataValue,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::Range {
                 field: unsafe { read_c_string(field, "field") }?,
                 lower: unsafe { optional_metadata_value(lower) }?,
@@ -1210,13 +1161,13 @@ pub unsafe extern "C" fn retrievalkit_filter_range(
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_in_values(
     field: *const c_char,
-    values: *const VkMetadataValue,
+    values: *const RetrievalKitMetadataValue,
     value_count: usize,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
         let values = unsafe { read_metadata_values(values, value_count) }?;
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::In {
                 field: unsafe { read_c_string(field, "field") }?,
                 values,
@@ -1232,12 +1183,12 @@ pub unsafe extern "C" fn retrievalkit_filter_in_values(
 /// `filters` must point to `filter_count` valid RetrievalKit filter pointers.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_all(
-    filters: *const *const VkFilter,
+    filters: *const *const RetrievalKitFilter,
     filter_count: usize,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::All(unsafe { read_filter_list(filters, filter_count) }?),
         })))
     })
@@ -1250,12 +1201,12 @@ pub unsafe extern "C" fn retrievalkit_filter_all(
 /// `filters` must point to `filter_count` valid RetrievalKit filter pointers.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_filter_any(
-    filters: *const *const VkFilter,
+    filters: *const *const RetrievalKitFilter,
     filter_count: usize,
-    status: *mut VkStatus,
-) -> *mut VkFilter {
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitFilter {
     ffi_ptr(status, || {
-        Ok(Box::into_raw(Box::new(VkFilter {
+        Ok(Box::into_raw(Box::new(RetrievalKitFilter {
             filter: Filter::Any(unsafe { read_filter_list(filters, filter_count) }?),
         })))
     })
@@ -1268,13 +1219,13 @@ pub unsafe extern "C" fn retrievalkit_filter_any(
 /// `filter` must be null or a pointer returned by a `retrievalkit_filter_*`
 /// function that has not already been freed.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_filter_free(filter: *mut VkFilter) {
+pub unsafe extern "C" fn retrievalkit_filter_free(filter: *mut RetrievalKitFilter) {
     if !filter.is_null() {
         unsafe { drop(Box::from_raw(filter)) };
     }
 }
 
-fn ffi_bool<F>(status: *mut VkStatus, operation: F) -> bool
+fn ffi_bool<F>(status: *mut RetrievalKitStatus, operation: F) -> bool
 where
     F: FnOnce() -> std::result::Result<(), FfiError>,
 {
@@ -1294,7 +1245,7 @@ where
     }
 }
 
-fn ffi_ptr<T, F>(status: *mut VkStatus, operation: F) -> *mut T
+fn ffi_ptr<T, F>(status: *mut RetrievalKitStatus, operation: F) -> *mut T
 where
     F: FnOnce() -> std::result::Result<*mut T, FfiError>,
 {
@@ -1314,11 +1265,11 @@ where
     }
 }
 
-unsafe fn set_status_ok(status: *mut VkStatus) {
+unsafe fn set_status_ok(status: *mut RetrievalKitStatus) {
     unsafe { retrievalkit_status_clear(status) };
 }
 
-unsafe fn set_status_error(status: *mut VkStatus, error: FfiError) {
+unsafe fn set_status_error(status: *mut RetrievalKitStatus, error: FfiError) {
     if status.is_null() {
         return;
     }
@@ -1338,29 +1289,33 @@ struct FfiError {
 impl FfiError {
     fn invalid_argument(message: impl Into<String>) -> Self {
         Self {
-            code: VK_STATUS_INVALID_ARGUMENT,
+            code: RETRIEVALKIT_STATUS_INVALID_ARGUMENT,
             message: message.into(),
         }
     }
 
     fn core(error: retrievalkit_core::RetrievalKitError) -> Self {
         let code = match &error {
-            retrievalkit_core::RetrievalKitError::CorruptIndex { .. } => VK_STATUS_CORRUPT_INDEX,
+            retrievalkit_core::RetrievalKitError::CorruptIndex { .. } => {
+                RETRIEVALKIT_STATUS_CORRUPT_INDEX
+            }
             retrievalkit_core::RetrievalKitError::InvalidDimension { .. } => {
-                VK_STATUS_INVALID_DIMENSION
+                RETRIEVALKIT_STATUS_INVALID_DIMENSION
             }
             retrievalkit_core::RetrievalKitError::MissingEmbedding { .. } => {
-                VK_STATUS_MISSING_EMBEDDING
+                RETRIEVALKIT_STATUS_MISSING_EMBEDDING
             }
             retrievalkit_core::RetrievalKitError::RetrievalCapabilityUnavailable { .. } => {
-                VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
+                RETRIEVALKIT_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
             }
             retrievalkit_core::RetrievalKitError::InvalidIdentity { .. }
             | retrievalkit_core::RetrievalKitError::InvalidRecordValue { .. } => {
-                VK_STATUS_INVALID_IDENTITY
+                RETRIEVALKIT_STATUS_INVALID_IDENTITY
             }
-            retrievalkit_core::RetrievalKitError::InvalidQuery { .. } => VK_STATUS_INVALID_ARGUMENT,
-            _ => VK_STATUS_CORE_ERROR,
+            retrievalkit_core::RetrievalKitError::InvalidQuery { .. } => {
+                RETRIEVALKIT_STATUS_INVALID_ARGUMENT
+            }
+            _ => RETRIEVALKIT_STATUS_CORE_ERROR,
         };
         Self {
             code,
@@ -1370,15 +1325,24 @@ impl FfiError {
 
     fn panic() -> Self {
         Self {
-            code: VK_STATUS_PANIC,
+            code: RETRIEVALKIT_STATUS_PANIC,
             message: "RetrievalKit FFI call panicked".to_owned(),
         }
     }
 
     fn result_buffer_overflow() -> Self {
         Self {
-            code: VK_STATUS_CORE_ERROR,
+            code: RETRIEVALKIT_STATUS_CORE_ERROR,
             message: "packed result buffer size overflow".to_owned(),
+        }
+    }
+
+    fn missing_result_payload(result_kind: &str, chunk_id: u64, missing: &str) -> Self {
+        Self {
+            code: RETRIEVALKIT_STATUS_CORE_ERROR,
+            message: format!(
+                "{result_kind} referenced internal chunk ID {chunk_id} with no {missing}; reload the database from its last valid snapshot"
+            ),
         }
     }
 }
@@ -1389,14 +1353,18 @@ impl From<retrievalkit_core::RetrievalKitError> for FfiError {
     }
 }
 
-unsafe fn index_ref<'a>(index: *const VkIndex) -> std::result::Result<&'a VkIndex, FfiError> {
+unsafe fn index_ref<'a>(
+    index: *const RetrievalKitIndex,
+) -> std::result::Result<&'a RetrievalKitIndex, FfiError> {
     if index.is_null() {
         return Err(FfiError::invalid_argument("index must not be null"));
     }
     Ok(unsafe { &*index })
 }
 
-unsafe fn index_mut<'a>(index: *mut VkIndex) -> std::result::Result<&'a mut VkIndex, FfiError> {
+unsafe fn index_mut<'a>(
+    index: *mut RetrievalKitIndex,
+) -> std::result::Result<&'a mut RetrievalKitIndex, FfiError> {
     if index.is_null() {
         return Err(FfiError::invalid_argument("index must not be null"));
     }
@@ -1432,7 +1400,7 @@ unsafe fn read_f32_slice<'a>(
 }
 
 unsafe fn read_metadata(
-    entries: *const VkMetadataEntry,
+    entries: *const RetrievalKitMetadataEntry,
     count: usize,
 ) -> std::result::Result<Metadata, FfiError> {
     if count == 0 {
@@ -1456,16 +1424,18 @@ unsafe fn read_metadata(
 }
 
 unsafe fn read_metadata_value(
-    value: VkMetadataValue,
+    value: RetrievalKitMetadataValue,
 ) -> std::result::Result<MetadataValue, FfiError> {
     match value.value_type {
-        VK_METADATA_STRING => Ok(MetadataValue::String(unsafe {
+        RETRIEVALKIT_METADATA_STRING => Ok(MetadataValue::String(unsafe {
             read_c_string(value.string_value, "metadata string value")
         }?)),
-        VK_METADATA_INTEGER => Ok(MetadataValue::Integer(value.integer_value)),
-        VK_METADATA_FLOAT => Ok(MetadataValue::Float(value.float_value)),
-        VK_METADATA_BOOLEAN => Ok(MetadataValue::Boolean(value.bool_value)),
-        VK_METADATA_TIMESTAMP_MILLIS => Ok(MetadataValue::TimestampMillis(value.integer_value)),
+        RETRIEVALKIT_METADATA_INTEGER => Ok(MetadataValue::Integer(value.integer_value)),
+        RETRIEVALKIT_METADATA_FLOAT => Ok(MetadataValue::Float(value.float_value)),
+        RETRIEVALKIT_METADATA_BOOLEAN => Ok(MetadataValue::Boolean(value.bool_value)),
+        RETRIEVALKIT_METADATA_TIMESTAMP_MILLIS => {
+            Ok(MetadataValue::TimestampMillis(value.integer_value))
+        }
         _ => Err(FfiError::invalid_argument(format!(
             "unsupported metadata value type {}",
             value.value_type
@@ -1474,7 +1444,7 @@ unsafe fn read_metadata_value(
 }
 
 unsafe fn optional_metadata_value(
-    value: *const VkMetadataValue,
+    value: *const RetrievalKitMetadataValue,
 ) -> std::result::Result<Option<MetadataValue>, FfiError> {
     if value.is_null() {
         return Ok(None);
@@ -1483,7 +1453,7 @@ unsafe fn optional_metadata_value(
 }
 
 unsafe fn read_metadata_values(
-    values: *const VkMetadataValue,
+    values: *const RetrievalKitMetadataValue,
     count: usize,
 ) -> std::result::Result<Vec<MetadataValue>, FfiError> {
     if count == 0 {
@@ -1501,7 +1471,7 @@ unsafe fn read_metadata_values(
 }
 
 unsafe fn read_chunk_inputs(
-    chunks: *const VkChunkInput,
+    chunks: *const RetrievalKitChunkInput,
     count: usize,
 ) -> std::result::Result<Vec<ChunkInput>, FfiError> {
     if count == 0 {
@@ -1528,7 +1498,7 @@ unsafe fn read_chunk_inputs(
         .collect()
 }
 
-unsafe fn optional_filter(filter: *const VkFilter) -> Option<Filter> {
+unsafe fn optional_filter(filter: *const RetrievalKitFilter) -> Option<Filter> {
     if filter.is_null() {
         None
     } else {
@@ -1537,7 +1507,7 @@ unsafe fn optional_filter(filter: *const VkFilter) -> Option<Filter> {
 }
 
 unsafe fn read_filter_list(
-    filters: *const *const VkFilter,
+    filters: *const *const RetrievalKitFilter,
     count: usize,
 ) -> std::result::Result<Vec<Filter>, FfiError> {
     if count == 0 {
@@ -1563,8 +1533,8 @@ unsafe fn read_filter_list(
 
 fn parse_metric(metric: u32) -> std::result::Result<VectorMetric, FfiError> {
     match metric {
-        VK_METRIC_COSINE => Ok(VectorMetric::Cosine),
-        VK_METRIC_DOT_PRODUCT => Ok(VectorMetric::DotProduct),
+        RETRIEVALKIT_METRIC_COSINE => Ok(VectorMetric::Cosine),
+        RETRIEVALKIT_METRIC_DOT_PRODUCT => Ok(VectorMetric::DotProduct),
         _ => Err(FfiError::invalid_argument(format!(
             "unsupported vector metric {metric}"
         ))),
@@ -1573,35 +1543,19 @@ fn parse_metric(metric: u32) -> std::result::Result<VectorMetric, FfiError> {
 
 fn parse_encoding_code(encoding: u32) -> std::result::Result<VectorEncoding, FfiError> {
     match encoding {
-        VK_ENCODING_F32 => Ok(VectorEncoding::F32),
-        VK_ENCODING_F16 => Ok(VectorEncoding::F16),
-        VK_ENCODING_BF16 => Ok(VectorEncoding::BF16),
-        VK_ENCODING_I8_SCALAR_QUANTIZED => Ok(VectorEncoding::I8ScalarQuantized),
+        RETRIEVALKIT_ENCODING_F32 => Ok(VectorEncoding::F32),
+        RETRIEVALKIT_ENCODING_F16 => Ok(VectorEncoding::F16),
+        RETRIEVALKIT_ENCODING_BF16 => Ok(VectorEncoding::BF16),
+        RETRIEVALKIT_ENCODING_I8_SCALAR_QUANTIZED => Ok(VectorEncoding::I8ScalarQuantized),
         _ => Err(FfiError::invalid_argument(format!(
             "unsupported vector encoding {encoding}"
         ))),
     }
 }
 
-fn parse_hybrid_fusion(options: VkHybridOptions) -> std::result::Result<HybridFusion, FfiError> {
-    match options.fusion_type {
-        VK_FUSION_WEIGHTED_NORMALIZED_SCORE => Ok(HybridFusion::WeightedNormalizedScore {
-            vector_weight: options.vector_weight,
-            keyword_weight: options.keyword_weight,
-        }),
-        VK_FUSION_RECIPROCAL_RANK => Ok(HybridFusion::ReciprocalRank {
-            rrf_k: options.rrf_k,
-        }),
-        _ => Err(FfiError::invalid_argument(format!(
-            "unsupported hybrid fusion type {}",
-            options.fusion_type
-        ))),
-    }
-}
-
-fn chunk_id_buffer(values: Vec<u64>) -> VkChunkIdBuffer {
+fn chunk_id_buffer(values: Vec<u64>) -> RetrievalKitChunkIdBuffer {
     let mut values = values.into_boxed_slice();
-    let buffer = VkChunkIdBuffer {
+    let buffer = RetrievalKitChunkIdBuffer {
         values: values.as_mut_ptr(),
         count: values.len(),
     };
@@ -1609,8 +1563,8 @@ fn chunk_id_buffer(values: Vec<u64>) -> VkChunkIdBuffer {
     buffer
 }
 
-fn text_chunk_buffer(mut chunks: Vec<VkTextChunk>) -> VkTextChunkBuffer {
-    let buffer = VkTextChunkBuffer {
+fn text_chunk_buffer(mut chunks: Vec<RetrievalKitTextChunk>) -> RetrievalKitTextChunkBuffer {
+    let buffer = RetrievalKitTextChunkBuffer {
         chunks: chunks.as_mut_ptr(),
         count: chunks.len(),
     };
@@ -1618,6 +1572,7 @@ fn text_chunk_buffer(mut chunks: Vec<VkTextChunk>) -> VkTextChunkBuffer {
     buffer
 }
 
+#[derive(Clone, Copy)]
 #[cfg_attr(not(feature = "graph"), allow(dead_code))]
 pub(crate) enum PackedRecordId<'a> {
     None,
@@ -1625,10 +1580,12 @@ pub(crate) enum PackedRecordId<'a> {
     Value(&'a str),
 }
 
-pub(crate) struct PackedResultText<'a> {
+#[derive(Clone, Copy)]
+pub(crate) struct PackedResultPayload<'a> {
     pub document_id: Option<&'a str>,
     pub record_id: PackedRecordId<'a>,
     pub text: &'a str,
+    pub metadata: &'a Metadata,
 }
 
 struct PackedUtf8Arena {
@@ -1642,8 +1599,8 @@ impl PackedUtf8Arena {
         }
     }
 
-    fn push(&mut self, value: &str) -> VkUtf8Range {
-        let range = VkUtf8Range {
+    fn push(&mut self, value: &str) -> RetrievalKitUtf8Range {
+        let range = RetrievalKitUtf8Range {
             offset: self.bytes.len(),
             length: value.len(),
         };
@@ -1661,7 +1618,7 @@ fn checked_result_bytes(total: usize, value: &str) -> std::result::Result<usize,
 fn packed_text_size(
     total: usize,
     fallback_document_id: &str,
-    value: PackedResultText<'_>,
+    value: PackedResultPayload<'_>,
 ) -> std::result::Result<usize, FfiError> {
     let document_id = value.document_id.unwrap_or(fallback_document_id);
     let total = checked_result_bytes(total, document_id)?;
@@ -1670,23 +1627,75 @@ fn packed_text_size(
         PackedRecordId::DocumentId => checked_result_bytes(total, document_id)?,
         PackedRecordId::Value(record_id) => checked_result_bytes(total, record_id)?,
     };
-    checked_result_bytes(total, value.text)
+    let mut total = checked_result_bytes(total, value.text)?;
+    for (key, metadata_value) in value.metadata {
+        total = checked_result_bytes(total, key)?;
+        if let MetadataValue::String(string_value) = metadata_value {
+            total = checked_result_bytes(total, string_value)?;
+        }
+    }
+    Ok(total)
 }
 
-fn pack_text(
+fn pack_payload(
     arena: &mut PackedUtf8Arena,
+    metadata: &mut Vec<RetrievalKitPackedMetadataEntry>,
     fallback_document_id: &str,
-    value: PackedResultText<'_>,
-) -> (VkUtf8Range, bool, VkUtf8Range, VkUtf8Range) {
+    value: PackedResultPayload<'_>,
+) -> (
+    RetrievalKitUtf8Range,
+    bool,
+    RetrievalKitUtf8Range,
+    RetrievalKitUtf8Range,
+    usize,
+    usize,
+) {
     let document_id_value = value.document_id.unwrap_or(fallback_document_id);
     let document_id = arena.push(document_id_value);
     let (has_record_id, record_id) = match value.record_id {
-        PackedRecordId::None => (false, VkUtf8Range::default()),
+        PackedRecordId::None => (false, RetrievalKitUtf8Range::default()),
         PackedRecordId::DocumentId => (true, arena.push(document_id_value)),
         PackedRecordId::Value(record_id) => (true, arena.push(record_id)),
     };
     let text = arena.push(value.text);
-    (document_id, has_record_id, record_id, text)
+    let metadata_start = metadata.len();
+    metadata.extend(value.metadata.iter().map(|(key, value)| {
+        let mut packed = RetrievalKitPackedMetadataEntry {
+            key: arena.push(key),
+            ..RetrievalKitPackedMetadataEntry::default()
+        };
+        match value {
+            MetadataValue::String(value) => {
+                packed.value_type = RETRIEVALKIT_METADATA_STRING;
+                packed.string_value = arena.push(value);
+            }
+            MetadataValue::Integer(value) => {
+                packed.value_type = RETRIEVALKIT_METADATA_INTEGER;
+                packed.integer_value = *value;
+            }
+            MetadataValue::Float(value) => {
+                packed.value_type = RETRIEVALKIT_METADATA_FLOAT;
+                packed.float_value = *value;
+            }
+            MetadataValue::Boolean(value) => {
+                packed.value_type = RETRIEVALKIT_METADATA_BOOLEAN;
+                packed.bool_value = *value;
+            }
+            MetadataValue::TimestampMillis(value) => {
+                packed.value_type = RETRIEVALKIT_METADATA_TIMESTAMP_MILLIS;
+                packed.integer_value = *value;
+            }
+        }
+        packed
+    }));
+    (
+        document_id,
+        has_record_id,
+        record_id,
+        text,
+        metadata_start,
+        value.metadata.len(),
+    )
 }
 
 fn into_ffi_slice<T>(values: Vec<T>) -> (*const T, usize) {
@@ -1711,53 +1720,73 @@ unsafe fn drop_ffi_slice<T>(values: *const T, count: usize) {
     }
 }
 
-pub(crate) fn empty_search_result_buffer() -> VkSearchResultBuffer {
-    VkSearchResultBuffer {
+pub(crate) fn empty_search_result_buffer() -> RetrievalKitSearchResultBuffer {
+    RetrievalKitSearchResultBuffer {
         hits: ptr::null(),
         count: 0,
         utf8: ptr::null(),
         utf8_len: 0,
+        metadata: ptr::null(),
+        metadata_count: 0,
     }
 }
 
-pub(crate) fn empty_keyword_result_buffer() -> VkKeywordResultBuffer {
-    VkKeywordResultBuffer {
+pub(crate) fn empty_keyword_result_buffer() -> RetrievalKitKeywordResultBuffer {
+    RetrievalKitKeywordResultBuffer {
         hits: ptr::null(),
         count: 0,
         utf8: ptr::null(),
         utf8_len: 0,
         matched_terms: ptr::null(),
         matched_terms_count: 0,
+        metadata: ptr::null(),
+        metadata_count: 0,
     }
 }
 
-pub(crate) fn empty_hybrid_result_buffer() -> VkHybridResultBuffer {
-    VkHybridResultBuffer {
+pub(crate) fn empty_hybrid_result_buffer() -> RetrievalKitHybridResultBuffer {
+    RetrievalKitHybridResultBuffer {
         hits: ptr::null(),
         count: 0,
         utf8: ptr::null(),
         utf8_len: 0,
         matched_terms: ptr::null(),
         matched_terms_count: 0,
+        metadata: ptr::null(),
+        metadata_count: 0,
+        alpha: 0.0,
     }
 }
 
 pub(crate) fn packed_search_result_buffer<'a, F>(
     hits: Vec<SearchHit>,
     resolve: F,
-) -> std::result::Result<VkSearchResultBuffer, FfiError>
+) -> std::result::Result<RetrievalKitSearchResultBuffer, FfiError>
 where
-    F: Fn(u64) -> PackedResultText<'a>,
+    F: Fn(u64) -> std::result::Result<PackedResultPayload<'a>, FfiError>,
 {
-    let utf8_capacity = hits.iter().try_fold(0, |total, hit| {
-        packed_text_size(total, &hit.document_id, resolve(hit.chunk_id))
+    let payloads = hits
+        .iter()
+        .map(|hit| resolve(hit.chunk_id))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let utf8_capacity = hits
+        .iter()
+        .zip(&payloads)
+        .try_fold(0, |total, (hit, payload)| {
+            packed_text_size(total, &hit.document_id, *payload)
+        })?;
+    let metadata_capacity = payloads.iter().try_fold(0usize, |total, payload| {
+        total
+            .checked_add(payload.metadata.len())
+            .ok_or_else(FfiError::result_buffer_overflow)
     })?;
     let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
+    let mut metadata = Vec::with_capacity(metadata_capacity);
     let mut packed_hits = Vec::with_capacity(hits.len());
-    for hit in &hits {
-        let (document_id, has_record_id, record_id, text) =
-            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
-        packed_hits.push(VkSearchHit {
+    for (hit, payload) in hits.iter().zip(payloads) {
+        let (document_id, has_record_id, record_id, text, metadata_start, metadata_count) =
+            pack_payload(&mut arena, &mut metadata, &hit.document_id, payload);
+        packed_hits.push(RetrievalKitSearchHit {
             chunk_id: hit.chunk_id,
             document_id,
             has_record_id,
@@ -1765,33 +1794,46 @@ where
             text,
             score: hit.score,
             vector_score: hit.trace.vector_score,
-            filter_matched: hit.trace.filter_matched,
+            metadata_start,
+            metadata_count,
         });
     }
     debug_assert_eq!(arena.bytes.len(), utf8_capacity);
+    debug_assert_eq!(metadata.len(), metadata_capacity);
     let (hits, count) = into_ffi_slice(packed_hits);
     let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
-    Ok(VkSearchResultBuffer {
+    let (metadata, metadata_count) = into_ffi_slice(metadata);
+    Ok(RetrievalKitSearchResultBuffer {
         hits,
         count,
         utf8,
         utf8_len,
+        metadata,
+        metadata_count,
     })
 }
 
 pub(crate) fn packed_keyword_result_buffer<'a, F>(
     hits: Vec<KeywordHit>,
     resolve: F,
-) -> std::result::Result<VkKeywordResultBuffer, FfiError>
+) -> std::result::Result<RetrievalKitKeywordResultBuffer, FfiError>
 where
-    F: Fn(u64) -> PackedResultText<'a>,
+    F: Fn(u64) -> std::result::Result<PackedResultPayload<'a>, FfiError>,
 {
+    let payloads = hits
+        .iter()
+        .map(|hit| resolve(hit.chunk_id))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut utf8_capacity = 0;
     let mut term_capacity: usize = 0;
-    for hit in &hits {
-        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, resolve(hit.chunk_id))?;
+    let mut metadata_capacity: usize = 0;
+    for (hit, payload) in hits.iter().zip(&payloads) {
+        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, *payload)?;
         term_capacity = term_capacity
             .checked_add(hit.matched_terms.len())
+            .ok_or_else(FfiError::result_buffer_overflow)?;
+        metadata_capacity = metadata_capacity
+            .checked_add(payload.metadata.len())
             .ok_or_else(FfiError::result_buffer_overflow)?;
         for term in &hit.matched_terms {
             utf8_capacity = checked_result_bytes(utf8_capacity, term)?;
@@ -1800,13 +1842,14 @@ where
 
     let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
     let mut matched_terms = Vec::with_capacity(term_capacity);
+    let mut metadata = Vec::with_capacity(metadata_capacity);
     let mut packed_hits = Vec::with_capacity(hits.len());
-    for hit in &hits {
-        let (document_id, has_record_id, record_id, text) =
-            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
+    for (hit, payload) in hits.iter().zip(payloads) {
+        let (document_id, has_record_id, record_id, text, metadata_start, metadata_count) =
+            pack_payload(&mut arena, &mut metadata, &hit.document_id, payload);
         let matched_terms_start = matched_terms.len();
         matched_terms.extend(hit.matched_terms.iter().map(|term| arena.push(term)));
-        packed_hits.push(VkKeywordHit {
+        packed_hits.push(RetrievalKitKeywordHit {
             chunk_id: hit.chunk_id,
             document_id,
             has_record_id,
@@ -1815,36 +1858,51 @@ where
             score: hit.score,
             matched_terms_start,
             matched_terms_count: hit.matched_terms.len(),
+            metadata_start,
+            metadata_count,
         });
     }
     debug_assert_eq!(arena.bytes.len(), utf8_capacity);
     debug_assert_eq!(matched_terms.len(), term_capacity);
+    debug_assert_eq!(metadata.len(), metadata_capacity);
     let (hits, count) = into_ffi_slice(packed_hits);
     let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
     let (matched_terms, matched_terms_count) = into_ffi_slice(matched_terms);
-    Ok(VkKeywordResultBuffer {
+    let (metadata, metadata_count) = into_ffi_slice(metadata);
+    Ok(RetrievalKitKeywordResultBuffer {
         hits,
         count,
         utf8,
         utf8_len,
         matched_terms,
         matched_terms_count,
+        metadata,
+        metadata_count,
     })
 }
 
 pub(crate) fn packed_hybrid_result_buffer<'a, F>(
     hits: Vec<HybridHit>,
+    alpha: f32,
     resolve: F,
-) -> std::result::Result<VkHybridResultBuffer, FfiError>
+) -> std::result::Result<RetrievalKitHybridResultBuffer, FfiError>
 where
-    F: Fn(u64) -> PackedResultText<'a>,
+    F: Fn(u64) -> std::result::Result<PackedResultPayload<'a>, FfiError>,
 {
+    let payloads = hits
+        .iter()
+        .map(|hit| resolve(hit.chunk_id))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut utf8_capacity = 0;
     let mut term_capacity: usize = 0;
-    for hit in &hits {
-        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, resolve(hit.chunk_id))?;
+    let mut metadata_capacity: usize = 0;
+    for (hit, payload) in hits.iter().zip(&payloads) {
+        utf8_capacity = packed_text_size(utf8_capacity, &hit.document_id, *payload)?;
         term_capacity = term_capacity
             .checked_add(hit.trace.matched_terms.len())
+            .ok_or_else(FfiError::result_buffer_overflow)?;
+        metadata_capacity = metadata_capacity
+            .checked_add(payload.metadata.len())
             .ok_or_else(FfiError::result_buffer_overflow)?;
         for term in &hit.trace.matched_terms {
             utf8_capacity = checked_result_bytes(utf8_capacity, term)?;
@@ -1853,13 +1911,14 @@ where
 
     let mut arena = PackedUtf8Arena::with_capacity(utf8_capacity);
     let mut matched_terms = Vec::with_capacity(term_capacity);
+    let mut metadata = Vec::with_capacity(metadata_capacity);
     let mut packed_hits = Vec::with_capacity(hits.len());
-    for hit in &hits {
-        let (document_id, has_record_id, record_id, text) =
-            pack_text(&mut arena, &hit.document_id, resolve(hit.chunk_id));
+    for (hit, payload) in hits.iter().zip(payloads) {
+        let (document_id, has_record_id, record_id, text, metadata_start, metadata_count) =
+            pack_payload(&mut arena, &mut metadata, &hit.document_id, payload);
         let matched_terms_start = matched_terms.len();
         matched_terms.extend(hit.trace.matched_terms.iter().map(|term| arena.push(term)));
-        packed_hits.push(VkHybridHit {
+        packed_hits.push(RetrievalKitHybridHit {
             chunk_id: hit.chunk_id,
             document_id,
             has_record_id,
@@ -1880,102 +1939,134 @@ where
             normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
             matched_terms_start,
             matched_terms_count: hit.trace.matched_terms.len(),
-            filter_matched: hit.trace.filter_matched,
+            metadata_start,
+            metadata_count,
         });
     }
     debug_assert_eq!(arena.bytes.len(), utf8_capacity);
     debug_assert_eq!(matched_terms.len(), term_capacity);
+    debug_assert_eq!(metadata.len(), metadata_capacity);
     let (hits, count) = into_ffi_slice(packed_hits);
     let (utf8, utf8_len) = into_ffi_slice(arena.bytes);
     let (matched_terms, matched_terms_count) = into_ffi_slice(matched_terms);
-    Ok(VkHybridResultBuffer {
+    let (metadata, metadata_count) = into_ffi_slice(metadata);
+    Ok(RetrievalKitHybridResultBuffer {
         hits,
         count,
         utf8,
         utf8_len,
         matched_terms,
         matched_terms_count,
+        metadata,
+        metadata_count,
+        alpha,
     })
 }
 
 fn search_result_buffer(
-    index: &VkIndex,
+    index: &RetrievalKitIndex,
     hits: Vec<SearchHit>,
-) -> std::result::Result<VkSearchResultBuffer, FfiError> {
-    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: index
+) -> std::result::Result<RetrievalKitSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| {
+        let chunk = index
             .index
             .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+            .ok_or_else(|| FfiError::missing_result_payload("search result", chunk_id, "chunk"))?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
 fn retrieval_search_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<SearchHit>,
-) -> std::result::Result<VkSearchResultBuffer, FfiError> {
-    packed_search_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: database
-            .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+) -> std::result::Result<RetrievalKitSearchResultBuffer, FfiError> {
+    packed_search_result_buffer(hits, |chunk_id| {
+        let chunk = database.chunk(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("retrieval result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
 fn keyword_result_buffer(
-    index: &VkIndex,
+    index: &RetrievalKitIndex,
     hits: Vec<KeywordHit>,
-) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
-    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: index
+) -> std::result::Result<RetrievalKitKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| {
+        let chunk = index
             .index
             .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+            .ok_or_else(|| FfiError::missing_result_payload("keyword result", chunk_id, "chunk"))?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
 fn retrieval_keyword_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<KeywordHit>,
-) -> std::result::Result<VkKeywordResultBuffer, FfiError> {
-    packed_keyword_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: database
-            .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+) -> std::result::Result<RetrievalKitKeywordResultBuffer, FfiError> {
+    packed_keyword_result_buffer(hits, |chunk_id| {
+        let chunk = database.chunk(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("retrieval keyword result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
 fn hybrid_result_buffer(
-    index: &VkIndex,
+    index: &RetrievalKitIndex,
     hits: Vec<HybridHit>,
-) -> std::result::Result<VkHybridResultBuffer, FfiError> {
-    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: index
+    alpha: f32,
+) -> std::result::Result<RetrievalKitHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, alpha, |chunk_id| {
+        let chunk = index
             .index
             .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+            .ok_or_else(|| FfiError::missing_result_payload("hybrid result", chunk_id, "chunk"))?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
 fn retrieval_hybrid_result_buffer(
     database: &RetrievalDatabase,
     hits: Vec<HybridHit>,
-) -> std::result::Result<VkHybridResultBuffer, FfiError> {
-    packed_hybrid_result_buffer(hits, |chunk_id| PackedResultText {
-        document_id: None,
-        record_id: PackedRecordId::None,
-        text: database
-            .chunk(chunk_id)
-            .map_or("", |chunk| chunk.text.as_str()),
+    alpha: f32,
+) -> std::result::Result<RetrievalKitHybridResultBuffer, FfiError> {
+    packed_hybrid_result_buffer(hits, alpha, |chunk_id| {
+        let chunk = database.chunk(chunk_id).ok_or_else(|| {
+            FfiError::missing_result_payload("retrieval hybrid result", chunk_id, "chunk")
+        })?;
+        Ok(PackedResultPayload {
+            document_id: None,
+            record_id: PackedRecordId::None,
+            text: &chunk.text,
+            metadata: &chunk.metadata,
+        })
     })
 }
 
@@ -1984,13 +2075,13 @@ fn string_to_owned_ptr(value: &str) -> *mut c_char {
 }
 
 #[cfg(feature = "graph")]
-fn string_array(values: Vec<String>) -> VkStringArray {
+fn string_array(values: Vec<String>) -> RetrievalKitStringArray {
     let mut pointers = values
         .into_iter()
         .map(|value| string_to_owned_ptr(&value))
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let array = VkStringArray {
+    let array = RetrievalKitStringArray {
         values: pointers.as_mut_ptr(),
         count: pointers.len(),
     };
@@ -1999,7 +2090,7 @@ fn string_array(values: Vec<String>) -> VkStringArray {
 }
 
 #[cfg(feature = "graph")]
-unsafe fn string_array_free(array: VkStringArray) {
+unsafe fn string_array_free(array: RetrievalKitStringArray) {
     if array.values.is_null() {
         return;
     }
@@ -2067,17 +2158,17 @@ mod tests {
     #[test]
     fn index_handle_contents_are_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
-        assert_send_sync::<VkIndex>();
+        assert_send_sync::<RetrievalKitIndex>();
     }
 
     #[test]
     fn chunking_ffi_returns_owned_text_and_offsets() {
         let text = CString::new("abçdef").unwrap();
-        let mut status = VkStatus {
+        let mut status = RetrievalKitStatus {
             code: -1,
             message: ptr::null_mut(),
         };
-        let mut output = VkTextChunkBuffer {
+        let mut output = RetrievalKitTextChunkBuffer {
             chunks: ptr::null_mut(),
             count: 0,
         };
@@ -2085,7 +2176,7 @@ mod tests {
         let success = unsafe {
             retrievalkit_chunk_text(
                 text.as_ptr(),
-                VK_CHUNKING_FIXED,
+                RETRIEVALKIT_CHUNKING_FIXED,
                 4,
                 1,
                 &mut output,
@@ -2094,7 +2185,7 @@ mod tests {
         };
 
         assert!(success);
-        assert_eq!(status.code, VK_STATUS_OK);
+        assert_eq!(status.code, RETRIEVALKIT_STATUS_OK);
         let chunks = unsafe { slice::from_raw_parts(output.chunks, output.count) };
         assert_eq!(chunks.len(), 2);
         assert_eq!(
@@ -2228,8 +2319,14 @@ mod tests {
     #[test]
     fn sdk_ffi_can_upsert_filter_search_and_delete() {
         let mut status = empty_status();
-        let index =
-            unsafe { retrievalkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        let index = unsafe {
+            retrievalkit_index_new(
+                2,
+                RETRIEVALKIT_METRIC_COSINE,
+                RETRIEVALKIT_ENCODING_F32,
+                &mut status,
+            )
+        };
         assert!(!index.is_null());
         assert_status_ok(&status);
 
@@ -2240,20 +2337,20 @@ mod tests {
         let chunk_text_skip = CString::new("skip").unwrap();
         let keep_embedding = [1.0_f32, 0.0];
         let skip_embedding = [0.0_f32, 1.0];
-        let keep_metadata = [VkMetadataEntry {
+        let keep_metadata = [RetrievalKitMetadataEntry {
             field: bucket_field.as_ptr(),
-            value: VkMetadataValue {
-                value_type: VK_METADATA_INTEGER,
+            value: RetrievalKitMetadataValue {
+                value_type: RETRIEVALKIT_METADATA_INTEGER,
                 string_value: ptr::null(),
                 integer_value: 1,
                 float_value: 0.0,
                 bool_value: false,
             },
         }];
-        let skip_metadata = [VkMetadataEntry {
+        let skip_metadata = [RetrievalKitMetadataEntry {
             field: bucket_field.as_ptr(),
-            value: VkMetadataValue {
-                value_type: VK_METADATA_INTEGER,
+            value: RetrievalKitMetadataValue {
+                value_type: RETRIEVALKIT_METADATA_INTEGER,
                 string_value: ptr::null(),
                 integer_value: 2,
                 float_value: 0.0,
@@ -2261,14 +2358,14 @@ mod tests {
             },
         }];
         let chunks = [
-            VkChunkInput {
+            RetrievalKitChunkInput {
                 text: chunk_text_keep.as_ptr(),
                 embedding: keep_embedding.as_ptr(),
                 embedding_len: keep_embedding.len(),
                 metadata: keep_metadata.as_ptr(),
                 metadata_len: keep_metadata.len(),
             },
-            VkChunkInput {
+            RetrievalKitChunkInput {
                 text: chunk_text_skip.as_ptr(),
                 embedding: skip_embedding.as_ptr(),
                 embedding_len: skip_embedding.len(),
@@ -2276,7 +2373,7 @@ mod tests {
                 metadata_len: skip_metadata.len(),
             },
         ];
-        let mut chunk_ids = VkChunkIdBuffer {
+        let mut chunk_ids = RetrievalKitChunkIdBuffer {
             values: ptr::null_mut(),
             count: 0,
         };
@@ -2299,8 +2396,8 @@ mod tests {
         assert_eq!(chunk_ids.count, 2);
         unsafe { retrievalkit_chunk_id_buffer_free(chunk_ids) };
 
-        let filter_value = VkMetadataValue {
-            value_type: VK_METADATA_INTEGER,
+        let filter_value = RetrievalKitMetadataValue {
+            value_type: RETRIEVALKIT_METADATA_INTEGER,
             string_value: ptr::null(),
             integer_value: 2,
             float_value: 0.0,
@@ -2350,7 +2447,7 @@ mod tests {
             2
         );
 
-        let mut compaction = VkCompactionReport::default();
+        let mut compaction = RetrievalKitCompactionReport::default();
         let compacted = unsafe { retrievalkit_index_compact(index, &mut compaction, &mut status) };
         assert!(compacted);
         assert_status_ok(&status);
@@ -2374,8 +2471,14 @@ mod tests {
     #[test]
     fn sdk_ffi_reports_dimension_errors_through_status() {
         let mut status = empty_status();
-        let index =
-            unsafe { retrievalkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        let index = unsafe {
+            retrievalkit_index_new(
+                2,
+                RETRIEVALKIT_METRIC_COSINE,
+                RETRIEVALKIT_ENCODING_F32,
+                &mut status,
+            )
+        };
         assert!(!index.is_null());
 
         let query = [1.0_f32];
@@ -2393,7 +2496,7 @@ mod tests {
         };
 
         assert!(!searched);
-        assert_eq!(status.code, VK_STATUS_INVALID_DIMENSION);
+        assert_eq!(status.code, RETRIEVALKIT_STATUS_INVALID_DIMENSION);
         let message = unsafe { CStr::from_ptr(status.message) }
             .to_str()
             .unwrap()
@@ -2409,22 +2512,28 @@ mod tests {
     #[test]
     fn sdk_ffi_save_and_load_round_trips_results() {
         let mut status = empty_status();
-        let index =
-            unsafe { retrievalkit_index_new(2, VK_METRIC_COSINE, VK_ENCODING_F32, &mut status) };
+        let index = unsafe {
+            retrievalkit_index_new(
+                2,
+                RETRIEVALKIT_METRIC_COSINE,
+                RETRIEVALKIT_ENCODING_F32,
+                &mut status,
+            )
+        };
         assert!(!index.is_null());
 
         let document_id = CString::new("doc-1").unwrap();
         let document_text = CString::new("").unwrap();
         let chunk_text = CString::new("persisted").unwrap();
         let embedding = [0.0_f32, 1.0];
-        let chunks = [VkChunkInput {
+        let chunks = [RetrievalKitChunkInput {
             text: chunk_text.as_ptr(),
             embedding: embedding.as_ptr(),
             embedding_len: embedding.len(),
             metadata: ptr::null(),
             metadata_len: 0,
         }];
-        let mut chunk_ids = VkChunkIdBuffer {
+        let mut chunk_ids = RetrievalKitChunkIdBuffer {
             values: ptr::null_mut(),
             count: 0,
         };
@@ -2488,43 +2597,50 @@ mod tests {
     #[test]
     fn packed_result_buffers_round_trip_utf8_identities_terms_and_traces() {
         let long_text = "ö".repeat(32 * 1024);
+        let mut first_metadata = Metadata::new();
+        first_metadata.insert(
+            "başlık".to_owned(),
+            MetadataValue::String("Swift için".to_owned()),
+        );
+        first_metadata.insert("count".to_owned(), MetadataValue::Integer(7));
+        first_metadata.insert("weight".to_owned(), MetadataValue::Float(2.5));
+        first_metadata.insert("active".to_owned(), MetadataValue::Boolean(true));
+        first_metadata.insert(
+            "created_at".to_owned(),
+            MetadataValue::TimestampMillis(1_700_000_000_000),
+        );
+        let empty_metadata = Metadata::new();
         let search = packed_search_result_buffer(
             vec![
                 SearchHit {
                     chunk_id: 1,
                     document_id: "fallback-1".to_owned(),
                     score: 0.9,
-                    trace: retrievalkit_core::SearchTrace {
-                        vector_score: 0.8,
-                        keyword_score: None,
-                        filter_matched: true,
-                    },
+                    trace: retrievalkit_core::SearchTrace { vector_score: 0.8 },
                 },
                 SearchHit {
                     chunk_id: 2,
                     document_id: "fallback-2".to_owned(),
                     score: 0.7,
-                    trace: retrievalkit_core::SearchTrace {
-                        vector_score: 0.6,
-                        keyword_score: None,
-                        filter_matched: false,
-                    },
+                    trace: retrievalkit_core::SearchTrace { vector_score: 0.6 },
                 },
             ],
             |chunk_id| {
-                if chunk_id == 1 {
-                    PackedResultText {
+                Ok(if chunk_id == 1 {
+                    PackedResultPayload {
                         document_id: Some("belge-ğ"),
                         record_id: PackedRecordId::Value("kayıt-1"),
                         text: "Swift için özel metin",
+                        metadata: &first_metadata,
                     }
                 } else {
-                    PackedResultText {
+                    PackedResultPayload {
                         document_id: None,
                         record_id: PackedRecordId::None,
                         text: &long_text,
+                        metadata: &empty_metadata,
                     }
-                }
+                })
             },
         )
         .unwrap();
@@ -2552,6 +2668,40 @@ mod tests {
             unsafe { packed_utf8(search.utf8, search.utf8_len, search_hits[1].text) },
             long_text
         );
+        assert_eq!(search_hits[0].metadata_start, 0);
+        assert_eq!(search_hits[0].metadata_count, 5);
+        assert_eq!(search_hits[1].metadata_count, 0);
+        assert_eq!(search.metadata_count, 5);
+        let metadata = unsafe { slice::from_raw_parts(search.metadata, search.metadata_count) };
+        for entry in metadata {
+            let key = unsafe { packed_utf8(search.utf8, search.utf8_len, entry.key) };
+            match key.as_str() {
+                "başlık" => {
+                    assert_eq!(entry.value_type, RETRIEVALKIT_METADATA_STRING);
+                    assert_eq!(
+                        unsafe { packed_utf8(search.utf8, search.utf8_len, entry.string_value) },
+                        "Swift için"
+                    );
+                }
+                "count" => {
+                    assert_eq!(entry.value_type, RETRIEVALKIT_METADATA_INTEGER);
+                    assert_eq!(entry.integer_value, 7);
+                }
+                "weight" => {
+                    assert_eq!(entry.value_type, RETRIEVALKIT_METADATA_FLOAT);
+                    assert_eq!(entry.float_value, 2.5);
+                }
+                "active" => {
+                    assert_eq!(entry.value_type, RETRIEVALKIT_METADATA_BOOLEAN);
+                    assert!(entry.bool_value);
+                }
+                "created_at" => {
+                    assert_eq!(entry.value_type, RETRIEVALKIT_METADATA_TIMESTAMP_MILLIS);
+                    assert_eq!(entry.integer_value, 1_700_000_000_000);
+                }
+                unexpected => panic!("unexpected metadata key {unexpected}"),
+            }
+        }
         unsafe { retrievalkit_search_results_free(search) };
 
         let keyword = packed_keyword_result_buffer(
@@ -2561,10 +2711,13 @@ mod tests {
                 score: 4.2,
                 matched_terms: vec!["swift".to_owned(), "özel".to_owned()],
             }],
-            |_| PackedResultText {
-                document_id: None,
-                record_id: PackedRecordId::None,
-                text: "Swift özel arama",
+            |_| {
+                Ok(PackedResultPayload {
+                    document_id: None,
+                    record_id: PackedRecordId::None,
+                    text: "Swift özel arama",
+                    metadata: &first_metadata,
+                })
             },
         )
         .unwrap();
@@ -2601,13 +2754,16 @@ mod tests {
                         vector_weight: 0.6,
                         keyword_weight: 0.4,
                     },
-                    filter_matched: true,
                 },
             }],
-            |_| PackedResultText {
-                document_id: None,
-                record_id: PackedRecordId::DocumentId,
-                text: "hybrid arama",
+            0.6,
+            |_| {
+                Ok(PackedResultPayload {
+                    document_id: None,
+                    record_id: PackedRecordId::DocumentId,
+                    text: "hybrid arama",
+                    metadata: &first_metadata,
+                })
             },
         )
         .unwrap();
@@ -2622,6 +2778,8 @@ mod tests {
             unsafe { packed_utf8(hybrid.utf8, hybrid.utf8_len, hybrid_hit.record_id) },
             "note-4"
         );
+        assert_eq!(hybrid.alpha, 0.6);
+        assert_eq!(hybrid_hit.metadata_count, 5);
         unsafe { retrievalkit_hybrid_results_free(hybrid) };
     }
 
@@ -2630,38 +2788,49 @@ mod tests {
         let search = empty_search_result_buffer();
         assert!(search.hits.is_null());
         assert!(search.utf8.is_null());
+        assert!(search.metadata.is_null());
         unsafe { retrievalkit_search_results_free(search) };
 
         let keyword = empty_keyword_result_buffer();
         assert!(keyword.hits.is_null());
         assert!(keyword.utf8.is_null());
         assert!(keyword.matched_terms.is_null());
+        assert!(keyword.metadata.is_null());
         unsafe { retrievalkit_keyword_results_free(keyword) };
 
         let hybrid = empty_hybrid_result_buffer();
         assert!(hybrid.hits.is_null());
         assert!(hybrid.utf8.is_null());
         assert!(hybrid.matched_terms.is_null());
+        assert!(hybrid.metadata.is_null());
+        assert_eq!(hybrid.alpha, 0.0);
         unsafe { retrievalkit_hybrid_results_free(hybrid) };
     }
 
-    fn empty_status() -> VkStatus {
-        VkStatus {
-            code: VK_STATUS_OK,
+    fn empty_status() -> RetrievalKitStatus {
+        RetrievalKitStatus {
+            code: RETRIEVALKIT_STATUS_OK,
             message: ptr::null_mut(),
         }
     }
 
-    fn assert_status_ok(status: &VkStatus) {
-        assert_eq!(status.code, VK_STATUS_OK);
+    fn assert_status_ok(status: &RetrievalKitStatus) {
+        assert_eq!(status.code, RETRIEVALKIT_STATUS_OK);
         assert!(status.message.is_null());
     }
 
-    unsafe fn packed_string(buffer: &VkSearchResultBuffer, range: VkUtf8Range) -> String {
+    unsafe fn packed_string(
+        buffer: &RetrievalKitSearchResultBuffer,
+        range: RetrievalKitUtf8Range,
+    ) -> String {
         unsafe { packed_utf8(buffer.utf8, buffer.utf8_len, range) }
     }
 
-    unsafe fn packed_utf8(utf8: *const u8, utf8_len: usize, range: VkUtf8Range) -> String {
+    unsafe fn packed_utf8(
+        utf8: *const u8,
+        utf8_len: usize,
+        range: RetrievalKitUtf8Range,
+    ) -> String {
         assert!(range.offset <= utf8_len);
         assert!(range.length <= utf8_len - range.offset);
         let bytes = unsafe { slice::from_raw_parts(utf8.add(range.offset), range.length) };

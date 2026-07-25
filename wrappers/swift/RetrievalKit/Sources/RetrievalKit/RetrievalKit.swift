@@ -52,10 +52,10 @@ public enum VectorEncoding: Sendable {
 }
 
 extension RetrievalKitShared.MetadataValue {
-  fileprivate func ffiValue(arena: CStringArena) -> VkMetadataValue {
+  fileprivate func ffiValue(arena: CStringArena) -> RetrievalKitMetadataValue {
     switch self {
     case .string(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 0,
         string_value: arena.copy(value),
         integer_value: 0,
@@ -63,7 +63,7 @@ extension RetrievalKitShared.MetadataValue {
         bool_value: false
       )
     case .integer(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 1,
         string_value: nil,
         integer_value: value,
@@ -71,7 +71,7 @@ extension RetrievalKitShared.MetadataValue {
         bool_value: false
       )
     case .float(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 2,
         string_value: nil,
         integer_value: 0,
@@ -79,7 +79,7 @@ extension RetrievalKitShared.MetadataValue {
         bool_value: false
       )
     case .boolean(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 3,
         string_value: nil,
         integer_value: 0,
@@ -87,7 +87,7 @@ extension RetrievalKitShared.MetadataValue {
         bool_value: value
       )
     case .timestampMillis(let value):
-      VkMetadataValue(
+      RetrievalKitMetadataValue(
         value_type: 4,
         string_value: nil,
         integer_value: value,
@@ -123,6 +123,8 @@ public struct SearchResult: Equatable, Sendable {
   public var documentID: String
   /// Stored chunk text.
   public var text: String
+  /// Effective metadata after chunk values override document values.
+  public var metadata: [String: MetadataValue]
   /// Ranked vector score.
   public var score: Float
   /// Debug data for the score and filter decision.
@@ -133,8 +135,6 @@ public struct SearchResult: Equatable, Sendable {
 public struct SearchTrace: Equatable, Sendable {
   /// Raw vector score used for ranking.
   public var vectorScore: Float
-  /// Whether the metadata filter matched this result.
-  public var filterMatched: Bool
 }
 
 /// BM25 keyword search result.
@@ -145,6 +145,8 @@ public struct KeywordResult: Equatable, Sendable {
   public var documentID: String
   /// Stored chunk text.
   public var text: String
+  /// Effective metadata after chunk values override document values.
+  public var metadata: [String: MetadataValue]
   /// BM25 score.
   public var score: Float
   /// Query terms matched by the keyword index.
@@ -159,6 +161,8 @@ public struct HybridResult: Equatable, Sendable {
   public var documentID: String
   /// Stored chunk text.
   public var text: String
+  /// Effective metadata after chunk values override document values.
+  public var metadata: [String: MetadataValue]
   /// Final fused hybrid score.
   public var score: Float
   /// Vector score when the chunk came from vector candidates.
@@ -171,6 +175,8 @@ public struct HybridResult: Equatable, Sendable {
 
 /// Debug data for hybrid search ranking.
 public struct HybridTrace: Equatable, Sendable {
+  /// Effective vector weight used for this search.
+  public var alpha: Float
   /// Rank in vector candidates before fusion.
   public var vectorRank: Int?
   /// Rank in keyword candidates before fusion.
@@ -181,8 +187,6 @@ public struct HybridTrace: Equatable, Sendable {
   public var normalizedKeywordScore: Float?
   /// Query terms matched by the keyword side of hybrid search.
   public var matchedTerms: [String]
-  /// Whether the metadata filter matched this result.
-  public var filterMatched: Bool
 }
 
 /// Candidate options for hybrid search.
@@ -203,8 +207,8 @@ public struct HybridOptions: Equatable, Sendable {
     self.keywordTopK = keywordTopK
   }
 
-  fileprivate func ffiValue(alpha: Float) -> VkHybridQueryOptions {
-    VkHybridQueryOptions(
+  fileprivate func ffiValue(alpha: Float) -> RetrievalKitHybridQueryOptions {
+    RetrievalKitHybridQueryOptions(
       vector_top_k: vectorTopK,
       keyword_top_k: keywordTopK,
       alpha: alpha
@@ -246,7 +250,7 @@ public enum RetrievalKitError: Error, Equatable, CustomStringConvertible, Sendab
     }
   }
 
-  fileprivate static func from(status: VkStatus) -> RetrievalKitError {
+  fileprivate static func from(status: RetrievalKitStatus) -> RetrievalKitError {
     let message = status.message.map { String(cString: $0) } ?? "unknown RetrievalKit FFI error"
     switch status.code {
     case 1: return .invalidArgument(message)
@@ -513,7 +517,7 @@ public actor VectorIndex {
       try await Task.detached(priority: Task.currentPriority) {
         defer { withExtendedLifetime(owner) {} }
         let arena = CStringArena()
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_save(
           OpaquePointer(bitPattern: handle),
@@ -543,7 +547,7 @@ public actor VectorIndex {
         let embeddingBuffers = chunks.map { EmbeddingBuffer($0.embedding) }
         let ffiChunks = ChunkInputBuffer(
           chunks.enumerated().map { index, chunk in
-            VkChunkInput(
+            RetrievalKitChunkInput(
               text: arena.copy(chunk.text),
               embedding: embeddingBuffers[index].pointer,
               embedding_len: embeddingBuffers[index].count,
@@ -551,9 +555,9 @@ public actor VectorIndex {
               metadata_len: chunkMetadata[index].count
             )
           })
-        var output = VkChunkIdBuffer(values: nil, count: 0)
+        var output = RetrievalKitChunkIdBuffer(values: nil, count: 0)
 
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_upsert_document(
           OpaquePointer(bitPattern: handle),
@@ -590,7 +594,7 @@ public actor VectorIndex {
         defer { withExtendedLifetime(owner) {} }
         let arena = CStringArena()
         var deletedCount = 0
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_delete_document(
           OpaquePointer(bitPattern: handle),
@@ -616,7 +620,7 @@ public actor VectorIndex {
       try Task.checkCancellation()
       return try await Task.detached(priority: Task.currentPriority) {
         defer { withExtendedLifetime(owner) {} }
-        var output = VkCompactionReport(
+        var output = RetrievalKitCompactionReport(
           chunks_before: 0,
           chunks_after: 0,
           chunks_removed: 0,
@@ -624,7 +628,7 @@ public actor VectorIndex {
           estimated_bytes_after: 0,
           estimated_bytes_reclaimed: 0
         )
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_compact(
           OpaquePointer(bitPattern: handle),
@@ -660,7 +664,7 @@ public actor VectorIndex {
         defer { withExtendedLifetime(owner) {} }
         var output = emptySearchResultBuffer()
         let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = embedding.withUnsafeBufferPointer { vector in
           retrievalkit_index_search(
@@ -703,7 +707,7 @@ public actor VectorIndex {
         var output = emptyKeywordResultBuffer()
         let arena = CStringArena()
         let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_keyword_search(
           OpaquePointer(bitPattern: handle),
@@ -747,7 +751,7 @@ public actor VectorIndex {
         let arena = CStringArena()
         let ffiOptions = options.ffiValue(alpha: alpha)
         let ffiFilter = try filter?.makeFFI()
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
         let succeeded = embedding.withUnsafeBufferPointer { vector in
           retrievalkit_index_hybrid_search_alpha(
@@ -771,7 +775,7 @@ public actor VectorIndex {
         }
         let decoder = PackedResultDecoder(output)
         return try UnsafeBufferPointer(start: hits, count: output.count).map {
-          try HybridResult($0, decoder: decoder)
+          try HybridResult($0, alpha: output.alpha, decoder: decoder)
         }
       }.value
     }
@@ -830,7 +834,7 @@ public actor RetrievalQueries {
     return try await Task.detached(priority: Task.currentPriority) {
       var output = emptySearchResultBuffer()
       let ffiFilter = try filter?.makeFFI()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let handle = try owner.requireHandle()
       guard embedding.withUnsafeBufferPointer({ vector in
@@ -858,7 +862,7 @@ public actor RetrievalQueries {
       var output = emptyKeywordResultBuffer()
       let arena = CStringArena()
       let ffiFilter = try filter?.makeFFI()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       guard
         retrievalkit_retrieval_keyword_search(
@@ -889,7 +893,7 @@ public actor RetrievalQueries {
       var output = emptyHybridResultBuffer()
       let arena = CStringArena()
       let ffiFilter = try filter?.makeFFI()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let handle = try owner.requireHandle()
       guard embedding.withUnsafeBufferPointer({ vector in
@@ -902,7 +906,7 @@ public actor RetrievalQueries {
       guard let hits = output.hits else { return [] }
       let decoder = PackedResultDecoder(output)
       return try UnsafeBufferPointer(start: hits, count: output.count).map {
-        try HybridResult($0, decoder: decoder)
+        try HybridResult($0, alpha: output.alpha, decoder: decoder)
       }
     }.value
   }
@@ -1014,7 +1018,7 @@ public actor RetrievalDatabase {
     let owner = owner
     try await Task.detached(priority: Task.currentPriority) {
       let handle = try owner.requireHandle()
-      var status = VkStatus(code: 0, message: nil)
+      var status = RetrievalKitStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let succeeded = directory.path.withCString {
         retrievalkit_retrieval_database_save(OpaquePointer(bitPattern: handle), $0, &status)
@@ -1036,26 +1040,25 @@ public actor RetrievalDatabase {
 }
 
 extension SearchResult {
-  fileprivate init(_ hit: VkSearchHit, decoder: PackedResultDecoder) throws {
+  fileprivate init(_ hit: RetrievalKitSearchHit, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
       documentID: try decoder.string(hit.document_id),
       text: try decoder.string(hit.text),
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count),
       score: hit.score,
-      trace: SearchTrace(
-        vectorScore: hit.vector_score,
-        filterMatched: hit.filter_matched
-      )
+      trace: SearchTrace(vectorScore: hit.vector_score)
     )
   }
 }
 
 extension KeywordResult {
-  fileprivate init(_ hit: VkKeywordHit, decoder: PackedResultDecoder) throws {
+  fileprivate init(_ hit: RetrievalKitKeywordHit, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
       documentID: try decoder.string(hit.document_id),
       text: try decoder.string(hit.text),
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count),
       score: hit.score,
       matchedTerms: try decoder.strings(
         start: hit.matched_terms_start,
@@ -1066,15 +1069,17 @@ extension KeywordResult {
 }
 
 extension HybridResult {
-  fileprivate init(_ hit: VkHybridHit, decoder: PackedResultDecoder) throws {
+  fileprivate init(_ hit: RetrievalKitHybridHit, alpha: Float, decoder: PackedResultDecoder) throws {
     self.init(
       chunkID: hit.chunk_id,
       documentID: try decoder.string(hit.document_id),
       text: try decoder.string(hit.text),
+      metadata: try decoder.metadata(start: hit.metadata_start, count: hit.metadata_count),
       score: hit.score,
       vectorScore: hit.has_vector_score ? hit.vector_score : nil,
       keywordScore: hit.has_keyword_score ? hit.keyword_score : nil,
       trace: HybridTrace(
+        alpha: alpha,
         vectorRank: hit.has_vector_rank ? Int(hit.vector_rank) : nil,
         keywordRank: hit.has_keyword_rank ? Int(hit.keyword_rank) : nil,
         normalizedVectorScore: hit.has_normalized_vector_score ? hit.normalized_vector_score : nil,
@@ -1083,8 +1088,7 @@ extension HybridResult {
         matchedTerms: try decoder.strings(
           start: hit.matched_terms_start,
           count: hit.matched_terms_count
-        ),
-        filterMatched: hit.filter_matched
+        )
       )
     )
   }
@@ -1093,31 +1097,39 @@ extension HybridResult {
 private struct PackedResultDecoder {
   private let utf8: UnsafePointer<UInt8>?
   private let utf8Count: Int
-  private let matchedTerms: UnsafePointer<VkUtf8Range>?
+  private let matchedTerms: UnsafePointer<RetrievalKitUtf8Range>?
   private let matchedTermsCount: Int
+  private let metadataEntries: UnsafePointer<RetrievalKitPackedMetadataEntry>?
+  private let metadataCount: Int
 
-  init(_ output: VkSearchResultBuffer) {
+  init(_ output: RetrievalKitSearchResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = nil
     matchedTermsCount = 0
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  init(_ output: VkKeywordResultBuffer) {
+  init(_ output: RetrievalKitKeywordResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = output.matched_terms
     matchedTermsCount = output.matched_terms_count
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  init(_ output: VkHybridResultBuffer) {
+  init(_ output: RetrievalKitHybridResultBuffer) {
     utf8 = output.utf8
     utf8Count = output.utf8_len
     matchedTerms = output.matched_terms
     matchedTermsCount = output.matched_terms_count
+    metadataEntries = output.metadata
+    metadataCount = output.metadata_count
   }
 
-  func string(_ range: VkUtf8Range) throws -> String {
+  func string(_ range: RetrievalKitUtf8Range) throws -> String {
     guard
       utf8Count >= 0,
       range.offset >= 0,
@@ -1156,39 +1168,82 @@ private struct PackedResultDecoder {
       try string($0)
     }
   }
+
+  func metadata(start: Int, count: Int) throws -> [String: MetadataValue] {
+    guard
+      metadataCount >= 0,
+      start >= 0,
+      count >= 0,
+      start <= metadataCount,
+      count <= metadataCount - start
+    else {
+      throw RetrievalKitError.core("native result contains an invalid metadata range")
+    }
+    guard count > 0 else { return [:] }
+    guard let metadataEntries else {
+      throw RetrievalKitError.core("native result metadata entries are missing")
+    }
+    var values: [String: MetadataValue] = [:]
+    values.reserveCapacity(count)
+    for entry in UnsafeBufferPointer(start: metadataEntries.advanced(by: start), count: count) {
+      let key = try string(entry.key)
+      switch entry.value_type {
+      case 0:
+        values[key] = .string(try string(entry.string_value))
+      case 1:
+        values[key] = .integer(entry.integer_value)
+      case 2:
+        values[key] = .float(entry.float_value)
+      case 3:
+        values[key] = .boolean(entry.bool_value)
+      case 4:
+        values[key] = .timestampMillis(entry.integer_value)
+      default:
+        throw RetrievalKitError.core(
+          "native result contains unsupported metadata type \(entry.value_type)")
+      }
+    }
+    return values
+  }
 }
 
-private func emptySearchResultBuffer() -> VkSearchResultBuffer {
-  VkSearchResultBuffer(hits: nil, count: 0, utf8: nil, utf8_len: 0)
+private func emptySearchResultBuffer() -> RetrievalKitSearchResultBuffer {
+  RetrievalKitSearchResultBuffer(
+    hits: nil, count: 0, utf8: nil, utf8_len: 0, metadata: nil, metadata_count: 0)
 }
 
-private func emptyKeywordResultBuffer() -> VkKeywordResultBuffer {
-  VkKeywordResultBuffer(
+private func emptyKeywordResultBuffer() -> RetrievalKitKeywordResultBuffer {
+  RetrievalKitKeywordResultBuffer(
     hits: nil,
     count: 0,
     utf8: nil,
     utf8_len: 0,
     matched_terms: nil,
-    matched_terms_count: 0
+    matched_terms_count: 0,
+    metadata: nil,
+    metadata_count: 0
   )
 }
 
-private func emptyHybridResultBuffer() -> VkHybridResultBuffer {
-  VkHybridResultBuffer(
+private func emptyHybridResultBuffer() -> RetrievalKitHybridResultBuffer {
+  RetrievalKitHybridResultBuffer(
     hits: nil,
     count: 0,
     utf8: nil,
     utf8_len: 0,
     matched_terms: nil,
-    matched_terms_count: 0
+    matched_terms_count: 0,
+    metadata: nil,
+    metadata_count: 0,
+    alpha: 0
   )
 }
 
 private enum FFI {
   static func withStatusPointer(
-    _ body: (UnsafeMutablePointer<VkStatus>) -> OpaquePointer?
+    _ body: (UnsafeMutablePointer<RetrievalKitStatus>) -> OpaquePointer?
   ) throws -> OpaquePointer {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard let pointer = body(&status) else {
       throw RetrievalKitError.from(status: status)
@@ -1197,9 +1252,9 @@ private enum FFI {
   }
 
   static func withStatusBool(
-    _ body: (UnsafeMutablePointer<VkStatus>) -> Bool
+    _ body: (UnsafeMutablePointer<RetrievalKitStatus>) -> Bool
   ) throws {
-    var status = VkStatus(code: 0, message: nil)
+    var status = RetrievalKitStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
     guard body(&status) else {
       throw RetrievalKitError.from(status: status)
@@ -1274,7 +1329,7 @@ extension Filter {
   }
 
   fileprivate func makeFFILeaf(
-    _ body: (UnsafeMutablePointer<VkStatus>, CStringArena) -> OpaquePointer?
+    _ body: (UnsafeMutablePointer<RetrievalKitStatus>, CStringArena) -> OpaquePointer?
   ) throws -> OpaquePointer {
     try FFI.withStatusPointer { status in
       let arena = CStringArena()
@@ -1287,7 +1342,7 @@ extension Filter {
     builder: (
       UnsafePointer<OpaquePointer?>?,
       Int,
-      UnsafeMutablePointer<VkStatus>?
+      UnsafeMutablePointer<RetrievalKitStatus>?
     ) -> OpaquePointer?
   ) throws -> OpaquePointer {
     let children = try filters.map { try $0.makeFFI() }
@@ -1343,17 +1398,17 @@ private final class EmbeddingBuffer {
 }
 
 private final class ChunkInputBuffer {
-  let pointer: UnsafePointer<VkChunkInput>?
+  let pointer: UnsafePointer<RetrievalKitChunkInput>?
   let count: Int
-  private let mutablePointer: UnsafeMutablePointer<VkChunkInput>?
+  private let mutablePointer: UnsafeMutablePointer<RetrievalKitChunkInput>?
 
-  init(_ values: [VkChunkInput]) {
+  init(_ values: [RetrievalKitChunkInput]) {
     count = values.count
     if values.isEmpty {
       mutablePointer = nil
       pointer = nil
     } else {
-      let allocated = UnsafeMutablePointer<VkChunkInput>.allocate(capacity: values.count)
+      let allocated = UnsafeMutablePointer<RetrievalKitChunkInput>.allocate(capacity: values.count)
       allocated.initialize(from: values, count: values.count)
       mutablePointer = allocated
       pointer = UnsafePointer(allocated)
@@ -1367,9 +1422,9 @@ private final class ChunkInputBuffer {
 }
 
 private final class MetadataBuffer {
-  let pointer: UnsafePointer<VkMetadataEntry>?
+  let pointer: UnsafePointer<RetrievalKitMetadataEntry>?
   let count: Int
-  private let mutablePointer: UnsafeMutablePointer<VkMetadataEntry>?
+  private let mutablePointer: UnsafeMutablePointer<RetrievalKitMetadataEntry>?
 
   init(_ metadata: [String: MetadataValue], arena: CStringArena) {
     count = metadata.count
@@ -1381,12 +1436,12 @@ private final class MetadataBuffer {
         metadata
         .sorted { $0.key < $1.key }
         .map { field, value in
-          VkMetadataEntry(
+          RetrievalKitMetadataEntry(
             field: arena.copy(field),
             value: value.ffiValue(arena: arena)
           )
         }
-      let allocated = UnsafeMutablePointer<VkMetadataEntry>.allocate(capacity: entries.count)
+      let allocated = UnsafeMutablePointer<RetrievalKitMetadataEntry>.allocate(capacity: entries.count)
       allocated.initialize(from: entries, count: entries.count)
       mutablePointer = allocated
       pointer = UnsafePointer(allocated)

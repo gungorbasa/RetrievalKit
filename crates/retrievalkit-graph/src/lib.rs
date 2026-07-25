@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 
 use retrievalkit_core::{
     CandidateScope, ChunkId, ChunkIdentity, CorpusIndex, ExactVectorIndex, Filter, HybridHit,
-    HybridQuery, KeywordHit, KeywordQuery, RetrievalDatabase, SearchHit, SearchQuery,
+    HybridQuery, KeywordHit, KeywordQuery, Metadata, RetrievalDatabase, SearchHit, SearchQuery,
 };
 
 pub use builder::GraphBuildStats;
@@ -267,6 +267,12 @@ impl GraphIndex {
 
     pub fn chunk_text(&self, chunk_id: ChunkId) -> Option<&str> {
         self.core.chunk(chunk_id).map(|chunk| chunk.text.as_str())
+    }
+
+    pub fn chunk_payload(&self, chunk_id: ChunkId) -> Option<(&str, &Metadata)> {
+        self.core
+            .chunk(chunk_id)
+            .map(|chunk| (chunk.text.as_str(), &chunk.metadata))
     }
 
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>> {

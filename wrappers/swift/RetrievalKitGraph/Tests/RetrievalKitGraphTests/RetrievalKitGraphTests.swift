@@ -142,6 +142,10 @@ final class RetrievalKitGraphTests: XCTestCase {
     XCTAssertEqual(exact.map(\.recordID), ["alpha"])
     XCTAssertEqual(keyword.map(\.recordID), ["alpha"])
     XCTAssertEqual(hybrid.map(\.recordID), ["alpha"])
+    XCTAssertEqual(exact[0].metadata["tenant"], .string("a"))
+    XCTAssertEqual(keyword[0].metadata["rank"], .integer(1))
+    XCTAssertEqual(hybrid[0].metadata["tenant"], .string("a"))
+    XCTAssertEqual(hybrid[0].trace.alpha, 0.6)
 
     let both = try await graph.query(
       nodeType: "Item", field: GraphFieldPath("name"), equals: [.string("Alpha"), .string("Beta")])
@@ -163,8 +167,6 @@ final class RetrievalKitGraphTests: XCTestCase {
     XCTAssertEqual(filteredExact.map(\.recordID), ["beta"])
     XCTAssertEqual(filteredKeyword.map(\.recordID), ["beta"])
     XCTAssertEqual(filteredHybrid.map(\.recordID), ["beta"])
-    XCTAssertTrue(filteredExact[0].filterMatched)
-    XCTAssertTrue(filteredHybrid[0].trace.filterMatched)
 
     let candidates = GraphHybridOptions(vectorTopK: 2, keywordTopK: 2)
     let vectorPreferred = try await graph.hybridSearch(
@@ -173,6 +175,12 @@ final class RetrievalKitGraphTests: XCTestCase {
       text: "beta", embedding: [1, 0], topK: 2, in: both, alpha: 0, options: candidates)
     XCTAssertEqual(vectorPreferred.first?.recordID, "alpha")
     XCTAssertEqual(keywordPreferred.first?.recordID, "beta")
+    XCTAssertNil(vectorPreferred.first?.keywordScore)
+    XCTAssertNil(vectorPreferred.first?.trace.keywordRank)
+    XCTAssertNil(keywordPreferred.first?.vectorScore)
+    XCTAssertNil(keywordPreferred.first?.trace.vectorRank)
+    XCTAssertEqual(vectorPreferred.first?.trace.alpha, 1)
+    XCTAssertEqual(keywordPreferred.first?.trace.alpha, 0)
     XCTAssertNotNil(vectorPreferred.first?.trace.normalizedVectorScore)
     XCTAssertNotNil(keywordPreferred.first?.trace.normalizedKeywordScore)
 

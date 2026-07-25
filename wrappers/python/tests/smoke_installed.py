@@ -43,10 +43,7 @@ def main() -> None:
         where={"project": "retrievalkit"},
     )
     assert [hit["document_id"] for hit in hits] == ["doc-alpha"]
-    fusion = hits[0]["trace"]["fusion"]
-    assert fusion["kind"] == "weighted_normalized"
-    assert math.isclose(fusion["vector_weight"], 0.6, rel_tol=1e-6)
-    assert math.isclose(fusion["keyword_weight"], 0.4, rel_tol=1e-6)
+    assert math.isclose(hits[0]["trace"]["alpha"], 0.6, rel_tol=1e-6)
 
     builder = RetrievalDatabaseBuilder(
         corpus_id="wheel-smoke",

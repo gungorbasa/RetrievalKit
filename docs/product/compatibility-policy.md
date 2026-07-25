@@ -26,5 +26,16 @@ downloads the other native aggregate.
 Python process. This boundary is part of compatibility, not a temporary build
 limitation.
 
+Packed result layouts are an aggregate-level ABI contract. Native libraries,
+headers, and wrappers must be upgraded together. The graph aggregate exposes
+an explicit ABI version; the base aggregate is revisioned with the preview
+release until a separate runtime version check is introduced.
+
+The preview ABI uses `RetrievalKit` type names and `RETRIEVALKIT_` constants.
+The pre-rename `Vk` and `VK_` spellings have no compatibility aliases. Native
+integrators migrating from an earlier development artifact must update the
+header, native library, and wrapper source as one unit; the public Swift and
+Python APIs are unaffected by this internal boundary rename.
+
 Kotlin, TypeScript, x86_64 Apple, Linux, and Windows have no compatibility
 commitment until a release manifest lists them.

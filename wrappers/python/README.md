@@ -411,6 +411,9 @@ before fusion. `alpha` directly controls weighted normalized fusion: `1` is
 vector-only, `0` is BM25-only, and the default `0.6` gives vector search 60% of
 the blend. The candidate defaults are 50 vector and 50 keyword results. Pass
 `encoding="f32"` for correctness-reference indexes.
+Every hit includes effective metadata. Hybrid traces expose `alpha`, source
+ranks, normalized scores, and matched terms rather than the internal Rust
+fusion enum.
 
 Inputs and search results are plain dictionaries, with public `TypedDict` shapes
 available for annotations:

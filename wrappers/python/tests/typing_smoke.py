@@ -51,13 +51,13 @@ def typed_inputs_and_results(index: Index, query_embedding: list[float]) -> None
     if vector_hits:
         score: float = vector_hits[0]["score"]
         document_id: str = vector_hits[0]["document_id"]
-        filter_matched: bool = vector_hits[0]["trace"]["filter_matched"]
-        _ = (score, document_id, filter_matched, compaction)
+        vector_score: float = vector_hits[0]["trace"]["vector_score"]
+        _ = (score, document_id, vector_score, compaction)
 
     if hybrid_hits:
         matched_terms: list[str] = hybrid_hits[0]["matched_terms"]
-        fusion_kind: str = hybrid_hits[0]["trace"]["fusion"]["kind"]
-        _ = (matched_terms, fusion_kind)
+        alpha: float = hybrid_hits[0]["trace"]["alpha"]
+        _ = (matched_terms, alpha)
 
 
 def typed_pipeline(pipeline: Pipeline) -> None:

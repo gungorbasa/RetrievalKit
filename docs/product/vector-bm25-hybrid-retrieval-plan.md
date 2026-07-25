@@ -161,17 +161,17 @@ Example trace shape:
   "normalized_bm25_score": 1.0,
   "hybrid_score": 0.766,
   "matched_terms": ["erica", "bar"],
-  "fusion": "weighted_normalized_score",
-  "vector_weight": 0.6,
-  "keyword_weight": 0.4,
-  "filter_matched": true
+  "alpha": 0.6
 }
 ```
 
-RRF traces should include `fusion = "rrf"` and `rrf_k`.
+The public wrapper trace exposes `alpha`, not the internal fusion enum. RRF and
+its trace remain internal Rust benchmark surfaces.
 
 Missing ranks should be represented explicitly. For example, a candidate found
 only by BM25 should have no vector rank rather than a fake vector score.
+Returned hits already passed their filter, so the public trace does not repeat
+a constant filter-match field.
 
 ## Filtering
 

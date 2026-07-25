@@ -725,8 +725,10 @@ keyword_candidates: 50
 alpha: 0.6
 ```
 
-`alpha = 1` is vector-only and `alpha = 0` is BM25-only. RRF remains an
-internal benchmark surface, not a high-level wrapper option.
+`alpha = 1` is vector-only and `alpha = 0` is BM25-only. At those endpoints,
+Rust must not generate candidates from the zero-weight source. Intermediate
+values generate both candidate sets. RRF remains an internal Rust benchmark
+surface, not a language-wrapper or public C ABI option.
 
 V1 hybrid query flow:
 
@@ -999,12 +1001,29 @@ struct GraphHybridHit {
     let documentID: String
     let recordID: String
     let text: String
+    let metadata: [String: MetadataValue]
     let score: Float
     let vectorScore: Float?
     let keywordScore: Float?
     let trace: GraphHybridTrace
 }
+
+struct GraphHybridTrace {
+    let alpha: Float
+    let vectorRank: Int?
+    let keywordRank: Int?
+    let normalizedVectorScore: Float?
+    let normalizedKeywordScore: Float?
+    let matchedTerms: [String]
+}
 ```
+
+Exact, BM25, and hybrid results all return the effective stored metadata after
+chunk metadata overrides document/projected metadata. A returned hit already
+passed its filter, so public traces do not repeat a constant `filterMatched`
+field. Exact traces expose the vector score. Hybrid traces expose the effective
+query `alpha`, ranks, normalized scores, and matched terms. The public contract
+does not expose the internal fusion enum.
 
 Supported storage encodings remain advanced builder options:
 
@@ -1084,6 +1103,9 @@ Do:
   UTF-8 arena.
 - return BM25 and hybrid matched terms through one flat range table referencing
   that same arena.
+- return effective metadata through one flat metadata-entry table whose keys
+  and string values reference that same arena.
+- store hybrid `alpha` once on the result buffer rather than once per hit.
 
 Do not:
 
@@ -1093,9 +1115,14 @@ Do not:
 - allocate large result objects per query.
 
 The packed result buffer remains valid until its matching free function is
-called. Wrappers decode native strings before freeing it and never retain
-borrowed arena pointers. Exact results require at most a hit allocation and a
-UTF-8 allocation; BM25 and hybrid add one matched-term range allocation.
+called. Wrappers decode native strings and metadata before freeing it and never
+retain borrowed arena pointers. Exact results use one allocation each for hits,
+UTF-8 bytes, and metadata entries. BM25 and hybrid add one matched-term range
+allocation. Empty buffers use null pointers and zero counts.
+
+Result hydration is fallible. If a ranked chunk or stable graph identity cannot
+be resolved, Rust fails the query with an actionable core error; wrappers must
+not synthesize empty text, metadata, or identities.
 
 The common Swift document-upsert path also uses typed C strings, metadata
 entries, and a contiguous float buffer. Schema-rich graph ingestion may use
@@ -1107,14 +1134,25 @@ Minimal C ABI shape:
 typedef struct {
   size_t offset;
   size_t length;
-} VkUtf8Range;
+} RetrievalKitUtf8Range;
 
 typedef struct {
-  const VkSearchHit *hits;
+  RetrievalKitUtf8Range key;
+  uint32_t value_type;
+  RetrievalKitUtf8Range string_value;
+  int64_t integer_value;
+  double float_value;
+  bool bool_value;
+} RetrievalKitPackedMetadataEntry;
+
+typedef struct {
+  const RetrievalKitSearchHit *hits;
   size_t count;
   const uint8_t *utf8;
   size_t utf8_len;
-} VkSearchResultBuffer;
+  const RetrievalKitPackedMetadataEntry *metadata;
+  size_t metadata_count;
+} RetrievalKitSearchResultBuffer;
 ```
 
 ## Correctness Requirements

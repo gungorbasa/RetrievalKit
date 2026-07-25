@@ -1341,24 +1341,29 @@ impl ExactVectorIndex {
 
     /// Performs hybrid exact vector + BM25 search using the configured fusion strategy.
     pub fn hybrid_search(&self, query: &HybridQuery) -> Result<Vec<HybridHit>> {
-        self.validate_dimension(query.embedding.len())?;
-
+        if fusion_uses_vector(query.fusion) {
+            self.validate_dimension(query.embedding.len())?;
+        }
         if query.top_k == 0 {
             return Ok(Vec::new());
         }
 
         validate_hybrid_fusion(query.fusion)?;
 
-        let vector_hits = self.search_vector_candidates(
-            &query.embedding,
-            query.vector_top_k,
-            query.filter.as_ref(),
-        )?;
-        let keyword_hits = self.keyword_search_candidates(
-            &query.text,
-            query.keyword_top_k,
-            query.filter.as_ref(),
-        )?;
+        let vector_hits = if fusion_uses_vector(query.fusion) {
+            self.search_vector_candidates(
+                &query.embedding,
+                query.vector_top_k,
+                query.filter.as_ref(),
+            )?
+        } else {
+            Vec::new()
+        };
+        let keyword_hits = if fusion_uses_keyword(query.fusion) {
+            self.keyword_search_candidates(&query.text, query.keyword_top_k, query.filter.as_ref())?
+        } else {
+            Vec::new()
+        };
 
         let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
         for (rank_index, hit) in vector_hits.iter().enumerate() {
@@ -1407,7 +1412,6 @@ impl ExactVectorIndex {
                         normalized_keyword_score: candidate.normalized_keyword_score,
                         matched_terms: candidate.matched_terms,
                         fusion: HybridFusionTrace::from(query.fusion),
-                        filter_matched: true,
                     },
                 })
             })
@@ -1421,24 +1425,34 @@ impl ExactVectorIndex {
         scope: &CandidateScope,
     ) -> Result<Vec<HybridHit>> {
         self.validate_candidate_scope(scope)?;
-        self.validate_dimension(query.embedding.len())?;
+        if fusion_uses_vector(query.fusion) {
+            self.validate_dimension(query.embedding.len())?;
+        }
         if query.top_k == 0 || scope.is_empty() {
             return Ok(Vec::new());
         }
         validate_hybrid_fusion(query.fusion)?;
 
-        let vector_hits = self.search_vector_in_candidates(
-            &query.embedding,
-            query.vector_top_k,
-            query.filter.as_ref(),
-            scope,
-        )?;
-        let keyword_hits = self.keyword_search_text_in_candidates(
-            &query.text,
-            query.keyword_top_k,
-            query.filter.as_ref(),
-            scope,
-        )?;
+        let vector_hits = if fusion_uses_vector(query.fusion) {
+            self.search_vector_in_candidates(
+                &query.embedding,
+                query.vector_top_k,
+                query.filter.as_ref(),
+                scope,
+            )?
+        } else {
+            Vec::new()
+        };
+        let keyword_hits = if fusion_uses_keyword(query.fusion) {
+            self.keyword_search_text_in_candidates(
+                &query.text,
+                query.keyword_top_k,
+                query.filter.as_ref(),
+                scope,
+            )?
+        } else {
+            Vec::new()
+        };
 
         let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
         for (rank_index, hit) in vector_hits.iter().enumerate() {
@@ -1481,7 +1495,6 @@ impl ExactVectorIndex {
                         normalized_keyword_score: candidate.normalized_keyword_score,
                         matched_terms: candidate.matched_terms,
                         fusion: HybridFusionTrace::from(query.fusion),
-                        filter_matched: true,
                     },
                 })
             })
@@ -1660,8 +1673,6 @@ impl ExactVectorIndex {
                     score: candidate.score,
                     trace: SearchTrace {
                         vector_score: candidate.score,
-                        keyword_score: None,
-                        filter_matched: true,
                     },
                 })
             })
@@ -2554,27 +2565,35 @@ impl<'a> ByteReader<'a> {
 }
 
 fn checked_usize_to_u32(value: usize, label: &str) -> Result<u32> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in u32"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in u32"),
+        })
 }
 
 fn checked_usize_to_u64(value: usize, label: &str) -> Result<u64> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in u64"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in u64"),
+        })
 }
 
 fn checked_u32_to_usize(value: u32, label: &str) -> Result<usize> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in usize"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in usize"),
+        })
 }
 
 fn checked_u64_to_usize(value: u64, label: &str) -> Result<usize> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in usize"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in usize"),
+        })
 }
 
 fn persistence_error(operation: &str, path: &Path, error: &std::io::Error) -> RetrievalKitError {
@@ -2777,6 +2796,20 @@ fn validate_hybrid_fusion(fusion: HybridFusion) -> Result<()> {
             }
             Ok(())
         }
+    }
+}
+
+fn fusion_uses_vector(fusion: HybridFusion) -> bool {
+    match fusion {
+        HybridFusion::ReciprocalRank { .. } => true,
+        HybridFusion::WeightedNormalizedScore { vector_weight, .. } => vector_weight > 0.0,
+    }
+}
+
+fn fusion_uses_keyword(fusion: HybridFusion) -> bool {
+    match fusion {
+        HybridFusion::ReciprocalRank { .. } => true,
+        HybridFusion::WeightedNormalizedScore { keyword_weight, .. } => keyword_weight > 0.0,
     }
 }
 
@@ -4633,6 +4666,65 @@ mod tests {
     }
 
     #[test]
+    fn alpha_endpoints_disable_the_zero_weight_candidate_source() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        index
+            .upsert_document(
+                document("doc-vector"),
+                vec![chunk_input("semantic only", vec![3.0, 0.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword-1"),
+                vec![chunk_input("rare keyword rare", vec![0.0, 1.0])],
+            )
+            .unwrap();
+        index
+            .upsert_document(
+                document("doc-keyword-2"),
+                vec![chunk_input("rare keyword", vec![0.0, 0.5])],
+            )
+            .unwrap();
+
+        let vector_only = index
+            .hybrid_search(
+                &HybridQuery::new("rare keyword", vec![1.0, 0.0], 10)
+                    .with_candidate_limits(1, 10)
+                    .try_with_alpha(1.0)
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(vector_only.len(), 1);
+        assert_eq!(vector_only[0].document_id, "doc-vector");
+        assert_eq!(vector_only[0].keyword_score, None);
+        assert_eq!(vector_only[0].trace.keyword_rank, None);
+        assert_eq!(vector_only[0].trace.normalized_keyword_score, None);
+        assert!(vector_only[0].trace.matched_terms.is_empty());
+
+        let keyword_only = index
+            .hybrid_search(
+                &HybridQuery::new("rare keyword", Vec::new(), 10)
+                    .with_candidate_limits(1, 10)
+                    .try_with_alpha(0.0)
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            keyword_only
+                .iter()
+                .map(|hit| hit.document_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["doc-keyword-1", "doc-keyword-2"]
+        );
+        assert!(keyword_only.iter().all(|hit| hit.vector_score.is_none()));
+        assert!(keyword_only
+            .iter()
+            .all(|hit| hit.trace.vector_rank.is_none()
+                && hit.trace.normalized_vector_score.is_none()));
+    }
+
+    #[test]
     fn hybrid_search_rrf_score_matches_ranks() {
         let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
         index
@@ -4783,7 +4875,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["doc-allowed"]
         );
-        assert!(hits[0].trace.filter_matched);
     }
 
     #[test]

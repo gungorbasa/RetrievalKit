@@ -111,8 +111,6 @@ pub struct SearchHit {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchTrace {
     pub vector_score: f32,
-    pub keyword_score: Option<f32>,
-    pub filter_matched: bool,
 }
 
 /// BM25 keyword search request.
@@ -278,7 +276,6 @@ pub struct HybridTrace {
     pub normalized_keyword_score: Option<f32>,
     pub matched_terms: Vec<String>,
     pub fusion: HybridFusionTrace,
-    pub filter_matched: bool,
 }
 
 /// Fusion data copied into traces so callers can reproduce the score.

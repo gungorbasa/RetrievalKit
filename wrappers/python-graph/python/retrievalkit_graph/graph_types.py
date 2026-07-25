@@ -36,9 +36,7 @@ Filter: TypeAlias = dict[str, "FilterCondition | list[Filter]"]
 
 
 class SearchTrace(TypedDict):
-    vector_score: float | None
-    keyword_score: float | None
-    filter_matched: bool
+    vector_score: float
 
 
 class SearchHit(TypedDict):
@@ -51,13 +49,12 @@ class SearchHit(TypedDict):
 
 
 class HybridTrace(TypedDict):
+    alpha: float
     vector_rank: int | None
     keyword_rank: int | None
     normalized_vector_score: float | None
     normalized_keyword_score: float | None
     matched_terms: list[str]
-    filter_matched: bool
-    fusion: dict[str, str | float]
 
 
 class HybridHit(TypedDict):

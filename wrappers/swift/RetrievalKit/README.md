@@ -82,6 +82,9 @@ let hybrid = try await database.search(
 The first document embedding fixes the database dimension. Every retrieval
 database builds exact-vector and BM25 state. `alpha` is query-time: `1` is
 vector-only, `0` is BM25-only, and intermediate values are hybrid.
+Every result returns effective metadata (chunk values override document
+values). Hybrid traces expose `alpha`, source ranks, normalized scores, and
+matched terms. Returned hits already passed any filter.
 
 Run the focused example with:
 

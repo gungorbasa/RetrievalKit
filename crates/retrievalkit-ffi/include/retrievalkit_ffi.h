@@ -9,140 +9,153 @@
 extern "C" {
 #endif
 
-#define VK_STATUS_OK 0
-#define VK_STATUS_INVALID_ARGUMENT 1
-#define VK_STATUS_CORE_ERROR 2
-#define VK_STATUS_PANIC 3
-#define VK_STATUS_CORRUPT_INDEX 4
+#define RETRIEVALKIT_STATUS_OK 0
+#define RETRIEVALKIT_STATUS_INVALID_ARGUMENT 1
+#define RETRIEVALKIT_STATUS_CORE_ERROR 2
+#define RETRIEVALKIT_STATUS_PANIC 3
+#define RETRIEVALKIT_STATUS_CORRUPT_INDEX 4
 
-#define VK_METRIC_COSINE 0
-#define VK_METRIC_DOT_PRODUCT 1
+#define RETRIEVALKIT_METRIC_COSINE 0
+#define RETRIEVALKIT_METRIC_DOT_PRODUCT 1
 
-#define VK_ENCODING_F32 0
-#define VK_ENCODING_F16 1
-#define VK_ENCODING_BF16 2
-#define VK_ENCODING_I8_SCALAR_QUANTIZED 3
+#define RETRIEVALKIT_ENCODING_F32 0
+#define RETRIEVALKIT_ENCODING_F16 1
+#define RETRIEVALKIT_ENCODING_BF16 2
+#define RETRIEVALKIT_ENCODING_I8_SCALAR_QUANTIZED 3
 
-#define VK_METADATA_STRING 0
-#define VK_METADATA_INTEGER 1
-#define VK_METADATA_FLOAT 2
-#define VK_METADATA_BOOLEAN 3
-#define VK_METADATA_TIMESTAMP_MILLIS 4
+#define RETRIEVALKIT_METADATA_STRING 0
+#define RETRIEVALKIT_METADATA_INTEGER 1
+#define RETRIEVALKIT_METADATA_FLOAT 2
+#define RETRIEVALKIT_METADATA_BOOLEAN 3
+#define RETRIEVALKIT_METADATA_TIMESTAMP_MILLIS 4
 
-#define VK_FUSION_WEIGHTED_NORMALIZED_SCORE 0
-#define VK_FUSION_RECIPROCAL_RANK 1
+#define RETRIEVALKIT_CHUNKING_FIXED 0
+#define RETRIEVALKIT_CHUNKING_SENTENCE 1
 
-#define VK_CHUNKING_FIXED 0
-#define VK_CHUNKING_SENTENCE 1
+typedef struct RetrievalKitIndex RetrievalKitIndex;
+typedef struct RetrievalKitFilter RetrievalKitFilter;
 
-typedef struct VkIndex VkIndex;
-typedef struct VkFilter VkFilter;
-
-typedef struct VkStatus {
+typedef struct RetrievalKitStatus {
   int32_t code;
   char *message;
-} VkStatus;
+} RetrievalKitStatus;
 
-typedef struct VkCompactionReport {
+typedef struct RetrievalKitCompactionReport {
   size_t chunks_before;
   size_t chunks_after;
   size_t chunks_removed;
   size_t estimated_bytes_before;
   size_t estimated_bytes_after;
   size_t estimated_bytes_reclaimed;
-} VkCompactionReport;
+} RetrievalKitCompactionReport;
 
-typedef struct VkMetadataValue {
+typedef struct RetrievalKitMetadataValue {
   uint32_t value_type;
   const char *string_value;
   int64_t integer_value;
   double float_value;
   bool bool_value;
-} VkMetadataValue;
+} RetrievalKitMetadataValue;
 
-typedef struct VkMetadataEntry {
+typedef struct RetrievalKitMetadataEntry {
   const char *field;
-  VkMetadataValue value;
-} VkMetadataEntry;
+  RetrievalKitMetadataValue value;
+} RetrievalKitMetadataEntry;
 
-typedef struct VkChunkInput {
+typedef struct RetrievalKitChunkInput {
   const char *text;
   const float *embedding;
   size_t embedding_len;
-  const VkMetadataEntry *metadata;
+  const RetrievalKitMetadataEntry *metadata;
   size_t metadata_len;
-} VkChunkInput;
+} RetrievalKitChunkInput;
 
-typedef struct VkChunkIdBuffer {
+typedef struct RetrievalKitChunkIdBuffer {
   uint64_t *values;
   size_t count;
-} VkChunkIdBuffer;
+} RetrievalKitChunkIdBuffer;
 
-typedef struct VkTextChunk {
+typedef struct RetrievalKitTextChunk {
   char *text;
   size_t start_byte;
   size_t end_byte;
-} VkTextChunk;
+} RetrievalKitTextChunk;
 
-typedef struct VkTextChunkBuffer {
-  VkTextChunk *chunks;
+typedef struct RetrievalKitTextChunkBuffer {
+  RetrievalKitTextChunk *chunks;
   size_t count;
-} VkTextChunkBuffer;
+} RetrievalKitTextChunkBuffer;
 
-typedef struct VkUtf8Range {
+typedef struct RetrievalKitUtf8Range {
   size_t offset;
   size_t length;
-} VkUtf8Range;
+} RetrievalKitUtf8Range;
 
-typedef struct VkSearchHit {
+typedef struct RetrievalKitPackedMetadataEntry {
+  RetrievalKitUtf8Range key;
+  uint32_t value_type;
+  RetrievalKitUtf8Range string_value;
+  int64_t integer_value;
+  double float_value;
+  bool bool_value;
+} RetrievalKitPackedMetadataEntry;
+
+typedef struct RetrievalKitSearchHit {
   uint64_t chunk_id;
-  VkUtf8Range document_id;
+  RetrievalKitUtf8Range document_id;
   bool has_record_id;
-  VkUtf8Range record_id;
-  VkUtf8Range text;
+  RetrievalKitUtf8Range record_id;
+  RetrievalKitUtf8Range text;
   float score;
   float vector_score;
-  bool filter_matched;
-} VkSearchHit;
+  size_t metadata_start;
+  size_t metadata_count;
+} RetrievalKitSearchHit;
 
-typedef struct VkSearchResultBuffer {
-  const VkSearchHit *hits;
+typedef struct RetrievalKitSearchResultBuffer {
+  const RetrievalKitSearchHit *hits;
   size_t count;
   const uint8_t *utf8;
   size_t utf8_len;
-} VkSearchResultBuffer;
+  const RetrievalKitPackedMetadataEntry *metadata;
+  size_t metadata_count;
+} RetrievalKitSearchResultBuffer;
 
-typedef struct VkStringArray {
+typedef struct RetrievalKitStringArray {
   char **values;
   size_t count;
-} VkStringArray;
+} RetrievalKitStringArray;
 
-typedef struct VkKeywordHit {
+typedef struct RetrievalKitKeywordHit {
   uint64_t chunk_id;
-  VkUtf8Range document_id;
+  RetrievalKitUtf8Range document_id;
   bool has_record_id;
-  VkUtf8Range record_id;
-  VkUtf8Range text;
+  RetrievalKitUtf8Range record_id;
+  RetrievalKitUtf8Range text;
   float score;
   size_t matched_terms_start;
   size_t matched_terms_count;
-} VkKeywordHit;
+  size_t metadata_start;
+  size_t metadata_count;
+} RetrievalKitKeywordHit;
 
-typedef struct VkKeywordResultBuffer {
-  const VkKeywordHit *hits;
+typedef struct RetrievalKitKeywordResultBuffer {
+  const RetrievalKitKeywordHit *hits;
   size_t count;
   const uint8_t *utf8;
   size_t utf8_len;
-  const VkUtf8Range *matched_terms;
+  const RetrievalKitUtf8Range *matched_terms;
   size_t matched_terms_count;
-} VkKeywordResultBuffer;
+  const RetrievalKitPackedMetadataEntry *metadata;
+  size_t metadata_count;
+} RetrievalKitKeywordResultBuffer;
 
-typedef struct VkHybridHit {
+typedef struct RetrievalKitHybridHit {
   uint64_t chunk_id;
-  VkUtf8Range document_id;
+  RetrievalKitUtf8Range document_id;
   bool has_record_id;
-  VkUtf8Range record_id;
-  VkUtf8Range text;
+  RetrievalKitUtf8Range record_id;
+  RetrievalKitUtf8Range text;
   float score;
   bool has_vector_score;
   float vector_score;
@@ -158,252 +171,227 @@ typedef struct VkHybridHit {
   float normalized_keyword_score;
   size_t matched_terms_start;
   size_t matched_terms_count;
-  bool filter_matched;
-} VkHybridHit;
+  size_t metadata_start;
+  size_t metadata_count;
+} RetrievalKitHybridHit;
 
-typedef struct VkHybridResultBuffer {
-  const VkHybridHit *hits;
+typedef struct RetrievalKitHybridResultBuffer {
+  const RetrievalKitHybridHit *hits;
   size_t count;
   const uint8_t *utf8;
   size_t utf8_len;
-  const VkUtf8Range *matched_terms;
+  const RetrievalKitUtf8Range *matched_terms;
   size_t matched_terms_count;
-} VkHybridResultBuffer;
+  const RetrievalKitPackedMetadataEntry *metadata;
+  size_t metadata_count;
+  float alpha;
+} RetrievalKitHybridResultBuffer;
 
-typedef struct VkHybridOptions {
-  size_t vector_top_k;
-  size_t keyword_top_k;
-  uint32_t fusion_type;
-  float vector_weight;
-  float keyword_weight;
-  float rrf_k;
-} VkHybridOptions;
-
-typedef struct VkHybridQueryOptions {
+typedef struct RetrievalKitHybridQueryOptions {
   size_t vector_top_k;
   size_t keyword_top_k;
   float alpha;
-} VkHybridQueryOptions;
+} RetrievalKitHybridQueryOptions;
 
-#define VK_STATUS_INVALID_DIMENSION 5
-#define VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE 6
-#define VK_STATUS_INVALID_IDENTITY 7
-#define VK_STATUS_MISSING_EMBEDDING 8
+#define RETRIEVALKIT_STATUS_INVALID_DIMENSION 5
+#define RETRIEVALKIT_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE 6
+#define RETRIEVALKIT_STATUS_INVALID_IDENTITY 7
+#define RETRIEVALKIT_STATUS_MISSING_EMBEDDING 8
 
-typedef struct VkRetrievalBuilder VkRetrievalBuilder;
-typedef struct VkRetrievalDatabase VkRetrievalDatabase;
+typedef struct RetrievalKitRetrievalBuilder RetrievalKitRetrievalBuilder;
+typedef struct RetrievalKitRetrievalDatabase RetrievalKitRetrievalDatabase;
 
-void retrievalkit_status_clear(VkStatus *status);
+void retrievalkit_status_clear(RetrievalKitStatus *status);
 
-VkRetrievalBuilder *retrievalkit_retrieval_builder_new(
+RetrievalKitRetrievalBuilder *retrievalkit_retrieval_builder_new(
     uint32_t metric,
     uint32_t encoding,
     const char *corpus_id,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 bool retrievalkit_retrieval_builder_upsert_document(
-    VkRetrievalBuilder *builder,
+    RetrievalKitRetrievalBuilder *builder,
     const char *document_id,
     const char *text,
-    const VkMetadataEntry *metadata,
+    const RetrievalKitMetadataEntry *metadata,
     size_t metadata_len,
     const float *embedding,
     size_t embedding_len,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 bool retrievalkit_retrieval_builder_upsert_record_json(
-    VkRetrievalBuilder *builder,
+    RetrievalKitRetrievalBuilder *builder,
     const char *record_json,
-    VkStatus *status);
-VkRetrievalDatabase *retrievalkit_retrieval_builder_build(
-    VkRetrievalBuilder *builder,
-    VkStatus *status);
-void retrievalkit_retrieval_builder_free(VkRetrievalBuilder *builder);
+    RetrievalKitStatus *status);
+RetrievalKitRetrievalDatabase *retrievalkit_retrieval_builder_build(
+    RetrievalKitRetrievalBuilder *builder,
+    RetrievalKitStatus *status);
+void retrievalkit_retrieval_builder_free(RetrievalKitRetrievalBuilder *builder);
 
-VkRetrievalDatabase *retrievalkit_retrieval_database_load(const char *directory, VkStatus *status);
-bool retrievalkit_retrieval_database_save(const VkRetrievalDatabase *database, const char *directory, VkStatus *status);
-bool retrievalkit_retrieval_database_validate(const char *directory, VkStatus *status);
-void retrievalkit_retrieval_database_free(VkRetrievalDatabase *database);
+RetrievalKitRetrievalDatabase *retrievalkit_retrieval_database_load(const char *directory, RetrievalKitStatus *status);
+bool retrievalkit_retrieval_database_save(const RetrievalKitRetrievalDatabase *database, const char *directory, RetrievalKitStatus *status);
+bool retrievalkit_retrieval_database_validate(const char *directory, RetrievalKitStatus *status);
+void retrievalkit_retrieval_database_free(RetrievalKitRetrievalDatabase *database);
 bool retrievalkit_retrieval_semantic_search(
-    const VkRetrievalDatabase *database,
+    const RetrievalKitRetrievalDatabase *database,
     const float *embedding,
     size_t embedding_len,
     size_t top_k,
-    const VkFilter *filter,
-    VkSearchResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitSearchResultBuffer *out_results,
+    RetrievalKitStatus *status);
 bool retrievalkit_retrieval_keyword_search(
-    const VkRetrievalDatabase *database,
+    const RetrievalKitRetrievalDatabase *database,
     const char *text,
     size_t top_k,
-    const VkFilter *filter,
-    VkKeywordResultBuffer *out_results,
-    VkStatus *status);
-bool retrievalkit_retrieval_hybrid_search(
-    const VkRetrievalDatabase *database,
-    const char *text,
-    const float *embedding,
-    size_t embedding_len,
-    size_t top_k,
-    const VkFilter *filter,
-    VkHybridOptions options,
-    VkHybridResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitKeywordResultBuffer *out_results,
+    RetrievalKitStatus *status);
 bool retrievalkit_retrieval_hybrid_search_alpha(
-    const VkRetrievalDatabase *database,
+    const RetrievalKitRetrievalDatabase *database,
     const char *text,
     const float *embedding,
     size_t embedding_len,
     size_t top_k,
-    const VkFilter *filter,
-    VkHybridQueryOptions options,
-    VkHybridResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitHybridQueryOptions options,
+    RetrievalKitHybridResultBuffer *out_results,
+    RetrievalKitStatus *status);
 
 /*
- * Threading contract for one VkIndex handle:
+ * Threading contract for one RetrievalKitIndex handle:
  *
  * - dimension/count accessors and exact, keyword, and hybrid search may run
  *   concurrently after construction or loading.
  * - save, upsert, delete, compaction, and free require exclusive access.
  * - callers must not start new reads while an exclusive operation is waiting.
- * - every concurrent call must use independent VkStatus, output buffers, and
- *   VkFilter handles. Output buffers may be freed independently.
+ * - every concurrent call must use independent RetrievalKitStatus, output buffers, and
+ *   RetrievalKitFilter handles. Output buffers may be freed independently.
  * - the handle must remain alive until every call using it has returned.
  *
  * The C ABI does not add locks. Callers are responsible for enforcing this
  * contract; the Swift wrapper provides a writer-preferring asynchronous gate.
  */
 
-VkIndex *retrievalkit_index_new(
+RetrievalKitIndex *retrievalkit_index_new(
     size_t dimension,
     uint32_t metric,
     uint32_t encoding,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
-VkIndex *retrievalkit_index_load(const char *directory, VkStatus *status);
+RetrievalKitIndex *retrievalkit_index_load(const char *directory, RetrievalKitStatus *status);
 
-bool retrievalkit_index_validate(const char *directory, VkStatus *status);
-void retrievalkit_index_free(VkIndex *index);
+bool retrievalkit_index_validate(const char *directory, RetrievalKitStatus *status);
+void retrievalkit_index_free(RetrievalKitIndex *index);
 
 bool retrievalkit_index_save(
-    VkIndex *index,
+    RetrievalKitIndex *index,
     const char *directory,
     bool include_bm25,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
-size_t retrievalkit_index_dimension(const VkIndex *index);
-size_t retrievalkit_index_active_chunk_count(const VkIndex *index);
-size_t retrievalkit_index_total_chunk_count(const VkIndex *index);
-size_t retrievalkit_index_tombstoned_chunk_count(const VkIndex *index);
+size_t retrievalkit_index_dimension(const RetrievalKitIndex *index);
+size_t retrievalkit_index_active_chunk_count(const RetrievalKitIndex *index);
+size_t retrievalkit_index_total_chunk_count(const RetrievalKitIndex *index);
+size_t retrievalkit_index_tombstoned_chunk_count(const RetrievalKitIndex *index);
 
 bool retrievalkit_chunk_text(
     const char *text,
     uint32_t strategy,
     size_t max_characters,
     size_t overlap_characters,
-    VkTextChunkBuffer *out_chunks,
-    VkStatus *status);
+    RetrievalKitTextChunkBuffer *out_chunks,
+    RetrievalKitStatus *status);
 
 bool retrievalkit_index_upsert_document(
-    VkIndex *index,
+    RetrievalKitIndex *index,
     const char *document_id,
     const char *document_text,
-    const VkMetadataEntry *document_metadata,
+    const RetrievalKitMetadataEntry *document_metadata,
     size_t document_metadata_len,
-    const VkChunkInput *chunks,
+    const RetrievalKitChunkInput *chunks,
     size_t chunk_count,
-    VkChunkIdBuffer *out_chunk_ids,
-    VkStatus *status);
+    RetrievalKitChunkIdBuffer *out_chunk_ids,
+    RetrievalKitStatus *status);
 
 bool retrievalkit_index_delete_document(
-    VkIndex *index,
+    RetrievalKitIndex *index,
     const char *document_id,
     size_t *deleted_count,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
 bool retrievalkit_index_compact(
-    VkIndex *index,
-    VkCompactionReport *out_report,
-    VkStatus *status);
+    RetrievalKitIndex *index,
+    RetrievalKitCompactionReport *out_report,
+    RetrievalKitStatus *status);
 
 bool retrievalkit_index_search(
-    const VkIndex *index,
+    const RetrievalKitIndex *index,
     const float *embedding,
     size_t embedding_len,
     size_t top_k,
-    const VkFilter *filter,
-    VkSearchResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitSearchResultBuffer *out_results,
+    RetrievalKitStatus *status);
 
 bool retrievalkit_index_keyword_search(
-    const VkIndex *index,
+    const RetrievalKitIndex *index,
     const char *text,
     size_t top_k,
-    const VkFilter *filter,
-    VkKeywordResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitKeywordResultBuffer *out_results,
+    RetrievalKitStatus *status);
 
-bool retrievalkit_index_hybrid_search(
-    const VkIndex *index,
-    const char *text,
-    const float *embedding,
-    size_t embedding_len,
-    size_t top_k,
-    const VkFilter *filter,
-    VkHybridOptions options,
-    VkHybridResultBuffer *out_results,
-    VkStatus *status);
 bool retrievalkit_index_hybrid_search_alpha(
-    const VkIndex *index,
+    const RetrievalKitIndex *index,
     const char *text,
     const float *embedding,
     size_t embedding_len,
     size_t top_k,
-    const VkFilter *filter,
-    VkHybridQueryOptions options,
-    VkHybridResultBuffer *out_results,
-    VkStatus *status);
+    const RetrievalKitFilter *filter,
+    RetrievalKitHybridQueryOptions options,
+    RetrievalKitHybridResultBuffer *out_results,
+    RetrievalKitStatus *status);
 
-void retrievalkit_chunk_id_buffer_free(VkChunkIdBuffer buffer);
-void retrievalkit_text_chunks_free(VkTextChunkBuffer buffer);
-void retrievalkit_search_results_free(VkSearchResultBuffer buffer);
-void retrievalkit_keyword_results_free(VkKeywordResultBuffer buffer);
-void retrievalkit_hybrid_results_free(VkHybridResultBuffer buffer);
+void retrievalkit_chunk_id_buffer_free(RetrievalKitChunkIdBuffer buffer);
+void retrievalkit_text_chunks_free(RetrievalKitTextChunkBuffer buffer);
+void retrievalkit_search_results_free(RetrievalKitSearchResultBuffer buffer);
+void retrievalkit_keyword_results_free(RetrievalKitKeywordResultBuffer buffer);
+void retrievalkit_hybrid_results_free(RetrievalKitHybridResultBuffer buffer);
 
-VkFilter *retrievalkit_filter_equals(
+RetrievalKitFilter *retrievalkit_filter_equals(
     const char *field,
-    VkMetadataValue value,
-    VkStatus *status);
+    RetrievalKitMetadataValue value,
+    RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_not_equals(
+RetrievalKitFilter *retrievalkit_filter_not_equals(
     const char *field,
-    VkMetadataValue value,
-    VkStatus *status);
+    RetrievalKitMetadataValue value,
+    RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_exists(const char *field, VkStatus *status);
+RetrievalKitFilter *retrievalkit_filter_exists(const char *field, RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_range(
+RetrievalKitFilter *retrievalkit_filter_range(
     const char *field,
-    const VkMetadataValue *lower,
-    const VkMetadataValue *upper,
-    VkStatus *status);
+    const RetrievalKitMetadataValue *lower,
+    const RetrievalKitMetadataValue *upper,
+    RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_in_values(
+RetrievalKitFilter *retrievalkit_filter_in_values(
     const char *field,
-    const VkMetadataValue *values,
+    const RetrievalKitMetadataValue *values,
     size_t value_count,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_all(
-    const VkFilter *const *filters,
+RetrievalKitFilter *retrievalkit_filter_all(
+    const RetrievalKitFilter *const *filters,
     size_t filter_count,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
-VkFilter *retrievalkit_filter_any(
-    const VkFilter *const *filters,
+RetrievalKitFilter *retrievalkit_filter_any(
+    const RetrievalKitFilter *const *filters,
     size_t filter_count,
-    VkStatus *status);
+    RetrievalKitStatus *status);
 
-void retrievalkit_filter_free(VkFilter *filter);
+void retrievalkit_filter_free(RetrievalKitFilter *filter);
 
 // Runs the synthetic benchmark and returns a heap-allocated UTF-8 JSON string.
 //

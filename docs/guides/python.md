@@ -277,7 +277,7 @@ hit = hits[0]
 print(hit["trace"]["vector_rank"])
 print(hit["trace"]["keyword_rank"])
 print(hit["trace"]["matched_terms"])
-print(hit["trace"]["filter_matched"])
+print(hit["trace"]["vector_score"])
 ```
 
 Save, validate, and reload the complete graph, corpus, retrieval indexes, and

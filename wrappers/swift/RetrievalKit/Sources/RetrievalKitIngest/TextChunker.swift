@@ -33,7 +33,7 @@ public enum TextChunkingError: Error, Equatable, CustomStringConvertible, Sendab
         }
     }
 
-    fileprivate static func from(status: VkStatus) -> TextChunkingError {
+    fileprivate static func from(status: RetrievalKitStatus) -> TextChunkingError {
         let message = status.message.map { String(cString: $0) } ?? "unknown RetrievalKitIngest FFI error"
         switch status.code {
         case 1: return .invalidArgument(message)
@@ -96,9 +96,9 @@ public struct TextChunker: Equatable, Sendable {
         }
         defer { free(input) }
 
-        var status = VkStatus(code: 0, message: nil)
+        var status = RetrievalKitStatus(code: 0, message: nil)
         defer { retrievalkit_status_clear(&status) }
-        var output = VkTextChunkBuffer(chunks: nil, count: 0)
+        var output = RetrievalKitTextChunkBuffer(chunks: nil, count: 0)
 
         guard retrievalkit_chunk_text(
             input,

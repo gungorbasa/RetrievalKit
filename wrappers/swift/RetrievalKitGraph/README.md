@@ -68,6 +68,10 @@ let hits = try await database.search(
 )
 ```
 
+Exact, keyword, and hybrid hits return effective metadata using the shared
+`MetadataValue` type. Hybrid traces expose `alpha`; graph scope constrains the
+candidate set but is not another scoring signal.
+
 Both database owners and their query views are actors. `GraphSelection` retains
 its native candidate scope and releases it automatically; callers do not close
 query results manually. Database `close()` is available for deterministic early

@@ -15,7 +15,7 @@ corpus. One corpus, one ranked list, one trace, and no retrieval server.
 [![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
 
-**[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[TypeScript guide](docs/guides/typescript.md)** · **[Kotlin guide](docs/guides/kotlin.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
+**[Public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site)** · **[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[TypeScript guide](docs/guides/typescript.md)** · **[Kotlin guide](docs/guides/kotlin.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
 
 </div>
 

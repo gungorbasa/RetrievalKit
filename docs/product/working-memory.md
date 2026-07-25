@@ -6,6 +6,19 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-25 wrapper onboarding qualification: CI now exercises Node/macOS
+  arm64, Kotlin/JVM/macOS arm64 with JDK 17, Android arm64-v8a, and explicitly
+  non-release Python source portability on Windows. Wrapper build entrypoints
+  run actionable Python, Node, or Kotlin/JDK/NDK preflights. The manual
+  onboarding workflow records clean-export time-to-first-result evidence and
+  environment/cache caveats for Python, Node, and Kotlin. Searchable public
+  source-preview docs are deployed at
+  `https://retrievalkit-docs.gungorbasa.chatgpt.site`; their versioned Python
+  bundle is built from commit `68b5517`, carries its SHA-256 on the page, and
+  passed the documented graph quickstart from a fresh extraction. This is a
+  narrow source-preview path, not registry publication or expanded platform
+  support; existing owner-authorization and standalone graph Swift publication
+  blockers remain intact.
 - 2026-07-25 Swift distribution decision: the root `Package.swift` is base-only
   and `Package.graph.swift` is the standalone graph publication manifest.
   SwiftPM eagerly resolved both remote binary targets when they shared one

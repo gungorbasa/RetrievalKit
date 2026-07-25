@@ -18,38 +18,35 @@ struct RetrievalKitGraphQuickstart {
         )
       ]
     )
-    let builder = try GraphDatabase.Builder(
-      corpusID: "project-notes",
-      schema: schema
-    )
+    let builder = try GraphDatabase.Builder(corpusID: "project-notes", schema: schema)
     try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "apollo",
-          type: "Project",
-          fields: [
-            "note_ids": .list([
-              .string("decision-swift"),
-              .string("launch-checklist"),
-            ])
-          ]
-        )
+      Record(
+        id: "apollo",
+        type: "Project",
+        fields: [
+          "note_ids": .list([
+            .string("decision-swift"),
+            .string("launch-checklist"),
+          ])
+        ]
       )
     )
     try await builder.upsert(
-      RecordInput(
-        record: Record(id: "decision-swift", type: "Note"),
-        chunks: [Chunk(key: "body", text: "We chose Swift for Project Apollo.")]
+      Record(
+        id: "decision-swift",
+        type: "Note",
+        content: "We chose Swift for Project Apollo."
       )
     )
     try await builder.upsert(
-      RecordInput(
-        record: Record(id: "launch-checklist", type: "Note"),
-        chunks: [Chunk(key: "body", text: "Project Apollo launch checklist.")]
+      Record(
+        id: "launch-checklist",
+        type: "Note",
+        content: "Project Apollo launch checklist."
       )
     )
     let database = try await builder.build()
-    let selection = try await database.graph.query(
+    let selection = try await database.query(
       from: [GraphNodeID(nodeType: "Project", recordID: "apollo")],
       traversing: [GraphTraversal(relationship: "contains")]
     )

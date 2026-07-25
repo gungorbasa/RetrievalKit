@@ -26,6 +26,11 @@ public struct RecordID: RetrievalKitStringIdentifier {
   public init?(rawValue: String) { self.rawValue = rawValue }
   public init(_ rawValue: String) { self.rawValue = rawValue }
 }
+public struct DocumentID: RetrievalKitStringIdentifier {
+  public let rawValue: String
+  public init?(rawValue: String) { self.rawValue = rawValue }
+  public init(_ rawValue: String) { self.rawValue = rawValue }
+}
 public struct RecordType: RetrievalKitStringIdentifier {
   public let rawValue: String
   public init?(rawValue: String) { self.rawValue = rawValue }
@@ -170,6 +175,55 @@ public struct Record: Equatable, Sendable, Codable {
     case fields, metadata, content
   }
 }
+
+/// A caller-owned unit of searchable text.
+///
+/// RetrievalKit stores the caller-produced embedding separately so applications
+/// can bring any embedding model, including EmbeddingKit.
+public struct Document: Equatable, Sendable, Codable {
+  public var id: DocumentID
+  public var text: String
+  public var metadata: [String: MetadataValue]
+
+  public init(
+    id: DocumentID,
+    text: String = "",
+    metadata: [String: MetadataValue] = [:]
+  ) {
+    self.id = id
+    self.text = text
+    self.metadata = metadata
+  }
+}
+
+/// A searchable document paired with its caller-produced embedding.
+///
+/// This is the advanced combined-ingestion value for records that own more
+/// than one independently identifiable searchable document.
+public struct EmbeddedDocument: Equatable, Sendable {
+  public var document: Document
+  public var embedding: [Float]
+
+  public init(
+    id: DocumentID,
+    text: String,
+    embedding: [Float],
+    metadata: [String: MetadataValue] = [:]
+  ) {
+    self.document = Document(id: id, text: text, metadata: metadata)
+    self.embedding = embedding
+  }
+
+  public init(document: Document, embedding: [Float]) {
+    self.document = document
+    self.embedding = embedding
+  }
+
+  public var id: DocumentID { document.id }
+  public var text: String { document.text }
+  public var metadata: [String: MetadataValue] { document.metadata }
+}
+
 public struct Chunk: Equatable, Sendable, Codable {
   public var key: ChunkKey
   public var text: String

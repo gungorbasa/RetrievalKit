@@ -878,95 +878,149 @@ Exact search is the V1 source of truth. Future ANN modes are acceleration paths,
 
 ## Public Swift API
 
-V1 Swift API shape:
+V1 uses capability-specific database types with progressive disclosure:
 
 ```swift
-let index = try LocalRAGIndex.open(
-    path: indexPath,
-    config: .init(
-        dimension: 384,
-        metric: .cosine,
-        vectorEncoding: .f32,
-        vectorIndex: .exact,
-        keywordIndex: true
-    )
+RetrievalDatabase       // searchable documents
+GraphDatabase           // graph records and traversal
+GraphRetrievalDatabase  // graph records plus searchable documents
+```
+
+Embeddings are caller-produced `[Float]` values. The common initializers do not
+accept an embedding dimension; the first embedding fixes the database dimension
+and later document and query embeddings must match it. Apps may bring their own
+model or use EmbeddingKit.
+
+Retrieval-only ingestion:
+
+```swift
+let builder = RetrievalDatabase.Builder(corpusID: "notes")
+try await builder.upsert(
+    Document(
+        id: "note-42",
+        text: "RetrievalKit provides private, on-device search.",
+        metadata: ["project": .string("apollo")]
+    ),
+    embedding: documentEmbedding
+)
+let database = try await builder.build()
+```
+
+Graph-only ingestion never accepts retrieval configuration or embeddings:
+
+```swift
+let builder = try GraphDatabase.Builder(schema: graphSchema)
+try await builder.upsert(record)
+let database = try await builder.build()
+let result = try await database.query(
+    from: [GraphNodeID(nodeType: "Project", recordID: "apollo")],
+    traversing: [GraphTraversal(relationship: "contains")]
 )
 ```
 
-Supported Swift storage options:
+The common combined path uses `Record.content` as one searchable document and
+derives its stable `DocumentID` from the `RecordID`:
+
+```swift
+let builder = try GraphRetrievalDatabase.Builder(graph: graphSchema)
+try await builder.upsert(record, embedding: documentEmbedding)
+```
+
+Records with multiple independently identifiable searchable documents use the
+advanced overload:
+
+```swift
+try await builder.upsert(
+    record,
+    documents: [
+        EmbeddedDocument(
+            id: "note-42:summary",
+            text: summary,
+            embedding: summaryEmbedding
+        ),
+        EmbeddedDocument(
+            id: "note-42:body",
+            text: body,
+            embedding: bodyEmbedding
+        )
+    ]
+)
+```
+
+`ChunkKey`, keyed embedding dictionaries, and explicit record/document linking
+remain compatibility and internal concepts, not common-path API requirements.
+
+All retrieval-capable databases use one overloaded search family:
+
+```swift
+let semantic = try await database.search(
+    embedding: queryEmbedding,
+    limit: 10
+)
+
+let lexical = try await database.search(
+    text: "private search",
+    limit: 10
+)
+
+let hybrid = try await database.search(
+    text: "private search",
+    embedding: queryEmbedding,
+    alpha: 0.6,
+    limit: 10,
+    filter: .equals("project", .string("apollo"))
+)
+```
+
+For combined databases, a graph selection can constrain any search:
+
+```swift
+let hits = try await database.search(
+    text: "private search",
+    embedding: queryEmbedding,
+    alpha: 0.6,
+    within: selection,
+    limit: 10
+)
+```
+
+`alpha` is the vector contribution to weighted normalized-score fusion:
+
+```text
+alpha = 1     vector only
+alpha = 0     BM25 only
+0 < alpha < 1 hybrid
+```
+
+Combined results expose both identities:
+
+```swift
+struct GraphHybridHit {
+    let documentID: String
+    let recordID: String
+    let text: String
+    let score: Float
+    let vectorScore: Float?
+    let keywordScore: Float?
+    let trace: GraphHybridTrace
+}
+```
+
+Supported storage encodings remain advanced builder options:
 
 ```swift
 enum VectorEncoding {
     case f32
     case f16
     case bf16
-    case i8ScalarQuantized(scope: QuantizationScope = .perVector)
-    case binaryQuantized
+    case i8ScalarQuantized
 }
 ```
 
-The caller always passes embeddings as `[Float]`. The index config decides how they are normalized, compressed, stored, and searched.
-
-Add chunks:
-
-```swift
-try index.add(
-    documentID: "movie_123",
-    chunks: [
-        .init(
-            text: "Mark enters the deposition room.",
-            embedding: embedding,
-            metadata: [
-                "title": .string("The Social Network"),
-                "timestampMs": .int(552000)
-            ]
-        )
-    ]
-)
-```
-
-Search:
-
-```swift
-let results = try index.search(
-    .init(
-        text: "Who is the main character?",
-        embedding: queryEmbedding,
-        topK: 10,
-        mode: .hybrid,
-        filter: .equals("title", "The Social Network"),
-        trace: true
-    )
-)
-```
-
-Result:
-
-```swift
-struct SearchResult {
-    let chunkID: UInt64
-    let documentID: String
-    let score: Float
-    let vectorScore: Float?
-    let keywordScore: Float?
-    let text: String?
-    let metadata: [String: MetadataValue]
-    let trace: SearchTrace?
-}
-```
-
-Trace:
-
-```swift
-struct SearchTrace {
-    let vectorRank: Int?
-    let keywordRank: Int?
-    let matchedTerms: [String]
-    let filtered: Bool
-    let reranked: Bool
-    let reason: String
-}
-```
+Explicit-dimension `RetrievalConfiguration`, `RecordInput`, `Chunk`, keyed
+embedding maps, and the `.retrieval.semanticSearch` /
+`.retrieval.hybridSearch` namespaces remain temporary compatibility surfaces
+while callers migrate to the progressive API.
 
 ## Rust Core API
 

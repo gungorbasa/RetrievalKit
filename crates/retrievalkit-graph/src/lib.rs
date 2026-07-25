@@ -451,6 +451,12 @@ impl GraphRetrievalDatabase {
             .map_err(GraphError::from)
     }
 
+    pub fn keyword_search(&self, query: &KeywordQuery) -> Result<Vec<KeywordHit>> {
+        self.retrieval
+            .keyword_search(query)
+            .map_err(GraphError::from)
+    }
+
     pub fn semantic_search_in_selection(
         &self,
         query: &SearchQuery,
@@ -470,6 +476,17 @@ impl GraphRetrievalDatabase {
         let projected = self.project_candidates(selection)?;
         self.retrieval
             .hybrid_search_in_candidates(query, &projected.scope)
+            .map_err(GraphError::from)
+    }
+
+    pub fn keyword_search_in_selection(
+        &self,
+        query: &KeywordQuery,
+        selection: &GraphResult,
+    ) -> Result<Vec<KeywordHit>> {
+        let projected = self.project_candidates(selection)?;
+        self.retrieval
+            .keyword_search_in_candidates(query, &projected.scope)
             .map_err(GraphError::from)
     }
 

@@ -39,34 +39,42 @@ and validated against that corpus.
 
 - `GraphDatabase` accepts a graph schema and capability-neutral records. It
   never accepts dimensions, vector metrics, encodings, or embeddings.
-- `RetrievalDatabase` requires vector configuration and embeddings keyed by
-  stable chunk key. It always supports semantic and hybrid queries.
-- `GraphRetrievalDatabase` accepts the same retrieval configuration and is the
-  only owner that composes a `GraphSelection` with retrieval.
+- `RetrievalDatabase` accepts searchable `Document` values paired directly
+  with caller-produced embeddings. The first embedding fixes its dimension.
+- `GraphRetrievalDatabase` accepts graph-only `Record` values, the common
+  `Record` plus embedding path for one searchable `content` value, and an
+  advanced list of stable `EmbeddedDocument` values. It is the only owner that
+  composes a `GraphSelection` with retrieval.
 - BM25 is built for every retrieval-capable database. High-level hybrid calls
-  accept query-time `alpha`; BM25 remains directly testable and benchmarkable
-  in Rust but has no standalone high-level database mode.
+  accept query-time `alpha`; direct text-only overloads run BM25 without a
+  query embedding.
 - Capability selection occurs when the builder is created. It is not inferred
   from data or attached to a completed database.
 
-The common record input is independent from capabilities:
+The common public values are independent from internal chunking:
 
 ```text
-RecordInput
-  record
-    id: RecordId
-    type: RecordType
-    fields: nested RecordValue map
-    metadata: flat filter metadata inherited by chunks
-  chunks[]
-    key: ChunkKey
-    text
-    metadata: flat per-chunk filter metadata
+Document
+  id: DocumentId
+  text
+  metadata
+
+Record
+  id: RecordId
+  type: RecordType
+  fields
+  metadata
+  content?
+
+EmbeddedDocument
+  document
+  embedding
 ```
 
-Chunk metadata overrides inherited record metadata on a duplicate key.
-Retrieval-capable upserts provide a separate embedding map whose keys must
-exactly match the input chunks. Graph-only upserts have no embedding parameter.
+`ChunkKey`, `RecordInput`, and keyed embedding maps remain internal and
+compatibility concepts. Graph-only upserts have no embedding parameter.
+Internally a stable document ID maps to the record-bound chunk identity used by
+candidate projection and persistence.
 
 ## Candidate Projection Contract
 

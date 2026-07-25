@@ -19,6 +19,56 @@ final class RetrievalKitTests: XCTestCase {
     )
   }
 
+  func testProgressiveDatabaseAPIInfersDimensionAndSupportsOneSearchFamily() async throws {
+    let builder = RetrievalDatabase.Builder(corpusID: "progressive", encoding: .f32)
+    try await builder.upsert(
+      Document(
+        id: "local",
+        text: "private local search",
+        metadata: ["kind": .string("note")]
+      ),
+      embedding: [1, 0]
+    )
+    try await builder.upsert(
+      Document(id: "remote", text: "public remote article"),
+      embedding: [0, 1]
+    )
+    let database = try await builder.build()
+
+    let semantic = try await database.search(embedding: [1, 0], limit: 1)
+    let keyword = try await database.search(text: "private", limit: 1)
+    let hybrid = try await database.search(
+      text: "private",
+      embedding: [1, 0],
+      alpha: 0.6,
+      limit: 1,
+      filter: .equals("kind", .string("note"))
+    )
+
+    XCTAssertEqual(semantic.first?.documentID, "local")
+    XCTAssertEqual(keyword.first?.documentID, "local")
+    XCTAssertEqual(hybrid.first?.documentID, "local")
+  }
+
+  func testProgressiveDatabaseRejectsEmbeddingDimensionDrift() async throws {
+    let builder = RetrievalDatabase.Builder()
+    try await builder.upsert(
+      Document(id: "first", text: "first"),
+      embedding: [1, 0]
+    )
+
+    do {
+      try await builder.upsert(
+        Document(id: "second", text: "second"),
+        embedding: [1, 0, 0]
+      )
+      XCTFail("expected inferred dimension mismatch")
+    } catch RetrievalKitError.invalidDimension(let message) {
+      XCTAssertTrue(message.contains("expected 2, got 3"))
+      XCTAssertTrue(message.contains("same embedding model"))
+    }
+  }
+
   func testExactSearchReturnsIndexedChunk() async throws {
     let index = try VectorIndex(dimension: 3)
 

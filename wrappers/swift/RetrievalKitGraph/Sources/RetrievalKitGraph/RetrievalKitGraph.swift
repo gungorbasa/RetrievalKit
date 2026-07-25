@@ -4,11 +4,14 @@ import RetrievalKitShared
 
 public typealias CorpusID = RetrievalKitShared.CorpusID
 public typealias RecordID = RetrievalKitShared.RecordID
+public typealias DocumentID = RetrievalKitShared.DocumentID
 public typealias RecordType = RetrievalKitShared.RecordType
 public typealias ChunkKey = RetrievalKitShared.ChunkKey
 public typealias RecordValue = RetrievalKitShared.RecordValue
 public typealias MetadataValue = RetrievalKitShared.MetadataValue
 public typealias Record = RetrievalKitShared.Record
+public typealias Document = RetrievalKitShared.Document
+public typealias EmbeddedDocument = RetrievalKitShared.EmbeddedDocument
 public typealias Chunk = RetrievalKitShared.Chunk
 public typealias RecordInput = RetrievalKitShared.RecordInput
 
@@ -565,13 +568,13 @@ extension GraphQueryResult: Equatable {
 }
 public struct GraphSearchHit: Equatable, Sendable {
   public let chunkID: UInt64
-  public let recordID, text: String
+  public let documentID, recordID, text: String
   public let score, vectorScore: Float
   public let filterMatched: Bool
 }
 public struct GraphKeywordHit: Equatable, Sendable {
   public let chunkID: UInt64
-  public let recordID, text: String
+  public let documentID, recordID, text: String
   public let score: Float
   public let matchedTerms: [String]
 }
@@ -583,7 +586,7 @@ public struct GraphHybridTrace: Equatable, Sendable {
 }
 public struct GraphHybridHit: Equatable, Sendable {
   public let chunkID: UInt64
-  public let recordID, text: String
+  public let documentID, recordID, text: String
   public let score: Float
   public let vectorScore, keywordScore: Float?
   public let trace: GraphHybridTrace
@@ -1183,8 +1186,10 @@ public actor GraphIndex {
     defer { retrievalkit_search_results_free(output) }
     return (0..<output.count).map { index in
       let hit = output.hits[index]
+      let documentID = String(cString: hit.document_id)
       return GraphSearchHit(
-        chunkID: hit.chunk_id, recordID: String(cString: hit.document_id),
+        chunkID: hit.chunk_id, documentID: documentID,
+        recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
         text: String(cString: hit.text), score: hit.score, vectorScore: hit.vector_score,
         filterMatched: hit.filter_matched)
     }
@@ -1211,8 +1216,10 @@ public actor GraphIndex {
       let terms = (0..<hit.matched_terms.count).map {
         String(cString: hit.matched_terms.values[$0]!)
       }
+      let documentID = String(cString: hit.document_id)
       return GraphKeywordHit(
-        chunkID: hit.chunk_id, recordID: String(cString: hit.document_id),
+        chunkID: hit.chunk_id, documentID: documentID,
+        recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
         text: String(cString: hit.text), score: hit.score, matchedTerms: terms)
     }
   }
@@ -1257,8 +1264,10 @@ public actor GraphIndex {
         normalizedKeywordScore: hit.has_normalized_keyword_score
           ? hit.normalized_keyword_score : nil, matchedTerms: terms,
         filterMatched: hit.filter_matched)
+      let documentID = String(cString: hit.document_id)
       return GraphHybridHit(
-        chunkID: hit.chunk_id, recordID: String(cString: hit.document_id),
+        chunkID: hit.chunk_id, documentID: documentID,
+        recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
         text: String(cString: hit.text), score: hit.score,
         vectorScore: hit.has_vector_score ? hit.vector_score : nil,
         keywordScore: hit.has_keyword_score ? hit.keyword_score : nil, trace: trace)
@@ -1673,7 +1682,7 @@ private func materializeCandidateProjection(
 public actor GraphDatabase {
   public actor Builder {
     private var handle: UInt?
-    public init(corpusID: CorpusID, schema: GraphSchema) throws {
+    public init(corpusID: CorpusID = "default", schema: GraphSchema) throws {
       let json = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
       handle = UInt(
         bitPattern: try Native.pointer { status in
@@ -1685,6 +1694,19 @@ public actor GraphDatabase {
     deinit {
       if let handle { retrievalkit_graph_database_builder_free(OpaquePointer(bitPattern: handle)) }
     }
+
+    /// Adds or replaces one graph record. If `record.content` is present it is
+    /// retained as the record's single searchable-document projection, without
+    /// exposing a chunk key to the caller.
+    public func upsert(_ record: Record) throws {
+      let chunks =
+        record.content.map {
+          [Chunk(key: ChunkKey(record.id.rawValue), text: $0)]
+        } ?? []
+      try upsert(RecordInput(record: record, chunks: chunks))
+    }
+
+    /// Compatibility entry point for explicit record/chunk ingestion.
     public func upsert(_ input: RecordInput) throws {
       guard let handle else { throw RetrievalKitGraphError.consumedBuilder }
       let batch = CapabilityGraphBatch(
@@ -1714,6 +1736,57 @@ public actor GraphDatabase {
     graph = GraphQueries(owner: owner)
   }
   public func close() { owner.close() }
+
+  public func query(
+    from seeds: [GraphNodeID],
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      from: seeds,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
+  public func query(
+    nodeType: String,
+    field: GraphFieldPath,
+    equals values: [GraphScalar],
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      nodeType: nodeType,
+      field: field,
+      equals: values,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
+  public func query(
+    nodeType: String,
+    field: GraphFieldPath,
+    equals value: GraphScalar,
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      nodeType: nodeType,
+      field: field,
+      equals: value,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
   public func projectCandidates(
     from selection: GraphSelection, filter: GraphFilter? = nil
   ) async throws -> GraphCandidateProjection {
@@ -1771,13 +1844,58 @@ public actor GraphRetrievalQueries {
       defer { retrievalkit_search_results_free(output) }
       return (0..<output.count).map {
         let hit = output.hits[$0]
+        let documentID = String(cString: hit.document_id)
         return GraphSearchHit(
-          chunkID: hit.chunk_id, recordID: String(cString: hit.document_id),
+          chunkID: hit.chunk_id, documentID: documentID,
+          recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
           text: String(cString: hit.text), score: hit.score, vectorScore: hit.vector_score,
           filterMatched: hit.filter_matched)
       }
     }.value
   }
+
+  public func keywordSearch(
+    text: String,
+    topK: Int = 10,
+    within selection: GraphSelection? = nil,
+    filter: GraphFilter? = nil
+  ) async throws -> [GraphKeywordHit] {
+    let owner = owner
+    return try await Task.detached {
+      let arena = GraphCStringArena()
+      let nativeFilter = try filter?.makeFFI()
+      var output = VkKeywordResultBuffer(hits: nil, count: 0)
+      var status = VkStatus(code: 0, message: nil)
+      defer { retrievalkit_status_clear(&status) }
+      let succeeded = retrievalkit_graph_retrieval_keyword_search(
+        OpaquePointer(bitPattern: try owner.requireHandle()),
+        try selection?.native.requireHandle(),
+        arena.copy(text),
+        topK,
+        nativeFilter?.pointer,
+        &output,
+        &status
+      )
+      guard succeeded else { throw Native.error(status, fallback: "keyword search failed") }
+      defer { retrievalkit_keyword_results_free(output) }
+      return (0..<output.count).map {
+        let hit = output.hits[$0]
+        let terms = (0..<hit.matched_terms.count).map {
+          String(cString: hit.matched_terms.values[$0]!)
+        }
+        let documentID = String(cString: hit.document_id)
+        return GraphKeywordHit(
+          chunkID: hit.chunk_id,
+          documentID: documentID,
+          recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
+          text: String(cString: hit.text),
+          score: hit.score,
+          matchedTerms: terms
+        )
+      }
+    }.value
+  }
+
   public func hybridSearch(
     text: String, embedding: [Float], topK: Int = 10, within selection: GraphSelection? = nil,
     filter: GraphFilter? = nil, alpha: Float = 0.6, options: GraphHybridOptions = .default
@@ -1803,8 +1921,10 @@ public actor GraphRetrievalQueries {
         let terms = (0..<hit.matched_terms.count).map {
           String(cString: hit.matched_terms.values[$0]!)
         }
+        let documentID = String(cString: hit.document_id)
         return GraphHybridHit(
-          chunkID: hit.chunk_id, recordID: String(cString: hit.document_id),
+          chunkID: hit.chunk_id, documentID: documentID,
+          recordID: hit.record_id.map { String(cString: $0) } ?? documentID,
           text: String(cString: hit.text), score: hit.score,
           vectorScore: hit.has_vector_score ? hit.vector_score : nil,
           keywordScore: hit.has_keyword_score ? hit.keyword_score : nil,
@@ -1824,27 +1944,113 @@ public actor GraphRetrievalQueries {
 public actor GraphRetrievalDatabase {
   public actor Builder {
     private var handle: UInt?
+    private let corpusID: CorpusID
+    private let schemaJSON: String
+    private let metric: GraphMetric
+    private let encoding: GraphVectorEncoding
+    private var dimension: Int?
+    private var pending: [CapabilityRetrievalBatch] = []
+    private var consumed = false
+
+    /// Creates a combined graph + retrieval builder whose embedding dimension
+    /// is inferred from the first searchable record or document.
+    public init(
+      corpusID: CorpusID = "default",
+      graph schema: GraphSchema,
+      metric: GraphMetric = .cosine,
+      encoding: GraphVectorEncoding = .i8ScalarQuantized
+    ) throws {
+      self.corpusID = corpusID
+      self.schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
+      self.metric = metric
+      self.encoding = encoding
+    }
+
+    /// Compatibility initializer for callers that need to declare the
+    /// dimension before the first upsert.
     public init(corpusID: CorpusID, graph schema: GraphSchema, retrieval: RetrievalConfiguration)
       throws
     {
-      let json = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
       let vector = retrieval.semantic
-      handle = UInt(
-        bitPattern: try Native.pointer { status in
-          corpusID.rawValue.withCString { corpus in
-            json.withCString {
-              retrievalkit_graph_retrieval_builder_new(
-                vector.dimension, vector.metric.ffi, vector.encoding.ffi, corpus,
-                $0, status)
-            }
-          }
-        })
+      self.corpusID = corpusID
+      self.schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
+      self.metric = vector.metric
+      self.encoding = vector.encoding
+      self.dimension = vector.dimension
+      self.handle = UInt(
+        bitPattern: try Self.makeHandle(
+          dimension: vector.dimension,
+          corpusID: corpusID,
+          schemaJSON: schemaJSON,
+          metric: vector.metric,
+          encoding: vector.encoding
+        ))
     }
     deinit {
       if let handle { retrievalkit_graph_retrieval_builder_free(OpaquePointer(bitPattern: handle)) }
     }
+
+    /// Adds a graph-only record to a combined database.
+    public func upsert(_ record: Record) throws {
+      try enqueue(
+        CapabilityRetrievalBatch(
+          record: record,
+          projectedMetadata: record.metadata,
+          chunks: []
+        ))
+    }
+
+    /// Adds a record whose `content` is its single searchable document.
+    /// RetrievalKit derives the stable document ID from the record ID.
+    public func upsert(_ record: Record, embedding: [Float]) throws {
+      guard let content = record.content else {
+        throw RetrievalKitGraphError.missingEmbedding(
+          "record \(record.id.rawValue) has no content to pair with the embedding")
+      }
+      try upsert(
+        record,
+        documents: [
+          EmbeddedDocument(
+            id: DocumentID(record.id.rawValue),
+            text: content,
+            embedding: embedding
+          )
+        ]
+      )
+    }
+
+    /// Adds a record with multiple independently identifiable searchable
+    /// documents.
+    public func upsert(_ record: Record, documents: [EmbeddedDocument]) throws {
+      let ids = documents.map(\.id)
+      guard Set(ids).count == ids.count else {
+        throw RetrievalKitGraphError.invalidIdentity(
+          "document IDs must be unique within record \(record.id.rawValue)")
+      }
+      if let first = documents.first {
+        try ensureHandle(for: first.embedding)
+      }
+      for document in documents {
+        try validateDimension(document.embedding)
+      }
+      try enqueue(
+        CapabilityRetrievalBatch(
+          record: record,
+          projectedMetadata: record.metadata,
+          chunks: documents.map {
+            CapabilityRetrievalChunk(
+              key: ChunkKey($0.id.rawValue),
+              text: $0.text,
+              embedding: $0.embedding,
+              metadata: $0.metadata
+            )
+          }
+        ))
+    }
+
+    /// Compatibility entry point for explicit record/chunk ingestion.
     public func upsert(_ input: RecordInput, embeddings: [ChunkKey: [Float]]) throws {
-      guard let handle else { throw RetrievalKitGraphError.consumedBuilder }
+      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
       let expected = Set(input.chunks.map(\.key))
       let actual = Set(embeddings.keys)
       guard expected == actual else {
@@ -1855,12 +2061,106 @@ public actor GraphRetrievalDatabase {
         }
         throw RetrievalKitGraphError.invalidIdentity("embeddings contain unknown chunk keys")
       }
-      let batch = CapabilityRetrievalBatch(
-        record: input.record, projectedMetadata: input.record.metadata,
-        chunks: input.chunks.map {
-          CapabilityRetrievalChunk(
-            key: $0.key, text: $0.text, embedding: embeddings[$0.key]!, metadata: $0.metadata)
+      if let first = embeddings.values.first {
+        try ensureHandle(for: first)
+      }
+      for embedding in embeddings.values {
+        try validateDimension(embedding)
+      }
+      try enqueue(
+        CapabilityRetrievalBatch(
+          record: input.record, projectedMetadata: input.record.metadata,
+          chunks: input.chunks.map {
+            CapabilityRetrievalChunk(
+              key: $0.key, text: $0.text, embedding: embeddings[$0.key]!, metadata: $0.metadata)
+          }))
+    }
+
+    public func build() throws -> GraphRetrievalDatabase {
+      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
+      guard let owned = handle else {
+        throw RetrievalKitGraphError.missingEmbedding(
+          "cannot build a graph retrieval database before upserting a searchable embedding")
+      }
+      consumed = true
+      handle = nil
+      return GraphRetrievalDatabase(
+        pointer: try Native.pointer {
+          retrievalkit_graph_retrieval_builder_build(OpaquePointer(bitPattern: owned), $0)
         })
+    }
+
+    private func enqueue(_ batch: CapabilityRetrievalBatch) throws {
+      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
+      guard let handle else {
+        pending.append(batch)
+        return
+      }
+      try Self.send(batch, to: handle)
+    }
+
+    private func ensureHandle(for embedding: [Float]) throws {
+      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
+      try validateDimension(embedding)
+      guard handle == nil else { return }
+      let inferredDimension = embedding.count
+      let newHandle = UInt(
+        bitPattern: try Self.makeHandle(
+          dimension: inferredDimension,
+          corpusID: corpusID,
+          schemaJSON: schemaJSON,
+          metric: metric,
+          encoding: encoding
+        ))
+      handle = newHandle
+      dimension = inferredDimension
+      do {
+        for batch in pending {
+          try Self.send(batch, to: newHandle)
+        }
+        pending.removeAll(keepingCapacity: false)
+      } catch {
+        retrievalkit_graph_retrieval_builder_free(OpaquePointer(bitPattern: newHandle))
+        handle = nil
+        dimension = nil
+        throw error
+      }
+    }
+
+    private func validateDimension(_ embedding: [Float]) throws {
+      guard !embedding.isEmpty else {
+        throw RetrievalKitGraphError.invalidDimension(
+          "embedding must contain at least one value; pass the vector produced by your embedding model"
+        )
+      }
+      if let dimension, embedding.count != dimension {
+        throw RetrievalKitGraphError.invalidDimension(
+          "embedding dimension mismatch: expected \(dimension), got \(embedding.count); use the same embedding model for every document"
+        )
+      }
+    }
+
+    private nonisolated static func makeHandle(
+      dimension: Int,
+      corpusID: CorpusID,
+      schemaJSON: String,
+      metric: GraphMetric,
+      encoding: GraphVectorEncoding
+    ) throws -> OpaquePointer {
+      try Native.pointer { status in
+        corpusID.rawValue.withCString { corpus in
+          schemaJSON.withCString {
+            retrievalkit_graph_retrieval_builder_new(
+              dimension, metric.ffi, encoding.ffi, corpus, $0, status)
+          }
+        }
+      }
+    }
+
+    private nonisolated static func send(
+      _ batch: CapabilityRetrievalBatch,
+      to handle: UInt
+    ) throws {
       let json = String(decoding: try JSONEncoder().encode(batch), as: UTF8.self)
       try Native.bool { status in
         json.withCString {
@@ -1868,14 +2168,6 @@ public actor GraphRetrievalDatabase {
             OpaquePointer(bitPattern: handle), $0, status)
         }
       }
-    }
-    public func build() throws -> GraphRetrievalDatabase {
-      guard let owned = handle else { throw RetrievalKitGraphError.consumedBuilder }
-      handle = nil
-      return GraphRetrievalDatabase(
-        pointer: try Native.pointer {
-          retrievalkit_graph_retrieval_builder_build(OpaquePointer(bitPattern: owned), $0)
-        })
     }
   }
   private let owner: NativeCapabilityDatabase
@@ -1888,6 +2180,109 @@ public actor GraphRetrievalDatabase {
     retrieval = GraphRetrievalQueries(owner: owner)
   }
   public func close() { owner.close() }
+
+  public func query(
+    from seeds: [GraphNodeID],
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      from: seeds,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
+  public func query(
+    nodeType: String,
+    field: GraphFieldPath,
+    equals values: [GraphScalar],
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      nodeType: nodeType,
+      field: field,
+      equals: values,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
+  public func query(
+    nodeType: String,
+    field: GraphFieldPath,
+    equals value: GraphScalar,
+    traversing steps: [GraphTraversal] = [],
+    limits: GraphQueryLimits = .init(),
+    cancellation: GraphCancellationToken? = nil
+  ) async throws -> GraphSelection {
+    try await graph.query(
+      nodeType: nodeType,
+      field: field,
+      equals: value,
+      traversing: steps,
+      limits: limits,
+      cancellation: cancellation
+    )
+  }
+
+  public func search(
+    embedding: [Float],
+    within selection: GraphSelection? = nil,
+    limit: Int = 10,
+    filter: GraphFilter? = nil
+  ) async throws -> [GraphSearchHit] {
+    try await retrieval.semanticSearch(
+      embedding: embedding,
+      topK: limit,
+      within: selection,
+      filter: filter
+    )
+  }
+
+  public func search(
+    text: String,
+    within selection: GraphSelection? = nil,
+    limit: Int = 10,
+    filter: GraphFilter? = nil
+  ) async throws -> [GraphKeywordHit] {
+    try await retrieval.keywordSearch(
+      text: text,
+      topK: limit,
+      within: selection,
+      filter: filter
+    )
+  }
+
+  /// Performs weighted vector + BM25 search. `alpha` is the vector weight:
+  /// `1` is vector-only, `0` is BM25-only, and intermediate values are hybrid.
+  public func search(
+    text: String,
+    embedding: [Float],
+    alpha: Float = 0.6,
+    within selection: GraphSelection? = nil,
+    limit: Int = 10,
+    filter: GraphFilter? = nil
+  ) async throws -> [GraphHybridHit] {
+    guard (0...1).contains(alpha) else {
+      throw RetrievalKitGraphError.invalidIdentity(
+        "alpha must be between 0 and 1; use 1 for vector-only or 0 for BM25-only")
+    }
+    return try await retrieval.hybridSearch(
+      text: text,
+      embedding: embedding,
+      topK: limit,
+      within: selection,
+      filter: filter,
+      alpha: alpha
+    )
+  }
+
   public func projectCandidates(
     from selection: GraphSelection, filter: GraphFilter? = nil
   ) async throws -> GraphCandidateProjection {

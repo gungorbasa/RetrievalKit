@@ -22,9 +22,10 @@ The current V1 direction is:
 
 - Small local indexes: fewer than 50K chunks.
 - Primary retrieval engine: exact vector search.
-- Public retrieval modes: semantic exact-vector search and hybrid ranking.
-  BM25 remains the measured lexical component of hybrid ranking, not a
-  standalone high-level product capability.
+- Public retrieval uses one overloaded search family: embedding-only exact
+  vector search, text-only BM25 search, and text-plus-embedding ranking whose
+  behavior is controlled by query-time `alpha`. BM25 is a query variation, not
+  a separate database architecture or product capability.
 - Core priorities: correctness, speed, filtering, persistence, and Swift/iOS integration.
 
 Do not add HNSW, ANN indexing, server mode, sync, dashboards, or distributed database features unless the product spec is updated first. HNSW research exists in `docs/research/`, but it is deferred until exact/hybrid retrieval is polished and benchmarked.

@@ -4,11 +4,14 @@ import RetrievalKitShared
 
 public typealias CorpusID = RetrievalKitShared.CorpusID
 public typealias RecordID = RetrievalKitShared.RecordID
+public typealias DocumentID = RetrievalKitShared.DocumentID
 public typealias RecordType = RetrievalKitShared.RecordType
 public typealias ChunkKey = RetrievalKitShared.ChunkKey
 public typealias RecordValue = RetrievalKitShared.RecordValue
 public typealias MetadataValue = RetrievalKitShared.MetadataValue
 public typealias Record = RetrievalKitShared.Record
+public typealias Document = RetrievalKitShared.Document
+public typealias EmbeddedDocument = RetrievalKitShared.EmbeddedDocument
 public typealias Chunk = RetrievalKitShared.Chunk
 public typealias RecordInput = RetrievalKitShared.RecordInput
 
@@ -92,23 +95,6 @@ extension RetrievalKitShared.MetadataValue {
         bool_value: false
       )
     }
-  }
-}
-
-/// Caller-owned document identity and metadata.
-public struct Document: Equatable, Sendable {
-  /// Stable caller-owned document identifier.
-  public var id: String
-  /// Optional document-level text retained for caller context.
-  public var text: String
-  /// Metadata merged into each indexed chunk unless overridden by chunk metadata.
-  public var metadata: [String: MetadataValue]
-
-  /// Creates a document descriptor for upsert operations.
-  public init(id: String, text: String = "", metadata: [String: MetadataValue] = [:]) {
-    self.id = id
-    self.text = text
-    self.metadata = metadata
   }
 }
 
@@ -574,7 +560,7 @@ public actor VectorIndex {
         defer { retrievalkit_status_clear(&status) }
         let succeeded = retrievalkit_index_upsert_document(
           OpaquePointer(bitPattern: handle),
-          arena.copy(document.id),
+          arena.copy(document.id.rawValue),
           arena.copy(document.text),
           documentMetadata.pointer,
           documentMetadata.count,
@@ -867,6 +853,34 @@ public actor RetrievalQueries {
     }.value
   }
 
+  public func keywordSearch(
+    text: String,
+    topK: Int = 10,
+    filter: Filter? = nil
+  ) async throws -> [KeywordResult] {
+    let owner = owner
+    return try await Task.detached(priority: Task.currentPriority) {
+      var output = VkKeywordResultBuffer(hits: nil, count: 0)
+      let arena = CStringArena()
+      let ffiFilter = try filter?.makeFFI()
+      var status = VkStatus(code: 0, message: nil)
+      defer { retrievalkit_status_clear(&status) }
+      guard
+        retrievalkit_retrieval_keyword_search(
+          OpaquePointer(bitPattern: try owner.requireHandle()),
+          arena.copy(text),
+          topK,
+          ffiFilter?.pointer,
+          &output,
+          &status
+        )
+      else { throw RetrievalKitError.from(status: status) }
+      defer { retrievalkit_keyword_results_free(output) }
+      guard let hits = output.hits else { return [] }
+      return UnsafeBufferPointer(start: hits, count: output.count).map(KeywordResult.init)
+    }.value
+  }
+
   public func hybridSearch(
     text: String, embedding: [Float], topK: Int = 10, filter: Filter? = nil,
     alpha: Float = 0.6,
@@ -895,20 +909,70 @@ public actor RetrievalQueries {
 public actor RetrievalDatabase {
   public actor Builder {
     private var handle: UInt?
+    private let corpusID: CorpusID
+    private let metric: VectorMetric
+    private let encoding: VectorEncoding
+    private var dimension: Int?
+    private var consumed = false
+
+    /// Creates a retrieval builder whose embedding dimension is inferred from
+    /// the first document upsert.
+    public init(
+      corpusID: CorpusID = "default",
+      metric: VectorMetric = .cosine,
+      encoding: VectorEncoding = .i8ScalarQuantized
+    ) {
+      self.corpusID = corpusID
+      self.metric = metric
+      self.encoding = encoding
+    }
+
+    /// Compatibility initializer for callers that need to declare the
+    /// dimension before the first upsert.
     public init(corpusID: CorpusID, retrieval: RetrievalConfiguration) throws {
       let vector = retrieval.semantic
-      let pointer = try FFI.withStatusPointer { status in
-        corpusID.rawValue.withCString { corpus in
-          retrievalkit_retrieval_builder_new(
-            vector.dimension, vector.metric.ffiValue, vector.encoding.ffiValue,
-            corpus, status)
-        }
-      }
-      handle = UInt(bitPattern: pointer)
+      self.corpusID = corpusID
+      self.metric = vector.metric
+      self.encoding = vector.encoding
+      self.dimension = vector.dimension
+      self.handle = UInt(
+        bitPattern: try Self.makeHandle(
+          dimension: vector.dimension,
+          corpusID: corpusID,
+          metric: vector.metric,
+          encoding: vector.encoding
+        ))
     }
     deinit { if let handle { retrievalkit_retrieval_builder_free(OpaquePointer(bitPattern: handle)) } }
+
+    /// Adds or replaces one searchable document using a caller-produced
+    /// embedding. The first embedding fixes the database dimension.
+    public func upsert(_ document: Document, embedding: [Float]) throws {
+      try ensureHandle(for: embedding)
+      try upsertEncoded(
+        RecordInput(
+          record: Record(
+            id: RecordID(document.id.rawValue),
+            type: "Document",
+            metadata: document.metadata,
+            content: document.text
+          ),
+          chunks: [
+            Chunk(
+              key: ChunkKey(document.id.rawValue),
+              text: document.text
+            )
+          ]
+        ),
+        embeddings: [ChunkKey(document.id.rawValue): embedding]
+      )
+    }
+
+    /// Compatibility entry point for the record/chunk ingestion model.
     public func upsert(_ input: RecordInput, embeddings: [ChunkKey: [Float]]) throws {
-      guard let handle else { throw RetrievalKitError.core("retrieval builder was already consumed") }
+      guard !consumed else {
+        throw RetrievalKitError.core("retrieval builder was already consumed")
+      }
       let expected = Set(input.chunks.map(\.key))
       let actual = Set(embeddings.keys)
       guard expected == actual else {
@@ -920,6 +984,23 @@ public actor RetrievalDatabase {
         throw RetrievalKitError.invalidArgument(
           "embeddings contain unknown chunk keys: \(actual.subtracting(expected).map(\.rawValue).sorted().joined(separator: ", "))"
         )
+      }
+      if let first = embeddings.values.first {
+        try ensureHandle(for: first)
+      }
+      for embedding in embeddings.values {
+        try validateDimension(embedding)
+      }
+      try upsertEncoded(input, embeddings: embeddings)
+    }
+
+    private func upsertEncoded(
+      _ input: RecordInput,
+      embeddings: [ChunkKey: [Float]]
+    ) throws {
+      guard let handle else {
+        throw RetrievalKitError.missingEmbedding(
+          "at least one document embedding is required before building a retrieval database")
       }
       let batch = NativeRetrievalBatch(
         record: input.record, projectedMetadata: input.record.metadata,
@@ -935,15 +1016,66 @@ public actor RetrievalDatabase {
         }
       }
     }
+
     public func build() throws -> RetrievalDatabase {
-      guard let owned = handle else {
+      guard !consumed else {
         throw RetrievalKitError.core("retrieval builder was already consumed")
       }
+      guard let owned = handle else {
+        throw RetrievalKitError.missingEmbedding(
+          "cannot build a retrieval database before upserting a document embedding")
+      }
+      consumed = true
       handle = nil
       let pointer = try FFI.withStatusPointer {
         retrievalkit_retrieval_builder_build(OpaquePointer(bitPattern: owned), $0)
       }
       return RetrievalDatabase(pointer: pointer)
+    }
+
+    private func ensureHandle(for embedding: [Float]) throws {
+      guard !consumed else {
+        throw RetrievalKitError.core("retrieval builder was already consumed")
+      }
+      try validateDimension(embedding)
+      if handle == nil {
+        let inferredDimension = embedding.count
+        handle = UInt(
+          bitPattern: try Self.makeHandle(
+            dimension: inferredDimension,
+            corpusID: corpusID,
+            metric: metric,
+            encoding: encoding
+          ))
+        dimension = inferredDimension
+      }
+    }
+
+    private func validateDimension(_ embedding: [Float]) throws {
+      guard !embedding.isEmpty else {
+        throw RetrievalKitError.invalidDimension(
+          "embedding must contain at least one value; pass the vector produced by your embedding model"
+        )
+      }
+      if let dimension, embedding.count != dimension {
+        throw RetrievalKitError.invalidDimension(
+          "embedding dimension mismatch: expected \(dimension), got \(embedding.count); use the same embedding model for every document"
+        )
+      }
+    }
+
+    private nonisolated static func makeHandle(
+      dimension: Int,
+      corpusID: CorpusID,
+      metric: VectorMetric,
+      encoding: VectorEncoding
+    ) throws -> OpaquePointer {
+      try FFI.withStatusPointer { status in
+        corpusID.rawValue.withCString { corpus in
+          retrievalkit_retrieval_builder_new(
+            dimension, metric.ffiValue, encoding.ffiValue, corpus, status)
+        }
+      }
     }
   }
 
@@ -955,6 +1087,47 @@ public actor RetrievalDatabase {
     retrieval = RetrievalQueries(owner: owner)
   }
   public func close() { owner.close() }
+
+  /// Performs exact vector search.
+  public func search(
+    embedding: [Float],
+    limit: Int = 10,
+    filter: Filter? = nil
+  ) async throws -> [SearchResult] {
+    try await retrieval.semanticSearch(embedding: embedding, topK: limit, filter: filter)
+  }
+
+  /// Performs BM25 text search without requiring a query embedding.
+  public func search(
+    text: String,
+    limit: Int = 10,
+    filter: Filter? = nil
+  ) async throws -> [KeywordResult] {
+    try await retrieval.keywordSearch(text: text, topK: limit, filter: filter)
+  }
+
+  /// Performs weighted vector + BM25 search. `alpha` is the vector weight:
+  /// `1` is vector-only, `0` is BM25-only, and intermediate values are hybrid.
+  public func search(
+    text: String,
+    embedding: [Float],
+    alpha: Float = 0.6,
+    limit: Int = 10,
+    filter: Filter? = nil
+  ) async throws -> [HybridResult] {
+    guard (0...1).contains(alpha) else {
+      throw RetrievalKitError.invalidArgument(
+        "alpha must be between 0 and 1; use 1 for vector-only or 0 for BM25-only")
+    }
+    return try await retrieval.hybridSearch(
+      text: text,
+      embedding: embedding,
+      topK: limit,
+      filter: filter,
+      alpha: alpha
+    )
+  }
+
   public func save(to directory: URL) async throws {
     let owner = owner
     try await Task.detached(priority: Task.currentPriority) {

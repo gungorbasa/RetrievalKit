@@ -48,38 +48,40 @@ default `Package.swift` and the XCFramework.
 ## Retrieval Database
 
 Use `RetrievalDatabase` when an application needs semantic or hybrid retrieval
-without graph traversal. The canonical `RecordInput` contains no embeddings;
-embeddings are supplied only to the retrieval-capable builder.
+without graph traversal. Embeddings are produced by the caller and paired
+directly with searchable documents.
 
 ```swift
 import RetrievalKit
 
-let builder = try RetrievalDatabase.Builder(
-    corpusID: "knowledge",
-    retrieval: .init(
-        semantic: .init(dimension: 384)
-    )
+let builder = RetrievalDatabase.Builder(
+    corpusID: "knowledge"
 )
-try await builder.upsert(input, embeddings: ["summary": embedding])
+try await builder.upsert(
+    Document(id: "note-42", text: "native retrieval"),
+    embedding: embedding
+)
 let database = try await builder.build()
 
-let semantic = try await database.retrieval.semanticSearch(
+let semantic = try await database.search(
     embedding: queryEmbedding,
-    topK: 10
+    limit: 10
 )
-let hybrid = try await database.retrieval.hybridSearch(
+let lexical = try await database.search(
+    text: "native retrieval",
+    limit: 10
+)
+let hybrid = try await database.search(
     text: "native retrieval",
     embedding: queryEmbedding,
-    topK: 10,
-    alpha: 0.6
+    alpha: 0.6,
+    limit: 10
 )
 ```
 
-Every retrieval database builds exact-vector and BM25 state and exposes
-`hybridSearch` alongside `semanticSearch`. `alpha` is query-time: `1` is
-vector-only, `0` is BM25-only. There is no separate high-level keyword-only
-database mode. The `retrieval` actor handle is available only on retrieval
-products.
+The first document embedding fixes the database dimension. Every retrieval
+database builds exact-vector and BM25 state. `alpha` is query-time: `1` is
+vector-only, `0` is BM25-only, and intermediate values are hybrid.
 
 Run the focused example with:
 
@@ -88,6 +90,10 @@ swift run --package-path wrappers/swift/RetrievalKit RetrievalKitRetrievalQuicks
 ```
 
 ## Compatibility API
+
+The explicit-dimension `RetrievalConfiguration`, `RecordInput`, `Chunk`, keyed
+embedding maps, and `.retrieval` query namespace remain available while
+preview clients migrate.
 
 `VectorIndex` remains temporarily available for existing examples and migration.
 New code should use `RetrievalDatabase` so its enabled capability is explicit at

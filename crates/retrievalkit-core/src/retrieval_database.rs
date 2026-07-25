@@ -8,8 +8,8 @@ use crate::metadata::Metadata;
 use crate::record_store::{ChunkIdentity, CorpusId, Record, RecordId};
 use crate::retrieval_index::{RetrievalConfiguration, RetrievalIndex, RetrievalMode};
 use crate::types::{
-    CompactionReport, HybridHit, HybridQuery, IndexFileSizeReport, RecordChunkInput, SearchHit,
-    SearchQuery, StoredChunk,
+    CompactionReport, HybridHit, HybridQuery, IndexFileSizeReport, KeywordHit, KeywordQuery,
+    RecordChunkInput, SearchHit, SearchQuery, StoredChunk,
 };
 
 /// A graph-neutral database with semantic and hybrid retrieval enabled.
@@ -75,6 +75,18 @@ impl RetrievalDatabase {
 
     pub fn hybrid_search(&self, query: &HybridQuery) -> Result<Vec<HybridHit>> {
         self.index.hybrid_search(query)
+    }
+
+    pub fn keyword_search(&self, query: &KeywordQuery) -> Result<Vec<KeywordHit>> {
+        self.index.keyword_search(query)
+    }
+
+    pub fn keyword_search_in_candidates(
+        &self,
+        query: &KeywordQuery,
+        scope: &CandidateScope,
+    ) -> Result<Vec<KeywordHit>> {
+        self.index.keyword_search_in_candidates(query, scope)
     }
 
     pub fn hybrid_search_in_candidates(
@@ -201,8 +213,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let directory =
-            std::env::temp_dir().join(format!("retrievalkit-semantic-{}-{nonce}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!(
+            "retrievalkit-semantic-{}-{nonce}",
+            std::process::id()
+        ));
         let report = database
             .as_compatibility_index()
             .save_to_dir_with_options(&directory, crate::IndexPersistenceOptions::vector_only())

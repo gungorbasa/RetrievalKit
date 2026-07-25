@@ -1,155 +1,20 @@
 # RetrievalKit for Swift
 
-RetrievalKit is one local retrieval system with two Swift packages:
+RetrievalKit is a local-first retrieval SDK with three capability-specific
+database types:
 
-- Link `RetrievalKitGraph` when records have useful relationships. It already
-  contains semantic and hybrid retrieval.
-- Link `RetrievalKit` when the corpus is flat and graph traversal would add no
-  value.
+| Use case | Database |
+|---|---|
+| Searchable documents without relationships | `RetrievalDatabase` |
+| Graph records and traversal without retrieval | `GraphDatabase` |
+| Graph traversal followed by scoped retrieval | `GraphRetrievalDatabase` |
 
-The packages contain alternative native aggregates, so an app links one or the
-other—never both. The examples below use the same Project Apollo notes to show
-that graph scope changes the candidate set, not the ranker.
+The base and graph packages contain alternative native aggregates. An
+application links `RetrievalKit` or `RetrievalKitGraph`, never both.
 
-## Choose the right path
+## Retrieval only
 
-| Your data and question | Use | Why |
-|---|---|---|
-| Notes belong to projects, messages belong to threads, or documents cite one another | `RetrievalKitGraph` with `GraphRetrievalDatabase` | Traverse relationships to choose candidates, then rank those candidates |
-| Records form a flat collection | `RetrievalKit` with `RetrievalDatabase` | Get semantic and hybrid retrieval without defining a graph |
-| You have query text and an embedding | Hybrid search | Meaning and exact keyword evidence can support each other |
-| You have only an embedding, or wording should not matter | Semantic search | Rank by vector similarity alone |
-| You need hard tenant, status, type, or date rules | Metadata filters | Filters are constraints and work with either retrieval mode |
-| You only need traversal and candidate projection | `GraphDatabase` | Avoid retrieval configuration and embeddings entirely |
-
-Hybrid search is the normal default for app and document search. Semantic-only
-search is a query variation for cases where keyword evidence is unavailable or
-deliberately irrelevant; it is not a separate database architecture.
-
-## Complete product: graph-scoped hybrid search
-
-Suppose a workspace contains notes from many projects. The user asks:
-“Why did we choose Swift?” while viewing Project Apollo.
-
-The graph answers *where to search*: start at Apollo and follow `contains` to
-its notes. The metadata filter requires an approved note. Hybrid retrieval then
-answers *which candidate ranks first* using semantic and BM25 evidence.
-
-Build the graph-enabled XCFramework and run the checked-in program:
-
-```bash
-scripts/build-xcframework.sh --macos-only --graph
-swift run --package-path wrappers/swift/RetrievalKitGraph \
-  RetrievalKitGraphRetrievalQuickstart
-```
-
-Complete runnable source:
-
-```swift
-import RetrievalKitGraph
-
-@main
-struct RetrievalKitGraphRetrievalQuickstart {
-  static func main() async throws {
-    let schema = GraphSchema(
-      recordNodes: [
-        GraphRecordNodeSchema(recordType: "Project", nodeType: "Project"),
-        GraphRecordNodeSchema(recordType: "Note", nodeType: "Note"),
-      ],
-      relationships: [
-        GraphRelationshipSchema(
-          relationshipType: "contains",
-          sourceNodeType: "Project",
-          targetNodeType: "Note",
-          sourceField: "note_ids",
-          cardinality: .many
-        )
-      ]
-    )
-    let builder = try GraphRetrievalDatabase.Builder(
-      corpusID: "project-notes",
-      graph: schema,
-      retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32)
-      )
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "apollo",
-          type: "Project",
-          fields: [
-            "note_ids": .list([
-              .string("decision-swift"),
-              .string("launch-checklist"),
-            ])
-          ]
-        )
-      ),
-      embeddings: [:]
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "decision-swift",
-          type: "Note",
-          metadata: ["status": .string("approved")]
-        ),
-        chunks: [
-          Chunk(
-            key: "body",
-            text: "We chose Swift for Project Apollo's Apple platform client."
-          )
-        ]
-      ),
-      embeddings: ["body": [1, 0]]
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "launch-checklist",
-          type: "Note",
-          metadata: ["status": .string("draft")]
-        ),
-        chunks: [
-          Chunk(
-            key: "body",
-            text: "Project Apollo launch checklist and release owners."
-          )
-        ]
-      ),
-      embeddings: ["body": [0, 1]]
-    )
-    let database = try await builder.build()
-    let selection = try await database.graph.query(
-      from: [GraphNodeID(nodeType: "Project", recordID: "apollo")],
-      traversing: [GraphTraversal(relationship: "contains")]
-    )
-    let hits = try await database.retrieval.hybridSearch(
-      text: "Why did we choose Swift?",
-      embedding: [1, 0],
-      topK: 1,
-      within: selection,
-      filter: .equals("status", .string("approved"))
-    )
-    print("graph-hybrid=\(hits[0].recordID)")
-  }
-}
-```
-
-Expected output:
-
-```text
-graph-hybrid=decision-swift
-```
-
-The relationship is application data: RetrievalKit validates and traverses
-`note_ids`, but it does not extract or invent relationships.
-
-## Simpler product: hybrid search without a graph
-
-If `project` is just metadata and users do not navigate relationships, use the
-base package:
+Build the local XCFramework and run the checked-in example:
 
 ```bash
 scripts/build-xcframework.sh --macos-only
@@ -157,123 +22,211 @@ swift run --package-path wrappers/swift/RetrievalKit \
   RetrievalKitRetrievalQuickstart
 ```
 
-The complete program is:
+The caller owns document IDs, text, metadata, and embeddings. RetrievalKit
+infers the dimension from the first embedding:
 
 ```swift
 import RetrievalKit
 
-@main
-struct RetrievalKitRetrievalQuickstart {
-  static func main() async throws {
-    let builder = try RetrievalDatabase.Builder(
-      corpusID: "project-notes",
-      retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32)
-      )
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "decision-swift",
-          type: "Note",
-          metadata: [
-            "project": .string("apollo"),
-            "status": .string("approved"),
-          ]
-        ),
-        chunks: [
-          Chunk(
-            key: "body",
-            text: "We chose Swift for Project Apollo's Apple platform client."
-          )
-        ]
-      ),
-      embeddings: ["body": [1, 0]]
-    )
-    try await builder.upsert(
-      RecordInput(
-        record: Record(
-          id: "launch-checklist",
-          type: "Note",
-          metadata: [
-            "project": .string("apollo"),
-            "status": .string("draft"),
-          ]
-        ),
-        chunks: [
-          Chunk(
-            key: "body",
-            text: "Project Apollo launch checklist and release owners."
-          )
-        ]
-      ),
-      embeddings: ["body": [0, 1]]
-    )
-    let database = try await builder.build()
-    let hits = try await database.retrieval.hybridSearch(
-      text: "Why did we choose Swift?",
-      embedding: [1, 0],
-      topK: 1
-    )
-    print("hybrid=\(hits[0].documentID)")
-  }
-}
-```
+let builder = RetrievalDatabase.Builder(
+  corpusID: "project-notes",
+  encoding: .f32
+)
 
-Expected output:
+try await builder.upsert(
+  Document(
+    id: "decision-swift",
+    text: "We chose Swift for Project Apollo's Apple platform client.",
+    metadata: [
+      "project": .string("apollo"),
+      "status": .string("approved"),
+    ]
+  ),
+  embedding: [1, 0]
+)
 
-```text
-hybrid=decision-swift
-```
+try await builder.upsert(
+  Document(
+    id: "launch-checklist",
+    text: "Project Apollo launch checklist and release owners.",
+    metadata: [
+      "project": .string("apollo"),
+      "status": .string("draft"),
+    ]
+  ),
+  embedding: [0, 1]
+)
 
-For a hard Apollo-only constraint, pass
-`filter: .all([.equals("project", .string("apollo")), ...])`. Use a graph
-selection instead when “inside Apollo” means traversing explicit relationships
-rather than comparing fields.
+let database = try await builder.build()
 
-## Semantic-only is a query variation
-
-Both database types expose semantic search. Reuse the database and omit query
-text:
-
-```swift
-// Graph-enabled database; `within` is optional.
-let semanticHits = try await database.retrieval.semanticSearch(
+let hits = try await database.search(
+  text: "Why did we choose Swift?",
   embedding: [1, 0],
-  topK: 1,
-  within: selection,
-  filter: .equals("status", .string("approved"))
+  alpha: 0.6,
+  limit: 1
 )
 ```
 
-On a base `RetrievalDatabase`, call the same method without `within`:
+Expected first document ID:
+
+```text
+decision-swift
+```
+
+## One search family
+
+The arguments determine the retrieval behavior:
 
 ```swift
-let semanticHits = try await database.retrieval.semanticSearch(
-  embedding: [1, 0],
-  topK: 1,
+// Exact vector search.
+let semantic = try await database.search(
+  embedding: queryEmbedding,
+  limit: 10
+)
+
+// BM25 text search.
+let lexical = try await database.search(
+  text: "private search",
+  limit: 10
+)
+
+// Weighted vector + BM25 search.
+let hybrid = try await database.search(
+  text: "private search",
+  embedding: queryEmbedding,
+  alpha: 0.6,
+  limit: 10,
   filter: .equals("project", .string("apollo"))
 )
 ```
 
-Choose this when there is no meaningful query text—for example, finding notes
-similar to another note—or when exact terms should intentionally have no
-influence.
+`alpha` is the vector weight. `1` is vector-only, `0` is BM25-only, and values
+between them combine both signals.
 
-## Traces and persistence
+## Graph only
 
-Hybrid hits expose the fused score and an explanation of each component:
+Graph-only databases never accept embeddings or retrieval configuration:
 
 ```swift
-let hit = hits[0]
-print(hit.trace.vectorRank as Any)
-print(hit.trace.keywordRank as Any)
-print(hit.trace.matchedTerms)
-print(hit.trace.filterMatched)
+import RetrievalKitGraph
+
+let builder = try GraphDatabase.Builder(
+  corpusID: "project-notes",
+  schema: schema
+)
+
+try await builder.upsert(
+  Record(
+    id: "apollo",
+    type: "Project",
+    fields: [
+      "note_ids": .list([
+        .string("decision-swift"),
+        .string("launch-checklist"),
+      ])
+    ]
+  )
+)
+
+try await builder.upsert(
+  Record(
+    id: "decision-swift",
+    type: "Note",
+    content: "We chose Swift for Project Apollo."
+  )
+)
+
+let database = try await builder.build()
+let result = try await database.query(
+  from: [GraphNodeID(nodeType: "Project", recordID: "apollo")],
+  traversing: [GraphTraversal(relationship: "contains")]
+)
 ```
 
-Save, validate, and reload the complete graph, corpus, retrieval indexes, and
-metadata together:
+The graph result contains matched nodes and paths and can be used without
+retrieval.
+
+## Graph and retrieval together
+
+Build and run the combined example:
+
+```bash
+scripts/build-xcframework.sh --macos-only --graph
+swift run --package-path wrappers/swift/RetrievalKitGraph \
+  RetrievalKitGraphRetrievalQuickstart
+```
+
+The common path stores graph records without embeddings and searchable records
+with one caller-produced embedding:
+
+```swift
+let builder = try GraphRetrievalDatabase.Builder(
+  corpusID: "project-notes",
+  graph: schema,
+  encoding: .f32
+)
+
+try await builder.upsert(project)
+
+try await builder.upsert(
+  Record(
+    id: "decision-swift",
+    type: "Note",
+    metadata: ["status": .string("approved")],
+    content: "We chose Swift for Project Apollo's Apple platform client."
+  ),
+  embedding: [1, 0]
+)
+
+let database = try await builder.build()
+let selection = try await database.query(
+  from: [GraphNodeID(nodeType: "Project", recordID: "apollo")],
+  traversing: [GraphTraversal(relationship: "contains")]
+)
+
+let hits = try await database.search(
+  text: "Why did we choose Swift?",
+  embedding: [1, 0],
+  alpha: 0.6,
+  within: selection,
+  limit: 1,
+  filter: .equals("status", .string("approved"))
+)
+```
+
+The graph selects candidates; the same vector + BM25 ranker orders those
+candidates. Graph evidence is not silently mixed into the retrieval score.
+
+Combined hits expose both identities:
+
+```swift
+hits[0].documentID  // searchable document
+hits[0].recordID    // owning graph record
+```
+
+For a record with multiple searchable documents, use the advanced overload:
+
+```swift
+try await builder.upsert(
+  record,
+  documents: [
+    EmbeddedDocument(
+      id: "note-42:summary",
+      text: summary,
+      embedding: summaryEmbedding
+    ),
+    EmbeddedDocument(
+      id: "note-42:body",
+      text: body,
+      embedding: bodyEmbedding
+    ),
+  ]
+)
+```
+
+## Persistence
+
+Save, validate, and load complete database generations:
 
 ```swift
 let snapshot = URL(fileURLWithPath: "project-notes.rk")
@@ -282,23 +235,17 @@ try GraphRetrievalDatabase.validate(at: snapshot)
 let reloaded = try GraphRetrievalDatabase.load(from: snapshot)
 ```
 
-Use `RetrievalDatabase.save`, `validate`, and `load` for the base package.
-Persistence, filtering, graph traversal, ranking, and trace construction all
-run in the shared Rust core.
+Use the corresponding `RetrievalDatabase` or `GraphDatabase` static methods for
+the other capability sets.
 
 ## Embeddings stay your choice
 
-The two-dimensional vectors above make the example deterministic; they are not
-a production embedding model. RetrievalKit requires one caller-provided
-embedding per indexed chunk and a query embedding from the same model.
+The two-dimensional vectors above make the examples deterministic; they are not
+a production embedding model. Bring embeddings from any model or use
+[`EmbeddingKit`](../../wrappers/swift/EmbeddingKit/README.md). Every document
+and query embedding in one database must come from the same model.
 
-For an on-device text-to-results pipeline, use
-[`EmbeddingKit`](../../wrappers/swift/EmbeddingKit/README.md) with
-[`RetrievalKitPipeline`](../../wrappers/swift/RetrievalKitPipeline/README.md).
-If your app sends text to a remote embedding API, that embedding step is remote
-even though indexing and retrieval remain local.
-
-For lower-level build, ownership, and API details, see the
+For lower-level ownership and build details, see the
 [`RetrievalKit` wrapper reference](../../wrappers/swift/RetrievalKit/README.md)
 and
 [`RetrievalKitGraph` wrapper reference](../../wrappers/swift/RetrievalKitGraph/README.md).

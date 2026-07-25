@@ -6,6 +6,37 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-23 owner sequencing decision: pause release qualification and all
+  new benchmark work until the SDK implementation is finalized. Do not rebuild
+  the release candidate, provision Phase 7 scheduled/release evidence, resume
+  device work, or add another performance/quality benchmark without a new
+  explicit owner task. The active slice is SDK API, behavior, wrapper parity,
+  and developer-experience completion. The already-collected evidence and
+  fail-closed publication gates remain intact for later resumption.
+- 2026-07-24 SDK-finalization approach: combine parity-first closure with
+  developer-experience work. Contract dependencies set the order, while native
+  API naming, errors, types, examples, and docs close inside every slice rather
+  than waiting for a final polish pass. The planned order is canonical
+  result/trace parity, Python stable candidate projection, retrieval-only
+  cross-wrapper conformance, typed Python graph query transport, then a bounded
+  public API/DX closure audit. Design record:
+  `~/.gstack/projects/gungorbasa-VectorKit/gungorbasa-main-design-20260724-103816.md`.
+- 2026-07-24 public ingestion implementation: Swift now uses
+  capability-specific progressive APIs and keeps record/document ownership
+  internal. Retrieval-only callers
+  upsert a `Document` with its caller-produced embedding; graph-only callers
+  upsert a `Record`; the common combined path upserts a `Record` with its
+  embedding and lets RetrievalKit create and link the searchable document
+  internally. An advanced combined overload accepts multiple
+  `EmbeddedDocument` values, each with a stable public document ID, text, and
+  caller-produced embedding. Do not expose `ChunkKey`, keyed embedding maps, or
+  explicit record/document linking in the common public path. Internally retain
+  separate stable record and searchable-document identities so text splitting
+  does not inflate or destabilize the graph. The first embedding now infers the
+  database dimension; direct `search` overloads cover vector-only, BM25-only,
+  and `alpha`-weighted hybrid queries. The explicit-dimension builders,
+  `RecordInput`, keyed embedding maps, and query namespaces remain temporary
+  compatibility surfaces.
 - 2026-07-23: the root README now presents RetrievalKit as one hybrid-search
   product. Canonical, runnable Project Apollo walkthroughs live in
   `docs/guides/swift.md` and `docs/guides/python.md`; wrapper READMEs remain
@@ -262,7 +293,7 @@ implemented, or superseded by the product spec.
   retrieval-capable database builds semantic and BM25 state, and high-level
   hybrid calls blend them directly with query-time `alpha` (`1` vector-only,
   `0` BM25-only). Compact snapshots may omit persisted BM25 and rebuild it from
-  canonical chunk text on load. The graph aggregate ABI is version 7 after
+  canonical chunk text on load. The graph aggregate ABI was version 7 after
   typed graph candidate projection.
 
 - The capability-separated architecture is approved. `CorpusIndex` becomes the
@@ -284,7 +315,9 @@ implemented, or superseded by the product spec.
 - Retrieval configuration now always builds exact-vector and BM25 state.
   Hybrid blending is selected directly per query with `alpha`; compact
   persistence may omit BM25 bytes and rebuild them from canonical chunk text
-  on load. The graph aggregate ABI is version 7.
+  on load. That implementation used graph aggregate ABI version 7; the
+  progressive Swift API moves the aggregate to ABI version 8 by adding stable
+  document and owner-record identities to result buffers.
   Three interleaved before/after benchmark pairs measured exact -1.21%, BM25
   -2.61%, and hybrid +0.35%, passing the +3% p95 gate.
 
@@ -718,29 +751,33 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
 
 ## Likely Next Tasks
 
-The active slice is `v0.1.0` release qualification and distribution. Benchmark
-Phases 0–7, persistence hardening, wrapper concurrency, memory qualification,
-and the release-candidate implementation are complete. Do not begin another
-benchmark phase or resume physical-device stress work without a new explicit
-owner task.
+The active slice is SDK implementation finalization. Benchmark Phases 0–7 and
+the release-candidate implementation are preserved but intentionally parked.
+Do not resume candidate rebuilding, release-evidence provisioning, publication,
+or physical-device work without a new explicit owner task.
 
-Complete the release gates in this order:
+The known SDK-completion gaps, in dependency order, are:
 
-1. Select the final clean release revision and rebuild the complete candidate.
-   The recorded candidate predates later README changes and must not be treated
-   as evidence for the final revision.
-2. Provision passing Phase 7 scheduled/full and controlled release results for
-   that same revision. Release qualification consumes pre-collected evidence
-   only; it authorizes no device command and exposes no 100K lane.
-3. Authorize README claim handling as either historical frozen-revision
-   observations or release-revision claims backed by new accepted evidence.
-4. Add the owner publication authorization binding the revision, legal
-   approvals, Phase 7 results, claim mode, and owner identity.
-5. Complete the approval checklist, create a verified signed `v0.1.0` tag,
-   obtain protected-environment approval, run the guarded publication workflow,
-   and verify fresh remote SwiftPM and PyPI consumers.
+1. Freeze one canonical public result and trace contract across Rust, FFI,
+   Swift, and Python. Swift capability results still omit metadata and hybrid
+   fusion configuration that Python exposes.
+2. Expose corpus-owned stable candidate-identity projection through Python
+   graph APIs, matching the existing Rust and Swift operation rather than
+   reproducing filtering or generation checks in Python.
+3. Add a retrieval-only cross-wrapper conformance fixture covering compact
+   persistence with BM25 rebuild, metadata filters, alpha-controlled hybrid
+   ordering, and exact result/trace equality.
+4. Replace JSON transport on the Python graph query path with typed PyO3
+   conversion. Wrapper-overhead benchmarking remains deferred with the broader
+   benchmark pause.
+5. Run a focused public-API and developer-experience closure audit after these
+   contracts land; fix only SDK implementation/documentation gaps found there.
 
-See `docs/product/release-process.md` and
+The formal gap source is
+`docs/product/reports/cross-language-wrapper-parity-audit.md`.
+
+When the owner explicitly resumes release work, continue the parked release
+gates from `docs/product/release-process.md` and
 `docs/product/release-approval-checklist.md`. Until every gate passes, the
 release remains a local candidate and external publication stays blocked.
 

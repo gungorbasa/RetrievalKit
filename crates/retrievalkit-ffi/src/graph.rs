@@ -2,7 +2,6 @@ use std::ffi::c_char;
 use std::path::Path;
 use std::slice;
 
-use serde::Deserialize;
 use retrievalkit_core::{
     CandidateScope, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, ExactVectorIndex, HybridHit,
     HybridQuery, IndexConfig, KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput,
@@ -14,6 +13,7 @@ use retrievalkit_graph::{
     GraphRetrievalDatabase, GraphScalar, NodeId, NodeSource, QueryLimits, Seed, Traverse,
 };
 use retrievalkit_graph::{FieldPath, GraphSchema, NodeType, RelationshipType};
+use serde::Deserialize;
 
 use super::{
     ffi_bool, ffi_ptr, optional_filter, parse_encoding_code, parse_hybrid_fusion, parse_metric,
@@ -223,7 +223,7 @@ struct GraphOnlyRecordChunk {
 
 #[no_mangle]
 pub extern "C" fn retrievalkit_graph_ffi_abi_version() -> u32 {
-    7
+    8
 }
 
 #[no_mangle]
@@ -647,6 +647,41 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_semantic_search(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn retrievalkit_graph_retrieval_keyword_search(
+    database: *const VkGraphRetrievalDatabase,
+    within: *const VkGraphResult,
+    text: *const c_char,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkKeywordResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }.ok_or_else(|| {
+            FfiError::invalid_argument("graph retrieval database must not be null")
+        })?;
+        let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = if let Some(selection) = unsafe { within.as_ref() } {
+            database
+                .database
+                .keyword_search_in_selection(&query, &selection.result)?
+        } else {
+            database.database.keyword_search(&query)?
+        };
+        unsafe {
+            *out_results = capability_keyword_buffer(&database.database, hits);
+        }
+        Ok(())
+    })
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn retrievalkit_graph_retrieval_hybrid_search(
     database: *const VkGraphRetrievalDatabase,
     within: *const VkGraphResult,
@@ -1013,7 +1048,9 @@ pub unsafe extern "C" fn retrievalkit_graph_scope_free(scope: *mut VkGraphScope)
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_graph_scope_source_nodes(scope: *const VkGraphScope) -> usize {
+pub unsafe extern "C" fn retrievalkit_graph_scope_source_nodes(
+    scope: *const VkGraphScope,
+) -> usize {
     unsafe { scope.as_ref() }.map_or(0, |value| value.source_nodes)
 }
 #[no_mangle]
@@ -1366,22 +1403,55 @@ fn capability_search_buffer(
 ) -> VkSearchResultBuffer {
     let hits = hits
         .into_iter()
-        .map(|hit| VkSearchHit {
-            chunk_id: hit.chunk_id,
-            document_id: string_to_owned_ptr(&hit.document_id),
-            text: string_to_owned_ptr(
-                database
-                    .corpus()
-                    .chunk(hit.chunk_id)
-                    .map_or("", |chunk| chunk.text.as_str()),
-            ),
-            score: hit.score,
-            vector_score: hit.trace.vector_score,
-            filter_matched: hit.trace.filter_matched,
+        .map(|hit| {
+            let (document_id, record_id) =
+                capability_result_ids(database, hit.chunk_id, &hit.document_id);
+            VkSearchHit {
+                chunk_id: hit.chunk_id,
+                document_id,
+                record_id,
+                text: string_to_owned_ptr(
+                    database
+                        .corpus()
+                        .chunk(hit.chunk_id)
+                        .map_or("", |chunk| chunk.text.as_str()),
+                ),
+                score: hit.score,
+                vector_score: hit.trace.vector_score,
+                filter_matched: hit.trace.filter_matched,
+            }
         })
         .collect();
     let (hits, count) = boxed_buffer(hits);
     VkSearchResultBuffer { hits, count }
+}
+
+fn capability_keyword_buffer(
+    database: &GraphRetrievalDatabase,
+    hits: Vec<KeywordHit>,
+) -> VkKeywordResultBuffer {
+    let hits = hits
+        .into_iter()
+        .map(|hit| {
+            let (document_id, record_id) =
+                capability_result_ids(database, hit.chunk_id, &hit.document_id);
+            VkKeywordHit {
+                chunk_id: hit.chunk_id,
+                document_id,
+                record_id,
+                text: string_to_owned_ptr(
+                    database
+                        .corpus()
+                        .chunk(hit.chunk_id)
+                        .map_or("", |chunk| chunk.text.as_str()),
+                ),
+                score: hit.score,
+                matched_terms: string_array(hit.matched_terms),
+            }
+        })
+        .collect();
+    let (hits, count) = boxed_buffer(hits);
+    VkKeywordResultBuffer { hits, count }
 }
 
 fn capability_hybrid_buffer(
@@ -1390,41 +1460,62 @@ fn capability_hybrid_buffer(
 ) -> VkHybridResultBuffer {
     let hits = hits
         .into_iter()
-        .map(|hit| VkHybridHit {
-            chunk_id: hit.chunk_id,
-            document_id: string_to_owned_ptr(&hit.document_id),
-            text: string_to_owned_ptr(
-                database
-                    .corpus()
-                    .chunk(hit.chunk_id)
-                    .map_or("", |chunk| chunk.text.as_str()),
-            ),
-            score: hit.score,
-            has_vector_score: hit.vector_score.is_some(),
-            vector_score: hit.vector_score.unwrap_or_default(),
-            has_keyword_score: hit.keyword_score.is_some(),
-            keyword_score: hit.keyword_score.unwrap_or_default(),
-            has_vector_rank: hit.trace.vector_rank.is_some(),
-            vector_rank: hit.trace.vector_rank.unwrap_or_default(),
-            has_keyword_rank: hit.trace.keyword_rank.is_some(),
-            keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
-            has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
-            normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
-            has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
-            normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
-            matched_terms: string_array(hit.trace.matched_terms),
-            filter_matched: hit.trace.filter_matched,
+        .map(|hit| {
+            let (document_id, record_id) =
+                capability_result_ids(database, hit.chunk_id, &hit.document_id);
+            VkHybridHit {
+                chunk_id: hit.chunk_id,
+                document_id,
+                record_id,
+                text: string_to_owned_ptr(
+                    database
+                        .corpus()
+                        .chunk(hit.chunk_id)
+                        .map_or("", |chunk| chunk.text.as_str()),
+                ),
+                score: hit.score,
+                has_vector_score: hit.vector_score.is_some(),
+                vector_score: hit.vector_score.unwrap_or_default(),
+                has_keyword_score: hit.keyword_score.is_some(),
+                keyword_score: hit.keyword_score.unwrap_or_default(),
+                has_vector_rank: hit.trace.vector_rank.is_some(),
+                vector_rank: hit.trace.vector_rank.unwrap_or_default(),
+                has_keyword_rank: hit.trace.keyword_rank.is_some(),
+                keyword_rank: hit.trace.keyword_rank.unwrap_or_default(),
+                has_normalized_vector_score: hit.trace.normalized_vector_score.is_some(),
+                normalized_vector_score: hit.trace.normalized_vector_score.unwrap_or_default(),
+                has_normalized_keyword_score: hit.trace.normalized_keyword_score.is_some(),
+                normalized_keyword_score: hit.trace.normalized_keyword_score.unwrap_or_default(),
+                matched_terms: string_array(hit.trace.matched_terms),
+                filter_matched: hit.trace.filter_matched,
+            }
         })
         .collect();
     let (hits, count) = boxed_buffer(hits);
     VkHybridResultBuffer { hits, count }
 }
+
+fn capability_result_ids(
+    database: &GraphRetrievalDatabase,
+    chunk_id: u64,
+    fallback_record_id: &str,
+) -> (*mut c_char, *mut c_char) {
+    let identity = database.corpus().chunk_identity(chunk_id);
+    let document_id = identity.map_or(fallback_record_id, |value| value.chunk_key.as_str());
+    let record_id = identity.map_or(fallback_record_id, |value| value.record_id.as_str());
+    (
+        string_to_owned_ptr(document_id),
+        string_to_owned_ptr(record_id),
+    )
+}
+
 fn graph_search_buffer(index: &VkGraphIndex, hits: Vec<SearchHit>) -> VkSearchResultBuffer {
     let hits = hits
         .into_iter()
         .map(|hit| VkSearchHit {
             chunk_id: hit.chunk_id,
             document_id: string_to_owned_ptr(&hit.document_id),
+            record_id: string_to_owned_ptr(&hit.document_id),
             text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
             score: hit.score,
             vector_score: hit.trace.vector_score,
@@ -1440,6 +1531,7 @@ fn graph_keyword_buffer(index: &VkGraphIndex, hits: Vec<KeywordHit>) -> VkKeywor
         .map(|hit| VkKeywordHit {
             chunk_id: hit.chunk_id,
             document_id: string_to_owned_ptr(&hit.document_id),
+            record_id: string_to_owned_ptr(&hit.document_id),
             text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
             score: hit.score,
             matched_terms: string_array(hit.matched_terms),
@@ -1454,6 +1546,7 @@ fn graph_hybrid_buffer(index: &VkGraphIndex, hits: Vec<HybridHit>) -> VkHybridRe
         .map(|hit| VkHybridHit {
             chunk_id: hit.chunk_id,
             document_id: string_to_owned_ptr(&hit.document_id),
+            record_id: string_to_owned_ptr(&hit.document_id),
             text: string_to_owned_ptr(index.index.chunk_text(hit.chunk_id).unwrap_or("")),
             score: hit.score,
             has_vector_score: hit.vector_score.is_some(),
@@ -1482,9 +1575,15 @@ impl From<retrievalkit_graph::GraphError> for FfiError {
             retrievalkit_graph::GraphError::InvalidSchema { .. } => VK_GRAPH_STATUS_INVALID_SCHEMA,
             retrievalkit_graph::GraphError::InvalidRecord { .. }
             | retrievalkit_graph::GraphError::InvalidQuery { .. }
-            | retrievalkit_graph::GraphError::MissingTarget { .. } => VK_GRAPH_STATUS_INVALID_IDENTITY,
-            retrievalkit_graph::GraphError::InvalidSnapshot { .. } => VK_GRAPH_STATUS_CORRUPT_SNAPSHOT,
-            retrievalkit_graph::GraphError::StaleGeneration { .. } => VK_GRAPH_STATUS_STALE_GENERATION,
+            | retrievalkit_graph::GraphError::MissingTarget { .. } => {
+                VK_GRAPH_STATUS_INVALID_IDENTITY
+            }
+            retrievalkit_graph::GraphError::InvalidSnapshot { .. } => {
+                VK_GRAPH_STATUS_CORRUPT_SNAPSHOT
+            }
+            retrievalkit_graph::GraphError::StaleGeneration { .. } => {
+                VK_GRAPH_STATUS_STALE_GENERATION
+            }
             retrievalkit_graph::GraphError::IncompatibleVersion { .. } => {
                 VK_GRAPH_STATUS_INCOMPATIBLE_VERSION
             }
@@ -1638,7 +1737,11 @@ mod tests {
         };
 
         let graph_builder = unsafe {
-            retrievalkit_graph_database_builder_new(corpus.as_ptr(), schema_json.as_ptr(), &mut status)
+            retrievalkit_graph_database_builder_new(
+                corpus.as_ptr(),
+                schema_json.as_ptr(),
+                &mut status,
+            )
         };
         assert!(!graph_builder.is_null());
         let graph_batch = CString::new(
@@ -1657,7 +1760,8 @@ mod tests {
                 &mut status,
             )
         });
-        let graph = unsafe { retrievalkit_graph_database_builder_build(graph_builder, &mut status) };
+        let graph =
+            unsafe { retrievalkit_graph_database_builder_build(graph_builder, &mut status) };
         assert!(!graph.is_null());
         unsafe { retrievalkit_graph_database_free(graph) };
 
@@ -1916,7 +2020,8 @@ mod tests {
             code: 0,
             message: std::ptr::null_mut(),
         };
-        let builder = unsafe { retrievalkit_graph_builder_new(2, 1, 0, corpus.as_ptr(), &mut status) };
+        let builder =
+            unsafe { retrievalkit_graph_builder_new(2, 1, 0, corpus.as_ptr(), &mut status) };
         assert!(!builder.is_null());
 
         let record = Record {
@@ -1984,7 +2089,8 @@ mod tests {
                 max_working_bytes: 1024 * 1024,
             },
         };
-        let result = unsafe { retrievalkit_graph_query(index, query, std::ptr::null(), &mut status) };
+        let result =
+            unsafe { retrievalkit_graph_query(index, query, std::ptr::null(), &mut status) };
         assert!(!result.is_null());
         assert_eq!(unsafe { retrievalkit_graph_result_count(result) }, 1);
         let mut matched = VkGraphMatch {
@@ -2008,7 +2114,10 @@ mod tests {
         );
         let scope = unsafe { retrievalkit_graph_result_project(index, result, &mut status) };
         assert!(!scope.is_null());
-        assert_eq!(unsafe { retrievalkit_graph_scope_resolved_chunks(scope) }, 1);
+        assert_eq!(
+            unsafe { retrievalkit_graph_scope_resolved_chunks(scope) },
+            1
+        );
         let embedding = [1.0_f32, 0.0];
         let mut exact = VkSearchResultBuffer {
             hits: std::ptr::null_mut(),
@@ -2070,10 +2179,14 @@ mod tests {
             value_count: values.len(),
             ..query
         };
-        let equality_result =
-            unsafe { retrievalkit_graph_query(index, equality_query, std::ptr::null(), &mut status) };
+        let equality_result = unsafe {
+            retrievalkit_graph_query(index, equality_query, std::ptr::null(), &mut status)
+        };
         assert!(!equality_result.is_null());
-        assert_eq!(unsafe { retrievalkit_graph_result_count(equality_result) }, 1);
+        assert_eq!(
+            unsafe { retrievalkit_graph_result_count(equality_result) },
+            1
+        );
         unsafe { retrievalkit_graph_result_free(equality_result) };
 
         let owns = CString::new("owns").unwrap();
@@ -2088,10 +2201,14 @@ mod tests {
             step_count: steps.len(),
             ..query
         };
-        let traversal_result =
-            unsafe { retrievalkit_graph_query(index, traversal_query, std::ptr::null(), &mut status) };
+        let traversal_result = unsafe {
+            retrievalkit_graph_query(index, traversal_query, std::ptr::null(), &mut status)
+        };
         assert!(!traversal_result.is_null());
-        assert_eq!(unsafe { retrievalkit_graph_result_count(traversal_result) }, 1);
+        assert_eq!(
+            unsafe { retrievalkit_graph_result_count(traversal_result) },
+            1
+        );
         let mut edge = VkGraphPathEdge {
             relationship_type: std::ptr::null_mut(),
             source: VkGraphOwnedNode {

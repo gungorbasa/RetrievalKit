@@ -20,10 +20,10 @@ let builder = try GraphDatabase.Builder(
     corpusID: "knowledge",
     schema: graphSchema
 )
-try await builder.upsert(input)
+try await builder.upsert(record)
 let database = try await builder.build()
 
-let selection = try await database.graph.query(
+let selection = try await database.query(
     nodeType: "Topic",
     field: "title",
     equals: .string("Rust")
@@ -42,25 +42,29 @@ selection can scope retrieval without copying records or exposing internal IDs:
 ```swift
 let builder = try GraphRetrievalDatabase.Builder(
     corpusID: "knowledge",
-    graph: graphSchema,
-    retrieval: .init(
-        semantic: .init(dimension: 384)
-    )
+    graph: graphSchema
 )
-try await builder.upsert(input, embeddings: ["summary": embedding])
+try await builder.upsert(
+    Record(
+        id: "note-42",
+        type: "Topic",
+        content: "native retrieval"
+    ),
+    embedding: embedding
+)
 let database = try await builder.build()
 
-let selection = try await database.graph.query(
+let selection = try await database.query(
     nodeType: "Topic",
     field: "title",
     equals: .string("Rust")
 )
-let hits = try await database.retrieval.hybridSearch(
+let hits = try await database.search(
     text: "native retrieval",
     embedding: queryEmbedding,
     alpha: 0.6,
-    topK: 10,
-    within: selection
+    within: selection,
+    limit: 10
 )
 ```
 

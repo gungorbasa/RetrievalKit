@@ -4,7 +4,6 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
 
-use serde::Deserialize;
 use retrievalkit_core::{
     ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex, Filter,
     HybridFusion, HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit,
@@ -12,6 +11,7 @@ use retrievalkit_core::{
     RetrievalDatabase, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 use retrievalkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
+use serde::Deserialize;
 
 mod bench;
 #[cfg(feature = "graph")]
@@ -141,6 +141,7 @@ pub struct VkTextChunkBuffer {
 pub struct VkSearchHit {
     pub chunk_id: u64,
     pub document_id: *mut c_char,
+    pub record_id: *mut c_char,
     pub text: *mut c_char,
     pub score: c_float,
     pub vector_score: c_float,
@@ -164,6 +165,7 @@ pub struct VkStringArray {
 pub struct VkKeywordHit {
     pub chunk_id: u64,
     pub document_id: *mut c_char,
+    pub record_id: *mut c_char,
     pub text: *mut c_char,
     pub score: c_float,
     pub matched_terms: VkStringArray,
@@ -179,6 +181,7 @@ pub struct VkKeywordResultBuffer {
 pub struct VkHybridHit {
     pub chunk_id: u64,
     pub document_id: *mut c_char,
+    pub record_id: *mut c_char,
     pub text: *mut c_char,
     pub score: c_float,
     pub has_vector_score: bool,
@@ -438,6 +441,33 @@ pub unsafe extern "C" fn retrievalkit_retrieval_semantic_search(
         }
         let hits = database.database.semantic_search(&query)?;
         unsafe { *out_results = retrieval_search_result_buffer(&database.database, hits) };
+        Ok(())
+    })
+}
+
+/// # Safety
+/// All input and output pointers must remain valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_retrieval_keyword_search(
+    database: *const VkRetrievalDatabase,
+    text: *const c_char,
+    top_k: usize,
+    filter: *const VkFilter,
+    out_results: *mut VkKeywordResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
+        let mut query = KeywordQuery::new(unsafe { read_c_string(text, "text") }?, top_k);
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = database.database.keyword_search(&query)?;
+        unsafe { *out_results = retrieval_keyword_result_buffer(&database.database, hits) };
         Ok(())
     })
 }
@@ -910,6 +940,7 @@ pub unsafe extern "C" fn retrievalkit_search_results_free(buffer: VkSearchResult
     let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
     for hit in hits.iter() {
         unsafe { retrievalkit_string_free(hit.document_id) };
+        unsafe { retrievalkit_string_free(hit.record_id) };
         unsafe { retrievalkit_string_free(hit.text) };
     }
 }
@@ -927,6 +958,7 @@ pub unsafe extern "C" fn retrievalkit_keyword_results_free(buffer: VkKeywordResu
     let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
     for hit in hits.iter() {
         unsafe { retrievalkit_string_free(hit.document_id) };
+        unsafe { retrievalkit_string_free(hit.record_id) };
         unsafe { retrievalkit_string_free(hit.text) };
         unsafe { string_array_free(hit.matched_terms) };
     }
@@ -945,6 +977,7 @@ pub unsafe extern "C" fn retrievalkit_hybrid_results_free(buffer: VkHybridResult
     let hits = unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buffer.hits, buffer.count)) };
     for hit in hits.iter() {
         unsafe { retrievalkit_string_free(hit.document_id) };
+        unsafe { retrievalkit_string_free(hit.record_id) };
         unsafe { retrievalkit_string_free(hit.text) };
         unsafe { string_array_free(hit.matched_terms) };
     }
@@ -1179,7 +1212,9 @@ impl FfiError {
     fn core(error: retrievalkit_core::RetrievalKitError) -> Self {
         let code = match &error {
             retrievalkit_core::RetrievalKitError::CorruptIndex { .. } => VK_STATUS_CORRUPT_INDEX,
-            retrievalkit_core::RetrievalKitError::InvalidDimension { .. } => VK_STATUS_INVALID_DIMENSION,
+            retrievalkit_core::RetrievalKitError::InvalidDimension { .. } => {
+                VK_STATUS_INVALID_DIMENSION
+            }
             retrievalkit_core::RetrievalKitError::RetrievalCapabilityUnavailable { .. } => {
                 VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE
             }
@@ -1450,6 +1485,7 @@ fn search_result_buffer(index: &VkIndex, hits: Vec<SearchHit>) -> VkSearchResult
             VkSearchHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
                 text: string_to_owned_ptr(text),
                 score: hit.score,
                 vector_score: hit.trace.vector_score,
@@ -1479,6 +1515,7 @@ fn retrieval_search_result_buffer(
             VkSearchHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
                 text: string_to_owned_ptr(text),
                 score: hit.score,
                 vector_score: hit.trace.vector_score,
@@ -1507,6 +1544,36 @@ fn keyword_result_buffer(index: &VkIndex, hits: Vec<KeywordHit>) -> VkKeywordRes
             VkKeywordHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
+                text: string_to_owned_ptr(text),
+                score: hit.score,
+                matched_terms: string_array(hit.matched_terms),
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let buffer = VkKeywordResultBuffer {
+        hits: hits.as_mut_ptr(),
+        count: hits.len(),
+    };
+    std::mem::forget(hits);
+    buffer
+}
+
+fn retrieval_keyword_result_buffer(
+    database: &RetrievalDatabase,
+    hits: Vec<KeywordHit>,
+) -> VkKeywordResultBuffer {
+    let mut hits = hits
+        .into_iter()
+        .map(|hit| {
+            let text = database
+                .chunk(hit.chunk_id)
+                .map_or("", |chunk| chunk.text.as_str());
+            VkKeywordHit {
+                chunk_id: hit.chunk_id,
+                document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
                 text: string_to_owned_ptr(text),
                 score: hit.score,
                 matched_terms: string_array(hit.matched_terms),
@@ -1534,6 +1601,7 @@ fn hybrid_result_buffer(index: &VkIndex, hits: Vec<HybridHit>) -> VkHybridResult
             VkHybridHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
                 text: string_to_owned_ptr(text),
                 score: hit.score,
                 has_vector_score: hit.vector_score.is_some(),
@@ -1575,6 +1643,7 @@ fn retrieval_hybrid_result_buffer(
             VkHybridHit {
                 chunk_id: hit.chunk_id,
                 document_id: string_to_owned_ptr(&hit.document_id),
+                record_id: ptr::null_mut(),
                 text: string_to_owned_ptr(text),
                 score: hit.score,
                 has_vector_score: hit.vector_score.is_some(),
@@ -1973,7 +2042,10 @@ mod tests {
         assert_eq!(deleted_count, 2);
         assert_eq!(unsafe { retrievalkit_index_active_chunk_count(index) }, 0);
         assert_eq!(unsafe { retrievalkit_index_total_chunk_count(index) }, 2);
-        assert_eq!(unsafe { retrievalkit_index_tombstoned_chunk_count(index) }, 2);
+        assert_eq!(
+            unsafe { retrievalkit_index_tombstoned_chunk_count(index) },
+            2
+        );
 
         let mut compaction = VkCompactionReport::default();
         let compacted = unsafe { retrievalkit_index_compact(index, &mut compaction, &mut status) };
@@ -1984,7 +2056,10 @@ mod tests {
         assert_eq!(compaction.chunks_removed, 2);
         assert!(compaction.estimated_bytes_reclaimed > 0);
         assert_eq!(unsafe { retrievalkit_index_total_chunk_count(index) }, 0);
-        assert_eq!(unsafe { retrievalkit_index_tombstoned_chunk_count(index) }, 0);
+        assert_eq!(
+            unsafe { retrievalkit_index_tombstoned_chunk_count(index) },
+            0
+        );
 
         unsafe {
             retrievalkit_filter_free(filter);

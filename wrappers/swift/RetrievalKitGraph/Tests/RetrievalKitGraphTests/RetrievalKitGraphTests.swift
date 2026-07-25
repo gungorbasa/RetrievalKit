@@ -4,6 +4,79 @@ import XCTest
 @testable import RetrievalKitGraph
 
 final class RetrievalKitGraphTests: XCTestCase {
+  func testProgressiveGraphAndCombinedAPIsHideChunkKeysAndInferDimension() async throws {
+    let schema = capabilitySchema()
+
+    let graphBuilder = try GraphDatabase.Builder(corpusID: "progressive-graph", schema: schema)
+    try await graphBuilder.upsert(
+      Record(
+        id: "rust",
+        type: "Topic",
+        fields: ["title": .string("Rust")],
+        content: "native retrieval"
+      )
+    )
+    let graph = try await graphBuilder.build()
+    let graphResult = try await graph.query(
+      nodeType: "Topic",
+      field: "title",
+      equals: .string("Rust")
+    )
+    XCTAssertEqual(graphResult.matches.map(\.nodeID.recordID), ["rust"])
+
+    let combinedBuilder = try GraphRetrievalDatabase.Builder(
+      corpusID: "progressive-combined",
+      graph: schema,
+      encoding: .f32
+    )
+    try await combinedBuilder.upsert(
+      Record(id: "project", type: "Topic", fields: ["title": .string("Project")])
+    )
+    try await combinedBuilder.upsert(
+      Record(
+        id: "rust",
+        type: "Topic",
+        fields: ["title": .string("Rust")],
+        metadata: ["team": .string("mobile")]
+      ),
+      documents: [
+        EmbeddedDocument(
+          id: "rust-summary",
+          text: "private native retrieval",
+          embedding: [1, 0]
+        )
+      ]
+    )
+    let combined = try await combinedBuilder.build()
+    let selection = try await combined.query(
+      nodeType: "Topic",
+      field: "title",
+      equals: .string("Rust")
+    )
+
+    let semantic = try await combined.search(
+      embedding: [1, 0],
+      within: selection,
+      limit: 1
+    )
+    let keyword = try await combined.search(
+      text: "private",
+      within: selection,
+      limit: 1
+    )
+    let hybrid = try await combined.search(
+      text: "private",
+      embedding: [1, 0],
+      within: selection,
+      limit: 1
+    )
+
+    XCTAssertEqual(semantic.first?.documentID, "rust-summary")
+    XCTAssertEqual(semantic.first?.recordID, "rust")
+    XCTAssertEqual(keyword.first?.documentID, "rust-summary")
+    XCTAssertEqual(hybrid.first?.recordID, "rust")
+  }
+
   func testGenericSchemaBuildAndPersistence() async throws {
     let builder = try GraphIndexBuilder(dimension: 2, corpusID: "swift-generic")
     try await builder.upsert(

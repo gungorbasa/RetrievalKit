@@ -92,6 +92,7 @@ typedef struct VkTextChunkBuffer {
 typedef struct VkSearchHit {
   uint64_t chunk_id;
   char *document_id;
+  char *record_id;
   char *text;
   float score;
   float vector_score;
@@ -111,6 +112,7 @@ typedef struct VkStringArray {
 typedef struct VkKeywordHit {
   uint64_t chunk_id;
   char *document_id;
+  char *record_id;
   char *text;
   float score;
   VkStringArray matched_terms;
@@ -124,6 +126,7 @@ typedef struct VkKeywordResultBuffer {
 typedef struct VkHybridHit {
   uint64_t chunk_id;
   char *document_id;
+  char *record_id;
   char *text;
   float score;
   bool has_vector_score;
@@ -192,6 +195,13 @@ bool retrievalkit_retrieval_semantic_search(
     size_t top_k,
     const VkFilter *filter,
     VkSearchResultBuffer *out_results,
+    VkStatus *status);
+bool retrievalkit_retrieval_keyword_search(
+    const VkRetrievalDatabase *database,
+    const char *text,
+    size_t top_k,
+    const VkFilter *filter,
+    VkKeywordResultBuffer *out_results,
     VkStatus *status);
 bool retrievalkit_retrieval_hybrid_search(
     const VkRetrievalDatabase *database,

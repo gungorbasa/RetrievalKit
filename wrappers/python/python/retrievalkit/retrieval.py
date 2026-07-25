@@ -6,10 +6,11 @@ import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from ._native import _RetrievalDatabase, _RetrievalDatabaseBuilder
 from .types import (
+    Document,
     Embedding,
     FileSizeReport,
     Filter,
@@ -38,26 +39,67 @@ class RetrievalDatabaseBuilder:
         self,
         *,
         corpus_id: str,
-        retrieval: RetrievalConfiguration,
+        retrieval: RetrievalConfiguration | None = None,
+        metric: str = "cosine",
+        encoding: str = "i8",
     ) -> None:
-        semantic = retrieval.semantic
+        if retrieval is not None:
+            metric = retrieval.semantic.metric
+            encoding = retrieval.semantic.encoding
         self._native = _RetrievalDatabaseBuilder(
-            semantic.dimension,
             corpus_id,
-            semantic.metric,
-            semantic.encoding,
+            metric,
+            encoding,
         )
 
+    @overload
+    def upsert(
+        self,
+        input: Document,
+        *,
+        embedding: Embedding,
+    ) -> list[int]: ...
+
+    @overload
     def upsert(
         self,
         input: RecordInput,
         *,
         embeddings: Mapping[str, Embedding],
-    ) -> list[int]:
-        """Insert or replace one record using embeddings keyed by chunk key."""
+    ) -> list[int]: ...
 
+    def upsert(
+        self,
+        input: Document | RecordInput,
+        *,
+        embedding: Embedding | None = None,
+        embeddings: Mapping[str, Embedding] | None = None,
+    ) -> list[int]:
+        """Insert a simple document or use the advanced keyed-record surface."""
+
+        if isinstance(input, Document):
+            if embedding is None:
+                raise TypeError("Document upsert requires embedding=")
+            if embeddings is not None:
+                raise TypeError("Document upsert accepts embedding=, not embeddings=")
+            return self._native.upsert_document(
+                input.id,
+                input.text,
+                input.metadata,
+                embedding,
+            )
+        if embedding is not None:
+            raise TypeError("advanced RecordInput upsert accepts embeddings=")
+        if embeddings is None:
+            raise TypeError("advanced RecordInput upsert requires embeddings=")
         record_embeddings = {input["record"]["id"]: embeddings}
         return self._native.add(_records_json([input], record_embeddings))[0]
+
+    @property
+    def dimension(self) -> int | None:
+        """The Rust-inferred dimension, or ``None`` before the first embedding."""
+
+        return self._native.dimension
 
     def add(
         self,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, TypeAlias, TypedDict
 
 
@@ -24,9 +24,11 @@ Embedding: TypeAlias = Sequence[float]
 RecordValue: TypeAlias = (
     None | bool | int | float | str | list["RecordValue"] | dict[str, "RecordValue"]
 )
+
+
 @dataclass(frozen=True)
 class VectorIndexConfiguration:
-    dimension: int
+    dimension: int | None = None
     metric: Literal["cosine", "dot_product"] = "cosine"
     encoding: Literal["f32", "f16", "bf16", "i8", "binary"] = "i8"
 
@@ -34,6 +36,13 @@ class VectorIndexConfiguration:
 @dataclass(frozen=True)
 class RetrievalConfiguration:
     semantic: VectorIndexConfiguration
+
+
+@dataclass(frozen=True)
+class Document:
+    id: str
+    text: str
+    metadata: Metadata = field(default_factory=dict)
 
 
 class RecordRequired(TypedDict):
@@ -175,6 +184,7 @@ __all__ = [
     "ChunkInput",
     "CompactionReport",
     "DocumentInput",
+    "Document",
     "Embedding",
     "Filter",
     "FilterCondition",

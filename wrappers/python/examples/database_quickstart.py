@@ -1,48 +1,30 @@
 """Hybrid retrieval quickstart using deterministic demo embeddings."""
 
 from retrievalkit import (
-    RetrievalConfiguration,
+    Document,
     RetrievalDatabaseBuilder,
-    VectorIndexConfiguration,
 )
 
 builder = RetrievalDatabaseBuilder(
     corpus_id="project-notes",
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(dimension=2)
+    metric="dot_product",
+    encoding="f32",
+)
+builder.upsert(
+    Document(
+        id="decision-swift",
+        text="We chose Swift for Project Apollo's Apple platform client.",
+        metadata={"project": "apollo", "status": "approved"},
     ),
+    embedding=[1.0, 0.0],
 )
 builder.upsert(
-    {
-        "record": {
-            "id": "decision-swift",
-            "record_type": "Note",
-            "metadata": {"project": "apollo", "status": "approved"},
-        },
-        "chunks": [
-            {
-                "key": "body",
-                "text": "We chose Swift for Project Apollo's Apple platform client.",
-            }
-        ],
-    },
-    embeddings={"body": [1.0, 0.0]},
-)
-builder.upsert(
-    {
-        "record": {
-            "id": "launch-checklist",
-            "record_type": "Note",
-            "metadata": {"project": "apollo", "status": "draft"},
-        },
-        "chunks": [
-            {
-                "key": "body",
-                "text": "Project Apollo launch checklist and release owners.",
-            }
-        ],
-    },
-    embeddings={"body": [0.0, 1.0]},
+    Document(
+        id="launch-checklist",
+        text="Project Apollo launch checklist and release owners.",
+        metadata={"project": "apollo", "status": "draft"},
+    ),
+    embedding=[0.0, 1.0],
 )
 database = builder.build()
 hits = database.retrieval.hybrid_search(

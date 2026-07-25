@@ -409,7 +409,7 @@ fn optional_metadata(dict: &Bound<'_, PyDict>, key: &str) -> PyResult<Metadata> 
     parse_metadata(&value)
 }
 
-fn parse_metadata(value: &Bound<'_, PyAny>) -> PyResult<Metadata> {
+pub(crate) fn parse_metadata(value: &Bound<'_, PyAny>) -> PyResult<Metadata> {
     let dict = value
         .cast::<PyDict>()
         .map_err(|_| PyTypeError::new_err("metadata must be a dictionary"))?;

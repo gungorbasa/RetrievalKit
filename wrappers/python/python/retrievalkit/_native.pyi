@@ -11,6 +11,7 @@ from .types import (
     Filter,
     HybridHit,
     KeywordHit,
+    Metadata,
     SearchHit,
     TextChunk,
 )
@@ -35,13 +36,21 @@ class RetrievalCapabilityUnavailableError(RetrievalKitError): ...
 class _RetrievalDatabaseBuilder:
     def __init__(
         self,
-        dimension: int,
         corpus_id: str,
         metric: str = "cosine",
         encoding: str = "i8",
     ) -> None: ...
+    def upsert_document(
+        self,
+        document_id: str,
+        text: str,
+        metadata: Metadata,
+        embedding: Embedding,
+    ) -> list[int]: ...
     def add(self, records_json: str) -> list[list[int]]: ...
     def build(self) -> _RetrievalDatabase: ...
+    @property
+    def dimension(self) -> int | None: ...
 
 class _RetrievalDatabase:
     @staticmethod

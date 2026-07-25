@@ -8,14 +8,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString};
 use retrievalkit_core::{
     ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, HybridHit, HybridQuery,
-    Metadata, Record, RecordChunkInput, RecordId, RecordInput, RetrievalConfiguration,
-    RetrievalDatabase, RetrievalKitError as CoreError, SearchHit, SearchQuery,
+    Metadata, Record, RecordChunkInput, RecordId, RecordInput, RetrievalKitError as CoreError,
+    SearchHit, SearchQuery,
 };
 use retrievalkit_graph::{
-    CancellationToken, Direction, GraphCandidateProjection, GraphDatabase, GraphDatabaseFileSizes,
-    GraphError as RustGraphError, GraphQuery, GraphResult, GraphRetrievalDatabase, GraphScalar,
-    GraphSchema, NodeId, NodeSource, NodeType, QueryLimits, RelationshipType, Seed, Traverse,
-    TruncationReason,
+    CancellationToken, Direction, GraphCandidateProjection, GraphDatabase,
+    GraphDatabaseBuilder as RustGraphDatabaseBuilder, GraphDatabaseFileSizes,
+    GraphError as RustGraphError, GraphQuery, GraphResult, GraphRetrievalDatabase,
+    GraphRetrievalDatabaseBuilder as RustGraphRetrievalDatabaseBuilder, GraphScalar, GraphSchema,
+    NodeId, NodeSource, NodeType, QueryLimits, RelationshipType, Seed, Traverse, TruncationReason,
 };
 use serde::Deserialize;
 
@@ -105,8 +106,7 @@ impl PyGraphSelection {
 
 #[pyclass(name = "_GraphDatabaseBuilder")]
 pub(crate) struct PyGraphDatabaseBuilder {
-    corpus: Option<CorpusIndex>,
-    schema: GraphSchema,
+    builder: Option<RustGraphDatabaseBuilder>,
 }
 
 #[pymethods]
@@ -114,145 +114,189 @@ impl PyGraphDatabaseBuilder {
     #[new]
     fn new(corpus_id: String, schema_json: String) -> PyResult<Self> {
         Ok(Self {
-            corpus: Some(CorpusIndex::new(
+            builder: Some(RustGraphDatabaseBuilder::new(
                 CorpusId::new(corpus_id).map_err(core_error)?,
+                parse_schema(&schema_json)?,
             )),
-            schema: parse_schema(&schema_json)?,
         })
     }
 
-    fn add(&mut self, records_json: String) -> PyResult<Vec<Vec<u64>>> {
+    fn upsert_record(&mut self, py: Python<'_>, record_json: String) -> PyResult<Vec<u64>> {
+        let batch = parse_single_record(&record_json)?;
+        if !batch.chunks.is_empty() {
+            return Err(PyValueError::new_err(
+                "progressive graph records must not include public chunks",
+            ));
+        }
+        let builder = self.require_builder()?;
+        py.detach(move || {
+            builder
+                .upsert_record(batch.record, batch.projected_metadata)
+                .map_err(graph_error)
+        })
+    }
+
+    fn add(&mut self, py: Python<'_>, records_json: String) -> PyResult<Vec<Vec<u64>>> {
         let records = parse_records(&records_json)?;
-        let corpus = self
-            .corpus
-            .as_mut()
-            .ok_or_else(|| PyRuntimeError::new_err("graph builder has already been consumed"))?;
-        records
-            .into_iter()
-            .map(|batch| {
-                if let Some(chunk) = batch.chunks.iter().find(|chunk| chunk.embedding.is_some()) {
-                    return Err(PyValueError::new_err(format!(
-                        "graph-only record '{}' chunk '{}' must not include an embedding",
-                        batch.record.id.as_str(),
-                        chunk.key.as_str()
-                    )));
-                }
-                corpus
-                    .upsert(RecordInput {
-                        record: batch.record,
-                        metadata: batch.projected_metadata,
-                        chunks: batch
-                            .chunks
-                            .into_iter()
-                            .map(|chunk| CorpusChunkInput {
-                                key: chunk.key,
-                                text: chunk.text,
-                                metadata: chunk.metadata,
-                            })
-                            .collect(),
-                    })
-                    .map_err(core_error)
-            })
-            .collect()
+        let builder = self.require_builder()?;
+        py.detach(move || {
+            records
+                .into_iter()
+                .map(|batch| {
+                    if let Some(chunk) = batch.chunks.iter().find(|chunk| chunk.embedding.is_some())
+                    {
+                        return Err(PyValueError::new_err(format!(
+                            "graph-only record '{}' chunk '{}' must not include an embedding",
+                            batch.record.id.as_str(),
+                            chunk.key.as_str()
+                        )));
+                    }
+                    builder
+                        .upsert_input(RecordInput {
+                            record: batch.record,
+                            metadata: batch.projected_metadata,
+                            chunks: batch
+                                .chunks
+                                .into_iter()
+                                .map(|chunk| CorpusChunkInput {
+                                    key: chunk.key,
+                                    text: chunk.text,
+                                    metadata: chunk.metadata,
+                                })
+                                .collect(),
+                        })
+                        .map_err(graph_error)
+                })
+                .collect()
+        })
     }
 
     fn build(&mut self, py: Python<'_>) -> PyResult<PyGraphDatabase> {
-        let corpus = self
-            .corpus
+        let builder = self
+            .builder
             .take()
             .ok_or_else(|| PyRuntimeError::new_err("graph builder has already been consumed"))?;
-        let schema = self.schema.clone();
         py.detach(move || {
             Ok(PyGraphDatabase {
-                database: Some(GraphDatabase::build(corpus, schema).map_err(graph_error)?),
+                database: Some(builder.build().map_err(graph_error)?),
             })
         })
     }
 }
 
+impl PyGraphDatabaseBuilder {
+    fn require_builder(&mut self) -> PyResult<&mut RustGraphDatabaseBuilder> {
+        self.builder
+            .as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("graph builder has already been consumed"))
+    }
+}
+
 #[pyclass(name = "_GraphRetrievalDatabaseBuilder")]
 pub(crate) struct PyGraphRetrievalDatabaseBuilder {
-    retrieval: Option<RetrievalDatabase>,
-    schema: GraphSchema,
+    builder: Option<RustGraphRetrievalDatabaseBuilder>,
 }
 
 #[pymethods]
 impl PyGraphRetrievalDatabaseBuilder {
     #[new]
     #[pyo3(signature = (
-        dimension,
         corpus_id,
         schema_json,
         metric = "cosine",
         encoding = "i8"
     ))]
-    fn new(
-        dimension: usize,
-        corpus_id: String,
-        schema_json: String,
-        metric: &str,
-        encoding: &str,
-    ) -> PyResult<Self> {
-        let vector = retrievalkit_core::IndexConfig::new(dimension, parse_metric(metric)?)
-            .with_vector_encoding(parse_encoding(encoding)?);
-        let configuration = RetrievalConfiguration::semantic(vector);
+    fn new(corpus_id: String, schema_json: String, metric: &str, encoding: &str) -> PyResult<Self> {
         Ok(Self {
-            retrieval: Some(
-                RetrievalDatabase::new(
-                    configuration,
-                    CorpusId::new(corpus_id).map_err(core_error)?,
-                )
-                .map_err(core_error)?,
-            ),
-            schema: parse_schema(&schema_json)?,
+            builder: Some(RustGraphRetrievalDatabaseBuilder::new(
+                CorpusId::new(corpus_id).map_err(core_error)?,
+                parse_schema(&schema_json)?,
+                parse_metric(metric)?,
+                parse_encoding(encoding)?,
+            )),
         })
     }
 
-    fn add(&mut self, records_json: String) -> PyResult<Vec<Vec<u64>>> {
+    fn upsert_record(
+        &mut self,
+        py: Python<'_>,
+        record_json: String,
+        embedding: Option<Vec<f32>>,
+    ) -> PyResult<Vec<u64>> {
+        let batch = parse_single_record(&record_json)?;
+        if !batch.chunks.is_empty() {
+            return Err(PyValueError::new_err(
+                "progressive graph records must not include public chunks",
+            ));
+        }
+        let builder = self.require_builder()?;
+        py.detach(move || match embedding {
+            Some(embedding) => builder
+                .upsert_record_with_embedding(batch.record, batch.projected_metadata, embedding)
+                .map_err(graph_error),
+            None => builder
+                .upsert_record(batch.record, batch.projected_metadata)
+                .map_err(graph_error),
+        })
+    }
+
+    fn add(&mut self, py: Python<'_>, records_json: String) -> PyResult<Vec<Vec<u64>>> {
         let records = parse_records(&records_json)?;
-        let retrieval = self.retrieval.as_mut().ok_or_else(|| {
-            PyRuntimeError::new_err("graph retrieval builder has already been consumed")
-        })?;
-        records
-            .into_iter()
-            .map(|batch| {
-                let record_id = batch.record.id.as_str().to_owned();
-                let chunks = batch
-                    .chunks
-                    .into_iter()
-                    .map(|chunk| {
-                        let embedding = chunk.embedding.ok_or_else(|| {
-                            PyValueError::new_err(format!(
-                                "record '{record_id}' chunk '{}' is missing an embedding",
-                                chunk.key.as_str()
-                            ))
-                        })?;
-                        Ok(RecordChunkInput {
-                            key: chunk.key,
-                            text: chunk.text,
-                            embedding,
-                            metadata: chunk.metadata,
+        let builder = self.require_builder()?;
+        py.detach(move || {
+            records
+                .into_iter()
+                .map(|batch| {
+                    let record_id = batch.record.id.as_str().to_owned();
+                    let chunks = batch
+                        .chunks
+                        .into_iter()
+                        .map(|chunk| {
+                            let embedding = chunk.embedding.ok_or_else(|| {
+                                PyValueError::new_err(format!(
+                                    "record '{record_id}' chunk '{}' is missing an embedding",
+                                    chunk.key.as_str()
+                                ))
+                            })?;
+                            Ok(RecordChunkInput {
+                                key: chunk.key,
+                                text: chunk.text,
+                                embedding,
+                                metadata: chunk.metadata,
+                            })
                         })
-                    })
-                    .collect::<PyResult<Vec<_>>>()?;
-                retrieval
-                    .upsert_record(batch.record, batch.projected_metadata, chunks)
-                    .map_err(core_error)
-            })
-            .collect()
+                        .collect::<PyResult<Vec<_>>>()?;
+                    builder
+                        .upsert_record_chunks(batch.record, batch.projected_metadata, chunks)
+                        .map_err(graph_error)
+                })
+                .collect()
+        })
     }
 
     fn build(&mut self, py: Python<'_>) -> PyResult<PyGraphRetrievalDatabase> {
-        let retrieval = self.retrieval.take().ok_or_else(|| {
+        let builder = self.builder.take().ok_or_else(|| {
             PyRuntimeError::new_err("graph retrieval builder has already been consumed")
         })?;
-        let schema = self.schema.clone();
         py.detach(move || {
             Ok(PyGraphRetrievalDatabase {
-                database: Some(
-                    GraphRetrievalDatabase::build(retrieval, schema).map_err(graph_error)?,
-                ),
+                database: Some(builder.build().map_err(graph_error)?),
             })
+        })
+    }
+
+    #[getter]
+    fn dimension(&self) -> Option<usize> {
+        self.builder
+            .as_ref()
+            .and_then(|builder| builder.dimension())
+    }
+}
+
+impl PyGraphRetrievalDatabaseBuilder {
+    fn require_builder(&mut self) -> PyResult<&mut RustGraphRetrievalDatabaseBuilder> {
+        self.builder.as_mut().ok_or_else(|| {
+            PyRuntimeError::new_err("graph retrieval builder has already been consumed")
         })
     }
 }
@@ -690,6 +734,17 @@ fn parse_schema(value: &str) -> PyResult<GraphSchema> {
 fn parse_records(value: &str) -> PyResult<Vec<RecordBatch>> {
     serde_json::from_str(value)
         .map_err(|error| PyValueError::new_err(format!("invalid graph records: {error}")))
+}
+
+fn parse_single_record(value: &str) -> PyResult<RecordBatch> {
+    let mut records = parse_records(value)?;
+    if records.len() != 1 {
+        return Err(PyValueError::new_err(format!(
+            "expected exactly one graph record; received {}",
+            records.len()
+        )));
+    }
+    Ok(records.remove(0))
 }
 
 fn node_query(

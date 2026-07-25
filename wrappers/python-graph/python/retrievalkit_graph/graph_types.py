@@ -71,7 +71,7 @@ class HybridHit(TypedDict):
 
 @dataclass(frozen=True)
 class VectorIndexConfiguration:
-    dimension: int
+    dimension: int | None = None
     metric: Literal["cosine", "dot_product"] = "cosine"
     encoding: Literal["f32", "f16", "bf16", "i8", "binary"] = "i8"
 

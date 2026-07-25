@@ -31,8 +31,6 @@ from retrievalkit_graph import (
     GraphRetrievalDatabaseBuilder,
     GraphSchema,
     GraphTraversal,
-    RetrievalConfiguration,
-    VectorIndexConfiguration,
 )
 
 schema = GraphSchema(
@@ -50,21 +48,16 @@ schema = GraphSchema(
 builder = GraphRetrievalDatabaseBuilder(
     corpus_id="topics",
     graph=schema,
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(dimension=384),
-    ),
 )
 builder.upsert(
     {
-        "record": {
-            "id": "alpha",
-            "record_type": "Topic",
-            "fields": {"title": "Alpha"},
-            "metadata": {"tenant": "blue"},
-        },
-        "chunks": [{"key": "summary", "text": "Graph retrieval"}],
+        "id": "alpha",
+        "record_type": "Topic",
+        "fields": {"title": "Alpha"},
+        "content": "Graph retrieval",
+        "metadata": {"tenant": "blue"},
     },
-    embeddings={"summary": embedding},
+    embedding=embedding,
 )
 database = builder.build()
 
@@ -92,10 +85,15 @@ hybrid_hits = database.retrieval.hybrid_search(
 
 `GraphDatabaseBuilder(corpus_id=..., schema=...)` builds graph-only state and
 accepts capability-neutral records through `upsert(record)`, with no embedding
-parameter. `GraphRetrievalDatabaseBuilder` accepts the same record shape plus a
-separate embedding map keyed by chunk key. Combined databases deliberately expose
-`database.graph` and `database.retrieval` query namespaces so graph traversal
-and semantic/hybrid retrieval remain separate capabilities.
+parameter. `GraphRetrievalDatabaseBuilder` accepts the same simple record plus
+an optional direct `embedding=`. Graph-only records may arrive before the first
+searchable record; Rust queues them, infers dimension from the first embedding,
+and derives hidden chunk identity from record content. Combined databases
+deliberately expose `database.graph` and `database.retrieval` query namespaces
+so graph traversal and semantic/hybrid retrieval remain separate capabilities.
+
+The older `RecordInput`/public chunk-key and nested embedding-map methods remain
+available as an advanced compatibility surface.
 
 Graph queries are deterministic and bounded by `GraphQueryLimits`. Selections
 are tied to the corpus generation that produced them and can scope semantic or

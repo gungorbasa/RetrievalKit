@@ -4,6 +4,7 @@ from collections.abc import Sequence
 
 from retrievalkit import (
     CompactionReport,
+    Document,
     DocumentInput,
     Filter,
     HybridHit,
@@ -81,6 +82,13 @@ def build_typed_pipeline(index: Index) -> Pipeline:
 
 
 def typed_retrieval_database() -> RetrievalDatabase:
+    progressive = RetrievalDatabaseBuilder(corpus_id="typed-documents")
+    progressive.upsert(
+        Document(id="document", text="typed document"),
+        embedding=[1.0, 0.0],
+    )
+    _ = progressive.dimension
+
     builder = RetrievalDatabaseBuilder(
         corpus_id="typed-retrieval",
         retrieval=RetrievalConfiguration(

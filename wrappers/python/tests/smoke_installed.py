@@ -3,10 +3,9 @@ from __future__ import annotations
 import math
 
 from retrievalkit import (
+    Document,
     Index,
-    RetrievalConfiguration,
     RetrievalDatabaseBuilder,
-    VectorIndexConfiguration,
     hybrid_search_text,
 )
 
@@ -47,21 +46,19 @@ def main() -> None:
 
     builder = RetrievalDatabaseBuilder(
         corpus_id="wheel-smoke",
-        retrieval=RetrievalConfiguration(
-            semantic=VectorIndexConfiguration(dimension=2, metric="dot_product")
-        ),
+        metric="dot_product",
+        encoding="f32",
     )
     builder.upsert(
-        {
-            "record": {"id": "topic-alpha", "record_type": "Topic"},
-            "chunks": [{"key": "summary", "text": "alpha retrieval"}],
-        },
-        embeddings={"summary": [1.0, 0.0]},
+        Document(id="topic-alpha", text="alpha retrieval"),
+        embedding=[1.0, 0.0],
     )
     database = builder.build()
-    assert database.retrieval.semantic_search([1.0, 0.0])[0][
-        "document_id"
-    ] == "topic-alpha"
+    assert (
+        database.retrieval.semantic_search([1.0, 0.0])[0]["document_id"]
+        == "topic-alpha"
+    )
+
 
 if __name__ == "__main__":
     main()

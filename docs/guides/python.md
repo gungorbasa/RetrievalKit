@@ -58,8 +58,6 @@ from retrievalkit_graph import (
     GraphRetrievalDatabaseBuilder,
     GraphSchema,
     GraphTraversal,
-    RetrievalConfiguration,
-    VectorIndexConfiguration,
 )
 
 schema = GraphSchema(
@@ -81,63 +79,38 @@ schema = GraphSchema(
 builder = GraphRetrievalDatabaseBuilder(
     corpus_id="project-notes",
     graph=schema,
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(
-            dimension=2,
-            metric="dot_product",
-            encoding="f32",
-        )
-    ),
+    metric="dot_product",
+    encoding="f32",
 )
-builder.add(
-    [
-        {
-            "record": {
-                "id": "apollo",
-                "record_type": "Project",
-                "fields": {
-                    "title": "Project Apollo",
-                    "note_ids": ["decision-swift", "launch-checklist"],
-                },
-            },
-            "chunks": [],
+builder.upsert(
+    {
+        "id": "apollo",
+        "record_type": "Project",
+        "fields": {
+            "title": "Project Apollo",
+            "note_ids": ["decision-swift", "launch-checklist"],
         },
-        {
-            "record": {
-                "id": "decision-swift",
-                "record_type": "Note",
-                "fields": {"title": "Apple client architecture decision"},
-                "metadata": {"status": "approved"},
-            },
-            "chunks": [
-                {
-                    "key": "body",
-                    "text": (
-                        "We chose Swift for Project Apollo's Apple platform client."
-                    ),
-                }
-            ],
-        },
-        {
-            "record": {
-                "id": "launch-checklist",
-                "record_type": "Note",
-                "fields": {"title": "Launch checklist"},
-                "metadata": {"status": "draft"},
-            },
-            "chunks": [
-                {
-                    "key": "body",
-                    "text": "Project Apollo launch checklist and release owners.",
-                }
-            ],
-        },
-    ],
-    embeddings={
-        "apollo": {},
-        "decision-swift": {"body": [1.0, 0.0]},
-        "launch-checklist": {"body": [0.0, 1.0]},
+    }
+)
+builder.upsert(
+    {
+        "id": "decision-swift",
+        "record_type": "Note",
+        "fields": {"title": "Apple client architecture decision"},
+        "content": "We chose Swift for Project Apollo's Apple platform client.",
+        "metadata": {"status": "approved"},
     },
+    embedding=[1.0, 0.0],
+)
+builder.upsert(
+    {
+        "id": "launch-checklist",
+        "record_type": "Note",
+        "fields": {"title": "Launch checklist"},
+        "content": "Project Apollo launch checklist and release owners.",
+        "metadata": {"status": "draft"},
+    },
+    embedding=[0.0, 1.0],
 )
 database = builder.build()
 
@@ -165,6 +138,54 @@ graph-hybrid=decision-swift
 The relationship is application data: RetrievalKit validates and traverses
 `note_ids`, but it does not extract or invent relationships.
 
+No dimension, public chunk key, or embedding dictionary is required. Rust
+queues the graph-only Apollo record, infers dimension from the first note
+embedding, and derives the hidden searchable identity from each record.
+
+## Graph traversal without retrieval
+
+For graph-only traversal and stable candidate projection, run:
+
+```bash
+target/python-graph-wrapper-check-venv-py*/bin/python \
+  wrappers/python-graph/examples/graph_quickstart.py
+```
+
+Its ingestion path is just a record:
+
+```python
+from retrievalkit_graph import GraphDatabaseBuilder, GraphRecordNode, GraphSchema
+
+builder = GraphDatabaseBuilder(
+    corpus_id="topics",
+    schema=GraphSchema(
+        record_nodes=[GraphRecordNode("Topic", "Topic", ["title"])]
+    ),
+)
+builder.upsert(
+    {
+        "id": "retrieval",
+        "record_type": "Topic",
+        "fields": {"title": "Local retrieval"},
+        "content": "Local semantic and lexical retrieval.",
+        "metadata": {"tenant": "blue"},
+    }
+)
+database = builder.build()
+selection = database.graph.query_equals(
+    node_type="Topic",
+    field="title",
+    values="Local retrieval",
+)
+projection = database.graph.project_candidates(
+    selection,
+    where={"tenant": "blue"},
+)
+```
+
+Rust derives the record-content candidate identity and owns projection
+filtering, ordering, and generation validation.
+
 ## Simpler product: hybrid search without a graph
 
 If `project` is just metadata and users do not navigate relationships, use the
@@ -180,44 +201,30 @@ The complete program is:
 
 ```python
 from retrievalkit import (
-    RetrievalConfiguration,
+    Document,
     RetrievalDatabaseBuilder,
-    VectorIndexConfiguration,
 )
 
 builder = RetrievalDatabaseBuilder(
     corpus_id="project-notes",
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(dimension=2)
+    metric="dot_product",
+    encoding="f32",
+)
+builder.upsert(
+    Document(
+        id="decision-swift",
+        text="We chose Swift for Project Apollo's Apple platform client.",
+        metadata={"project": "apollo", "status": "approved"},
     ),
+    embedding=[1.0, 0.0],
 )
 builder.upsert(
-    {
-        "record": {
-            "id": "decision-swift",
-            "record_type": "Note",
-            "metadata": {"project": "apollo", "status": "approved"},
-        },
-        "chunks": [{
-            "key": "body",
-            "text": "We chose Swift for Project Apollo's Apple platform client.",
-        }],
-    },
-    embeddings={"body": [1.0, 0.0]},
-)
-builder.upsert(
-    {
-        "record": {
-            "id": "launch-checklist",
-            "record_type": "Note",
-            "metadata": {"project": "apollo", "status": "draft"},
-        },
-        "chunks": [{
-            "key": "body",
-            "text": "Project Apollo launch checklist and release owners.",
-        }],
-    },
-    embeddings={"body": [0.0, 1.0]},
+    Document(
+        id="launch-checklist",
+        text="Project Apollo launch checklist and release owners.",
+        metadata={"project": "apollo", "status": "draft"},
+    ),
+    embedding=[0.0, 1.0],
 )
 database = builder.build()
 hits = database.retrieval.hybrid_search(
@@ -233,6 +240,12 @@ Expected output:
 ```text
 hybrid=decision-swift
 ```
+
+`Document` is the common flat-corpus input. The first direct `embedding=`
+fixes dimension in Rust, which also creates the hidden canonical record and
+chunk identity. The older `RecordInput` plus chunk-key embedding maps remain
+available for advanced applications that already own stable multi-chunk
+identities.
 
 For a hard Apollo-only constraint, add
 `where={"project": "apollo", "status": "approved"}`. Use a graph selection

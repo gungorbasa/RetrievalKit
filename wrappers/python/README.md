@@ -20,27 +20,20 @@ architecture while keeping Python naming and data structures idiomatic:
 
 ```python
 from retrievalkit import (
-    RetrievalConfiguration,
+    Document,
     RetrievalDatabaseBuilder,
-    VectorIndexConfiguration,
 )
 
 builder = RetrievalDatabaseBuilder(
     corpus_id="notes",
-    retrieval=RetrievalConfiguration(
-        semantic=VectorIndexConfiguration(dimension=384),
-    ),
 )
 builder.upsert(
-    {
-        "record": {
-            "id": "note-42",
-            "record_type": "Note",
-            "metadata": {"project": "retrievalkit"},
-        },
-        "chunks": [{"key": "summary", "text": "Local retrieval architecture"}],
-    },
-    embeddings={"summary": embedding},
+    Document(
+        id="note-42",
+        text="Local retrieval architecture",
+        metadata={"project": "retrievalkit"},
+    ),
+    embedding=embedding,
 )
 database = builder.build()
 
@@ -50,9 +43,14 @@ hits = database.retrieval.semantic_search(
 )
 ```
 
-Records and chunks remain capability-neutral; embeddings are supplied
-separately by stable chunk key. Every retrieval database exposes both
+The first embedding fixes the dimension in Rust. Rust also derives the hidden
+canonical record and chunk identity, so the common path has no dimension,
+chunk-key, or embedding-map bookkeeping. Every retrieval database exposes both
 `semantic_search(...)` and `hybrid_search(...)`.
+
+The existing `RecordInput` plus `embeddings={chunk_key: vector}` methods remain
+available as an advanced compatibility surface for applications that already
+own stable multi-chunk identities.
 
 The lower-level `Index` API remains available for compatibility, pipeline
 integration, mutation, compaction, and direct BM25 benchmarking. It is not the

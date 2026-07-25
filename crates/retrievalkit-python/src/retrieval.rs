@@ -4,13 +4,14 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use retrievalkit_core::{
-    CorpusId, HybridHit, HybridQuery, Metadata, Record, RecordChunkInput, RetrievalConfiguration,
-    RetrievalDatabase, SearchHit, SearchQuery,
+    CorpusId, Document, HybridHit, HybridQuery, Metadata, Record, RecordChunkInput,
+    RetrievalDatabase, RetrievalDatabaseBuilder as RustRetrievalDatabaseBuilder, SearchHit,
+    SearchQuery,
 };
 use serde::Deserialize;
 
 use crate::{
-    file_size_report_to_py, hybrid_trace_to_py, parse_encoding, parse_metric,
+    file_size_report_to_py, hybrid_trace_to_py, parse_encoding, parse_metadata, parse_metric,
     parse_optional_filter, py_error, search_hit_to_py, RetrievalKitError,
 };
 
@@ -33,68 +34,103 @@ struct RetrievalChunkBatch {
 
 #[pyclass(name = "_RetrievalDatabaseBuilder")]
 pub(crate) struct PyRetrievalDatabaseBuilder {
-    database: Option<RetrievalDatabase>,
+    builder: Option<RustRetrievalDatabaseBuilder>,
 }
 
 #[pymethods]
 impl PyRetrievalDatabaseBuilder {
     #[new]
     #[pyo3(signature = (
-        dimension,
         corpus_id,
         metric = "cosine",
         encoding = "i8"
     ))]
-    fn new(dimension: usize, corpus_id: String, metric: &str, encoding: &str) -> PyResult<Self> {
-        let vector = retrievalkit_core::IndexConfig::new(dimension, parse_metric(metric)?)
-            .with_vector_encoding(parse_encoding(encoding)?);
-        let configuration = RetrievalConfiguration::semantic(vector);
+    fn new(corpus_id: String, metric: &str, encoding: &str) -> PyResult<Self> {
         Ok(Self {
-            database: Some(
-                RetrievalDatabase::new(configuration, CorpusId::new(corpus_id).map_err(py_error)?)
-                    .map_err(py_error)?,
-            ),
+            builder: Some(RustRetrievalDatabaseBuilder::new(
+                CorpusId::new(corpus_id).map_err(py_error)?,
+                parse_metric(metric)?,
+                parse_encoding(encoding)?,
+            )),
         })
     }
 
-    fn add(&mut self, records_json: String) -> PyResult<Vec<Vec<u64>>> {
+    fn upsert_document(
+        &mut self,
+        py: Python<'_>,
+        document_id: String,
+        text: String,
+        metadata: &Bound<'_, PyAny>,
+        embedding: Vec<f32>,
+    ) -> PyResult<Vec<u64>> {
+        let document = Document {
+            id: document_id,
+            text,
+            metadata: parse_metadata(metadata)?,
+        };
+        let builder = self.require_builder()?;
+        py.detach(move || {
+            builder
+                .upsert_document(document, embedding)
+                .map_err(py_error)
+        })
+    }
+
+    fn add(&mut self, py: Python<'_>, records_json: String) -> PyResult<Vec<Vec<u64>>> {
         let records: Vec<RetrievalRecordBatch> =
             serde_json::from_str(&records_json).map_err(|error| {
                 PyValueError::new_err(format!("invalid retrieval records: {error}"))
             })?;
-        let database = self.database.as_mut().ok_or_else(|| {
-            PyRuntimeError::new_err("retrieval builder has already been consumed")
-        })?;
-        records
-            .into_iter()
-            .map(|batch| {
-                database
-                    .upsert_record(
-                        batch.record,
-                        batch.projected_metadata,
-                        batch
-                            .chunks
-                            .into_iter()
-                            .map(|chunk| RecordChunkInput {
-                                key: chunk.key,
-                                text: chunk.text,
-                                embedding: chunk.embedding,
-                                metadata: chunk.metadata,
-                            })
-                            .collect(),
-                    )
-                    .map_err(py_error)
-            })
-            .collect()
+        let builder = self.require_builder()?;
+        py.detach(move || {
+            records
+                .into_iter()
+                .map(|batch| {
+                    builder
+                        .upsert_record(
+                            batch.record,
+                            batch.projected_metadata,
+                            batch
+                                .chunks
+                                .into_iter()
+                                .map(|chunk| RecordChunkInput {
+                                    key: chunk.key,
+                                    text: chunk.text,
+                                    embedding: chunk.embedding,
+                                    metadata: chunk.metadata,
+                                })
+                                .collect(),
+                        )
+                        .map_err(py_error)
+                })
+                .collect()
+        })
     }
 
-    fn build(&mut self) -> PyResult<PyRetrievalDatabase> {
-        let database = self.database.take().ok_or_else(|| {
+    fn build(&mut self, py: Python<'_>) -> PyResult<PyRetrievalDatabase> {
+        let builder = self.builder.take().ok_or_else(|| {
             PyRuntimeError::new_err("retrieval builder has already been consumed")
         })?;
-        Ok(PyRetrievalDatabase {
-            database: Some(database),
+        py.detach(move || {
+            Ok(PyRetrievalDatabase {
+                database: Some(builder.build().map_err(py_error)?),
+            })
         })
+    }
+
+    #[getter]
+    fn dimension(&self) -> Option<usize> {
+        self.builder
+            .as_ref()
+            .and_then(|builder| builder.dimension())
+    }
+}
+
+impl PyRetrievalDatabaseBuilder {
+    fn require_builder(&mut self) -> PyResult<&mut RustRetrievalDatabaseBuilder> {
+        self.builder
+            .as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("retrieval builder has already been consumed"))
     }
 }
 

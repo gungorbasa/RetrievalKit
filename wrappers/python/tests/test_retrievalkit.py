@@ -12,6 +12,7 @@ from retrievalkit import (
     ChunkInput,
     CorruptIndexError,
     DimensionMismatchError,
+    Document,
     DocumentInput,
     Filter,
     HybridHit,
@@ -132,13 +133,12 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
     assert len(chunk_ids) == 1
     database = builder.build()
 
-    hits = database.retrieval.semantic_search(
-        [1.0, 0.0], where={"tenant": "blue"}
-    )
+    hits = database.retrieval.semantic_search([1.0, 0.0], where={"tenant": "blue"})
     assert [hit["document_id"] for hit in hits] == ["alpha"]
-    assert database.retrieval.hybrid_search("alpha", [1.0, 0.0])[0][
-        "document_id"
-    ] == "alpha"
+    assert (
+        database.retrieval.hybrid_search("alpha", [1.0, 0.0])[0]["document_id"]
+        == "alpha"
+    )
     with pytest.raises(ValueError, match="invalid query parameter 'alpha'"):
         database.retrieval.hybrid_search("alpha", [1.0, 0.0], alpha=1.1)
 
@@ -146,6 +146,34 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
     RetrievalDatabase.validate(tmp_path)
     loaded = RetrievalDatabase.load(tmp_path)
     assert loaded.retrieval.semantic_search([1.0, 0.0])[0]["text"] == "alpha retrieval"
+
+
+def test_progressive_retrieval_builder_infers_dimension_and_hides_identity() -> None:
+    builder = RetrievalDatabaseBuilder(
+        corpus_id="python-progressive-retrieval",
+        metric="dot_product",
+        encoding="f32",
+    )
+    assert builder.dimension is None
+    chunk_ids = builder.upsert(
+        Document(
+            id="alpha",
+            text="alpha retrieval",
+            metadata={"tenant": "blue"},
+        ),
+        embedding=[1.0, 0.0],
+    )
+    assert len(chunk_ids) == 1
+    assert builder.dimension == 2
+    with pytest.raises(DimensionMismatchError, match="expected 2, got 1"):
+        builder.upsert(Document(id="wrong", text="wrong"), embedding=[1.0])
+
+    database = builder.build()
+    hits = database.retrieval.semantic_search(
+        [1.0, 0.0],
+        where={"tenant": "blue"},
+    )
+    assert [hit["document_id"] for hit in hits] == ["alpha"]
 
 
 def test_retrieval_builder_requires_exact_embedding_keys() -> None:
@@ -582,9 +610,7 @@ def test_python_matches_retrieval_cross_wrapper_fixture(tmp_path: Path) -> None:
         keyword_candidates=1,
         alpha=hybrid_expectation["alpha"],
     )
-    assert [hit["document_id"] for hit in hybrid] == hybrid_expectation[
-        "document_ids"
-    ]
+    assert [hit["document_id"] for hit in hybrid] == hybrid_expectation["document_ids"]
     assert all(
         hit["trace"]["alpha"] == pytest.approx(hybrid_expectation["alpha"])
         for hit in hybrid
@@ -620,9 +646,9 @@ def test_python_matches_retrieval_cross_wrapper_fixture(tmp_path: Path) -> None:
     rebuilt_keyword = Index.load(tmp_path).keyword_search(
         expectations["keyword"]["text"]
     )
-    assert [
-        hit["document_id"] for hit in rebuilt_keyword
-    ] == expectations["compact_reload_keyword"]["document_ids"]
+    assert [hit["document_id"] for hit in rebuilt_keyword] == expectations[
+        "compact_reload_keyword"
+    ]["document_ids"]
 
 
 def test_save_load_round_trip(tmp_path) -> None:

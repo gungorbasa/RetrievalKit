@@ -6,7 +6,7 @@ import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, overload
 
 from ._native import (
     GraphCancelledError,
@@ -45,6 +45,7 @@ from .graph_types import (
     HydratedGraphChunk,
     HydratedGraphRecord,
     MetadataValue,
+    Record,
     RecordInput,
     RetrievalConfiguration,
     TimestampMillis,
@@ -116,8 +117,17 @@ class GraphDatabaseBuilder:
     def __init__(self, *, corpus_id: str, schema: GraphSchema) -> None:
         self._native = _GraphDatabaseBuilder(corpus_id, _schema_json(schema))
 
-    def upsert(self, input: RecordInput) -> list[int]:
-        return self._native.add(_records_json([input]))[0]
+    @overload
+    def upsert(self, input: Record) -> list[int]: ...
+
+    @overload
+    def upsert(self, input: RecordInput) -> list[int]: ...
+
+    def upsert(self, input: Record | RecordInput) -> list[int]:
+        if "record" in input:
+            advanced = cast(RecordInput, input)
+            return self._native.add(_records_json([advanced]))[0]
+        return self._native.upsert_record(_record_json(input))
 
     def add(self, records: Iterable[RecordInput]) -> list[list[int]]:
         return self._native.add(_records_json(records))
@@ -134,25 +144,54 @@ class GraphRetrievalDatabaseBuilder:
         *,
         corpus_id: str,
         graph: GraphSchema,
-        retrieval: RetrievalConfiguration,
+        retrieval: RetrievalConfiguration | None = None,
+        metric: str = "cosine",
+        encoding: str = "i8",
     ) -> None:
-        semantic = retrieval.semantic
+        if retrieval is not None:
+            metric = retrieval.semantic.metric
+            encoding = retrieval.semantic.encoding
         self._native = _GraphRetrievalDatabaseBuilder(
-            semantic.dimension,
             corpus_id,
             _schema_json(graph),
-            semantic.metric,
-            semantic.encoding,
+            metric,
+            encoding,
         )
 
+    @overload
+    def upsert(
+        self,
+        input: Record,
+        *,
+        embedding: Embedding | None = None,
+    ) -> list[int]: ...
+
+    @overload
     def upsert(
         self,
         input: RecordInput,
         *,
         embeddings: Mapping[str, Embedding],
+    ) -> list[int]: ...
+
+    def upsert(
+        self,
+        input: Record | RecordInput,
+        *,
+        embedding: Embedding | None = None,
+        embeddings: Mapping[str, Embedding] | None = None,
     ) -> list[int]:
-        record_id = input["record"]["id"]
-        return self._native.add(_records_json([input], {record_id: embeddings}))[0]
+        if "record" not in input:
+            if embeddings is not None:
+                raise TypeError("Record upsert accepts embedding=, not embeddings=")
+            return self._native.upsert_record(_record_json(input), embedding)
+        advanced = cast(RecordInput, input)
+        if embedding is not None:
+            raise TypeError("advanced RecordInput upsert accepts embeddings=")
+        if embeddings is None:
+            raise TypeError("advanced RecordInput upsert requires embeddings=")
+        record_id = advanced["record"]["id"]
+        return self._native.add(_records_json([advanced], {record_id: embeddings}))[0]
 
     def add(
         self,
@@ -164,6 +203,12 @@ class GraphRetrievalDatabaseBuilder:
 
     def build(self) -> GraphRetrievalDatabase:
         return GraphRetrievalDatabase(self._native.build())
+
+    @property
+    def dimension(self) -> int | None:
+        """The Rust-inferred dimension, or ``None`` before the first embedding."""
+
+        return self._native.dimension
 
 
 class GraphQueries:
@@ -492,6 +537,11 @@ def _records_json(
             for input in materialized
         ]
     )
+
+
+def _record_json(record: Record) -> str:
+    input: RecordInput = {"record": record}
+    return _records_json([input])
 
 
 def _timeout_milliseconds(timeout: float | None) -> int | None:

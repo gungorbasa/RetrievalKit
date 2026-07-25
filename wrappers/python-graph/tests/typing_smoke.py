@@ -11,6 +11,7 @@ from retrievalkit_graph import (
     GraphSchema,
     GraphSearchHit,
     GraphTraversal,
+    Record,
     RetrievalConfiguration,
     VectorIndexConfiguration,
 )
@@ -29,6 +30,19 @@ def typed_graph_database() -> GraphRetrievalDatabase:
             )
         ],
     )
+    progressive = GraphRetrievalDatabaseBuilder(
+        corpus_id="typed-progressive-graph",
+        graph=schema,
+    )
+    record: Record = {
+        "id": "document",
+        "record_type": "Topic",
+        "fields": {"title": "Document"},
+        "content": "typed graph document",
+    }
+    progressive.upsert(record, embedding=[1.0, 0.0])
+    _ = progressive.dimension
+
     builder = GraphRetrievalDatabaseBuilder(
         corpus_id="typed-graph",
         graph=schema,

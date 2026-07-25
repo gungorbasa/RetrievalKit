@@ -127,6 +127,72 @@ def test_graph_only_database_queries_hydrates_and_persists(tmp_path: Path) -> No
     assert result.matches[0]["node"]["record_id"] == "gamma"
 
 
+def test_progressive_graph_builders_hide_chunks_and_infer_dimension() -> None:
+    schema = topic_graph_schema()
+    graph_builder = GraphDatabaseBuilder(
+        corpus_id="python-progressive-graph",
+        schema=schema,
+    )
+    graph_builder.upsert(
+        {
+            "id": "alpha",
+            "record_type": "Topic",
+            "fields": {"title": "Alpha"},
+            "content": "alpha graph",
+            "metadata": {"tenant": "blue"},
+        }
+    )
+    graph_database = graph_builder.build()
+    graph_selection = graph_database.graph.query_equals(
+        node_type="Topic",
+        field="title",
+        values="Alpha",
+    )
+    graph_projection = graph_database.graph.project_candidates(graph_selection)
+    assert [
+        (candidate.record_id, candidate.chunk_key)
+        for candidate in graph_projection.candidates
+    ] == [("alpha", "alpha")]
+
+    combined_builder = GraphRetrievalDatabaseBuilder(
+        corpus_id="python-progressive-combined",
+        graph=schema,
+        metric="dot_product",
+        encoding="f32",
+    )
+    combined_builder.upsert(
+        {
+            "id": "alpha",
+            "record_type": "Topic",
+            "fields": {"title": "Alpha", "related_id": "beta"},
+        }
+    )
+    assert combined_builder.dimension is None
+    combined_builder.upsert(
+        {
+            "id": "beta",
+            "record_type": "Topic",
+            "fields": {"title": "Beta"},
+            "content": "beta retrieval",
+            "metadata": {"tenant": "blue"},
+        },
+        embedding=[1.0, 0.0],
+    )
+    assert combined_builder.dimension == 2
+    combined = combined_builder.build()
+    selection = combined.graph.query(
+        seeds=[GraphNode("Topic", "alpha")],
+        traversals=[GraphTraversal("related_to")],
+    )
+    assert (
+        combined.retrieval.semantic_search(
+            [1.0, 0.0],
+            within=selection,
+        )[0]["document_id"]
+        == "beta"
+    )
+
+
 def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None:
     builder = GraphRetrievalDatabaseBuilder(
         corpus_id="python-graph-retrieval",

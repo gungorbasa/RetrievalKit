@@ -6,6 +6,20 @@ All notable user-facing changes and persistence migrations are recorded here.
 
 ### Added
 
+- Repository-local, provisionally named TypeScript/Node base and graph
+  aggregates for Node.js LTS on macOS arm64. Promise-based N-API operations use
+  typed values, `Float32Array`, exact `bigint` transport, Rust-owned search and
+  graph semantics, deterministic async disposal, package-content checks, and
+  local-install smoke tests.
+- Repository-local Kotlin/JVM and Android base and graph aggregates with typed
+  JNI transport, `FloatArray` embeddings, `AutoCloseable` lifecycle, opaque
+  synchronized handles, and Android arm64-v8a AAR packaging.
+- Python graph queries, results, and stable candidate projection now cross
+  PyO3 as typed values without JSON. Projection filtering, stale-selection
+  checks, ordering, and counts remain owned by the canonical Rust corpus.
+- Progressive Python, TypeScript, and Kotlin ingestion accepts ordinary
+  documents plus direct embeddings and infers dimension in Rust, while
+  preserving advanced compatibility APIs where they already existed.
 - Crash-safe transactional index saves. New data is written to an immutable
   generation and synced before `manifest.json` publishes it.
 - Cross-process save locking prevents concurrent writers from publishing and

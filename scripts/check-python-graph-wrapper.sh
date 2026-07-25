@@ -38,6 +38,6 @@ if [[ "$SKIP_WHEEL" == "0" ]]; then
   WHEEL="$(find "$BUILD_DIR" -maxdepth 1 -name 'retrievalkit_graph-*.whl' -print -quit)"
   [[ -n "$WHEEL" ]] || { echo "graph wheel was not produced" >&2; exit 1; }
   "$PYTHON_BIN" -m venv "$SMOKE_DIR"
-  "$SMOKE_DIR/bin/python" -m pip install --disable-pip-version-check "$WHEEL"
+  "$SMOKE_DIR/bin/python" -m pip install --disable-pip-version-check --force-reinstall "$WHEEL"
   "$SMOKE_DIR/bin/python" "$WRAPPER_DIR/tests/smoke_installed.py"
 fi

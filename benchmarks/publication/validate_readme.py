@@ -60,8 +60,30 @@ def validate_local_links(repo: Path, readme: str) -> None:
 def validate_status_labels(readme: str) -> None:
     for sdk in ("Swift `RetrievalKit`", "Swift `RetrievalKitGraph`", "Swift `EmbeddingKit`", "Swift `RetrievalKitPipeline`", "Python `retrievalkit`", "Python `retrievalkit-graph`"):
         require(re.search(rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source\*\* \|", readme), f"incorrect source status for {sdk}")
-    for sdk in ("Kotlin", "TypeScript"):
-        require(re.search(rf"\| {sdk} \|.*\| \*\*Coming soon\*\* \|", readme), f"incorrect coming-soon status for {sdk}")
+    for sdk in (
+        "TypeScript `retrievalkit-node-local`",
+        "TypeScript `retrievalkit-node-graph-local`",
+        "Kotlin/JVM `retrievalkit`",
+        "Kotlin/JVM `retrievalkit-graph`",
+        "Android `retrievalkit-android`",
+        "Android `retrievalkit-graph-android`",
+    ):
+        require(
+            re.search(
+                rf"\| {re.escape(sdk)} \|.*provisional.*\| \*\*Available from source\*\* \|",
+                readme,
+            ),
+            f"incorrect provisional source status for {sdk}",
+        )
+    require(
+        re.search(
+            r"public SwiftPM, PyPI, npm, and Maven publication\s+remain blocked",
+            readme,
+            re.IGNORECASE,
+        )
+        is not None,
+        "README must deny public registry availability for provisional wrappers",
+    )
 
 
 def validate_claims(repo: Path, readme: str, mapping: dict[str, Any], as_of: date) -> None:

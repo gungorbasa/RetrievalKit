@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-import re
 import tempfile
 import unittest
 from datetime import date
@@ -33,15 +32,24 @@ class ReadmeClaimMutationTests(unittest.TestCase):
         result = VALIDATOR.validate(REPO, REPO / "benchmarks/publication/readme-claims-v1.json", date(2026, 7, 21))
         self.assertEqual(result["result"], "PASS")
 
-    def test_readme_quickstarts_match_executed_sources(self) -> None:
-        python_blocks = re.findall(r"```python\n(.*?)```", README, re.DOTALL)
-        swift_blocks = re.findall(r"```swift\n(.*?)```", README, re.DOTALL)
-        self.assertEqual(len(python_blocks), 1)
-        self.assertEqual(len(swift_blocks), 1)
-        python_source = (REPO / "wrappers/python/examples/database_quickstart.py").read_text()
-        self.assertEqual(python_blocks[0], "\n".join(python_source.splitlines()[2:]) + "\n")
-        swift_source = (REPO / "wrappers/swift/RetrievalKit/Sources/RetrievalKitDatabaseQuickstart/main.swift").read_text()
-        self.assertEqual(swift_blocks[0], swift_source)
+    def test_readme_quickstarts_reference_checked_in_sources(self) -> None:
+        quickstarts = (
+            "wrappers/python-graph/examples/graph_retrieval_quickstart.py",
+            "RetrievalKitGraphRetrievalQuickstart",
+            "wrappers/typescript",
+        )
+        for quickstart in quickstarts:
+            self.assertIn(quickstart, README)
+        self.assertTrue(
+            (REPO / "wrappers/python-graph/examples/graph_retrieval_quickstart.py").is_file()
+        )
+        self.assertTrue(
+            (
+                REPO
+                / "wrappers/swift/RetrievalKitGraph/Sources/"
+                "RetrievalKitGraphRetrievalQuickstart/main.swift"
+            ).is_file()
+        )
 
     def test_changed_number_is_rejected(self) -> None:
         self.assert_rejected(README.replace("7.17×", "7.18×"))

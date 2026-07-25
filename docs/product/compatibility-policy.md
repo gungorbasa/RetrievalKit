@@ -9,6 +9,10 @@ and accompanied by migration guidance.
 - Rust core and C ABI: exact behavior is revisioned with each release.
 - Swift: Swift 6.2, iOS 15+, and macOS 14+ on the published arm64 Apple slices.
 - Python: CPython 3.10–3.14 on macOS arm64 for the first preview.
+- TypeScript: Node.js LTS on macOS arm64 for the first preview. Browser and
+  WebAssembly runtimes are not supported.
+- Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
+  preview. Kotlin Multiplatform is not supported.
 - Persistence: V1–V4 base snapshots remain readable; new saves use the current
   checksummed format. Graph capability formats are validated independently.
 
@@ -23,8 +27,9 @@ Swift distributes them through separate `RetrievalKit` and
 `RetrievalKitGraph` package manifests so resolving one capability never
 downloads the other native aggregate.
 `retrievalkit` and `retrievalkit-graph` are likewise mutually exclusive inside one
-Python process. This boundary is part of compatibility, not a temporary build
-limitation.
+Python process. The TypeScript and Kotlin base and graph-capable packages use
+the same alternative-aggregate rule. This boundary is part of compatibility,
+not a temporary build limitation.
 
 Packed result layouts are an aggregate-level ABI contract. Native libraries,
 headers, and wrappers must be upgraded together. The graph aggregate exposes
@@ -37,5 +42,8 @@ integrators migrating from an earlier development artifact must update the
 header, native library, and wrapper source as one unit; the public Swift and
 Python APIs are unaffected by this internal boundary rename.
 
-Kotlin, TypeScript, x86_64 Apple, Linux, and Windows have no compatibility
-commitment until a release manifest lists them.
+TypeScript npm names and Kotlin Maven coordinates are provisional repository
+local identifiers until naming clearance. Public registry availability is not
+claimed. x86_64 Apple, Linux desktop/server, Windows, browser/WASM, and Kotlin
+Multiplatform have no compatibility commitment until a release manifest lists
+them.

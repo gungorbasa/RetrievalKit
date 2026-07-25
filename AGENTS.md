@@ -11,12 +11,16 @@ Keep this file focused on repo-wide rules. Put language-specific instructions in
 - Cursor: read `.cursor/rules/retrievalkit.mdc`, which points back to this file.
 - Rust changes: also read `docs/agents/rust.md`.
 - Python changes: also read `docs/agents/python.md`.
+- TypeScript changes: also read `docs/agents/typescript.md`.
+- Kotlin changes: also read `docs/agents/kotlin.md`.
 
 When changing repository guidance, update this file first. Keep tool-specific files as small compatibility entrypoints unless a tool genuinely needs different syntax.
 
 ## Product Direction
 
-RetrievalKit is a local-first retrieval SDK for mobile and desktop apps. The first target is an iOS/macOS SDK with a Rust retrieval core and a Swift wrapper.
+RetrievalKit is a local-first retrieval SDK for mobile and desktop apps. Its V1
+wrappers are Swift for iOS/macOS, Python and TypeScript for macOS arm64, and
+Kotlin/JVM with Android arm64-v8a packaging, all backed by the same Rust core.
 
 The current V1 direction is:
 
@@ -26,7 +30,8 @@ The current V1 direction is:
   vector search, text-only BM25 search, and text-plus-embedding ranking whose
   behavior is controlled by query-time `alpha`. BM25 is a query variation, not
   a separate database architecture or product capability.
-- Core priorities: correctness, speed, filtering, persistence, and Swift/iOS integration.
+- Core priorities: correctness, speed, filtering, persistence, and native
+  cross-language integration.
 
 Do not add HNSW, ANN indexing, server mode, sync, dashboards, or distributed database features unless the product spec is updated first. HNSW research exists in `docs/research/`, but it is deferred until exact/hybrid retrieval is polished and benchmarked.
 
@@ -99,9 +104,11 @@ crates/
   retrievalkit-core/        # Rust retrieval core
   retrievalkit-cli/         # Benchmarking and local tooling
 wrappers/
-  swift/                 # Swift/iOS/macOS wrapper
-  python/                # Future wrapper, if added
-  node/                  # Future wrapper, if added
+  swift/                     # Swift/iOS/macOS wrapper
+  python/                    # Python base wrapper
+  python-graph/              # Python graph aggregate
+  typescript/                # Node.js base and graph packages
+  kotlin/                    # Kotlin/JVM and Android modules
 docs/
   product/               # Active product decisions
   research/              # Deferred technical explorations
@@ -115,6 +122,8 @@ Language-specific guidance lives in `docs/agents/`.
 
 - Rust: `docs/agents/rust.md`
 - Python: `docs/agents/python.md`
+- TypeScript: `docs/agents/typescript.md`
+- Kotlin: `docs/agents/kotlin.md`
 
 Add a new language file before adding a substantial wrapper or implementation language.
 

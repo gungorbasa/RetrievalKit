@@ -28,7 +28,11 @@ python3 scripts/release/validate_release.py --repo .
 
 Python changes should also run `scripts/check-python-wrapper.sh` and
 `scripts/check-python-graph-wrapper.sh`. Swift or FFI changes should run
-`scripts/verify-swift-graph-wrapper.sh` on a supported Mac.
+`scripts/verify-swift-graph-wrapper.sh` on a supported Mac. TypeScript/Node
+changes should run the build, typecheck, lint, tests, package-content check, and
+local-install smoke test under `wrappers/typescript`. Kotlin changes should run
+the JVM tests for both aggregates and build and inspect both Android AARs under
+`wrappers/kotlin`.
 
 ## Legal status
 

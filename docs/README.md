@@ -8,6 +8,8 @@ Start here for product choices and runnable Project Apollo examples:
 
 - [`guides/swift.md`](guides/swift.md)
 - [`guides/python.md`](guides/python.md)
+- [`guides/typescript.md`](guides/typescript.md)
+- [`guides/kotlin.md`](guides/kotlin.md)
 
 ## Product
 
@@ -27,7 +29,8 @@ Current implementation source of truth:
 - [`product/size-speed-report.md`](product/size-speed-report.md) for the current
   compact-index footprint and retrieval-speed analysis
 - [`product/release-process.md`](product/release-process.md) for the guarded
-  combined Swift/Python `v0.1.0` release-candidate workflow
+  current Swift/Python release-candidate workflow; the provisional Node and
+  Kotlin artifacts are source-only and are not yet publication inputs
 - [`product/reports/v0.1.0-release-candidate-report.md`](product/reports/v0.1.0-release-candidate-report.md)
   for the qualified artifact identities, verification, and remaining blockers
 
@@ -46,7 +49,7 @@ RetrievalKit V1 is a small-index local retrieval SDK:
 target size: fewer than 50K chunks
 primary engine: exact vector search
 retrieval: exact vector + BM25 + hybrid ranking
-priority: speed, correctness, filtering, persistence, Swift/iOS integration
+priority: speed, correctness, filtering, persistence, native SDK integration
 ```
 
 HNSW/ANN work is deferred until exact/hybrid retrieval is polished and benchmarked on real iOS datasets.

@@ -3,8 +3,11 @@
 ## Product Summary
 
 Build a local-first retrieval SDK for mobile and desktop apps. The first public
-targets are iOS/macOS through Swift and macOS arm64 through Python, backed by
-one Rust core.
+targets are iOS/macOS through Swift, macOS arm64 through Python, Node.js LTS
+initially on macOS arm64 through TypeScript, and Kotlin/JVM with Android
+arm64-v8a native packaging, backed by one Rust core. The initial TypeScript
+target does not include browsers or WebAssembly. The initial Kotlin target does
+not include Kotlin Multiplatform.
 
 The SDK must provide fast, correct local retrieval over app-owned documents without requiring a vector database server.
 
@@ -47,6 +50,9 @@ Speed means:
 Initial target:
 
 - iOS/macOS developers building AI apps.
+- Node.js developers shipping local desktop or command-line AI features on
+  macOS arm64.
+- Android developers integrating through Kotlin/JVM on arm64-v8a devices.
 - Apps with private local data.
 - Apps that need offline semantic search or RAG.
 - Apps with small local indexes: 1K to fewer than 50K chunks.
@@ -67,6 +73,8 @@ V1 must include:
 - Rust retrieval core.
 - Swift wrapper.
 - Python wrapper with capability parity.
+- TypeScript wrapper for Node.js LTS, initially on macOS arm64.
+- Kotlin/JVM wrapper with Android arm64-v8a native packaging.
 - Local persistent index.
 - Exact vector search.
 - BM25 lexical scoring as the internal lexical component of hybrid search.
@@ -219,12 +227,24 @@ combined database exposes separate `graph` and `retrieval` query namespaces.
 Applications may install both distributions for environment compatibility but
 must import only one native distribution in a process.
 
+TypeScript and Kotlin follow the same aggregate boundary. TypeScript uses
+separate repository-local Node packages backed by separate napi-rs native
+aggregates; the initial supported runtime is Node.js LTS on macOS arm64, with
+no browser or WebAssembly claim. Kotlin uses separate base and graph-capable
+Kotlin/JVM modules backed by thin JNI aggregates; the initial native package is
+Android arm64-v8a, with no Kotlin Multiplatform claim. Base consumers in either
+ecosystem must not load or depend on graph code, and applications must not load
+both native aggregates in one process. npm names and Maven coordinates remain
+provisional until naming clearance and do not imply public registry
+availability.
+
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed
 traversal, and only the retrieval composition mode proven by the customer
 fixture. Arbitrary Cypher, automatic model extraction, PageRank and broad graph
 analytics, SQL metadata storage, ANN/HNSW, incremental graph mutation,
-JavaScript, and Kotlin remain out of scope until separately authorized.
+browser/WASM TypeScript, and Kotlin Multiplatform remain out of scope until
+separately authorized.
 
 ## Small-Index MVP Strategy
 
@@ -1648,10 +1668,10 @@ Success criteria:
 Start with:
 
 ```text
-language: Rust core, Swift wrapper
+language: Rust core with native Swift, Python, TypeScript/Node, and Kotlin/JVM wrappers
 metric: cosine
 normalization: unit L2
-dimension: caller-defined, fixed per index
+dimension: inferred from the first embedding, then fixed per index
 vector encoding: I8ScalarQuantized by default, F32/F16 opt-in
 exact search: enabled
 BM25: enabled

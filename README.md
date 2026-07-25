@@ -1,7 +1,7 @@
 # ![RetrievalKit — local hybrid search grounded by your app's relationships](assets/readme/hero.svg)
 
-RetrievalKit is one local retrieval engine for Swift and Python apps. It
-combines semantic meaning with BM25 keyword evidence, and can use
+RetrievalKit is one local retrieval engine for Swift, Python, TypeScript/Node,
+and Kotlin apps. It combines semantic meaning with BM25 keyword evidence and can use
 application-defined relationships to search only the relevant part of your
 corpus. One corpus, one ranked list, one trace, and no retrieval server.
 
@@ -10,10 +10,12 @@ corpus. One corpus, one ranked list, one trace, and no retrieval server.
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust)](https://www.rust-lang.org/)
 [![Swift](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift)](https://www.swift.org/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://www.python.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)](https://nodejs.org/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-JVM%2011-7F52FF?logo=kotlin)](https://kotlinlang.org/)
 [![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
 
-**[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
+**[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[TypeScript guide](docs/guides/typescript.md)** · **[Kotlin guide](docs/guides/kotlin.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
 
 </div>
 
@@ -66,8 +68,8 @@ rule?” They can be used together.
 </p>
 
 Indexing, graph traversal, filtering, ranking, trace construction, and
-persistence all run in the shared Rust core. Swift and Python provide idiomatic
-APIs over the same ownership model and correctness guarantees.
+persistence all run in the shared Rust core. The language wrappers provide
+idiomatic APIs over the same ownership model and correctness guarantees.
 
 Embeddings are caller-provided. To keep the complete ingestion and query flow
 private, use a local embedding provider such as a Core ML model through
@@ -85,6 +87,10 @@ choose, when, and why:
   embeddings.
 - **[Python guide](docs/guides/python.md)** — the same product flow with
   Pythonic builders, queries, lifecycle, and packaging.
+- **[TypeScript guide](docs/guides/typescript.md)** — asynchronous Node.js
+  builders and typed N-API values on macOS arm64.
+- **[Kotlin guide](docs/guides/kotlin.md)** — Kotlin/JVM and Android
+  arm64-v8a builders over a typed JNI boundary.
 
 The complete programs are checked into the repository and are exercised by the
 wrapper validation scripts, so the documentation stays tied to executable
@@ -106,13 +112,17 @@ traversal.
 | Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
 | Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
 | Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
-| Kotlin | — | **Coming soon** |
-| TypeScript | — | **Coming soon** |
+| TypeScript `retrievalkit-node-local` | Base corpus and retrieval; provisional repository-local name | **Available from source** |
+| TypeScript `retrievalkit-node-graph-local` | Graph aggregate with retrieval; provisional repository-local name | **Available from source** |
+| Kotlin/JVM `retrievalkit` | Base corpus and retrieval; provisional coordinates | **Available from source** |
+| Kotlin/JVM `retrievalkit-graph` | Graph aggregate with retrieval; provisional coordinates | **Available from source** |
+| Android `retrievalkit-android` | Base AAR for arm64-v8a; provisional coordinates | **Available from source** |
+| Android `retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a; provisional coordinates | **Available from source** |
 
-The Python distributions are mutually exclusive within one process. Likewise,
-Swift applications must link either the base native aggregate or the graph
-native aggregate, never both. The graph-enabled distribution already contains
-the base native retrieval capabilities.
+The base and graph native aggregates are mutually exclusive within one process
+for every language. The graph-enabled distribution already contains the base
+native retrieval capabilities. Node loaders enforce this with a process-global
+guard; JVM and Android applications must depend on exactly one artifact.
 
 Swift base and graph distributions use separate package manifests. This keeps
 SwiftPM from downloading the graph native artifact for a base-only application,
@@ -151,6 +161,26 @@ Expected output: `graph-hybrid=decision-swift`.
 See the [Python guide](docs/guides/python.md) or
 [Swift guide](docs/guides/swift.md) for complete code, base-package commands,
 semantic-only variations, persistence, and trace inspection.
+
+Run the Node.js source checks on a supported macOS arm64 host:
+
+```bash
+cd wrappers/typescript
+npm ci
+npm run build
+npm test
+```
+
+Run the Kotlin/JVM tests after building the matching JNI aggregate:
+
+```bash
+cd wrappers/kotlin
+./gradlew :base:test :graph:test
+```
+
+The [TypeScript guide](docs/guides/typescript.md) and
+[Kotlin guide](docs/guides/kotlin.md) include native build, package-content,
+local-install, and Android AAR commands.
 
 ## Measured proof
 
@@ -245,26 +275,32 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 
 - V1 is designed for local indexes with fewer than 50K chunks.
 - Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
-  iOS 15+, including the arm64 iOS Simulator.
+  iOS 15+, including the arm64 iOS Simulator. The provisional Node target is
+  macOS arm64; the provisional Android target is arm64-v8a.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
 - Installation remains source-first until the remaining release gates are
   owner-approved.
 - Benchmark evidence supports scoped observations, not a universal competitor
   claim.
-- SwiftPM and Python package publication remain blocked pending provisioned
-  Phase 7 release gates and claim authorization for the release revision.
+- Public SwiftPM, PyPI, npm, and Maven publication remain blocked pending
+  provisioned release gates, naming clearance where applicable, and claim
+  authorization for the release revision.
 
 ## Documentation
 
 - [Swift guide](docs/guides/swift.md)
 - [Python guide](docs/guides/python.md)
+- [TypeScript guide](docs/guides/typescript.md)
+- [Kotlin guide](docs/guides/kotlin.md)
 - [Product specification](docs/product/retrievalkit-product-spec.md)
 - [Capability-separated architecture](docs/product/capability-separated-architecture.md)
 - [Swift wrapper API/build reference](wrappers/swift/RetrievalKit/README.md)
 - [Swift graph wrapper API/build reference](wrappers/swift/RetrievalKitGraph/README.md)
 - [Python wrapper API/build reference](wrappers/python/README.md)
 - [Python graph wrapper API/build reference](wrappers/python-graph/README.md)
+- [TypeScript wrapper API/build reference](wrappers/typescript/README.md)
+- [Kotlin/JVM and Android API/build reference](wrappers/kotlin/README.md)
 - [Release process](docs/product/release-process.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)

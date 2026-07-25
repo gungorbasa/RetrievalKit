@@ -111,9 +111,9 @@ use the existing typed stale-generation error.
 
 The work is O(scope size), aside from the required lexical identity sort, and
 does not scan the corpus. A no-filter projection still validates generation and
-scope membership. The current production Python graph surface does not expose
-this operation; an equivalent native projection must be added when that wrapper
-is introduced rather than reimplementing filtering in Python.
+scope membership. Swift, Python, TypeScript/Node, and Kotlin expose this same
+Rust-owned projection through typed native boundaries. None reimplements
+filtering, generation checks, or lexical ordering in wrapper code.
 
 ## Persistence Contract
 
@@ -154,6 +154,29 @@ not require normal callers to call `close()`.
 Swift performs marshaling, ownership, concurrency coordination, and error
 mapping only. Schema validation, indexing, filtering, ranking, traversal,
 candidate projection, and persistence remain Rust logic.
+
+## Python, TypeScript, and Kotlin Contracts
+
+Python mirrors the three concrete database types with context managers and
+typed PyO3 values. The graph query, result, and candidate-projection path does
+not serialize JSON. Long-running Rust work releases the GIL.
+
+TypeScript exposes promise-based builders and resources over N-API. Embeddings
+use `Float32Array`; signed 64-bit values surface as `bigint`. The base and graph
+packages contain distinct native aggregates, and a process-global loader guard
+rejects mixing them.
+
+Kotlin exposes `AutoCloseable` builders, databases, and graph selections over
+typed JNI objects and `FloatArray` embeddings. JNI handles are opaque registry
+keys, and each resource owns its synchronization. Kotlin/JVM and Android use
+separate base and graph artifacts; Android is initially packaged only for
+arm64-v8a.
+
+All three wrappers use the progressive common path: callers supply ordinary
+documents or records and direct embeddings, while Rust derives stable internal
+chunk identities and infers retrieval dimension from the first embedding.
+Advanced keyed-chunk APIs may remain for compatibility, but are not the default
+developer path.
 
 ## Error Contract
 

@@ -781,32 +781,86 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   includes Mach task RSS snapshots for the whole report, per-run build/search
   phases, and persistence save/load/post-load-search phases.
 
+## 2026-07-25 Python, TypeScript, and Kotlin Wrapper Completion
+
+- Python stable candidate projection now calls the corpus-owned Rust operation
+  and preserves generation/corpus checks, filtering, lexical identities,
+  source-node count, and before/after counts. Python graph query input and
+  result materialization use typed PyO3 conversion; JSON remains only on
+  justified cold schema/advanced ingestion and hydration paths.
+- Python's common path now accepts `Document` plus one direct embedding,
+  graph-only `Record`, or combined `Record` plus an optional direct embedding.
+  Rust infers dimension and derives hidden document/chunk identities. The
+  legacy keyed-record surface remains available as an advanced compatibility
+  path.
+- TypeScript/Node is implemented through napi-rs as separate provisional
+  `retrievalkit-node-local` and `retrievalkit-node-graph-local` packages.
+  Blocking native work uses worker tasks, embeddings use `Float32Array`, i64
+  values use exact `bigint`, graph paths/provenance and projection are typed,
+  and an aggregate guard rejects loading both packages in one process. The
+  narrow qualified target is Node.js LTS on macOS arm64; browser/WASM and public
+  npm availability are not claimed.
+- Kotlin/JVM and Android are implemented through a thin typed JNI crate with
+  separate base and graph aggregates. Public APIs use blocking idiomatic
+  overloads, `FloatArray`, sealed values, typed exceptions, and
+  `AutoCloseable`. Opaque registry handles resolve under a short global lock
+  and then use per-resource locking, so independent databases do not serialize.
+  Android AARs currently contain only arm64-v8a. Kotlin Multiplatform and public
+  Maven availability are not claimed.
+- Base and graph artifacts remain mutually exclusive in every language. The
+  graph aggregate includes retrieval; base artifacts are checked to exclude
+  graph code and dependencies.
+
+Verification completed without benchmark workloads:
+
+- Scoped Rust format checks for the Python, Node, and JNI crates pass, and
+  workspace clippy with all targets/features passes. The repository-wide format
+  check still reports pre-existing formatting drift in unrelated CLI, core,
+  FFI, graph, and benchmark files under the installed rustfmt; those files were
+  deliberately left untouched.
+- Base and graph Cargo checks pass for Python, Node, and JNI.
+- Python Ruff, strict mypy, base `27` tests, graph `8` tests, all three
+  examples, CPython 3.14 wheel builds, and isolated installed-wheel smoke tests
+  pass.
+- TypeScript build/typecheck/lint pass; base `6` and graph `7` tests pass.
+  Package-content, graph-exclusion, isolated local-install, all three examples,
+  Node 24 LTS, and production-dependency audit checks pass.
+- Kotlin/JVM base and graph unit/conformance tests pass from a forced rerun.
+  Retrieval-only, graph-only, and combined examples pass. Both Android release
+  AARs assemble and pass base/graph aggregate inspection; the JNI payloads are
+  arm64-v8a.
+- README claim validation/tests and release validation pass. Release validation
+  still reports the existing owner-authorization and standalone graph Swift
+  publication blockers.
+- The broad `cargo test --workspace --all-features --no-fail-fast` run passes
+  every non-CLI target but fails 34 `retrievalkit-cli` V3 qualification tests
+  at their common fixture integrity precondition:
+  `manifests/chunking.json` is recorded as 715 bytes but is 718 bytes. This
+  tracked frozen benchmark/release evidence predates and is unrelated to the
+  wrapper changes. It was not regenerated because benchmark and release
+  qualification remain explicitly paused.
+
 ## Likely Next Tasks
 
-The active slice is SDK implementation finalization. Benchmark Phases 0–7 and
-the release-candidate implementation are preserved but intentionally parked.
-Do not resume candidate rebuilding, release-evidence provisioning, publication,
-or physical-device work without a new explicit owner task.
+The scoped SDK wrapper implementation is complete. Benchmark Phases 0–7 and
+release-candidate work remain parked. Do not rebuild frozen fixtures, provision
+release evidence, publish packages, or resume physical-device work without a
+new explicit owner task.
 
-The remaining SDK-completion gaps, in dependency order, are:
+The next owner decisions are:
 
-1. Expose corpus-owned stable candidate-identity projection through Python
-   graph APIs, matching the existing Rust and Swift operation rather than
-   reproducing filtering or generation checks in Python.
-2. Replace JSON transport on the Python graph query path with typed PyO3
-   conversion. Wrapper-overhead benchmarking remains deferred with the broader
-   benchmark pause.
-3. Run a focused public-API and developer-experience closure audit after these
-   contracts land; fix only SDK implementation/documentation gaps found there.
+1. clear final npm names and Maven coordinates;
+2. decide when to qualify more Node operating systems/architectures and Android
+   ABIs;
+3. separately authorize repair or regeneration of the inconsistent frozen V3
+   quality fixture;
+4. authorize wrapper-overhead measurements before making any cross-language
+   performance claim.
 
-The canonical result/trace contract and the retrieval-only Rust/Swift/Python
-conformance fixture are implemented. The fixture covers Unicode and all
-metadata value types, chunk-over-document metadata precedence, exact/BM25/
-hybrid ordering, alpha endpoints, trace fields, and compact persistence with
-BM25 rebuild. Base and graph fixture runners remain separate because their
-native aggregates are intentionally mutually exclusive.
-
-The formal gap source is
+The canonical result/trace contracts and shared retrieval/graph conformance
+expectations now cover Rust, Swift, Python, TypeScript, and Kotlin. Base and
+graph runners remain separate because their native aggregates are intentionally
+mutually exclusive. The formal status source is
 `docs/product/reports/cross-language-wrapper-parity-audit.md`.
 
 When the owner explicitly resumes release work, continue the parked release

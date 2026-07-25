@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from retrievalkit_graph import (
+    GraphCandidateProjection,
     GraphNode,
     GraphRecordInput,
     GraphRecordNode,
@@ -51,6 +52,8 @@ def typed_graph_database() -> GraphRetrievalDatabase:
         seeds=[GraphNode("Topic", "alpha")],
         traversals=[GraphTraversal("related_to", min_hops=0, max_hops=0)],
     )
+    candidates: GraphCandidateProjection = database.graph.project_candidates(selection)
+    _ = candidates
     hits: list[GraphSearchHit] = database.retrieval.semantic_search(
         [1.0, 0.0], within=selection
     )

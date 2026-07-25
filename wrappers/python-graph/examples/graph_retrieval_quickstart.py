@@ -94,6 +94,10 @@ selection = database.graph.query(
     seeds=[GraphNode("Project", "apollo")],
     traversals=[GraphTraversal("contains")],
 )
+projection = database.graph.project_candidates(
+    selection,
+    where={"status": "approved"},
+)
 hits = database.retrieval.hybrid_search(
     "Why did we choose Swift?",
     [1.0, 0.0],
@@ -103,3 +107,8 @@ hits = database.retrieval.hybrid_search(
 )
 
 print(f"graph-hybrid={hits[0]['document_id']}")
+print(
+    "graph-candidates="
+    f"{projection.projected_chunks_after_filter}/"
+    f"{projection.projected_chunks_before_filter}"
+)

@@ -42,6 +42,11 @@ def main() -> None:
     )
     database = builder.build()
     selection = database.graph.query(seeds=[GraphNode("Topic", "topic-alpha")])
+    projection = database.graph.project_candidates(selection)
+    assert [
+        (candidate.record_id, candidate.chunk_key)
+        for candidate in projection.candidates
+    ] == [("topic-alpha", "summary")]
     hits = database.retrieval.semantic_search([1.0, 0.0], within=selection)
     assert [hit["document_id"] for hit in hits] == ["topic-alpha"]
 

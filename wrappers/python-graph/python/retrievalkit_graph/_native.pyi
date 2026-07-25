@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .graph_types import Embedding, Filter, HybridHit, SearchHit
+from .graph_types import (
+    Embedding,
+    Filter,
+    GraphDirection,
+    GraphScalar,
+    HybridHit,
+    SearchHit,
+)
+
+_NodeInput = tuple[str, str, str | None]
+_TraversalInput = tuple[str, GraphDirection, int, int]
+_LimitsInput = tuple[int, int, int, int]
 
 class RetrievalKitError(Exception): ...
 class DimensionMismatchError(RetrievalKitError): ...
@@ -26,7 +37,7 @@ class _GraphSelection:
     def projected_chunk_count(self) -> int: ...
     @property
     def closed(self) -> bool: ...
-    def to_json(self) -> str: ...
+    def materialize(self) -> dict[str, object]: ...
     def close(self) -> None: ...
 
 class _GraphDatabaseBuilder:
@@ -52,13 +63,32 @@ class _GraphDatabase:
     @staticmethod
     def validate(path: str | Path) -> None: ...
     def save(self, path: str | Path) -> dict[str, int]: ...
-    def query(
+    def query_nodes(
         self,
-        query_json: str,
+        nodes: list[_NodeInput],
+        traversals: list[_TraversalInput],
+        limits: _LimitsInput,
         *,
         cancellation: _GraphCancellationToken | None = None,
         timeout_ms: int | None = None,
     ) -> _GraphSelection: ...
+    def query_equals(
+        self,
+        node_type: str,
+        field: list[str],
+        values: list[GraphScalar],
+        traversals: list[_TraversalInput],
+        limits: _LimitsInput,
+        *,
+        cancellation: _GraphCancellationToken | None = None,
+        timeout_ms: int | None = None,
+    ) -> _GraphSelection: ...
+    def project_candidates(
+        self,
+        selection: _GraphSelection,
+        *,
+        where: Filter | None = None,
+    ) -> dict[str, object]: ...
     def records_json(self, record_ids: list[str]) -> str: ...
     def chunks_json(self, chunk_ids: list[int]) -> str: ...
     @property
@@ -71,13 +101,32 @@ class _GraphRetrievalDatabase:
     @staticmethod
     def validate(path: str | Path) -> None: ...
     def save(self, path: str | Path) -> dict[str, int]: ...
-    def query(
+    def query_nodes(
         self,
-        query_json: str,
+        nodes: list[_NodeInput],
+        traversals: list[_TraversalInput],
+        limits: _LimitsInput,
         *,
         cancellation: _GraphCancellationToken | None = None,
         timeout_ms: int | None = None,
     ) -> _GraphSelection: ...
+    def query_equals(
+        self,
+        node_type: str,
+        field: list[str],
+        values: list[GraphScalar],
+        traversals: list[_TraversalInput],
+        limits: _LimitsInput,
+        *,
+        cancellation: _GraphCancellationToken | None = None,
+        timeout_ms: int | None = None,
+    ) -> _GraphSelection: ...
+    def project_candidates(
+        self,
+        selection: _GraphSelection,
+        *,
+        where: Filter | None = None,
+    ) -> dict[str, object]: ...
     def search(
         self,
         embedding: Embedding,

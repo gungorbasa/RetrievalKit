@@ -3,21 +3,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString};
 use retrievalkit_core::{
     ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, HybridHit, HybridQuery,
     Metadata, Record, RecordChunkInput, RecordId, RecordInput, RetrievalConfiguration,
     RetrievalDatabase, RetrievalKitError as CoreError, SearchHit, SearchQuery,
 };
 use retrievalkit_graph::{
-    CancellationToken, Direction, GraphDatabase, GraphDatabaseFileSizes,
+    CancellationToken, Direction, GraphCandidateProjection, GraphDatabase, GraphDatabaseFileSizes,
     GraphError as RustGraphError, GraphQuery, GraphResult, GraphRetrievalDatabase, GraphScalar,
     GraphSchema, NodeId, NodeSource, NodeType, QueryLimits, RelationshipType, Seed, Traverse,
+    TruncationReason,
 };
 use serde::Deserialize;
-use serde_json::json;
 
 use crate::{
     hybrid_trace_to_py, metadata_to_py, parse_encoding, parse_metric, parse_optional_filter,
@@ -44,83 +44,9 @@ struct RecordChunkBatch {
     metadata: Metadata,
 }
 
-#[derive(Debug, Deserialize)]
-struct QueryRequest {
-    seed: QuerySeed,
-    #[serde(default)]
-    traversals: Vec<QueryTraversal>,
-    #[serde(default)]
-    limits: QueryLimitInput,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum QuerySeed {
-    Nodes {
-        nodes: Vec<QueryNode>,
-    },
-    Equals {
-        node_type: String,
-        field: Vec<String>,
-        values: Vec<QueryScalar>,
-    },
-}
-
-#[derive(Debug, Deserialize)]
-struct QueryNode {
-    node_type: String,
-    record_id: String,
-    #[serde(default)]
-    chunk_key: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum QueryScalar {
-    Bool(bool),
-    Integer(i64),
-    String(String),
-}
-
-#[derive(Debug, Deserialize)]
-struct QueryTraversal {
-    relationship: String,
-    #[serde(default = "default_direction")]
-    direction: String,
-    #[serde(default = "default_one")]
-    min_hops: usize,
-    #[serde(default = "default_one")]
-    max_hops: usize,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(default)]
-struct QueryLimitInput {
-    max_hops: usize,
-    max_visited: usize,
-    max_results: usize,
-    max_working_bytes: usize,
-}
-
-impl Default for QueryLimitInput {
-    fn default() -> Self {
-        let limits = QueryLimits::default();
-        Self {
-            max_hops: limits.max_hops,
-            max_visited: limits.max_visited,
-            max_results: limits.max_results,
-            max_working_bytes: limits.max_working_bytes,
-        }
-    }
-}
-
-fn default_direction() -> String {
-    "outgoing".to_owned()
-}
-
-fn default_one() -> usize {
-    1
-}
+type QueryNodeInput = (String, String, Option<String>);
+type QueryTraversalInput = (String, String, i64, i64);
+type QueryLimitsInput = (i64, i64, i64, i64);
 
 #[pyclass(name = "_GraphCancellationToken")]
 pub(crate) struct PyGraphCancellationToken {
@@ -159,13 +85,12 @@ impl PyGraphSelection {
         self.projected_chunk_count
     }
 
-    fn to_json(&self) -> PyResult<String> {
+    fn materialize(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let result = self
             .result
             .as_ref()
             .ok_or_else(|| StaleGraphSelectionError::new_err("graph selection has been closed"))?;
-        serde_json::to_string(&graph_result_value(result, self.projected_chunk_count))
-            .map_err(json_error)
+        graph_result_to_py(py, result, self.projected_chunk_count)
     }
 
     fn close(&mut self) {
@@ -359,28 +284,63 @@ impl PyGraphDatabase {
         graph_size_report_to_py(py, sizes)
     }
 
-    #[pyo3(signature = (query_json, *, cancellation = None, timeout_ms = None))]
-    fn query(
+    #[pyo3(signature = (nodes, traversals, limits, *, cancellation = None, timeout_ms = None))]
+    fn query_nodes(
         &self,
         py: Python<'_>,
-        query_json: String,
+        nodes: Vec<QueryNodeInput>,
+        traversals: Vec<QueryTraversalInput>,
+        limits: QueryLimitsInput,
         cancellation: Option<&PyGraphCancellationToken>,
         timeout_ms: Option<u64>,
     ) -> PyResult<PyGraphSelection> {
-        let query = parse_query(&query_json)?;
+        let query = node_query(nodes, traversals, limits)?;
+        self.execute_query(py, query, cancellation, timeout_ms)
+    }
+
+    #[pyo3(signature = (
+        node_type,
+        field,
+        values,
+        traversals,
+        limits,
+        *,
+        cancellation = None,
+        timeout_ms = None
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn query_equals(
+        &self,
+        py: Python<'_>,
+        node_type: String,
+        field: Vec<String>,
+        values: Vec<Py<PyAny>>,
+        traversals: Vec<QueryTraversalInput>,
+        limits: QueryLimitsInput,
+        cancellation: Option<&PyGraphCancellationToken>,
+        timeout_ms: Option<u64>,
+    ) -> PyResult<PyGraphSelection> {
+        let query = equals_query(py, node_type, field, values, traversals, limits)?;
+        self.execute_query(py, query, cancellation, timeout_ms)
+    }
+
+    #[pyo3(signature = (selection, *, r#where = None))]
+    fn project_candidates(
+        &self,
+        py: Python<'_>,
+        selection: &PyGraphSelection,
+        r#where: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let filter = parse_optional_filter(r#where)?;
+        let selection = selection
+            .result
+            .as_ref()
+            .ok_or_else(|| StaleGraphSelectionError::new_err("graph selection has been closed"))?;
         let database = self.require_database()?;
-        let cancellation = cancellation.map(|value| value.token.clone());
-        py.detach(move || {
-            let result = execute_query_with_controls(cancellation.as_ref(), timeout_ms, |token| {
-                database.graph_query(&query, token)
-            })
+        let projection = py
+            .detach(move || database.project_candidate_identities(selection, filter.as_ref()))
             .map_err(graph_error)?;
-            let projected = database.project_candidates(&result).map_err(graph_error)?;
-            Ok(PyGraphSelection {
-                result: Some(result),
-                projected_chunk_count: projected.trace.resolved_chunks,
-            })
-        })
+        graph_candidate_projection_to_py(py, projection)
     }
 
     fn records_json(&self, record_ids: Vec<String>) -> PyResult<String> {
@@ -406,6 +366,28 @@ impl PyGraphDatabase {
         self.database
             .as_ref()
             .ok_or_else(|| GraphError::new_err("graph database has been closed"))
+    }
+
+    fn execute_query(
+        &self,
+        py: Python<'_>,
+        query: GraphQuery,
+        cancellation: Option<&PyGraphCancellationToken>,
+        timeout_ms: Option<u64>,
+    ) -> PyResult<PyGraphSelection> {
+        let database = self.require_database()?;
+        let cancellation = cancellation.map(|value| value.token.clone());
+        py.detach(move || {
+            let result = execute_query_with_controls(cancellation.as_ref(), timeout_ms, |token| {
+                database.graph_query(&query, token)
+            })
+            .map_err(graph_error)?;
+            let projected = database.project_candidates(&result).map_err(graph_error)?;
+            Ok(PyGraphSelection {
+                result: Some(result),
+                projected_chunk_count: projected.trace.resolved_chunks,
+            })
+        })
     }
 }
 
@@ -436,28 +418,63 @@ impl PyGraphRetrievalDatabase {
         graph_size_report_to_py(py, sizes)
     }
 
-    #[pyo3(signature = (query_json, *, cancellation = None, timeout_ms = None))]
-    fn query(
+    #[pyo3(signature = (nodes, traversals, limits, *, cancellation = None, timeout_ms = None))]
+    fn query_nodes(
         &self,
         py: Python<'_>,
-        query_json: String,
+        nodes: Vec<QueryNodeInput>,
+        traversals: Vec<QueryTraversalInput>,
+        limits: QueryLimitsInput,
         cancellation: Option<&PyGraphCancellationToken>,
         timeout_ms: Option<u64>,
     ) -> PyResult<PyGraphSelection> {
-        let query = parse_query(&query_json)?;
+        let query = node_query(nodes, traversals, limits)?;
+        self.execute_query(py, query, cancellation, timeout_ms)
+    }
+
+    #[pyo3(signature = (
+        node_type,
+        field,
+        values,
+        traversals,
+        limits,
+        *,
+        cancellation = None,
+        timeout_ms = None
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn query_equals(
+        &self,
+        py: Python<'_>,
+        node_type: String,
+        field: Vec<String>,
+        values: Vec<Py<PyAny>>,
+        traversals: Vec<QueryTraversalInput>,
+        limits: QueryLimitsInput,
+        cancellation: Option<&PyGraphCancellationToken>,
+        timeout_ms: Option<u64>,
+    ) -> PyResult<PyGraphSelection> {
+        let query = equals_query(py, node_type, field, values, traversals, limits)?;
+        self.execute_query(py, query, cancellation, timeout_ms)
+    }
+
+    #[pyo3(signature = (selection, *, r#where = None))]
+    fn project_candidates(
+        &self,
+        py: Python<'_>,
+        selection: &PyGraphSelection,
+        r#where: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let filter = parse_optional_filter(r#where)?;
+        let selection = selection
+            .result
+            .as_ref()
+            .ok_or_else(|| StaleGraphSelectionError::new_err("graph selection has been closed"))?;
         let database = self.require_database()?;
-        let cancellation = cancellation.map(|value| value.token.clone());
-        py.detach(move || {
-            let result = execute_query_with_controls(cancellation.as_ref(), timeout_ms, |token| {
-                database.graph_query(&query, token)
-            })
+        let projection = py
+            .detach(move || database.project_candidate_identities(selection, filter.as_ref()))
             .map_err(graph_error)?;
-            let projected = database.project_candidates(&result).map_err(graph_error)?;
-            Ok(PyGraphSelection {
-                result: Some(result),
-                projected_chunk_count: projected.trace.resolved_chunks,
-            })
-        })
+        graph_candidate_projection_to_py(py, projection)
     }
 
     #[pyo3(signature = (embedding, *, limit = 10, r#where = None, selection = None))]
@@ -566,6 +583,28 @@ impl PyGraphRetrievalDatabase {
             .as_ref()
             .ok_or_else(|| GraphError::new_err("graph retrieval database has been closed"))
     }
+
+    fn execute_query(
+        &self,
+        py: Python<'_>,
+        query: GraphQuery,
+        cancellation: Option<&PyGraphCancellationToken>,
+        timeout_ms: Option<u64>,
+    ) -> PyResult<PyGraphSelection> {
+        let database = self.require_database()?;
+        let cancellation = cancellation.map(|value| value.token.clone());
+        py.detach(move || {
+            let result = execute_query_with_controls(cancellation.as_ref(), timeout_ms, |token| {
+                database.graph_query(&query, token)
+            })
+            .map_err(graph_error)?;
+            let projected = database.project_candidates(&result).map_err(graph_error)?;
+            Ok(PyGraphSelection {
+                result: Some(result),
+                projected_chunk_count: projected.trace.resolved_chunks,
+            })
+        })
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -653,69 +692,102 @@ fn parse_records(value: &str) -> PyResult<Vec<RecordBatch>> {
         .map_err(|error| PyValueError::new_err(format!("invalid graph records: {error}")))
 }
 
-fn parse_query(value: &str) -> PyResult<GraphQuery> {
-    let request: QueryRequest = serde_json::from_str(value)
-        .map_err(|error| GraphQueryError::new_err(format!("invalid graph query: {error}")))?;
-    let seed = match request.seed {
-        QuerySeed::Nodes { nodes } => Seed::NodeIds(
+fn node_query(
+    nodes: Vec<QueryNodeInput>,
+    traversals: Vec<QueryTraversalInput>,
+    limits: QueryLimitsInput,
+) -> PyResult<GraphQuery> {
+    graph_query(
+        Seed::NodeIds(
             nodes
                 .into_iter()
-                .map(query_node)
+                .map(|(node_type, record_id, chunk_key)| {
+                    query_node(node_type, record_id, chunk_key)
+                })
                 .collect::<PyResult<Vec<_>>>()?,
         ),
-        QuerySeed::Equals {
-            node_type,
-            field,
-            values,
-        } => Seed::Equals {
-            node_type: NodeType::new(node_type).map_err(graph_error)?,
-            field: retrievalkit_graph::FieldPath::new(
-                field
-                    .into_iter()
-                    .map(|field| retrievalkit_core::FieldName::new(field).map_err(core_error))
-                    .collect::<PyResult<Vec<_>>>()?,
-            )
-            .map_err(graph_error)?,
-            values: values.into_iter().map(query_scalar).collect(),
-        },
+        traversals,
+        limits,
+    )
+}
+
+fn equals_query(
+    py: Python<'_>,
+    node_type: String,
+    field: Vec<String>,
+    values: Vec<Py<PyAny>>,
+    traversals: Vec<QueryTraversalInput>,
+    limits: QueryLimitsInput,
+) -> PyResult<GraphQuery> {
+    let seed = Seed::Equals {
+        node_type: NodeType::new(node_type).map_err(graph_error)?,
+        field: retrievalkit_graph::FieldPath::new(
+            field
+                .into_iter()
+                .map(|field| retrievalkit_core::FieldName::new(field).map_err(core_error))
+                .collect::<PyResult<Vec<_>>>()?,
+        )
+        .map_err(graph_error)?,
+        values: values
+            .into_iter()
+            .map(|value| query_scalar(value.bind(py)))
+            .collect::<PyResult<Vec<_>>>()?,
     };
-    let traversals = request
-        .traversals
+    graph_query(seed, traversals, limits)
+}
+
+fn graph_query(
+    seed: Seed,
+    traversals: Vec<QueryTraversalInput>,
+    limits: QueryLimitsInput,
+) -> PyResult<GraphQuery> {
+    let steps = traversals
         .into_iter()
-        .map(|traversal| {
-            let direction = match traversal.direction.to_ascii_lowercase().as_str() {
-                "outgoing" => Direction::Outgoing,
-                "incoming" => Direction::Incoming,
-                other => {
-                    return Err(GraphQueryError::new_err(format!(
-                        "unsupported graph direction '{other}'"
-                    )))
-                }
-            };
-            Ok(Traverse {
-                relationship: RelationshipType::new(traversal.relationship).map_err(graph_error)?,
-                direction,
-                min_hops: traversal.min_hops,
-                max_hops: traversal.max_hops,
-            })
-        })
+        .map(
+            |(relationship, direction, min_hops, max_hops)| -> PyResult<Traverse> {
+                let direction = match direction.to_ascii_lowercase().as_str() {
+                    "outgoing" => Direction::Outgoing,
+                    "incoming" => Direction::Incoming,
+                    other => {
+                        return Err(GraphQueryError::new_err(format!(
+                            "unsupported graph direction '{other}'"
+                        )))
+                    }
+                };
+                Ok(Traverse {
+                    relationship: RelationshipType::new(relationship).map_err(graph_error)?,
+                    direction,
+                    min_hops: non_negative_size("traversal min_hops", min_hops)?,
+                    max_hops: non_negative_size("traversal max_hops", max_hops)?,
+                })
+            },
+        )
         .collect::<PyResult<Vec<_>>>()?;
+    let (max_hops, max_visited, max_results, max_working_bytes) = limits;
     Ok(GraphQuery {
         seed,
-        steps: traversals,
+        steps,
         limits: QueryLimits {
-            max_hops: request.limits.max_hops,
-            max_visited: request.limits.max_visited,
-            max_results: request.limits.max_results,
-            max_working_bytes: request.limits.max_working_bytes,
+            max_hops: non_negative_size("max_hops", max_hops)?,
+            max_visited: non_negative_size("max_visited", max_visited)?,
+            max_results: non_negative_size("max_results", max_results)?,
+            max_working_bytes: non_negative_size("max_working_bytes", max_working_bytes)?,
         },
     })
 }
 
-fn query_node(node: QueryNode) -> PyResult<NodeId> {
-    let node_type = NodeType::new(node.node_type).map_err(graph_error)?;
-    let record_id = RecordId::new(node.record_id).map_err(core_error)?;
-    match node.chunk_key {
+fn non_negative_size(name: &str, value: i64) -> PyResult<usize> {
+    usize::try_from(value).map_err(|_| {
+        GraphQueryError::new_err(format!(
+            "{name} must be non-negative; received {value}; pass zero or a positive integer"
+        ))
+    })
+}
+
+fn query_node(node_type: String, record_id: String, chunk_key: Option<String>) -> PyResult<NodeId> {
+    let node_type = NodeType::new(node_type).map_err(graph_error)?;
+    let record_id = RecordId::new(record_id).map_err(core_error)?;
+    match chunk_key {
         Some(chunk_key) => Ok(NodeId::chunk(
             node_type,
             ChunkIdentity::new(record_id, ChunkKey::new(chunk_key).map_err(core_error)?),
@@ -724,62 +796,125 @@ fn query_node(node: QueryNode) -> PyResult<NodeId> {
     }
 }
 
-fn query_scalar(value: QueryScalar) -> GraphScalar {
-    match value {
-        QueryScalar::Bool(value) => GraphScalar::Bool(value),
-        QueryScalar::Integer(value) => GraphScalar::I64(value),
-        QueryScalar::String(value) => GraphScalar::String(value),
+fn query_scalar(value: &Bound<'_, PyAny>) -> PyResult<GraphScalar> {
+    if value.is_instance_of::<PyBool>() {
+        Ok(GraphScalar::Bool(value.extract()?))
+    } else if value.is_instance_of::<PyInt>() {
+        Ok(GraphScalar::I64(value.extract()?))
+    } else if value.is_instance_of::<PyString>() {
+        Ok(GraphScalar::String(value.extract()?))
+    } else {
+        Err(PyTypeError::new_err(
+            "graph equality values must be str, int, or bool",
+        ))
     }
 }
 
-fn graph_result_value(result: &GraphResult, projected_chunk_count: usize) -> serde_json::Value {
-    json!({
-        "corpus_id": result.corpus_id.as_str(),
-        "generation": result.generation.get(),
-        "matches": result.matches.iter().map(|matched| json!({
-            "node": node_value(&matched.node_id),
-            "depth": matched.depth,
-            "path": matched.path.iter().map(|edge| json!({
-                "relationship": edge.edge_id.relationship_type.as_str(),
-                "source": node_value(&edge.edge_id.source),
-                "target": node_value(&edge.edge_id.target),
-                "occurrence_ordinal": edge.edge_id.occurrence_ordinal,
-                "provenance": {
-                    "schema_rule_index": edge.provenance.schema_rule_index,
-                    "source_record_id": edge.provenance.source_record_id.as_str(),
-                    "source_field": edge.provenance.source_field.as_ref().map(|path| {
-                        path.segments().iter().map(|field| field.as_str()).collect::<Vec<_>>()
-                    }),
-                    "derived_inverse": edge.provenance.derived_inverse,
-                    "built_in": edge.provenance.built_in,
-                }
-            })).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
-        "truncated": result.truncated.map(|reason| format!("{reason:?}")),
-        "trace": {
-            "seed_count": result.trace.seed_count,
-            "visited_states": result.trace.visited_states,
-            "traversed_edges": result.trace.traversed_edges,
-            "result_count": result.trace.result_count,
-            "diagnostics": result.trace.diagnostics,
-            "projected_chunk_count": projected_chunk_count,
+fn graph_result_to_py(
+    py: Python<'_>,
+    result: &GraphResult,
+    projected_chunk_count: usize,
+) -> PyResult<Py<PyAny>> {
+    let output = PyDict::new(py);
+    output.set_item("corpus_id", result.corpus_id.as_str())?;
+    output.set_item("generation", result.generation.get())?;
+
+    let matches = PyList::empty(py);
+    for matched in &result.matches {
+        let item = PyDict::new(py);
+        item.set_item("node", node_to_py(py, &matched.node_id)?)?;
+        item.set_item("depth", matched.depth)?;
+        let path = PyList::empty(py);
+        for edge in &matched.path {
+            let edge_item = PyDict::new(py);
+            edge_item.set_item("relationship", edge.edge_id.relationship_type.as_str())?;
+            edge_item.set_item("source", node_to_py(py, &edge.edge_id.source)?)?;
+            edge_item.set_item("target", node_to_py(py, &edge.edge_id.target)?)?;
+            edge_item.set_item("occurrence_ordinal", edge.edge_id.occurrence_ordinal)?;
+
+            let provenance = PyDict::new(py);
+            provenance.set_item("schema_rule_index", edge.provenance.schema_rule_index)?;
+            provenance.set_item(
+                "source_record_id",
+                edge.provenance.source_record_id.as_str(),
+            )?;
+            let source_field = edge.provenance.source_field.as_ref().map(|path| {
+                path.segments()
+                    .iter()
+                    .map(|field| field.as_str())
+                    .collect::<Vec<_>>()
+            });
+            provenance.set_item("source_field", source_field)?;
+            provenance.set_item("derived_inverse", edge.provenance.derived_inverse)?;
+            provenance.set_item("built_in", edge.provenance.built_in)?;
+            edge_item.set_item("provenance", provenance)?;
+            path.append(edge_item)?;
         }
-    })
+        item.set_item("path", path)?;
+        matches.append(item)?;
+    }
+    output.set_item("matches", matches)?;
+    output.set_item("truncated", result.truncated.map(truncation_reason))?;
+
+    let trace = PyDict::new(py);
+    trace.set_item("seed_count", result.trace.seed_count)?;
+    trace.set_item("visited_states", result.trace.visited_states)?;
+    trace.set_item("traversed_edges", result.trace.traversed_edges)?;
+    trace.set_item("result_count", result.trace.result_count)?;
+    trace.set_item("diagnostics", result.trace.diagnostics)?;
+    trace.set_item("projected_chunk_count", projected_chunk_count)?;
+    output.set_item("trace", trace)?;
+    Ok(output.into_any().unbind())
 }
 
-fn node_value(node: &NodeId) -> serde_json::Value {
+fn node_to_py(py: Python<'_>, node: &NodeId) -> PyResult<Py<PyAny>> {
+    let output = PyDict::new(py);
+    output.set_item("node_type", node.node_type.as_str())?;
     match &node.source {
-        NodeSource::Record(record_id) => json!({
-            "node_type": node.node_type.as_str(),
-            "record_id": record_id.as_str(),
-            "chunk_key": null,
-        }),
-        NodeSource::Chunk(identity) => json!({
-            "node_type": node.node_type.as_str(),
-            "record_id": identity.record_id.as_str(),
-            "chunk_key": identity.chunk_key.as_str(),
-        }),
+        NodeSource::Record(record_id) => {
+            output.set_item("record_id", record_id.as_str())?;
+            output.set_item("chunk_key", py.None())?;
+        }
+        NodeSource::Chunk(identity) => {
+            output.set_item("record_id", identity.record_id.as_str())?;
+            output.set_item("chunk_key", identity.chunk_key.as_str())?;
+        }
     }
+    Ok(output.into_any().unbind())
+}
+
+fn truncation_reason(reason: TruncationReason) -> &'static str {
+    match reason {
+        TruncationReason::MaxHops => "MaxHops",
+        TruncationReason::MaxVisited => "MaxVisited",
+        TruncationReason::MaxResults => "MaxResults",
+        TruncationReason::MaxWorkingBytes => "MaxWorkingBytes",
+    }
+}
+
+fn graph_candidate_projection_to_py(
+    py: Python<'_>,
+    projection: GraphCandidateProjection,
+) -> PyResult<Py<PyAny>> {
+    let output = PyDict::new(py);
+    let candidates = PyList::empty(py);
+    for candidate in projection.candidates {
+        let item = PyDict::new(py);
+        item.set_item("record_id", candidate.record_id.as_str())?;
+        item.set_item("chunk_key", candidate.chunk_key.as_str())?;
+        candidates.append(item)?;
+    }
+    output.set_item("candidates", candidates)?;
+    output.set_item("source_nodes", projection.source_nodes)?;
+    output.set_item(
+        "projected_chunks_before_filter",
+        projection.projected_chunks_before_filter,
+    )?;
+    output.set_item(
+        "projected_chunks_after_filter",
+        projection.projected_chunks_after_filter,
+    )?;
+    Ok(output.into_any().unbind())
 }
 
 fn records_json(corpus: &CorpusIndex, record_ids: Vec<String>) -> PyResult<String> {

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,6 +27,8 @@ from .graph_types import (
     Chunk,
     Embedding,
     Filter,
+    GraphCandidateProjection,
+    GraphChunkIdentity,
     GraphFileSizeReport,
     GraphHybridHit,
     GraphMatch,
@@ -77,7 +78,7 @@ class GraphSelection:
 
     def __init__(self, native: _GraphSelection) -> None:
         self._native = native
-        self._data = cast(dict[str, Any], json.loads(native.to_json()))
+        self._data = cast(dict[str, Any], native.materialize())
 
     @property
     def matches(self) -> list[GraphMatch]:
@@ -180,11 +181,23 @@ class GraphQueries:
     ) -> GraphSelection:
         """Run a bounded graph query starting from explicit node identities."""
 
-        seed = {
-            "kind": "nodes",
-            "nodes": [asdict(node) for node in seeds],
-        }
-        return self._execute_query(seed, traversals, limits, cancellation, timeout)
+        query_limits = limits or GraphQueryLimits()
+        native = self._native.query_nodes(
+            [(node.node_type, node.record_id, node.chunk_key) for node in seeds],
+            [
+                (
+                    traversal.relationship,
+                    traversal.direction,
+                    traversal.min_hops,
+                    traversal.max_hops,
+                )
+                for traversal in traversals
+            ],
+            _query_limits_tuple(query_limits),
+            cancellation=None if cancellation is None else cancellation._native,
+            timeout_ms=_timeout_milliseconds(timeout),
+        )
+        return GraphSelection(native)
 
     def query_equals(
         self,
@@ -204,34 +217,56 @@ class GraphQueries:
             normalized_values = [values]
         else:
             normalized_values = list(values)
-        seed = {
-            "kind": "equals",
-            "node_type": node_type,
-            "field": _field_path(field),
-            "values": normalized_values,
-        }
-        return self._execute_query(seed, traversals, limits, cancellation, timeout)
-
-    def _execute_query(
-        self,
-        seed: dict[str, Any],
-        traversals: Sequence[GraphTraversal],
-        limits: GraphQueryLimits | None,
-        cancellation: GraphCancellationToken | None,
-        timeout: float | None,
-    ) -> GraphSelection:
-        request = {
-            "seed": seed,
-            "traversals": [asdict(traversal) for traversal in traversals],
-            "limits": asdict(limits or GraphQueryLimits()),
-        }
+        query_limits = limits or GraphQueryLimits()
         return GraphSelection(
-            self._native.query(
-                json.dumps(request),
+            self._native.query_equals(
+                node_type,
+                _field_path(field),
+                normalized_values,
+                [
+                    (
+                        traversal.relationship,
+                        traversal.direction,
+                        traversal.min_hops,
+                        traversal.max_hops,
+                    )
+                    for traversal in traversals
+                ],
+                _query_limits_tuple(query_limits),
                 cancellation=None if cancellation is None else cancellation._native,
                 timeout_ms=_timeout_milliseconds(timeout),
             )
         )
+
+    def project_candidates(
+        self,
+        selection: GraphSelection,
+        *,
+        where: Filter | None = None,
+    ) -> GraphCandidateProjection:
+        """Materialize stable candidate identities through the owning Rust corpus."""
+
+        value = cast(
+            dict[str, Any],
+            self._native.project_candidates(selection._native, where=where),
+        )
+        return GraphCandidateProjection(
+            candidates=[
+                GraphChunkIdentity(
+                    record_id=candidate["record_id"],
+                    chunk_key=candidate["chunk_key"],
+                )
+                for candidate in cast(list[dict[str, str]], value["candidates"])
+            ],
+            source_nodes=cast(int, value["source_nodes"]),
+            projected_chunks_before_filter=cast(
+                int, value["projected_chunks_before_filter"]
+            ),
+            projected_chunks_after_filter=cast(
+                int, value["projected_chunks_after_filter"]
+            ),
+        )
+
 
 class GraphDatabase:
     """Immutable local graph database without vector or BM25 state."""
@@ -467,6 +502,17 @@ def _timeout_milliseconds(timeout: float | None) -> int | None:
     if timeout > 86_400:
         raise ValueError("timeout must not exceed 86400 seconds")
     return math.ceil(timeout * 1000)
+
+
+def _query_limits_tuple(
+    limits: GraphQueryLimits,
+) -> tuple[int, int, int, int]:
+    return (
+        limits.max_hops,
+        limits.max_visited,
+        limits.max_results,
+        limits.max_working_bytes,
+    )
 
 
 def _record_batch(

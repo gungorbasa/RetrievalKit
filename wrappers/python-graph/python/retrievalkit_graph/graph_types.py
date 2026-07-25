@@ -80,6 +80,7 @@ class VectorIndexConfiguration:
 class RetrievalConfiguration:
     semantic: VectorIndexConfiguration
 
+
 GraphValue: TypeAlias = (
     None | bool | int | float | str | list["GraphValue"] | dict[str, "GraphValue"]
 )
@@ -145,6 +146,20 @@ class GraphQueryLimits:
     max_visited: int = 100_000
     max_results: int = 10_000
     max_working_bytes: int = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class GraphChunkIdentity:
+    record_id: str
+    chunk_key: str
+
+
+@dataclass(frozen=True)
+class GraphCandidateProjection:
+    candidates: list[GraphChunkIdentity]
+    source_nodes: int
+    projected_chunks_before_filter: int
+    projected_chunks_after_filter: int
 
 
 class ChunkRequired(TypedDict):
@@ -245,6 +260,8 @@ GraphHybridHit: TypeAlias = HybridHit
 __all__ = [
     "Chunk",
     "GraphCardinality",
+    "GraphCandidateProjection",
+    "GraphChunkIdentity",
     "GraphChunkInput",
     "GraphChunkNode",
     "GraphDirection",

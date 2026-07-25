@@ -32,6 +32,8 @@ from .graph import (
 from .graph_types import (
     Chunk,
     Filter,
+    GraphCandidateProjection,
+    GraphChunkIdentity,
     GraphChunkInput,
     GraphChunkNode,
     GraphFileSizeReport,
@@ -64,7 +66,9 @@ __all__ = [
     "Filter",
     "GraphCancellationToken",
     "GraphCancelledError",
+    "GraphCandidateProjection",
     "GraphChunkInput",
+    "GraphChunkIdentity",
     "GraphChunkNode",
     "GraphDatabase",
     "GraphDatabaseBuilder",

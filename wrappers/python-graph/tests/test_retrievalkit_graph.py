@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
 from retrievalkit_graph import (
     GraphCancellationToken,
     GraphCancelledError,
+    GraphCandidateProjection,
     GraphDatabase,
     GraphDatabaseBuilder,
     GraphError,
@@ -106,6 +109,13 @@ def test_graph_only_database_queries_hydrates_and_persists(tmp_path: Path) -> No
         "beta",
         "gamma",
     ]
+    projection = database.graph.project_candidates(
+        selection,
+        where={"tenant": "blue"},
+    )
+    assert projection.source_nodes == 2
+    assert projection.projected_chunks_before_filter == 2
+    assert projection.projected_chunks_after_filter == 2
     assert database.records(["beta", "missing"])[1] is None
     chunk = database.chunks([chunk_ids[0][0]])[0]
     assert chunk is not None and chunk["text"] == "alpha graph retrieval"
@@ -113,9 +123,7 @@ def test_graph_only_database_queries_hydrates_and_persists(tmp_path: Path) -> No
     database.save(tmp_path)
     GraphDatabase.validate(tmp_path)
     loaded = GraphDatabase.load(tmp_path)
-    result = loaded.graph.query_equals(
-        node_type="Topic", field="title", values="Gamma"
-    )
+    result = loaded.graph.query_equals(node_type="Topic", field="title", values="Gamma")
     assert result.matches[0]["node"]["record_id"] == "gamma"
 
 
@@ -150,9 +158,102 @@ def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None
     database.save(tmp_path)
     GraphRetrievalDatabase.validate(tmp_path)
     loaded = GraphRetrievalDatabase.load(tmp_path)
-    assert loaded.retrieval.semantic_search([0.0, 1.0], limit=1)[0][
-        "document_id"
-    ] == "gamma"
+    assert (
+        loaded.retrieval.semantic_search([0.0, 1.0], limit=1)[0]["document_id"]
+        == "gamma"
+    )
+
+
+def test_candidate_projection_is_filtered_stable_and_lexically_ordered() -> None:
+    builder = GraphRetrievalDatabaseBuilder(
+        corpus_id="python-candidate-projection",
+        graph=topic_graph_schema(),
+        retrieval=retrieval_configuration(),
+    )
+    builder.add(topic_graph_records(), embeddings=topic_graph_embeddings())
+    database = builder.build()
+    selection = database.graph.query_equals(
+        node_type="Topic",
+        field="title",
+        values=["Gamma", "Alpha", "Beta"],
+    )
+
+    projection: GraphCandidateProjection = database.graph.project_candidates(
+        selection,
+        where={"tenant": "blue"},
+    )
+
+    assert projection.source_nodes == 3
+    assert projection.projected_chunks_before_filter == 3
+    assert projection.projected_chunks_after_filter == 2
+    assert [
+        (candidate.record_id, candidate.chunk_key)
+        for candidate in projection.candidates
+    ] == [("beta", "summary"), ("gamma", "summary")]
+
+
+def test_candidate_projection_rejects_stale_and_cross_corpus_selections() -> None:
+    original_builder = GraphDatabaseBuilder(
+        corpus_id="candidate-generation",
+        schema=GraphSchema([GraphRecordNode("Topic", "Topic", ["title"])]),
+    )
+    original_builder.upsert(topic_graph_records()[0])
+    original = original_builder.build()
+    selection = original.graph.query_equals(
+        node_type="Topic",
+        field="title",
+        values="Alpha",
+    )
+
+    newer_builder = GraphDatabaseBuilder(
+        corpus_id="candidate-generation",
+        schema=GraphSchema([GraphRecordNode("Topic", "Topic", ["title"])]),
+    )
+    newer_builder.add(topic_graph_records()[:2])
+    newer = newer_builder.build()
+    with pytest.raises(StaleGraphSelectionError, match="stale graph result"):
+        newer.graph.project_candidates(selection)
+
+    other_builder = GraphDatabaseBuilder(
+        corpus_id="other-corpus",
+        schema=GraphSchema([GraphRecordNode("Topic", "Topic", ["title"])]),
+    )
+    other_builder.upsert(topic_graph_records()[0])
+    other = other_builder.build()
+    with pytest.raises(StaleGraphSelectionError, match="stale graph result"):
+        other.graph.project_candidates(selection)
+
+
+def test_graph_query_transport_does_not_use_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    builder = GraphRetrievalDatabaseBuilder(
+        corpus_id="python-typed-query-transport",
+        graph=topic_graph_schema(),
+        retrieval=retrieval_configuration(),
+    )
+    builder.add(topic_graph_records(), embeddings=topic_graph_embeddings())
+    database = builder.build()
+
+    def fail_json(*_args: object, **_kwargs: object) -> NoReturn:
+        raise AssertionError("graph query transport must not use JSON")
+
+    monkeypatch.setattr(json, "dumps", fail_json)
+    monkeypatch.setattr(json, "loads", fail_json)
+
+    selection = database.graph.query(
+        seeds=[GraphNode("Topic", "alpha")],
+        traversals=[GraphTraversal("related_to", max_hops=2)],
+    )
+    assert [match["node"]["record_id"] for match in selection.matches] == [
+        "beta",
+        "gamma",
+    ]
+    assert database.graph.project_candidates(selection).source_nodes == 2
+    assert database.retrieval.semantic_search(
+        [1.0, 0.0],
+        within=selection,
+    )
 
 
 def test_graph_lifecycle_iterables_cancellation_and_timeout() -> None:

@@ -57,6 +57,15 @@ def test_python_matches_cross_wrapper_graph_fixture() -> None:
     )
     assert _record_ids(equality_selection.matches) == equality["node_ids"]
     assert equality_selection.projected_chunk_count == equality["resolved_chunks"]
+    equality_projection = database.graph.project_candidates(equality_selection)
+    assert equality_projection.source_nodes == equality["source_nodes"]
+    assert (
+        equality_projection.projected_chunks_before_filter
+        == equality["resolved_chunks"]
+    )
+    assert (
+        equality_projection.projected_chunks_after_filter == equality["resolved_chunks"]
+    )
 
     traversal = fixture["expectations"]["traversal"]
     traversal_selection = database.graph.query(
@@ -92,6 +101,14 @@ def test_python_matches_cross_wrapper_graph_fixture() -> None:
         where={filtered["filter_field"]: filtered["filter_value"]},
     )
     assert [hit["document_id"] for hit in hits] == filtered["record_ids"]
+    filtered_projection = database.graph.project_candidates(
+        all_topics,
+        where={filtered["filter_field"]: filtered["filter_value"]},
+    )
+    projected_record_ids = [
+        candidate.record_id for candidate in filtered_projection.candidates
+    ]
+    assert projected_record_ids == sorted(filtered["record_ids"])
 
 
 def _schema(value: dict[str, Any]) -> GraphSchema:
@@ -137,8 +154,7 @@ def _record(value: dict[str, Any]) -> GraphRecordInput:
             "id": record["id"],
             "record_type": record["record_type"],
             "fields": {
-                key: _decode_graph_value(item)
-                for key, item in record["fields"].items()
+                key: _decode_graph_value(item) for key, item in record["fields"].items()
             },
             "content": record["content"],
             "metadata": {

@@ -32,7 +32,12 @@ git archive \
   --format=tar.gz \
   --prefix=retrievalkit-python-source-preview/ \
   --output=website/public/downloads/retrievalkit-python-source-preview.tar.gz \
-  <revision>
+  <revision> \
+  Cargo.toml Cargo.lock LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md \
+  crates wrappers/python-graph \
+  scripts/check-python-graph-wrapper.sh \
+  scripts/preflight-python-wrapper.sh \
+  benchmarks/graph-conformance/v1/fixture.json
 ```
 
 After regenerating it, update `app/release.ts` with the source revision and

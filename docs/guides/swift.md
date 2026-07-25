@@ -28,7 +28,7 @@ infers the dimension from the first embedding:
 ```swift
 import RetrievalKit
 
-let builder = RetrievalDatabase.Builder(
+let builder = try RetrievalDatabase.Builder(
   corpusID: "project-notes",
   encoding: .f32
 )

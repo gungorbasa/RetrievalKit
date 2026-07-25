@@ -54,7 +54,6 @@ VkGraphDatabase *retrievalkit_graph_database_builder_build(
 void retrievalkit_graph_database_builder_free(VkGraphDatabaseBuilder *builder);
 
 VkGraphRetrievalBuilder *retrievalkit_graph_retrieval_builder_new(
-    size_t dimension,
     uint32_t metric,
     uint32_t encoding,
     const char *corpus_id,
@@ -64,6 +63,18 @@ VkGraphRetrievalBuilder *retrievalkit_graph_retrieval_builder_new(
 bool retrievalkit_graph_retrieval_builder_upsert_record_json(
     VkGraphRetrievalBuilder *builder,
     const char *record_json,
+    VkStatus *status
+);
+bool retrievalkit_graph_retrieval_builder_upsert_record_with_embedding_json(
+    VkGraphRetrievalBuilder *builder,
+    const char *record_json,
+    const float *embedding,
+    size_t embedding_len,
+    VkStatus *status
+);
+bool retrievalkit_graph_retrieval_builder_upsert_documents_json(
+    VkGraphRetrievalBuilder *builder,
+    const char *batch_json,
     VkStatus *status
 );
 VkGraphRetrievalDatabase *retrievalkit_graph_retrieval_builder_build(
@@ -177,9 +188,11 @@ void retrievalkit_graph_scope_free(VkGraphScope *scope);
 bool retrievalkit_graph_scope_search(const VkGraphIndex *index, const VkGraphScope *scope, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkSearchResultBuffer *out_results, VkStatus *status);
 bool retrievalkit_graph_scope_keyword_search(const VkGraphIndex *index, const VkGraphScope *scope, const char *text, size_t top_k, const VkFilter *filter, VkKeywordResultBuffer *out_results, VkStatus *status);
 bool retrievalkit_graph_scope_hybrid_search(const VkGraphIndex *index, const VkGraphScope *scope, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
+bool retrievalkit_graph_scope_hybrid_search_alpha(const VkGraphIndex *index, const VkGraphScope *scope, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridQueryOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
 bool retrievalkit_graph_retrieval_semantic_search(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkSearchResultBuffer *out_results, VkStatus *status);
 bool retrievalkit_graph_retrieval_keyword_search(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const char *text, size_t top_k, const VkFilter *filter, VkKeywordResultBuffer *out_results, VkStatus *status);
 bool retrievalkit_graph_retrieval_hybrid_search(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
+bool retrievalkit_graph_retrieval_hybrid_search_alpha(const VkGraphRetrievalDatabase *database, const VkGraphResult *within, const char *text, const float *embedding, size_t embedding_len, size_t top_k, const VkFilter *filter, VkHybridQueryOptions options, VkHybridResultBuffer *out_results, VkStatus *status);
 VkGraphCancellation *retrievalkit_graph_cancellation_new(void);
 void retrievalkit_graph_cancellation_cancel(const VkGraphCancellation *value);
 void retrievalkit_graph_cancellation_free(VkGraphCancellation *value);

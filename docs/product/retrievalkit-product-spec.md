@@ -894,7 +894,7 @@ model or use EmbeddingKit.
 Retrieval-only ingestion:
 
 ```swift
-let builder = RetrievalDatabase.Builder(corpusID: "notes")
+let builder = try RetrievalDatabase.Builder(corpusID: "notes")
 try await builder.upsert(
     Document(
         id: "note-42",
@@ -948,7 +948,7 @@ try await builder.upsert(
 ```
 
 `ChunkKey`, keyed embedding dictionaries, and explicit record/document linking
-remain compatibility and internal concepts, not common-path API requirements.
+are internal concepts, not common-path API requirements.
 
 All retrieval-capable databases use one overloaded search family:
 
@@ -1017,10 +1017,9 @@ enum VectorEncoding {
 }
 ```
 
-Explicit-dimension `RetrievalConfiguration`, `RecordInput`, `Chunk`, keyed
-embedding maps, and the `.retrieval.semanticSearch` /
-`.retrieval.hybridSearch` namespaces remain temporary compatibility surfaces
-while callers migrate to the progressive API.
+Explicit-dimension builders, keyed embedding maps, and public chunk construction
+are not part of the progressive database API. The lower-level mutable
+`VectorIndex` remains available as a separate compatibility surface.
 
 ## Rust Core API
 
@@ -1049,18 +1048,27 @@ pub struct SearchEngine {
 
 Rust owns:
 
+- progressive builder state and dimension inference
+- canonical record/document/chunk identity derivation
+- embedding coverage and dimension validation
 - index loading
 - vector search
 - BM25 search
 - filtering
-- fusion
+- alpha validation and fusion
 - result assembly
 
-Swift owns:
+Every language wrapper owns only:
 
-- UI
-- embedding generation if using Core ML
-- app-level document lifecycle
+- idiomatic public API shape and naming
+- conversion between native language values and the C ABI
+- native-handle lifetime, async/threading integration, and cancellation bridging
+- typed presentation of Rust status errors
+
+Wrappers must not queue semantic work, infer retrieval configuration, derive
+hidden identities, validate ranking rules, or reimplement retrieval and graph
+behavior. This boundary applies to Swift first and to every later wrapper with
+language-appropriate syntax.
 
 ## FFI Contract
 
@@ -1070,6 +1078,8 @@ Do:
 
 - pass query vector pointer and length.
 - pass top-k and mode.
+- pass public hybrid `alpha` directly; Rust validates and expands it into
+  concrete fusion weights.
 - return result IDs and scores into caller-provided buffers.
 - fetch full text separately when needed.
 
@@ -1078,6 +1088,10 @@ Do not:
 - return heap-allocated strings from Rust during search.
 - pass JSON across FFI in the hot path.
 - allocate large result objects per query.
+
+The common Swift document-upsert path also uses typed C strings, metadata
+entries, and a contiguous float buffer. Schema-rich graph ingestion may use
+JSON on the cold build path, but query embeddings and query controls never do.
 
 Minimal C ABI shape:
 

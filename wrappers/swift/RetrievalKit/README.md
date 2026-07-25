@@ -54,7 +54,7 @@ directly with searchable documents.
 ```swift
 import RetrievalKit
 
-let builder = RetrievalDatabase.Builder(
+let builder = try RetrievalDatabase.Builder(
     corpusID: "knowledge"
 )
 try await builder.upsert(
@@ -89,13 +89,10 @@ Run the focused example with:
 swift run --package-path wrappers/swift/RetrievalKit RetrievalKitRetrievalQuickstart
 ```
 
-## Compatibility API
+## Lower-level API
 
-The explicit-dimension `RetrievalConfiguration`, `RecordInput`, `Chunk`, keyed
-embedding maps, and `.retrieval` query namespace remain available while
-preview clients migrate.
-
-`VectorIndex` remains temporarily available for existing examples and migration.
+`VectorIndex` remains available for existing mutable-index clients. Progressive
+database builders do not expose dimensions, chunks, or keyed embedding maps.
 New code should use `RetrievalDatabase` so its enabled capability is explicit at
 the call site.
 

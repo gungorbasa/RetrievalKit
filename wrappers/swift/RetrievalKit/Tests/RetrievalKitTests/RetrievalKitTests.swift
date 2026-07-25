@@ -20,7 +20,7 @@ final class RetrievalKitTests: XCTestCase {
   }
 
   func testProgressiveDatabaseAPIInfersDimensionAndSupportsOneSearchFamily() async throws {
-    let builder = RetrievalDatabase.Builder(corpusID: "progressive", encoding: .f32)
+    let builder = try RetrievalDatabase.Builder(corpusID: "progressive", encoding: .f32)
     try await builder.upsert(
       Document(
         id: "local",
@@ -48,10 +48,21 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertEqual(semantic.first?.documentID, "local")
     XCTAssertEqual(keyword.first?.documentID, "local")
     XCTAssertEqual(hybrid.first?.documentID, "local")
+
+    do {
+      _ = try await database.search(
+        text: "private",
+        embedding: [1, 0],
+        alpha: 1.1
+      )
+      XCTFail("Rust must reject alpha outside the public range")
+    } catch RetrievalKitError.invalidArgument(let message) {
+      XCTAssertTrue(message.contains("alpha must be finite and between 0 and 1"))
+    }
   }
 
   func testProgressiveDatabaseRejectsEmbeddingDimensionDrift() async throws {
-    let builder = RetrievalDatabase.Builder()
+    let builder = try RetrievalDatabase.Builder()
     try await builder.upsert(
       Document(id: "first", text: "first"),
       embedding: [1, 0]
@@ -447,14 +458,11 @@ final class RetrievalKitTests: XCTestCase {
   func testRetrievalDatabaseSupportsHybridAndPersistsBM25() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "semantic-only",
-      retrieval: .init(semantic: .init(dimension: 2, encoding: .f32))
+      encoding: .f32
     )
     try await builder.upsert(
-      RecordInput(
-        record: Record(id: "rust", type: "Topic"),
-        chunks: [Chunk(key: "summary", text: "native retrieval")]
-      ),
-      embeddings: ["summary": [1, 0]]
+      Document(id: "rust", text: "native retrieval"),
+      embedding: [1, 0]
     )
     let database = try await builder.build()
 
@@ -481,26 +489,26 @@ final class RetrievalKitTests: XCTestCase {
     XCTAssertEqual(reopenedHits.map(\.documentID), ["rust"])
   }
 
-  func testHybridRetrievalDatabaseRequiresEveryEmbedding() async throws {
+  func testRetrievalDatabaseRequiresASearchableEmbedding() async throws {
     let builder = try RetrievalDatabase.Builder(
       corpusID: "hybrid",
-      retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32)
-      )
-    )
-    let input = RecordInput(
-      record: Record(id: "rust", type: "Topic"),
-      chunks: [Chunk(key: "summary", text: "native retrieval")]
+      encoding: .f32
     )
 
     do {
-      try await builder.upsert(input, embeddings: [:])
-      XCTFail("retrieval upsert must require one embedding per chunk")
+      try await builder.upsert(
+        Document(id: "rust", text: "native retrieval"),
+        embedding: []
+      )
+      XCTFail("retrieval upsert must require a non-empty embedding")
     } catch RetrievalKitError.missingEmbedding(let message) {
-      XCTAssertTrue(message.contains("summary"))
+      XCTAssertTrue(message.contains("at least one value"))
     }
 
-    try await builder.upsert(input, embeddings: ["summary": [1, 0]])
+    try await builder.upsert(
+      Document(id: "rust", text: "native retrieval"),
+      embedding: [1, 0]
+    )
     let database = try await builder.build()
     let hits = try await database.retrieval.hybridSearch(
       text: "native retrieval",

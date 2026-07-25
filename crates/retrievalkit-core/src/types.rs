@@ -10,11 +10,18 @@ pub type ChunkId = u64;
 /// The `id` must be stable across app launches and is used for update,
 /// delete, and result grouping. RetrievalKit assigns internal `ChunkId` values,
 /// but it does not generate document IDs.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
     pub text: String,
     pub metadata: Metadata,
+}
+
+/// One caller-owned document paired with its externally produced embedding.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmbeddedDocument {
+    pub document: Document,
+    pub embedding: Vec<f32>,
 }
 
 /// Caller-provided retrievable unit with an internal numeric ID.
@@ -221,6 +228,20 @@ impl HybridQuery {
     /// `alpha = 1` is vector-only and `alpha = 0` is BM25-only.
     pub fn with_alpha(self, alpha: f32) -> Self {
         self.with_weighted_normalized_score(alpha, 1.0 - alpha)
+    }
+
+    /// Validates and applies the public query-time hybrid balance.
+    ///
+    /// Keeping this validation in the Rust core guarantees that every language
+    /// binding has identical alpha semantics.
+    pub fn try_with_alpha(self, alpha: f32) -> crate::Result<Self> {
+        if !alpha.is_finite() || !(0.0..=1.0).contains(&alpha) {
+            return Err(crate::RetrievalKitError::InvalidFormat {
+                message: "alpha must be finite and between 0 and 1; use 1 for vector-only or 0 for BM25-only"
+                    .to_owned(),
+            });
+        }
+        Ok(self.with_alpha(alpha))
     }
 }
 
@@ -465,5 +486,25 @@ mod tests {
                 keyword_weight: 0.4
             }
         );
+    }
+
+    #[test]
+    fn public_alpha_is_validated_and_converted_in_rust() {
+        let query = HybridQuery::new("query", vec![1.0, 0.0], 5)
+            .try_with_alpha(0.25)
+            .unwrap();
+        assert_eq!(
+            query.fusion,
+            HybridFusion::WeightedNormalizedScore {
+                vector_weight: 0.25,
+                keyword_weight: 0.75,
+            }
+        );
+        assert!(HybridQuery::new("query", vec![1.0, 0.0], 5)
+            .try_with_alpha(f32::NAN)
+            .is_err());
+        assert!(HybridQuery::new("query", vec![1.0, 0.0], 5)
+            .try_with_alpha(1.01)
+            .is_err());
     }
 }

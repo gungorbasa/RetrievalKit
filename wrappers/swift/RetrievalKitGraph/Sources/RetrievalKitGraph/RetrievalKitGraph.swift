@@ -183,10 +183,9 @@ public struct GraphHybridOptions: Equatable, Sendable {
     self.vectorTopK = vectorTopK
     self.keywordTopK = keywordTopK
   }
-  fileprivate func ffiValue(alpha: Float) -> VkHybridOptions {
-    VkHybridOptions(
-      vector_top_k: vectorTopK, keyword_top_k: keywordTopK, fusion_type: 0,
-      vector_weight: alpha, keyword_weight: 1 - alpha, rrf_k: 0)
+  fileprivate func ffiValue(alpha: Float) -> VkHybridQueryOptions {
+    VkHybridQueryOptions(
+      vector_top_k: vectorTopK, keyword_top_k: keywordTopK, alpha: alpha)
   }
 }
 
@@ -1165,22 +1164,16 @@ public actor GraphIndex {
     handle: UInt, embedding: [Float], topK: Int, result: GraphQueryResult, filter: GraphFilter?
   ) throws -> [GraphSearchHit] {
     try requireNonnegative(topK, name: "topK")
-    let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count))
-    for (index, value) in embedding.enumerated() {
-      pointer.advanced(by: index).initialize(to: value)
-    }
-    defer {
-      pointer.deinitialize(count: embedding.count)
-      pointer.deallocate()
-    }
     let nativeFilter = try filter?.makeFFI()
     var output = VkSearchResultBuffer(hits: nil, count: 0)
     var status = VkStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
-    let succeeded = try result.native.withScope { scope in
-      retrievalkit_graph_scope_search(
-        OpaquePointer(bitPattern: handle), scope, embedding.isEmpty ? nil : pointer,
-        embedding.count, topK, nativeFilter?.pointer, &output, &status)
+    let succeeded = try embedding.withUnsafeBufferPointer { vector in
+      try result.native.withScope { scope in
+        retrievalkit_graph_scope_search(
+          OpaquePointer(bitPattern: handle), scope, vector.baseAddress,
+          vector.count, topK, nativeFilter?.pointer, &output, &status)
+      }
     }
     guard succeeded else { throw Native.error(status, fallback: "scoped search failed") }
     defer { retrievalkit_search_results_free(output) }
@@ -1231,24 +1224,18 @@ public actor GraphIndex {
     try requireNonnegative(topK, name: "topK")
     try requireNonnegative(options.vectorTopK, name: "vectorTopK")
     try requireNonnegative(options.keywordTopK, name: "keywordTopK")
-    let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(1, embedding.count))
-    for (index, value) in embedding.enumerated() {
-      pointer.advanced(by: index).initialize(to: value)
-    }
-    defer {
-      pointer.deinitialize(count: embedding.count)
-      pointer.deallocate()
-    }
     let nativeFilter = try filter?.makeFFI()
     let arena = GraphCStringArena()
     var output = VkHybridResultBuffer(hits: nil, count: 0)
     var status = VkStatus(code: 0, message: nil)
     defer { retrievalkit_status_clear(&status) }
-    let succeeded = try result.native.withScope { scope in
-      retrievalkit_graph_scope_hybrid_search(
-        OpaquePointer(bitPattern: handle), scope, arena.copy(text),
-        embedding.isEmpty ? nil : pointer, embedding.count, topK, nativeFilter?.pointer,
-        options.ffiValue(alpha: alpha), &output, &status)
+    let succeeded = try embedding.withUnsafeBufferPointer { vector in
+      try result.native.withScope { scope in
+        retrievalkit_graph_scope_hybrid_search_alpha(
+          OpaquePointer(bitPattern: handle), scope, arena.copy(text),
+          vector.baseAddress, vector.count, topK, nativeFilter?.pointer,
+          options.ffiValue(alpha: alpha), &output, &status)
+      }
     }
     guard succeeded else { throw Native.error(status, fallback: "scoped hybrid search failed") }
     defer { retrievalkit_hybrid_results_free(output) }
@@ -1361,20 +1348,14 @@ private struct CapabilityGraphBatch: Encodable {
     case chunks
   }
 }
-private struct CapabilityRetrievalChunk: Encodable {
-  let key: ChunkKey
-  let text: String
-  let embedding: [Float]
-  let metadata: [String: MetadataValue]
-}
-private struct CapabilityRetrievalBatch: Encodable {
+private struct CapabilityEmbeddedRecordBatch: Encodable {
   let record: Record
   let projectedMetadata: [String: MetadataValue]
-  let chunks: [CapabilityRetrievalChunk]
+  let documents: [EmbeddedDocument]
   enum CodingKeys: String, CodingKey {
     case record
     case projectedMetadata = "projected_metadata"
-    case chunks
+    case documents
   }
 }
 
@@ -1699,11 +1680,7 @@ public actor GraphDatabase {
     /// retained as the record's single searchable-document projection, without
     /// exposing a chunk key to the caller.
     public func upsert(_ record: Record) throws {
-      let chunks =
-        record.content.map {
-          [Chunk(key: ChunkKey(record.id.rawValue), text: $0)]
-        } ?? []
-      try upsert(RecordInput(record: record, chunks: chunks))
+      try upsert(RecordInput(record: record))
     }
 
     /// Compatibility entry point for explicit record/chunk ingestion.
@@ -1909,7 +1886,7 @@ public actor GraphRetrievalQueries {
       var status = VkStatus(code: 0, message: nil)
       defer { retrievalkit_status_clear(&status) }
       let succeeded = try values.withUnsafeBufferPointer { buffer in
-        retrievalkit_graph_retrieval_hybrid_search(
+        retrievalkit_graph_retrieval_hybrid_search_alpha(
           OpaquePointer(bitPattern: try owner.requireHandle()),
           try selection?.native.requireHandle(), arena.copy(text), buffer.baseAddress, buffer.count,
           topK, nativeFilter?.pointer, options.ffiValue(alpha: alpha), &output, &status)
@@ -1944,13 +1921,6 @@ public actor GraphRetrievalQueries {
 public actor GraphRetrievalDatabase {
   public actor Builder {
     private var handle: UInt?
-    private let corpusID: CorpusID
-    private let schemaJSON: String
-    private let metric: GraphMetric
-    private let encoding: GraphVectorEncoding
-    private var dimension: Int?
-    private var pending: [CapabilityRetrievalBatch] = []
-    private var consumed = false
 
     /// Creates a combined graph + retrieval builder whose embedding dimension
     /// is inferred from the first searchable record or document.
@@ -1960,31 +1930,16 @@ public actor GraphRetrievalDatabase {
       metric: GraphMetric = .cosine,
       encoding: GraphVectorEncoding = .i8ScalarQuantized
     ) throws {
-      self.corpusID = corpusID
-      self.schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
-      self.metric = metric
-      self.encoding = encoding
-    }
-
-    /// Compatibility initializer for callers that need to declare the
-    /// dimension before the first upsert.
-    public init(corpusID: CorpusID, graph schema: GraphSchema, retrieval: RetrievalConfiguration)
-      throws
-    {
-      let vector = retrieval.semantic
-      self.corpusID = corpusID
-      self.schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
-      self.metric = vector.metric
-      self.encoding = vector.encoding
-      self.dimension = vector.dimension
+      let schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
       self.handle = UInt(
-        bitPattern: try Self.makeHandle(
-          dimension: vector.dimension,
-          corpusID: corpusID,
-          schemaJSON: schemaJSON,
-          metric: vector.metric,
-          encoding: vector.encoding
-        ))
+        bitPattern: try Native.pointer { status in
+          corpusID.rawValue.withCString { corpus in
+            schemaJSON.withCString {
+              retrievalkit_graph_retrieval_builder_new(
+                metric.ffi, encoding.ffi, corpus, $0, status)
+            }
+          }
+        })
     }
     deinit {
       if let handle { retrievalkit_graph_retrieval_builder_free(OpaquePointer(bitPattern: handle)) }
@@ -1992,97 +1947,46 @@ public actor GraphRetrievalDatabase {
 
     /// Adds a graph-only record to a combined database.
     public func upsert(_ record: Record) throws {
-      try enqueue(
-        CapabilityRetrievalBatch(
-          record: record,
-          projectedMetadata: record.metadata,
-          chunks: []
-        ))
+      guard let handle else { throw RetrievalKitGraphError.consumedBuilder }
+      try Self.send(record, to: handle)
     }
 
     /// Adds a record whose `content` is its single searchable document.
     /// RetrievalKit derives the stable document ID from the record ID.
     public func upsert(_ record: Record, embedding: [Float]) throws {
-      guard let content = record.content else {
-        throw RetrievalKitGraphError.missingEmbedding(
-          "record \(record.id.rawValue) has no content to pair with the embedding")
+      guard let handle else { throw RetrievalKitGraphError.consumedBuilder }
+      let batch = CapabilityGraphBatch(
+        record: record, projectedMetadata: record.metadata, chunks: [])
+      let json = String(decoding: try JSONEncoder().encode(batch), as: UTF8.self)
+      try Native.bool { status in
+        embedding.withUnsafeBufferPointer { vector in
+          json.withCString {
+            retrievalkit_graph_retrieval_builder_upsert_record_with_embedding_json(
+              OpaquePointer(bitPattern: handle), $0, vector.baseAddress, vector.count, status)
+          }
+        }
       }
-      try upsert(
-        record,
-        documents: [
-          EmbeddedDocument(
-            id: DocumentID(record.id.rawValue),
-            text: content,
-            embedding: embedding
-          )
-        ]
-      )
     }
 
     /// Adds a record with multiple independently identifiable searchable
     /// documents.
     public func upsert(_ record: Record, documents: [EmbeddedDocument]) throws {
-      let ids = documents.map(\.id)
-      guard Set(ids).count == ids.count else {
-        throw RetrievalKitGraphError.invalidIdentity(
-          "document IDs must be unique within record \(record.id.rawValue)")
-      }
-      if let first = documents.first {
-        try ensureHandle(for: first.embedding)
-      }
-      for document in documents {
-        try validateDimension(document.embedding)
-      }
-      try enqueue(
-        CapabilityRetrievalBatch(
-          record: record,
-          projectedMetadata: record.metadata,
-          chunks: documents.map {
-            CapabilityRetrievalChunk(
-              key: ChunkKey($0.id.rawValue),
-              text: $0.text,
-              embedding: $0.embedding,
-              metadata: $0.metadata
-            )
-          }
-        ))
-    }
-
-    /// Compatibility entry point for explicit record/chunk ingestion.
-    public func upsert(_ input: RecordInput, embeddings: [ChunkKey: [Float]]) throws {
-      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
-      let expected = Set(input.chunks.map(\.key))
-      let actual = Set(embeddings.keys)
-      guard expected == actual else {
-        let missing = expected.subtracting(actual).map(\.rawValue).sorted()
-        if !missing.isEmpty {
-          throw RetrievalKitGraphError.missingEmbedding(
-            "missing embeddings for: \(missing.joined(separator: ", "))")
+      guard let handle else { throw RetrievalKitGraphError.consumedBuilder }
+      let batch = CapabilityEmbeddedRecordBatch(
+        record: record, projectedMetadata: record.metadata, documents: documents)
+      let json = String(decoding: try JSONEncoder().encode(batch), as: UTF8.self)
+      try Native.bool { status in
+        json.withCString {
+          retrievalkit_graph_retrieval_builder_upsert_documents_json(
+            OpaquePointer(bitPattern: handle), $0, status)
         }
-        throw RetrievalKitGraphError.invalidIdentity("embeddings contain unknown chunk keys")
       }
-      if let first = embeddings.values.first {
-        try ensureHandle(for: first)
-      }
-      for embedding in embeddings.values {
-        try validateDimension(embedding)
-      }
-      try enqueue(
-        CapabilityRetrievalBatch(
-          record: input.record, projectedMetadata: input.record.metadata,
-          chunks: input.chunks.map {
-            CapabilityRetrievalChunk(
-              key: $0.key, text: $0.text, embedding: embeddings[$0.key]!, metadata: $0.metadata)
-          }))
     }
 
     public func build() throws -> GraphRetrievalDatabase {
-      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
       guard let owned = handle else {
-        throw RetrievalKitGraphError.missingEmbedding(
-          "cannot build a graph retrieval database before upserting a searchable embedding")
+        throw RetrievalKitGraphError.consumedBuilder
       }
-      consumed = true
       handle = nil
       return GraphRetrievalDatabase(
         pointer: try Native.pointer {
@@ -2090,77 +1994,12 @@ public actor GraphRetrievalDatabase {
         })
     }
 
-    private func enqueue(_ batch: CapabilityRetrievalBatch) throws {
-      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
-      guard let handle else {
-        pending.append(batch)
-        return
-      }
-      try Self.send(batch, to: handle)
-    }
-
-    private func ensureHandle(for embedding: [Float]) throws {
-      guard !consumed else { throw RetrievalKitGraphError.consumedBuilder }
-      try validateDimension(embedding)
-      guard handle == nil else { return }
-      let inferredDimension = embedding.count
-      let newHandle = UInt(
-        bitPattern: try Self.makeHandle(
-          dimension: inferredDimension,
-          corpusID: corpusID,
-          schemaJSON: schemaJSON,
-          metric: metric,
-          encoding: encoding
-        ))
-      handle = newHandle
-      dimension = inferredDimension
-      do {
-        for batch in pending {
-          try Self.send(batch, to: newHandle)
-        }
-        pending.removeAll(keepingCapacity: false)
-      } catch {
-        retrievalkit_graph_retrieval_builder_free(OpaquePointer(bitPattern: newHandle))
-        handle = nil
-        dimension = nil
-        throw error
-      }
-    }
-
-    private func validateDimension(_ embedding: [Float]) throws {
-      guard !embedding.isEmpty else {
-        throw RetrievalKitGraphError.invalidDimension(
-          "embedding must contain at least one value; pass the vector produced by your embedding model"
-        )
-      }
-      if let dimension, embedding.count != dimension {
-        throw RetrievalKitGraphError.invalidDimension(
-          "embedding dimension mismatch: expected \(dimension), got \(embedding.count); use the same embedding model for every document"
-        )
-      }
-    }
-
-    private nonisolated static func makeHandle(
-      dimension: Int,
-      corpusID: CorpusID,
-      schemaJSON: String,
-      metric: GraphMetric,
-      encoding: GraphVectorEncoding
-    ) throws -> OpaquePointer {
-      try Native.pointer { status in
-        corpusID.rawValue.withCString { corpus in
-          schemaJSON.withCString {
-            retrievalkit_graph_retrieval_builder_new(
-              dimension, metric.ffi, encoding.ffi, corpus, $0, status)
-          }
-        }
-      }
-    }
-
     private nonisolated static func send(
-      _ batch: CapabilityRetrievalBatch,
+      _ record: Record,
       to handle: UInt
     ) throws {
+      let batch = CapabilityGraphBatch(
+        record: record, projectedMetadata: record.metadata, chunks: [])
       let json = String(decoding: try JSONEncoder().encode(batch), as: UTF8.self)
       try Native.bool { status in
         json.withCString {
@@ -2269,10 +2108,6 @@ public actor GraphRetrievalDatabase {
     limit: Int = 10,
     filter: GraphFilter? = nil
   ) async throws -> [GraphHybridHit] {
-    guard (0...1).contains(alpha) else {
-      throw RetrievalKitGraphError.invalidIdentity(
-        "alpha must be between 0 and 1; use 1 for vector-only or 0 for BM25-only")
-    }
     return try await retrieval.hybridSearch(
       text: text,
       embedding: embedding,

@@ -200,7 +200,7 @@ public struct Document: Equatable, Sendable, Codable {
 ///
 /// This is the advanced combined-ingestion value for records that own more
 /// than one independently identifiable searchable document.
-public struct EmbeddedDocument: Equatable, Sendable {
+public struct EmbeddedDocument: Equatable, Sendable, Codable {
   public var document: Document
   public var embedding: [Float]
 

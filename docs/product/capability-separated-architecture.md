@@ -71,8 +71,9 @@ EmbeddedDocument
   embedding
 ```
 
-`ChunkKey`, `RecordInput`, and keyed embedding maps remain internal and
-compatibility concepts. Graph-only upserts have no embedding parameter.
+`ChunkKey`, `RecordInput`, and keyed embedding maps remain internal or
+lower-level graph compatibility concepts; progressive retrieval builders do not
+expose them. Graph-only upserts have no embedding parameter.
 Internally a stable document ID maps to the record-bound chunk identity used by
 candidate projection and persistence.
 

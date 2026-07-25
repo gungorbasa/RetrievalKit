@@ -1,6 +1,7 @@
 mod bm25;
 mod candidate_scope;
 mod corpus_index;
+mod database_builder;
 mod error;
 mod filter;
 mod index;
@@ -15,6 +16,7 @@ mod types;
 pub use bm25::Bm25Config;
 pub use candidate_scope::CandidateScope;
 pub use corpus_index::{CorpusChunkInput, CorpusIndex, RecordInput};
+pub use database_builder::RetrievalDatabaseBuilder;
 pub use error::{Result, RetrievalKitError};
 pub use filter::Filter;
 pub use index::ExactVectorIndex;
@@ -30,8 +32,8 @@ pub use retrieval_index::{
 #[doc(hidden)]
 pub use scoring::dot_product_i8 as diagnostic_dot_product_i8;
 pub use types::{
-    Chunk, ChunkId, ChunkInput, CompactionReport, Document, HybridFusion, HybridFusionTrace,
-    HybridHit, HybridQuery, HybridTrace, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
-    IndexSizeEstimate, KeywordHit, KeywordQuery, RecordChunkInput, SearchHit, SearchQuery,
-    SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
+    Chunk, ChunkId, ChunkInput, CompactionReport, Document, EmbeddedDocument, HybridFusion,
+    HybridFusionTrace, HybridHit, HybridQuery, HybridTrace, IndexConfig, IndexFileSizeReport,
+    IndexPersistenceOptions, IndexSizeEstimate, KeywordHit, KeywordQuery, RecordChunkInput,
+    SearchHit, SearchQuery, SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };

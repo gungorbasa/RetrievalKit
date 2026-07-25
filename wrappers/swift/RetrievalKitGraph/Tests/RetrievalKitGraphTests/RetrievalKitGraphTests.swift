@@ -75,6 +75,18 @@ final class RetrievalKitGraphTests: XCTestCase {
     XCTAssertEqual(semantic.first?.recordID, "rust")
     XCTAssertEqual(keyword.first?.documentID, "rust-summary")
     XCTAssertEqual(hybrid.first?.recordID, "rust")
+
+    do {
+      _ = try await combined.search(
+        text: "private",
+        embedding: [1, 0],
+        alpha: -0.1,
+        within: selection
+      )
+      XCTFail("Rust must reject alpha outside the public range")
+    } catch RetrievalKitGraphError.invalidIdentity(let message) {
+      XCTAssertTrue(message.contains("alpha must be finite and between 0 and 1"))
+    }
   }
 
   func testGenericSchemaBuildAndPersistence() async throws {
@@ -596,17 +608,17 @@ final class RetrievalKitGraphTests: XCTestCase {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "knowledge",
       graph: capabilitySchema(),
-      retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32)
-      )
+      encoding: .f32
     )
+    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
     try await builder.upsert(
-      capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),
-      embeddings: ["summary": [1, 0]]
+      rust.record,
+      documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
     )
+    let swift = capabilityInput(id: "swift", title: "Swift", text: "native application code")
     try await builder.upsert(
-      capabilityInput(id: "swift", title: "Swift", text: "native application code"),
-      embeddings: ["summary": [0, 1]]
+      swift.record,
+      documents: [EmbeddedDocument(id: "summary", text: swift.chunks[0].text, embedding: [0, 1])]
     )
     let database = try await builder.build()
     let rustOnly = try await database.graph.query(
@@ -652,11 +664,12 @@ final class RetrievalKitGraphTests: XCTestCase {
     let builder = try GraphRetrievalDatabase.Builder(
       corpusID: "semantic-graph",
       graph: capabilitySchema(),
-      retrieval: .init(semantic: .init(dimension: 2, encoding: .f32))
+      encoding: .f32
     )
+    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
     try await builder.upsert(
-      capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),
-      embeddings: ["summary": [1, 0]]
+      rust.record,
+      documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
     )
     let database = try await builder.build()
 
@@ -685,13 +698,12 @@ final class RetrievalKitGraphTests: XCTestCase {
     let combinedBuilder = try GraphRetrievalDatabase.Builder(
       corpusID: "target-corpus",
       graph: capabilitySchema(),
-      retrieval: .init(
-        semantic: .init(dimension: 2, encoding: .f32)
-      )
+      encoding: .f32
     )
+    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
     try await combinedBuilder.upsert(
-      capabilityInput(id: "rust", title: "Rust", text: "native retrieval"),
-      embeddings: ["summary": [1, 0]]
+      rust.record,
+      documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
     )
     let combined = try await combinedBuilder.build()
 

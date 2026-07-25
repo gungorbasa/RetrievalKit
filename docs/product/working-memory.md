@@ -6,6 +6,20 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-25 Swift/Rust boundary decision: Swift is the first logic-free wrapper
+  implementation and establishes the contract for later language wrappers.
+  Rust owns progressive dimension inference, pending graph-only records,
+  canonical hidden identity derivation, embedding validation, and public
+  `alpha` semantics. Swift owns only idiomatic API shape, marshaling,
+  handle/async/cancellation lifetime, and typed error presentation. The common
+  retrieval upsert and every query path use typed C ABI values with contiguous
+  float buffers; JSON remains limited to cold schema-rich graph ingestion. Do
+  not add wrapper-side fallbacks or duplicate these rules in Python/Node.
+  Remaining boundary performance debt is explicit: result hydration still
+  returns owned strings per hit, the Rust query object still owns one vector
+  copy, and the advanced multi-document graph upsert serializes embeddings on
+  the cold JSON path. Optimize those only with measured, compatibility-tested
+  ABI changes; they are not wrapper semantics.
 - 2026-07-23 owner sequencing decision: pause release qualification and all
   new benchmark work until the SDK implementation is finalized. Do not rebuild
   the release candidate, provision Phase 7 scheduled/release evidence, resume
@@ -34,9 +48,10 @@ implemented, or superseded by the product spec.
   separate stable record and searchable-document identities so text splitting
   does not inflate or destabilize the graph. The first embedding now infers the
   database dimension; direct `search` overloads cover vector-only, BM25-only,
-  and `alpha`-weighted hybrid queries. The explicit-dimension builders,
-  `RecordInput`, keyed embedding maps, and query namespaces remain temporary
-  compatibility surfaces.
+  and `alpha`-weighted hybrid queries. Explicit-dimension progressive builders,
+  keyed embedding maps, and public chunk construction were removed from the
+  Swift database APIs; the lower-level mutable `VectorIndex` remains a separate
+  compatibility surface.
 - 2026-07-23: the root README now presents RetrievalKit as one hybrid-search
   product. Canonical, runnable Project Apollo walkthroughs live in
   `docs/guides/swift.md` and `docs/guides/python.md`; wrapper READMEs remain
@@ -316,8 +331,9 @@ implemented, or superseded by the product spec.
   Hybrid blending is selected directly per query with `alpha`; compact
   persistence may omit BM25 bytes and rebuild them from canonical chunk text
   on load. That implementation used graph aggregate ABI version 7; the
-  progressive Swift API moves the aggregate to ABI version 8 by adding stable
-  document and owner-record identities to result buffers.
+  progressive Swift API moved the aggregate to ABI version 8 by adding stable
+  document and owner-record identities to result buffers. The Rust-owned
+  progressive-builder boundary moves the aggregate to ABI version 9.
   Three interleaved before/after benchmark pairs measured exact -1.21%, BM25
   -2.61%, and hybrid +0.35%, passing the +3% p95 gate.
 

@@ -3,7 +3,7 @@ import RetrievalKit
 @main
 struct RetrievalKitRetrievalQuickstart {
   static func main() async throws {
-    let builder = RetrievalDatabase.Builder(corpusID: "project-notes", encoding: .f32)
+    let builder = try RetrievalDatabase.Builder(corpusID: "project-notes", encoding: .f32)
     try await builder.upsert(
       Document(
         id: "decision-swift",

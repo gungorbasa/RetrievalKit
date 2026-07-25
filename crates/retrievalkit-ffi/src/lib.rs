@@ -7,8 +7,8 @@ use std::slice;
 use retrievalkit_core::{
     ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex, Filter,
     HybridFusion, HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit,
-    KeywordQuery, Metadata, MetadataValue, Record, RecordChunkInput, RetrievalConfiguration,
-    RetrievalDatabase, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
+    KeywordQuery, Metadata, MetadataValue, Record, RecordChunkInput, RetrievalDatabase,
+    RetrievalDatabaseBuilder, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 use retrievalkit_ingest::{chunk_text, ChunkingConfig, ChunkingStrategy};
 use serde::Deserialize;
@@ -217,12 +217,21 @@ pub struct VkHybridOptions {
     pub rrf_k: c_float,
 }
 
+/// Public hybrid controls shared by high-level language bindings.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkHybridQueryOptions {
+    pub vector_top_k: usize,
+    pub keyword_top_k: usize,
+    pub alpha: c_float,
+}
+
 pub struct VkIndex {
     index: ExactVectorIndex,
 }
 
 pub struct VkRetrievalBuilder {
-    database: RetrievalDatabase,
+    builder: RetrievalDatabaseBuilder,
 }
 
 pub struct VkRetrievalDatabase {
@@ -274,19 +283,49 @@ pub unsafe extern "C" fn retrievalkit_status_clear(status: *mut VkStatus) {
 /// String and status pointers must be valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn retrievalkit_retrieval_builder_new(
-    dimension: usize,
     metric: u32,
     encoding: u32,
     corpus_id: *const c_char,
     status: *mut VkStatus,
 ) -> *mut VkRetrievalBuilder {
     ffi_ptr(status, || {
-        let vector = IndexConfig::new(dimension, parse_metric(metric)?)
-            .with_vector_encoding(parse_encoding_code(encoding)?);
-        let configuration = RetrievalConfiguration::semantic(vector);
         let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
-        let database = RetrievalDatabase::new(configuration, corpus_id)?;
-        Ok(Box::into_raw(Box::new(VkRetrievalBuilder { database })))
+        let builder = RetrievalDatabaseBuilder::new(
+            corpus_id,
+            parse_metric(metric)?,
+            parse_encoding_code(encoding)?,
+        );
+        Ok(Box::into_raw(Box::new(VkRetrievalBuilder { builder })))
+    })
+}
+
+/// Adds one public document without exposing its canonical record/chunk
+/// projection to the caller.
+///
+/// # Safety
+/// Every pointer must remain valid for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_document(
+    builder: *mut VkRetrievalBuilder,
+    document_id: *const c_char,
+    text: *const c_char,
+    metadata: *const VkMetadataEntry,
+    metadata_len: usize,
+    embedding: *const c_float,
+    embedding_len: usize,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        let builder = unsafe { builder.as_mut() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval builder must not be null"))?;
+        let document = Document {
+            id: unsafe { read_c_string(document_id, "document_id") }?,
+            text: unsafe { read_c_string(text, "text") }?,
+            metadata: unsafe { read_metadata(metadata, metadata_len) }?,
+        };
+        let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec();
+        builder.builder.upsert_document(document, embedding)?;
+        Ok(())
     })
 }
 
@@ -313,7 +352,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_upsert_record_json(
                 message: format!("invalid retrieval record JSON: {error}"),
             }
         })?;
-        builder.database.upsert_record(
+        builder.builder.upsert_record(
             batch.record,
             batch.projected_metadata,
             batch
@@ -346,7 +385,7 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_build(
         }
         let builder = unsafe { Box::from_raw(builder) };
         Ok(Box::into_raw(Box::new(VkRetrievalDatabase {
-            database: builder.database,
+            database: builder.builder.build()?,
         })))
     })
 }
@@ -502,6 +541,46 @@ pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search(
             query = query.with_filter(filter);
         }
         query.fusion = parse_hybrid_fusion(options)?;
+        let hits = database.database.hybrid_search(&query)?;
+        unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits) };
+        Ok(())
+    })
+}
+
+/// Performs the public alpha-controlled hybrid query without requiring a
+/// language binding to construct engine fusion weights.
+///
+/// # Safety
+/// All input and output pointers must remain valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_retrieval_hybrid_search_alpha(
+    database: *const VkRetrievalDatabase,
+    text: *const c_char,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridQueryOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let database = unsafe { database.as_ref() }
+            .ok_or_else(|| FfiError::invalid_argument("retrieval database must not be null"))?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
+        .try_with_alpha(options.alpha)
+        .map_err(|error| FfiError::invalid_argument(error.to_string()))?;
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
         let hits = database.database.hybrid_search(&query)?;
         unsafe { *out_results = retrieval_hybrid_result_buffer(&database.database, hits) };
         Ok(())
@@ -893,6 +972,46 @@ pub unsafe extern "C" fn retrievalkit_index_hybrid_search(
     })
 }
 
+/// Performs alpha-controlled hybrid search for language bindings.
+///
+/// # Safety
+/// The safety contract is identical to [`retrievalkit_index_hybrid_search`].
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_index_hybrid_search_alpha(
+    index: *const VkIndex,
+    text: *const c_char,
+    embedding: *const c_float,
+    embedding_len: usize,
+    top_k: usize,
+    filter: *const VkFilter,
+    options: VkHybridQueryOptions,
+    out_results: *mut VkHybridResultBuffer,
+    status: *mut VkStatus,
+) -> bool {
+    ffi_bool(status, || {
+        if out_results.is_null() {
+            return Err(FfiError::invalid_argument("out_results must not be null"));
+        }
+        let index = unsafe { index_ref(index) }?;
+        let embedding = unsafe { read_f32_slice(embedding, embedding_len, "embedding") }?;
+        let mut query = HybridQuery::new(
+            unsafe { read_c_string(text, "text") }?,
+            embedding.to_vec(),
+            top_k,
+        )
+        .with_candidate_limits(options.vector_top_k, options.keyword_top_k)
+        .try_with_alpha(options.alpha)
+        .map_err(|error| FfiError::invalid_argument(error.to_string()))?;
+        if let Some(filter) = unsafe { optional_filter(filter) } {
+            query = query.with_filter(filter);
+        }
+        let hits = index.index.hybrid_search(&query)?;
+        let buffer = hybrid_result_buffer(index, hits);
+        unsafe { *out_results = buffer };
+        Ok(())
+    })
+}
+
 /// Frees chunk IDs returned by `retrievalkit_index_upsert_document`.
 ///
 /// # Safety
@@ -1214,6 +1333,9 @@ impl FfiError {
             retrievalkit_core::RetrievalKitError::CorruptIndex { .. } => VK_STATUS_CORRUPT_INDEX,
             retrievalkit_core::RetrievalKitError::InvalidDimension { .. } => {
                 VK_STATUS_INVALID_DIMENSION
+            }
+            retrievalkit_core::RetrievalKitError::MissingEmbedding { .. } => {
+                VK_STATUS_MISSING_EMBEDDING
             }
             retrievalkit_core::RetrievalKitError::RetrievalCapabilityUnavailable { .. } => {
                 VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE

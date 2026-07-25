@@ -13,6 +13,12 @@ pub enum GraphError {
     InvalidQuery {
         message: String,
     },
+    InvalidDimension {
+        message: String,
+    },
+    MissingEmbedding {
+        message: String,
+    },
     InvalidSnapshot {
         message: String,
     },
@@ -53,6 +59,8 @@ impl Display for GraphError {
                 write!(f, "invalid graph record '{record_id}': {message}")
             }
             Self::InvalidQuery { message } => write!(f, "invalid graph query: {message}"),
+            Self::InvalidDimension { message } => write!(f, "{message}"),
+            Self::MissingEmbedding { message } => write!(f, "{message}"),
             Self::InvalidSnapshot { message } => write!(f, "invalid graph snapshot: {message}"),
             Self::StaleGeneration { message } => write!(f, "stale graph generation: {message}"),
             Self::IncompatibleVersion { message } => {
@@ -88,6 +96,16 @@ impl From<retrievalkit_core::RetrievalKitError> for GraphError {
             retrievalkit_core::RetrievalKitError::StaleGeneration { .. } => Self::StaleGeneration {
                 message: error.to_string(),
             },
+            retrievalkit_core::RetrievalKitError::InvalidDimension { .. } => {
+                Self::InvalidDimension {
+                    message: error.to_string(),
+                }
+            }
+            retrievalkit_core::RetrievalKitError::MissingEmbedding { .. } => {
+                Self::MissingEmbedding {
+                    message: error.to_string(),
+                }
+            }
             _ => Self::Core {
                 message: error.to_string(),
             },

@@ -159,6 +159,12 @@ typedef struct VkHybridOptions {
   float rrf_k;
 } VkHybridOptions;
 
+typedef struct VkHybridQueryOptions {
+  size_t vector_top_k;
+  size_t keyword_top_k;
+  float alpha;
+} VkHybridQueryOptions;
+
 #define VK_STATUS_INVALID_DIMENSION 5
 #define VK_STATUS_RETRIEVAL_CAPABILITY_UNAVAILABLE 6
 #define VK_STATUS_INVALID_IDENTITY 7
@@ -170,10 +176,18 @@ typedef struct VkRetrievalDatabase VkRetrievalDatabase;
 void retrievalkit_status_clear(VkStatus *status);
 
 VkRetrievalBuilder *retrievalkit_retrieval_builder_new(
-    size_t dimension,
     uint32_t metric,
     uint32_t encoding,
     const char *corpus_id,
+    VkStatus *status);
+bool retrievalkit_retrieval_builder_upsert_document(
+    VkRetrievalBuilder *builder,
+    const char *document_id,
+    const char *text,
+    const VkMetadataEntry *metadata,
+    size_t metadata_len,
+    const float *embedding,
+    size_t embedding_len,
     VkStatus *status);
 bool retrievalkit_retrieval_builder_upsert_record_json(
     VkRetrievalBuilder *builder,
@@ -211,6 +225,16 @@ bool retrievalkit_retrieval_hybrid_search(
     size_t top_k,
     const VkFilter *filter,
     VkHybridOptions options,
+    VkHybridResultBuffer *out_results,
+    VkStatus *status);
+bool retrievalkit_retrieval_hybrid_search_alpha(
+    const VkRetrievalDatabase *database,
+    const char *text,
+    const float *embedding,
+    size_t embedding_len,
+    size_t top_k,
+    const VkFilter *filter,
+    VkHybridQueryOptions options,
     VkHybridResultBuffer *out_results,
     VkStatus *status);
 
@@ -306,6 +330,16 @@ bool retrievalkit_index_hybrid_search(
     size_t top_k,
     const VkFilter *filter,
     VkHybridOptions options,
+    VkHybridResultBuffer *out_results,
+    VkStatus *status);
+bool retrievalkit_index_hybrid_search_alpha(
+    const VkIndex *index,
+    const char *text,
+    const float *embedding,
+    size_t embedding_len,
+    size_t top_k,
+    const VkFilter *filter,
+    VkHybridQueryOptions options,
     VkHybridResultBuffer *out_results,
     VkStatus *status);
 

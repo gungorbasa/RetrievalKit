@@ -26,6 +26,9 @@ pub enum RetrievalKitError {
         expected: usize,
         actual: usize,
     },
+    MissingEmbedding {
+        message: String,
+    },
     InvalidRange {
         field: String,
     },
@@ -75,8 +78,11 @@ impl Display for RetrievalKitError {
             Self::InvalidDimension { expected, actual } => {
                 write!(
                     f,
-                    "invalid vector dimension: expected {expected}, got {actual}"
+                    "invalid vector dimension: expected {expected}, got {actual}; use the same embedding model for indexing and queries"
                 )
+            }
+            Self::MissingEmbedding { message } => {
+                write!(f, "missing embedding: {message}")
             }
             Self::InvalidRange { field } => {
                 write!(f, "invalid range filter for metadata field '{field}'")

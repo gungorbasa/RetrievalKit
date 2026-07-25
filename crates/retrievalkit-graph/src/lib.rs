@@ -1,4 +1,5 @@
 mod builder;
+mod database_builder;
 mod error;
 mod persistence;
 mod query;
@@ -14,6 +15,7 @@ use retrievalkit_core::{
 };
 
 pub use builder::GraphBuildStats;
+pub use database_builder::{GraphDatabaseBuilder, GraphRetrievalDatabaseBuilder};
 pub use error::{GraphError, Result};
 pub use persistence::GraphDatabaseFileSizes;
 pub use query::{

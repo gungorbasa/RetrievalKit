@@ -12,3 +12,9 @@ __pycache__/
 *.so
 **/*.so
 .gstack/
+node_modules/
+**/node_modules/
+.gradle/
+**/.gradle/
+**/build/
+**/dist/

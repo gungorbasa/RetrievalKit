@@ -16,18 +16,33 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | arrayref | 0.3.9 | BSD-2-Clause | https://github.com/droundy/arrayref |
 | arrayvec | 0.7.8 | MIT OR Apache-2.0 | https://github.com/bluss/arrayvec |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT | https://github.com/cuviper/autocfg |
+| bitflags | 2.13.1 | MIT OR Apache-2.0 | https://github.com/bitflags/bitflags |
 | blake3 | 1.8.5 | CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception | https://github.com/BLAKE3-team/BLAKE3 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
+| bytes | 1.12.1 | MIT | https://github.com/tokio-rs/bytes |
 | cc | 1.2.64 | MIT OR Apache-2.0 | https://github.com/rust-lang/cc-rs |
+| cesu8 | 1.1.0 | Apache-2.0/MIT | https://github.com/emk/cesu8-rs |
 | cfg-if | 1.0.4 | MIT OR Apache-2.0 | https://github.com/rust-lang/cfg-if |
+| combine | 4.6.7 | MIT | https://github.com/Marwes/combine |
 | constant_time_eq | 0.4.2 | CC0-1.0 OR MIT-0 OR Apache-2.0 | https://github.com/cesarb/constant_time_eq |
+| convert_case | 0.11.0 | MIT | https://github.com/rutrum/convert-case |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | cpufeatures | 0.3.0 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
+| ctor | 1.0.10 | Apache-2.0 OR MIT | https://github.com/mmastrac/linktime |
 | digest | 0.10.7 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
 | displaydoc | 0.2.6 | MIT OR Apache-2.0 | https://github.com/yaahc/displaydoc |
 | find-msvc-tools | 0.1.9 | MIT OR Apache-2.0 | https://github.com/rust-lang/cc-rs |
 | fs2 | 0.4.3 | MIT/Apache-2.0 | https://github.com/danburkert/fs2-rs |
+| futures | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-channel | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-core | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-executor | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-io | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-macro | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-sink | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-task | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| futures-util | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
 | generic-array | 0.14.7 | MIT | https://github.com/fizyk20/generic-array.git |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
 | heck | 0.5.0 | MIT OR Apache-2.0 | https://github.com/withoutboats/heck |
@@ -45,12 +60,25 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | icu_provider_macros | 1.4.0 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | indoc | 2.0.7 | MIT OR Apache-2.0 | https://github.com/dtolnay/indoc |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/itoa |
+| jni | 0.21.1 | MIT/Apache-2.0 | https://github.com/jni-rs/jni-rs |
+| jni-sys | 0.3.1 | MIT OR Apache-2.0 | https://github.com/jni-rs/jni-sys |
+| jni-sys | 0.4.1 | MIT OR Apache-2.0 | https://github.com/jni-rs/jni-sys |
+| jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 | https://github.com/jni-rs/jni-sys |
 | jobserver | 0.1.34 | MIT OR Apache-2.0 | https://github.com/rust-lang/jobserver-rs |
 | libc | 0.2.186 | MIT OR Apache-2.0 | https://github.com/rust-lang/libc |
+| libloading | 0.9.0 | ISC | https://github.com/nagisa/rust_libloading/ |
 | litemap | 0.7.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
+| log | 0.4.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/log |
 | memchr | 2.8.2 | Unlicense OR MIT | https://github.com/BurntSushi/memchr |
 | memoffset | 0.9.1 | MIT | https://github.com/Gilnaa/memoffset |
+| napi | 3.11.0 | MIT | https://github.com/napi-rs/napi-rs |
+| napi-build | 2.3.2 | MIT | https://github.com/napi-rs/napi-rs |
+| napi-derive | 3.6.0 | MIT | https://github.com/napi-rs/napi-rs |
+| napi-derive-backend | 6.0.0 | MIT | https://github.com/napi-rs/napi-rs |
+| napi-sys | 3.3.0 | MIT | https://github.com/napi-rs/napi-rs |
+| nohash-hasher | 0.2.0 | Apache-2.0 OR MIT | https://github.com/paritytech/nohash-hasher |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 | https://github.com/matklad/once_cell |
+| pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | https://github.com/taiki-e/pin-project-lite |
 | pkg-config | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/pkg-config-rs |
 | portable-atomic | 1.13.1 | Apache-2.0 OR MIT | https://github.com/taiki-e/portable-atomic |
 | proc-macro2 | 1.0.106 | MIT OR Apache-2.0 | https://github.com/dtolnay/proc-macro2 |
@@ -61,7 +89,10 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | pyo3-macros-backend | 0.27.2 | MIT OR Apache-2.0 | https://github.com/pyo3/pyo3 |
 | quote | 1.0.45 | MIT OR Apache-2.0 | https://github.com/dtolnay/quote |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | https://github.com/r-efi/r-efi |
+| rustc-hash | 2.1.3 | Apache-2.0 OR MIT | https://github.com/rust-lang/rustc-hash |
 | rustversion | 1.0.22 | MIT OR Apache-2.0 | https://github.com/dtolnay/rustversion |
+| same-file | 1.0.6 | Unlicense/MIT | https://github.com/BurntSushi/same-file |
+| semver | 1.0.28 | MIT OR Apache-2.0 | https://github.com/dtolnay/semver |
 | serde | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
 | serde_core | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
 | serde_derive | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
@@ -69,12 +100,16 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | sha2 | 0.10.9 | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | shlex | 2.0.1 | MIT OR Apache-2.0 | https://github.com/comex/rust-shlex |
 | simsimd | 6.5.16 | Apache-2.0 | https://github.com/ashvardanian/SimSIMD |
+| slab | 0.4.12 | MIT | https://github.com/tokio-rs/slab |
 | smallvec | 1.15.2 | MIT OR Apache-2.0 | https://github.com/servo/rust-smallvec |
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 | https://github.com/storyyeller/stable_deref_trait |
 | syn | 2.0.117 | MIT OR Apache-2.0 | https://github.com/dtolnay/syn |
 | synstructure | 0.13.2 | MIT | https://github.com/mystor/synstructure |
 | target-lexicon | 0.13.5 | Apache-2.0 WITH LLVM-exception | https://github.com/bytecodealliance/target-lexicon |
+| thiserror | 1.0.69 | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror |
+| thiserror-impl | 1.0.69 | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror |
 | tinystr | 0.7.6 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
+| tokio | 1.53.1 | MIT | https://github.com/tokio-rs/tokio |
 | typenum | 1.20.1 | MIT OR Apache-2.0 | https://github.com/paholg/typenum |
 | unicode-ident | 1.0.24 | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/dtolnay/unicode-ident |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | https://github.com/unicode-rs/unicode-segmentation |
@@ -82,10 +117,23 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | utf16_iter | 1.0.5 | Apache-2.0 OR MIT | https://github.com/hsivonen/utf16_iter |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT | https://github.com/hsivonen/utf8_iter |
 | version_check | 0.9.5 | MIT/Apache-2.0 | https://github.com/SergioBenitez/version_check |
+| walkdir | 2.5.0 | Unlicense/MIT | https://github.com/BurntSushi/walkdir |
 | wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/bytecodealliance/wasi-rs |
 | winapi | 0.3.9 | MIT/Apache-2.0 | https://github.com/retep998/winapi-rs |
 | winapi-i686-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | https://github.com/retep998/winapi-rs |
+| winapi-util | 0.1.11 | Unlicense OR MIT | https://github.com/BurntSushi/winapi-util |
 | winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | https://github.com/retep998/winapi-rs |
+| windows-link | 0.2.1 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows-sys | 0.45.0 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows-sys | 0.61.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows-targets | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_aarch64_gnullvm | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_aarch64_msvc | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_i686_gnu | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_i686_msvc | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_x86_64_gnu | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_x86_64_gnullvm | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows_x86_64_msvc | 0.42.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/bytecodealliance/wit-bindgen |
 | write16 | 1.0.0 | Apache-2.0 OR MIT | https://github.com/hsivonen/write16 |
 | writeable | 0.5.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |

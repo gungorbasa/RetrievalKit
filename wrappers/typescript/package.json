@@ -1,0 +1,29 @@
+{
+  "name": "retrievalkit-typescript-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "base",
+    "graph"
+  ],
+  "scripts": {
+    "build:native": "node ./scripts/build-native.mjs all",
+    "build": "npm run build:native && npm run build --workspace retrievalkit-node-local && npm run build --workspace retrievalkit-node-graph-local",
+    "typecheck": "npm run typecheck --workspace retrievalkit-node-local && npm run typecheck --workspace retrievalkit-node-graph-local",
+    "lint": "eslint base/src base/test graph/src graph/test && node --check scripts/build-native.mjs && node --check scripts/verify-package-content.mjs && node --check scripts/smoke-local-install.mjs",
+    "test": "npm run test --workspace retrievalkit-node-local && npm run test --workspace retrievalkit-node-graph-local",
+    "verify:contents": "node ./scripts/verify-package-content.mjs",
+    "smoke:install": "node ./scripts/smoke-local-install.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^22.18.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

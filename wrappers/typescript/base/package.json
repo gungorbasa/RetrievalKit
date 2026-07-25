@@ -1,0 +1,35 @@
+{
+  "name": "retrievalkit-node-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repository-local RetrievalKit Node.js base package (provisional name)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "native/retrievalkit.node",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:native": "node ../scripts/build-native.mjs base",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "license": "Apache-2.0"
+}

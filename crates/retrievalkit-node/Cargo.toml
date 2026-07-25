@@ -1,0 +1,24 @@
+[package]
+name = "retrievalkit-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "retrievalkit_node_native"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+graph = ["dep:retrievalkit-graph"]
+
+[dependencies]
+napi = { version = "3.3.0", default-features = false, features = ["napi8", "async", "tokio_rt"] }
+napi-derive = "3.2.5"
+retrievalkit-core = { path = "../retrievalkit-core" }
+retrievalkit-graph = { path = "../retrievalkit-graph", optional = true }
+
+[build-dependencies]
+napi-build = "2.2.4"

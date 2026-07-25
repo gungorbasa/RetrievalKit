@@ -1,0 +1,19 @@
+[package]
+name = "retrievalkit-jni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = []
+graph = ["dep:retrievalkit-graph"]
+
+[dependencies]
+jni = "0.21.1"
+retrievalkit-core = { path = "../retrievalkit-core" }
+retrievalkit-graph = { path = "../retrievalkit-graph", optional = true }

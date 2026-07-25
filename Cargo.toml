@@ -7,6 +7,8 @@ members = [
     "crates/retrievalkit-cli",
     "crates/retrievalkit-ffi",
     "crates/retrievalkit-python",
+    "crates/retrievalkit-node",
+    "crates/retrievalkit-jni",
 ]
 resolver = "2"
 

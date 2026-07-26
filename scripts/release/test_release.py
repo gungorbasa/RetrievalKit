@@ -33,23 +33,21 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("root LICENSE is absent", result["publication_blockers"])
         self.assertNotIn("owner-approved NOTICE is absent", result["publication_blockers"])
         self.assertIn("owner publication authorization is absent", result["publication_blockers"])
-        self.assertIn(
-            "standalone graph Swift package repository and protected publication step are not configured",
-            result["publication_blockers"],
-        )
+        self.assertNotIn("standalone graph Swift package repository", " ".join(result["publication_blockers"]))
 
     def test_publication_fails_closed_without_authorization(self) -> None:
         result = validator.static_validation(REPO)
         with self.assertRaises(validator.ValidationError):
             validator.require(not result["publication_blockers"], "publication blocked")
 
-    def test_swift_packages_resolve_only_their_selected_aggregate(self) -> None:
-        base = (REPO / "Package.swift").read_text()
-        graph = (REPO / "Package.graph.swift").read_text()
-        self.assertIn("RetrievalKitFFI.xcframework.zip", base)
-        self.assertNotIn("RetrievalKitGraphFFI", base)
-        self.assertIn("RetrievalKitGraphFFI.xcframework.zip", graph)
-        self.assertNotIn("RetrievalKitFFI.xcframework.zip", graph)
+    def test_swift_package_exposes_base_and_graph_through_one_aggregate(self) -> None:
+        package = (REPO / "Package.swift").read_text()
+        self.assertIn('.library(name: "RetrievalKit"', package)
+        self.assertIn('.library(name: "RetrievalKitGraph"', package)
+        self.assertIn("RetrievalKitGraphFFI.xcframework.zip", package)
+        self.assertNotIn("RetrievalKitFFI.xcframework.zip", package)
+        self.assertNotIn('.library(name: "RetrievalKitIngest"', package)
+        self.assertFalse((REPO / "Package.graph.swift").exists())
 
     def test_release_bundle_includes_license_and_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -124,7 +122,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_altered_apple_checksum_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            archive = Path(directory) / "RetrievalKitFFI.xcframework.zip"
+            archive = Path(directory) / "RetrievalKitGraphFFI.xcframework.zip"
             archive.write_bytes(b"altered")
             with self.assertRaisesRegex(validator.ValidationError, "checksum mismatch"):
                 validator.validate_xcframework_archive(archive, "0.1.0", "0" * 64)

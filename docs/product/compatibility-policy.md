@@ -22,14 +22,18 @@ changelog entry before removal when practical. Major persistence migrations
 must fail with actionable typed errors and preserve read/validate/migrate paths
 for formats still listed as supported.
 
-The base and graph native aggregates are alternatives, not co-linkable modules.
-Swift distributes them through separate `RetrievalKit` and
-`RetrievalKitGraph` package manifests so resolving one capability never
-downloads the other native aggregate.
-`retrievalkit` and `retrievalkit-graph` are likewise mutually exclusive inside one
+The Rust base and graph native aggregates remain alternatives, not co-linkable
+modules. The public Swift package deliberately distributes only the
+graph-capable aggregate and exposes `RetrievalKit` and `RetrievalKitGraph` as
+separately selectable Swift products over it. Applications may select either
+product or both without loading competing native libraries. A base-only Swift
+consumer still downloads the shared graph-capable binary; graph APIs are not
+part of its selected Swift target.
+
+`retrievalkit` and `retrievalkit-graph` remain mutually exclusive inside one
 Python process. The TypeScript and Kotlin base and graph-capable packages use
-the same alternative-aggregate rule. This boundary is part of compatibility,
-not a temporary build limitation.
+the same alternative-aggregate rule. Their native aggregate boundary is part
+of compatibility, not a temporary build limitation.
 
 Packed result layouts are an aggregate-level ABI contract. Native libraries,
 headers, and wrappers must be upgraded together. The graph aggregate exposes

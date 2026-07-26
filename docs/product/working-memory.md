@@ -6,6 +6,18 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-26 Swift distribution decision: the root `Package.swift` is the only
+  public Swift manifest. It exposes `RetrievalKit`, `RetrievalKitGraph`,
+  `EmbeddingKit`, and `RetrievalKitPipeline` over the single
+  `RetrievalKitGraphFFI` aggregate, so applications may select base, graph, or
+  both products from one repository and version. This intentionally makes a
+  base-only Swift consumer download the graph-capable binary. The internal
+  graph-free `RetrievalKitFFI` artifact and repository-local component package
+  remain for isolation and symbol-neutrality qualification, not publication.
+  `TextChunker` is part of `RetrievalKit`; `RetrievalKitIngest` is no longer a
+  separate Swift product. Public release is no longer blocked on a standalone
+  graph repository; owner authorization, signed-tag, claims, and Phase 7 gates
+  remain.
 - 2026-07-25 wrapper onboarding qualification: CI now exercises Node/macOS
   arm64, Kotlin/JVM/macOS arm64 with JDK 17, Android arm64-v8a, and explicitly
   non-release Python source portability on Windows. Wrapper build entrypoints
@@ -17,16 +29,8 @@ implemented, or superseded by the product spec.
   bundle is built from commit `68b5517`, carries its SHA-256 on the page, and
   passed the documented graph quickstart from a fresh extraction. This is a
   narrow source-preview path, not registry publication or expanded platform
-  support; existing owner-authorization and standalone graph Swift publication
-  blockers remain intact.
-- 2026-07-25 Swift distribution decision: the root `Package.swift` is base-only
-  and `Package.graph.swift` is the standalone graph publication manifest.
-  SwiftPM eagerly resolved both remote binary targets when they shared one
-  manifest, even for a base-only consumer. Release validation and clean
-  consumer smoke tests now require each package to reference only its matching
-  aggregate. Public graph distribution still requires a dedicated package
-  repository and protected publication step; release qualification remains
-  paused until the owner resumes it.
+  support. Its earlier standalone graph Swift publication blocker was
+  superseded by the 2026-07-26 unified-package decision above.
 - 2026-07-25 Swift/Rust boundary decision: Swift is the first logic-free wrapper
   implementation and establishes the contract for later language wrappers.
   Rust owns progressive dimension inference, pending graph-only records,
@@ -124,9 +128,9 @@ implemented, or superseded by the product spec.
 - The `v0.1.0` combined Swift/Python release-candidate implementation is the
   paused distribution slice. The root README is an evidence-led product page
   whose numeric observations are mapped to permitted Phase 6 claim IDs and
-  mutation-tested in CI. Separate Swift package manifests expose the four base
-  products and the standalone graph product; macOS arm64 Python targets CPython
-  3.10–3.14. Release tooling produces canonical XCFramework archives, a closed
+  mutation-tested in CI. One Swift package exposes four products over the
+  graph-capable aggregate; macOS arm64 Python targets CPython 3.10–3.14.
+  Release tooling produces a canonical Swift XCFramework archive, a closed
   wheel matrix, checksums, SPDX SBOM, and provenance, then validates two-root
   determinism and fresh consumers. On 2026-07-23 the owner selected
   Apache-2.0 for RetrievalKit, with copyright held by EGGYOLK YAZILIM TİCARET
@@ -702,8 +706,8 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   retrieval remains isolated in `retrievalkit-core`.
 - Fixed and sentence-aware strategies use Unicode-character limits and overlap;
   returned ranges are UTF-8 byte offsets into the original text.
-- Swift exposes chunking through the separate `RetrievalKitIngest` product and
-  Python through `retrievalkit.ingest`. Both call the same Rust implementation.
+- Swift exposes chunking through `TextChunker` in `RetrievalKit` and Python
+  through `retrievalkit.ingest`. Both call the same Rust implementation.
   Tokenizers differ by model, so exact token counting remains provider-owned.
 - The optional Swift `RetrievalKitPipeline` package and Python
   `retrievalkit.pipeline` module compose chunking, embedding, document upsert, and
@@ -842,9 +846,9 @@ Verification completed without benchmark workloads:
   Retrieval-only, graph-only, and combined examples pass. Both Android release
   AARs assemble and pass base/graph aggregate inspection; the JNI payloads are
   arm64-v8a.
-- README claim validation/tests and release validation pass. Release validation
-  still reports the existing owner-authorization and standalone graph Swift
-  publication blockers.
+- README claim validation/tests and release validation pass. Publication still
+  requires owner authorization, a signed tag, authorized claims, and
+  provisioned passing Phase 7 gates.
 - The broad `cargo test --workspace --all-features --no-fail-fast` run passes
   every non-CLI target but fails 34 `retrievalkit-cli` V3 qualification tests
   at their common fixture integrity precondition:

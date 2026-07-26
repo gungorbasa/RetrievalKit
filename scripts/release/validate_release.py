@@ -52,7 +52,7 @@ def static_validation(repo: Path) -> dict[str, Any]:
     for pyproject in (repo / "wrappers/python/pyproject.toml", repo / "wrappers/python-graph/pyproject.toml"):
         require(f'version = "{version}"' in pyproject.read_text(), f"Python version mismatch: {pyproject}")
     swift_packages = config["apple"]["packages"]
-    require(set(swift_packages) == {"base", "graph"}, "Swift package set changed")
+    require(set(swift_packages) == {"unified"}, "Swift package set changed")
     package_texts: dict[str, str] = {}
     for capability, package_config in swift_packages.items():
         manifest = repo / package_config["manifest"]
@@ -76,18 +76,24 @@ def static_validation(repo: Path) -> dict[str, Any]:
             "RETRIEVALKIT_USE_LOCAL_ARTIFACTS" in package,
             f"Swift {capability} package missing explicit local-artifact mode",
         )
-    base_package = package_texts["base"]
-    graph_package = package_texts["graph"]
+    swift_package = package_texts["unified"]
     require(
-        "RetrievalKitGraphFFI" not in base_package
-        and "RetrievalKitGraphFFI.xcframework.zip" not in base_package,
-        "base Swift package must not resolve the graph aggregate",
+        swift_package.count(".binaryTarget(") == 2,
+        "Swift package must declare one local and one remote form of the same native target",
     )
     require(
-        "RetrievalKitFFI.xcframework.zip" not in graph_package,
-        "graph Swift package must not resolve the base aggregate",
+        "RetrievalKitGraphFFI.xcframework.zip" in swift_package
+        and "RetrievalKitFFI.xcframework.zip" not in swift_package,
+        "Swift package must resolve only the graph-capable native aggregate",
     )
-    require("link exactly one" in config["apple"]["native_aggregate_rule"], "aggregate linkage rule missing")
+    require(
+        'name: "RetrievalKitIngest"' not in swift_package,
+        "Swift text chunking must be part of RetrievalKit rather than a separate product",
+    )
+    require(
+        "links exactly one RetrievalKitGraphFFI" in config["apple"]["native_aggregate_rule"],
+        "aggregate linkage rule missing",
+    )
     require("VERSION" in (repo / "scripts/build-xcframework.sh").read_text(), "XCFramework metadata does not read VERSION")
     require(config["python"]["implementations"] == ["cp310", "cp311", "cp312", "cp313", "cp314"], "Python release matrix changed")
     require(config["python"]["distributions"] == ["retrievalkit", "retrievalkit-graph"], "Python distribution set changed")
@@ -98,9 +104,8 @@ def static_validation(repo: Path) -> dict[str, Any]:
     checksums = {name: row["swiftpm_checksum"] for name, row in config["apple"]["artifacts"].items()}
     for name, checksum in checksums.items():
         require(re.fullmatch(r"[0-9a-f]{64}", checksum) is not None, f"invalid SwiftPM checksum: {name}")
-        expected_package = graph_package if name.startswith("RetrievalKitGraph") else base_package
         require(
-            expected_package.count(checksum) >= 1,
+            swift_package.count(checksum) >= 1,
             f"Swift package checksum mismatch: {name}",
         )
     return {"version": version, "swiftpm_checksums": checksums, "publication_blockers": publication_blockers(repo, config)}
@@ -206,11 +211,6 @@ def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
         if checksum == ZERO_CHECKSUM:
             blockers.append("SwiftPM release checksums are placeholders")
             break
-    graph_publication = repo / "release/swift-graph-publication-v1.json"
-    if not graph_publication.is_file():
-        blockers.append(
-            "standalone graph Swift package repository and protected publication step are not configured"
-        )
     return blockers
 
 

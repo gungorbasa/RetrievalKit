@@ -1,7 +1,6 @@
 import EmbeddingKit
 import Foundation
 import RetrievalKit
-import RetrievalKitIngest
 
 /// Application-defined chunking policy consumed and validated by `Pipeline`.
 public protocol DocumentChunker: Sendable {

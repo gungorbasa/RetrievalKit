@@ -8,22 +8,16 @@
     "architectures": ["arm64"],
     "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
     "artifacts": {
-      "RetrievalKitFFI.xcframework.zip": {"swiftpm_checksum": "fcc3c94144ce26104c92abb9227a1e95a45395e1db44265e70e585ead915266f"},
       "RetrievalKitGraphFFI.xcframework.zip": {"swiftpm_checksum": "5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468"}
     },
     "packages": {
-      "base": {
+      "unified": {
         "name": "RetrievalKit",
         "manifest": "Package.swift",
-        "products": ["RetrievalKit", "RetrievalKitIngest", "EmbeddingKit", "RetrievalKitPipeline"]
-      },
-      "graph": {
-        "name": "RetrievalKitGraph",
-        "manifest": "Package.graph.swift",
-        "products": ["RetrievalKitGraph"]
+        "products": ["RetrievalKit", "RetrievalKitGraph", "EmbeddingKit", "RetrievalKitPipeline"]
       }
     },
-    "native_aggregate_rule": "link exactly one of RetrievalKitFFI or RetrievalKitGraphFFI; the graph aggregate includes base symbols"
+    "native_aggregate_rule": "the public Swift package links exactly one RetrievalKitGraphFFI aggregate; it contains base and graph symbols"
   },
   "python": {
     "platform": "macosx_arm64",
@@ -40,7 +34,6 @@
   "publication_blockers": [
     "Phase 7 scheduled and release gates provisioned and passing for the release revision",
     "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
-    "signed v0.1.0 tag and owner release approval",
-    "standalone graph Swift package repository and protected publication step configured"
+    "signed v0.1.0 tag and owner release approval"
   ]
 }

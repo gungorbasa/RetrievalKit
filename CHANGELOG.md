@@ -85,8 +85,11 @@ and replacement structures to guarantee an all-or-nothing swap.
   `filterMatched`/`filter_matched` field and public fusion dictionaries were
   removed. Swift graph metadata now uses the shared `MetadataValue`;
   `GraphMetadataValue` remains as a deprecated compatibility alias.
-- Swift base and graph products use separate package manifests so a base-only
-  consumer never resolves or downloads the graph native aggregate.
+- Swift now publishes `RetrievalKit` and `RetrievalKitGraph` from one package
+  backed by one graph-capable native aggregate. Applications may select either
+  or both products without linking competing native libraries. `TextChunker`
+  is part of `RetrievalKit`; the separate `RetrievalKitIngest` product was
+  removed.
 - Invalid hybrid `alpha` values are query-argument errors in Rust, Swift, and
   Python rather than being mislabeled as an invalid persisted index format.
 - `RetrievalKitPipeline` now accepts the shared typed `DocumentID` used by the

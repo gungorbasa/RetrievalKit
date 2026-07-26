@@ -155,6 +155,14 @@ Swift performs marshaling, ownership, concurrency coordination, and error
 mapping only. Schema validation, indexing, filtering, ranking, traversal,
 candidate projection, and persistence remain Rust logic.
 
+The public Swift package exposes `RetrievalKit` and `RetrievalKitGraph` as
+separately selectable products over one `RetrievalKitGraphFFI` native
+aggregate. An application may select either or both products. This is a
+distribution exception, not a database-ownership exception: base APIs do not
+open graph state or route through graph dispatch. Internal qualification still
+builds graph-free `RetrievalKitFFI` to prove base isolation, but public SwiftPM
+does not link that artifact alongside the graph aggregate.
+
 ## Python, TypeScript, and Kotlin Contracts
 
 Python mirrors the three concrete database types with context managers and

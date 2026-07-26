@@ -2,39 +2,40 @@
 
 Status: release-candidate implementation complete; external publication blocked.
 
-RetrievalKit ships the Swift and Python previews from one signed source revision.
-The release contains separate base and graph native aggregates because linking
-both into one process is unsupported.
+RetrievalKit ships the Swift and Python previews from one signed source
+revision. Python retains separate base and graph native aggregates because
+loading both into one process is unsupported. Swift publishes one graph-capable
+aggregate containing both native capability surfaces.
 
 ## Release contents
 
-- `RetrievalKitFFI.xcframework.zip` for the Swift base products.
-- `RetrievalKitGraphFFI.xcframework.zip` for the graph aggregate.
+- `RetrievalKitGraphFFI.xcframework.zip` for all public Swift products.
 - macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
 - Apache-2.0 `LICENSE` and the RetrievalKit company `NOTICE`.
-- Base Swift package products `RetrievalKit`, `RetrievalKitIngest`,
-  `EmbeddingKit`, and `RetrievalKitPipeline`.
-- Standalone graph Swift package product `RetrievalKitGraph`.
+- One Swift package with `RetrievalKit`, `RetrievalKitGraph`, `EmbeddingKit`,
+  and `RetrievalKitPipeline` products.
 
-The root `Package.swift` is the base package and resolves only
-`RetrievalKitFFI`. `Package.graph.swift` is staged as `Package.swift` in the
-standalone graph package repository and resolves only `RetrievalKitGraphFFI`.
-Repository verification uses `RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1` with
-independently built local XCFrameworks. A consumer selects one package; an
-application must never link the base and graph native aggregates together.
+The root `Package.swift` is the only public Swift package manifest and resolves
+only `RetrievalKitGraphFFI`. A consumer selects `RetrievalKit`,
+`RetrievalKitGraph`, or both products; all use the same native handle universe.
+Repository verification uses `RETRIEVALKIT_USE_LOCAL_ARTIFACTS=1`. Internal
+qualification still builds the graph-free `RetrievalKitFFI` artifact separately
+to prove the Rust base boundary remains graph-neutral, but that artifact is not
+part of the public Swift release.
 
 ## Candidate procedure
 
 1. Confirm `VERSION`, Cargo, Python, Swift, changelog, and release configuration
    all identify `0.1.0`.
 2. Run Phase 7 PR gates and Phase 6/README claim validation.
-3. Build both three-slice arm64 XCFrameworks and canonical zip archives.
+3. Build the three-slice arm64 graph-capable XCFramework and canonical zip
+   archive; separately run the internal graph-neutrality qualification.
 4. Build both wheel distributions for each CPython 3.10–3.14 interpreter.
-5. Smoke-test both isolated Swift package manifests and every artifact in a
-   fresh consumer environment, including the negative base/graph co-import
-   test.
+5. Smoke-test every Swift product and a combined base-plus-graph consumer from
+   the unified package, plus every Python artifact in fresh consumer
+   environments.
 6. Assemble the closed release bundle with checksums, SBOM, and provenance.
 7. Repeat from a second clean root and compare every byte.
 8. Validate the bundle independently and complete the
@@ -55,8 +56,6 @@ revision:
 - README numeric claims remain explicitly historical or are newly authorized;
 - bundle inventory, checksums, SBOM, provenance, attestations, and fresh
   consumer smoke tests pass;
-- the standalone graph Swift package repository and protected publication step
-  are configured and point at the same signed source revision;
 - `v0.1.0` is a verified signed tag matching the authorization;
 - the protected release environment receives owner approval.
 

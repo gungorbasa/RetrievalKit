@@ -2,9 +2,9 @@
 
 `RetrievalKitPipeline` is the optional high-level Swift package that composes:
 
-- `RetrievalKitIngest` for shared Rust text chunking.
+- `RetrievalKit` for shared Rust text chunking, indexing, persistence,
+  filtering, and hybrid retrieval.
 - `EmbeddingKit` for provider-neutral batch and query embeddings.
-- `RetrievalKit` for indexing, persistence, filtering, and hybrid retrieval.
 
 The lower-level packages remain independently usable.
 
@@ -58,7 +58,7 @@ Applications can replace the built-in Rust chunker by implementing
 `DocumentChunker`, which is owned and validated by `RetrievalKitPipeline`:
 
 ```swift
-import RetrievalKitIngest
+import RetrievalKit
 
 struct MarkdownChunker: DocumentChunker {
     func chunks(for text: String) throws -> [TextChunk] {

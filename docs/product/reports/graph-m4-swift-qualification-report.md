@@ -2,6 +2,11 @@
 
 Date: 2026-07-12
 
+> Historical evidence: this report qualified separate base and graph artifacts.
+> The public Swift package now ships only the graph-capable aggregate so base
+> and graph products can coexist. The separate base artifact remains an
+> internal graph-neutrality check.
+
 ## Outcome
 
 The generic optional graph package is qualified through the Rust, C ABI, and

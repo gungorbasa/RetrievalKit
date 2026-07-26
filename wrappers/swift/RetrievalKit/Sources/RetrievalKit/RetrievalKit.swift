@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(RetrievalKitGraphFFI)
+import RetrievalKitGraphFFI
+#else
 import RetrievalKitFFI
+#endif
 import RetrievalKitShared
 
 public typealias CorpusID = RetrievalKitShared.CorpusID

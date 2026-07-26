@@ -119,15 +119,18 @@ traversal.
 | Android `retrievalkit-android` | Base AAR for arm64-v8a; provisional coordinates | **Available from source** |
 | Android `retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a; provisional coordinates | **Available from source** |
 
-The base and graph native aggregates are mutually exclusive within one process
-for every language. The graph-enabled distribution already contains the base
-native retrieval capabilities. Node loaders enforce this with a process-global
-guard; JVM and Android applications must depend on exactly one artifact.
+Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
+Their graph-enabled distributions already contain the base native retrieval
+capabilities. Node loaders enforce this with a process-global guard; JVM and
+Android applications must depend on exactly one artifact.
 
-Swift base and graph distributions use separate package manifests. This keeps
-SwiftPM from downloading the graph native artifact for a base-only application,
-or the base artifact for a graph application. Until public distribution starts,
-use the checked-in source packages shown in the quickstarts below.
+Swift uses one package and one graph-capable native aggregate. Add the package
+once, then select `RetrievalKit`, `RetrievalKitGraph`, or both products.
+`RetrievalKitGraphFFI` contains the shared base and graph entry points, so a
+Swift application never links competing native aggregates. Selecting only
+`RetrievalKit` keeps graph APIs out of the Swift target, although SwiftPM still
+downloads the graph-capable binary. Until public distribution starts, use the
+checked-in source packages shown in the quickstarts below.
 
 `GraphRetrievalDatabase` is the complete graph-scoped search product.
 `GraphDatabase` is available for applications that need only traversal and
@@ -200,7 +203,7 @@ swift run --package-path wrappers/swift/RetrievalKitGraph \
 Expected output: `graph-hybrid=decision-swift`.
 
 See the [Python guide](docs/guides/python.md) or
-[Swift guide](docs/guides/swift.md) for complete code, base-package commands,
+[Swift guide](docs/guides/swift.md) for complete code, retrieval-only commands,
 semantic-only variations, persistence, and trace inspection.
 
 The [TypeScript guide](docs/guides/typescript.md) and

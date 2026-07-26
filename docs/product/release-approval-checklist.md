@@ -25,9 +25,11 @@ Every item is required unless explicitly marked candidate-only.
 
 ## Artifacts
 
-- [ ] Base and graph XCFrameworks contain arm64 macOS, iOS, and iOS Simulator slices.
+- [ ] The public graph-capable XCFramework contains arm64 macOS, iOS, and iOS
+  Simulator slices.
 - [ ] Both Python distributions pass on CPython 3.10–3.14 macOS arm64.
-- [ ] Base/graph Swift linkage and Python co-import negative tests pass.
+- [ ] Every Swift product and the combined base-plus-graph consumer pass; the
+  internal graph-neutrality and Python co-import negative tests pass.
 - [ ] Two clean roots produce byte-identical artifacts.
 - [ ] SHA-256 inventory and SwiftPM checksums independently validate.
 - [ ] SPDX SBOM, provenance, attestations, and artifact retention metadata validate.
@@ -36,8 +38,8 @@ Every item is required unless explicitly marked candidate-only.
 
 - [ ] Protected release environment approval is recorded.
 - [ ] GitHub Release is created from the verified tag with validated assets only.
-- [ ] Base and graph Swift package repositories publish manifests from the same
-  signed revision and resolve only their matching native aggregate.
+- [ ] The Swift package publishes all four products from the signed revision and
+  resolves only `RetrievalKitGraphFFI`.
 - [ ] Trusted PyPI publication uploads exactly the validated wheel inventory.
 - [ ] Fresh remote SwiftPM and PyPI consumer projects pass.
 - [ ] Changelog, compatibility notes, and rollback owner are confirmed.

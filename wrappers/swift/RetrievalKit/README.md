@@ -101,7 +101,6 @@ the call site.
 
 ```swift
 import RetrievalKit
-import RetrievalKitIngest
 
 let index = try VectorIndex(dimension: 3)
 
@@ -136,8 +135,7 @@ for result in results {
 
 - Create/load/save `RetrievalDatabase` and the compatibility `VectorIndex`.
 - Upsert and delete documents.
-- Separate `RetrievalKitIngest` product with shared Rust-backed fixed and
-  sentence-aware text chunking.
+- Shared Rust-backed fixed and sentence-aware `TextChunker`.
 - Exact vector search.
 - BM25 keyword search.
 - Hybrid vector + keyword search.
@@ -245,10 +243,11 @@ Run it during a maintenance window and leave memory headroom, especially near
 the 50K-chunk V1 ceiling. The estimate reports retained payload before and
 after compaction; it is not a peak-RSS measurement.
 
-The source package currently expects the XCFramework to be built in this
-repository before `swift build` or `swift test`. A public binary release should
-publish `RetrievalKitFFI.xcframework` and switch the binary target to a URL plus
-checksum for tagged distribution.
+This repository-local component package expects the graph-free XCFramework to
+be built before `swift build` or `swift test`; it exists to verify base
+isolation. The public root package instead publishes one graph-capable
+XCFramework and exposes both `RetrievalKit` and `RetrievalKitGraph` products
+over that native aggregate.
 
 `TextChunker` limits and overlap are measured in Unicode characters. Returned
 `startByte` and `endByte` values are UTF-8 byte offsets into the original text.

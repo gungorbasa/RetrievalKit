@@ -325,8 +325,8 @@ hybrid_hits = hybrid_search_text(
 Chunk limits and overlap are measured in Unicode characters. `start_byte` and
 `end_byte` are UTF-8 byte offsets into the original string. Sentence mode
 prefers sentence endings, then whitespace, and falls back to the hard character
-limit. The implementation lives in Rust and is shared with the separate Swift
-`RetrievalKitIngest` product.
+limit. The implementation lives in Rust and is shared with Swift's
+`RetrievalKit.TextChunker` API.
 
 Graph capabilities are intentionally absent from this base distribution. Use
 the separate `retrievalkit-graph` distribution in `wrappers/python-graph` when an

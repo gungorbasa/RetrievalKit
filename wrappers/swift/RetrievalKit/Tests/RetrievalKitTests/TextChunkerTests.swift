@@ -1,7 +1,7 @@
 import XCTest
-@testable import RetrievalKitIngest
+@testable import RetrievalKit
 
-final class RetrievalKitIngestTests: XCTestCase {
+final class TextChunkerTests: XCTestCase {
     func testFixedTextChunkerUsesRustImplementationAndPreservesUnicodeOffsets() throws {
         let chunker = try TextChunker(strategy: .fixed, maxCharacters: 4, overlapCharacters: 1)
 

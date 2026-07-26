@@ -10,7 +10,6 @@ let package = Package(
     ],
     products: [
         .library(name: "RetrievalKit", targets: ["RetrievalKit"]),
-        .library(name: "RetrievalKitIngest", targets: ["RetrievalKitIngest"]),
         .executable(name: "RetrievalKitDatabaseQuickstart", targets: ["RetrievalKitDatabaseQuickstart"]),
         .executable(name: "RetrievalKitRetrievalQuickstart", targets: ["RetrievalKitRetrievalQuickstart"])
     ],
@@ -29,15 +28,6 @@ let package = Package(
                 ])
             ]
         ),
-        .target(
-            name: "RetrievalKitIngest",
-            dependencies: ["RetrievalKitFFI"],
-            linkerSettings: [
-                .unsafeFlags([
-                    "../../../target/debug/libretrievalkit_ffi.a"
-                ])
-            ]
-        ),
         .executableTarget(
             name: "RetrievalKitDatabaseQuickstart",
             dependencies: ["RetrievalKit"]
@@ -49,10 +39,6 @@ let package = Package(
         .testTarget(
             name: "RetrievalKitTests",
             dependencies: ["RetrievalKit"]
-        ),
-        .testTarget(
-            name: "RetrievalKitIngestTests",
-            dependencies: ["RetrievalKitIngest"]
         ),
     ],
     swiftLanguageModes: [.v6]

@@ -21,7 +21,6 @@ let package = Package(
             name: "RetrievalKitPipeline",
             dependencies: [
                 .product(name: "RetrievalKit", package: "RetrievalKit"),
-                .product(name: "RetrievalKitIngest", package: "RetrievalKit"),
                 .product(name: "EmbeddingKit", package: "EmbeddingKit")
             ]
         ),

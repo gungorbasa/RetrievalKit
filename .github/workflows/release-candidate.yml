@@ -118,7 +118,8 @@ jobs:
         run: python3 scripts/release/compare_artifacts.py target/root-a target/root-b
       - name: Assemble and independently validate closed bundle
         run: |
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           python3 scripts/release/assemble_release.py \
             --repo . \
             --staging target/root-a \

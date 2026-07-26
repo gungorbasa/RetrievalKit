@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(RetrievalKitGraphFFI)
+import RetrievalKitGraphFFI
+#else
 import RetrievalKitFFI
+#endif
 
 /// A deterministic text segment produced by the shared Rust ingestion layer.
 public struct TextChunk: Equatable, Sendable {
@@ -17,7 +21,7 @@ public struct TextChunk: Equatable, Sendable {
     }
 }
 
-/// Errors produced by the shared Rust text chunker or its Swift FFI boundary.
+/// Errors produced by RetrievalKit's shared Rust text chunker or its Swift FFI boundary.
 public enum TextChunkingError: Error, Equatable, CustomStringConvertible, Sendable {
     case invalidArgument(String)
     case core(String)
@@ -29,12 +33,13 @@ public enum TextChunkingError: Error, Equatable, CustomStringConvertible, Sendab
         case .invalidArgument(let message), .core(let message), .panic(let message):
             message
         case .unknown(let code, let message):
-            "RetrievalKitIngest error \(code): \(message)"
+            "RetrievalKit text chunking error \(code): \(message)"
         }
     }
 
     fileprivate static func from(status: RetrievalKitStatus) -> TextChunkingError {
-        let message = status.message.map { String(cString: $0) } ?? "unknown RetrievalKitIngest FFI error"
+        let message = status.message.map { String(cString: $0) }
+            ?? "unknown RetrievalKit text chunking FFI error"
         switch status.code {
         case 1: return .invalidArgument(message)
         case 2: return .core(message)

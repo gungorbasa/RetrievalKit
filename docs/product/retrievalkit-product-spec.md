@@ -108,9 +108,13 @@ This roadmap is additive to the graph-free product. `retrievalkit-core` remains
 graph-neutral. A canonical `CorpusIndex` owns records, chunks, stable identity
 maps, generations, lifecycle, and hydration. `RetrievalIndex` and the optional
 `GraphEngine` are rebuildable derived capabilities over that corpus; neither is
-an independent payload owner. Applications that do not install graph support
-must not link graph code, open graph files, initialize graph state, or route
-ordinary queries through graph-aware dispatch.
+an independent payload owner. Base native aggregates and non-Swift base
+distributions must not link graph code, open graph files, initialize graph
+state, or route ordinary queries through graph-aware dispatch. The public Swift
+distribution is an explicit packaging exception: it ships one graph-capable
+native aggregate so base and graph Swift products can coexist, while selecting
+only `RetrievalKit` keeps graph APIs and graph initialization out of the Swift
+target.
 
 The supported database products are fixed during builder creation:
 
@@ -211,13 +215,23 @@ unreferenced generations only when no reader lease is present.
 The detailed ownership, Swift API, error, qualification, and commit contract is
 defined in `docs/product/capability-separated-architecture.md`.
 
-M4 Swift packaging uses an aggregate native artifact. `retrievalkit-ffi` keeps its
-graph dependency behind an off-by-default Cargo feature. Base users link the
-graph-free `RetrievalKitFFI`; graph users select `RetrievalKitGraphFFI`, built from the
-same crate with the `graph` feature and exporting both retrieval and graph entry
-points. Applications must not link both artifacts. This gives graph-enabled
-users one Rust core implementation and one native handle universe without
-adding graph code to the base product.
+M4 Swift packaging uses one public graph-capable native artifact.
+`retrievalkit-ffi` keeps its graph dependency behind an off-by-default Cargo
+feature, and internal qualification still builds graph-free `RetrievalKitFFI`
+to prove base isolation. The public Swift package resolves only
+`RetrievalKitGraphFFI`, built from the same crate with the `graph` feature and
+exporting both retrieval and graph entry points. It exposes independently
+selectable `RetrievalKit` and `RetrievalKitGraph` products, and applications may
+use either or both without linking competing native aggregates.
+
+This is a deliberate Swift distribution and developer-experience exception to
+the native capability boundary. Its cost is that a base-only Swift consumer
+downloads the graph-capable binary. Its benefits are one package repository,
+one version, one native handle universe, and direct base-plus-graph composition.
+The exception does not move graph state into base database types: graph files,
+initialization, and dispatch remain opt-in through graph APIs. Tests must prove
+that the combined products link and run together and that the internal
+graph-free artifact remains graph-neutral.
 
 M5 Python packaging follows the same capability boundary. The base `retrievalkit`
 distribution builds `retrievalkit-python` without graph features. The optional
@@ -1473,8 +1487,8 @@ The generic SDK helper provides deterministic fixed and sentence-aware
 chunking from `retrievalkit-ingest`. Limits and overlap are Unicode-character
 based, and chunks retain UTF-8 byte offsets into the original document. Exact
 model-token budgets remain an embedding integration concern because tokenizer
-behavior varies by model. Swift exposes this through the separate
-`RetrievalKitIngest` product and Python through `retrievalkit.ingest`; both call the
+behavior varies by model. Swift exposes `TextChunker` through the
+`RetrievalKit` product and Python through `retrievalkit.ingest`; both call the
 same Rust implementation rather than reimplementing it.
 
 An optional wrapper-level pipeline composes chunking, embedding, and indexing

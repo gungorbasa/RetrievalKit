@@ -1,7 +1,6 @@
 import EmbeddingKit
 import XCTest
 import RetrievalKit
-import RetrievalKitIngest
 @testable import RetrievalKitPipeline
 
 final class RetrievalKitPipelineTests: XCTestCase {

@@ -48,6 +48,8 @@ class WrapperTthwPlanTests(unittest.TestCase):
         ]
         self.assertIn("--locked", python_commands)
         self.assertIn("ci", node_commands)
+        self.assertIn("@gungorbasa/retrievalkit", node_commands)
+        self.assertNotIn("retrievalkit", node_commands)
         self.assertIn("--graph", swift_commands)
         self.assertIn("graph-retrieval", swift_commands)
         self.assertIn("--no-daemon", kotlin_commands)

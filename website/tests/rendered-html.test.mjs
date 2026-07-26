@@ -45,7 +45,7 @@ test("server-renders the public RetrievalKit documentation", async () => {
   );
   assert.match(
     html,
-    /Coordinates selected; pending Central verification and publication/,
+    /Central namespace and protected credentials configured; v0\.1\.0 unpublished/,
   );
   assert.match(
     html,

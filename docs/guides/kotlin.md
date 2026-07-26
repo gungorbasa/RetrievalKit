@@ -5,11 +5,11 @@ RetrievalKit has separate base and graph artifacts:
 - Kotlin/JVM: `retrievalkit` and `retrievalkit-graph`.
 - Android: `retrievalkit-android` and `retrievalkit-graph-android`.
 
-The `io.github.gungorbasa` coordinates are selected, but Central namespace
-verification and publication are not complete. Choose exactly one artifact per
-application; the graph artifact already contains retrieval. The initial
-Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and other Android
-ABIs are not claimed.
+The `io.github.gungorbasa` namespace is verified and its protected publishing
+credentials are configured, but v0.1.0 is not published. Choose exactly one
+artifact per application; the graph artifact already contains retrieval. The
+initial Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and other
+Android ABIs are not claimed.
 
 ## Installation status
 
@@ -17,7 +17,7 @@ The eventual Gradle dependency will have this shape:
 
 ```kotlin
 dependencies {
-    // PENDING — Central verification and publication are not complete.
+    // PENDING — Central owner setup is complete; v0.1.0 is not published.
     implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")
 }
 ```

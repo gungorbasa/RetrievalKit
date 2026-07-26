@@ -42,9 +42,15 @@ implemented, or superseded by the product spec.
   because PyPI rejects one identical pending-publisher identity for multiple
   uncreated project names; those temporary publishers and workflows were
   removed after both projects existed. Both public records resolve
-  anonymously, and v0.1.0 remains unused. Central namespace verification and
-  user token, the signed tag, and provisioned Phase 7 evidence remain external
-  gates.
+  anonymously, and v0.1.0 remains unused.
+- 2026-07-26 Maven Central owner setup: the automatically provisioned
+  `io.github.gungorbasa` namespace is verified. A six-month Portal user token
+  named `RetrievalKit GitHub Actions` is installed as
+  `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD` in the protected
+  `maven` environment; rotate it before 2027-01-26. All three Maven GPG secrets
+  are also present, the public key is distributed, and the environment accepts
+  only `v*` tags. The signed tag and provisioned Phase 7 evidence remain
+  external gates.
 - 2026-07-26 Phase B publication-authorization decision: no completed
   authorization file is committed to the release revision. The exact signed-tag
   candidate, candidate/scheduled/release workflow run IDs, passing Phase 7
@@ -929,15 +935,16 @@ Verification completed without benchmark workloads:
 ## Likely Next Tasks
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
-npm names, PyPI projects, protected GitHub environments, and Maven signing
-identity are configured. Continue one owner-interactive registry step at a
-time:
+npm names, PyPI projects, protected GitHub environments, Maven signing
+identity, Central namespace, and Portal token are configured. Registry-owner
+setup is complete:
 
 1. re-verify both npm and PyPI bootstrap records and their exact
    trusted-publisher configuration immediately before publication dispatch;
-2. verify the `io.github.gungorbasa` Central namespace and install its user
-   token in the protected `maven` environment;
-3. only then resume the signed-tag and provisioned Phase 7 evidence gates.
+2. re-verify the Central namespace, published signing key, and five protected
+   Maven secrets immediately before publication dispatch;
+3. resume only when the owner explicitly authorizes the signed-tag and
+   provisioned Phase 7 evidence gates.
 
 Do not publish v0.1.0, create its tag, rebuild frozen qualification fixtures,
 or resume physical-device work until the corresponding documented gate is

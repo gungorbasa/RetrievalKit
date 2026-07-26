@@ -32,16 +32,16 @@ not usable SDK releases.
 | Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
 | Python | `python -m pip install retrievalkit-graph` | Names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; CPython 3.10–3.14 |
 | Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; Node.js 22.13+ or 24 LTS |
-| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
-| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | Android API 24+; arm64-v8a |
+| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
+| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | Android API 24+; arm64-v8a |
 
 The public identities have been selected. npm and PyPI ownership and
-trusted-publisher setup are complete; Central namespace verification and every
-v0.1.0 publication are still pending, so the install commands do not yet
-provide an SDK release. For Swift, add one package and select `RetrievalKit`
-for a flat corpus, `RetrievalKitGraph` for relationships plus retrieval, or
-both. For Python, Node, and Kotlin, choose exactly one native distribution in
-a process: graph-enabled packages already include base retrieval.
+trusted-publisher setup and Maven Central owner setup are complete. Every
+v0.1.0 publication is still pending, so the install commands do not yet provide
+an SDK release. For Swift, add one package and select `RetrievalKit` for a flat
+corpus, `RetrievalKitGraph` for relationships plus retrieval, or both. For
+Python, Node, and Kotlin, choose exactly one native distribution in a process:
+graph-enabled packages already include base retrieval.
 
 **Available now:** [run the checked-in source quickstarts](#run-from-source).
 The downloadable Python graph source preview is also available from the
@@ -339,9 +339,9 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
   owner-approved.
 - Benchmark evidence supports scoped observations, not a universal competitor
   claim.
-- Public SwiftPM, PyPI, npm, and Maven publication remain blocked pending
-  provisioned release gates, naming clearance where applicable, and claim
-  authorization for the release revision.
+- Public SwiftPM, PyPI, npm, and Maven publication remain blocked pending the
+  signed release tag, provisioned release gates, and claim authorization for
+  the release revision.
 
 ## Documentation
 

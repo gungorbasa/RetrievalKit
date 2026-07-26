@@ -21,7 +21,7 @@ const sections: DocSection[] = [
     summary:
       "No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. The npm and PyPI names contain bootstrap-only placeholders; the commands below show the intended install shape, not an SDK available today.",
     body:
-      "The package identities are selected, and npm plus PyPI ownership and GitHub trusted publishing are configured. Central namespace verification and all v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
+      "The package identities are selected. npm plus PyPI ownership and trusted publishing are configured, and the Maven Central namespace and protected credentials are ready. All v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
 npm install @gungorbasa/retrievalkit-graph
@@ -174,7 +174,7 @@ console.log(hits[0]?.documentId);`,
     summary:
       "Kotlin uses FloatArray, sealed value types, typed exceptions, and AutoCloseable resources over the shared Rust core.",
     body:
-      "The io.github.gungorbasa Maven coordinates are selected, but Central namespace verification and publication are pending. The source build uses JDK 17 and targets a macOS arm64 JVM native library; compiled bytecode can run on Java 11+. Android targets API 24+ and arm64-v8a.",
+      "The io.github.gungorbasa Central namespace is verified and its protected publishing credentials are configured, but v0.1.0 is unpublished. The source build uses JDK 17 and targets a macOS arm64 JVM native library; compiled bytecode can run on Java 11+. Android targets API 24+ and arm64-v8a.",
     code: `import ai.retrievalkit.Document
 import ai.retrievalkit.RetrievalDatabase
 import ai.retrievalkit.VectorEncoding
@@ -261,7 +261,7 @@ const releaseReadiness = [
   [
     "Kotlin",
     "io.github.gungorbasa base or graph artifact",
-    "Coordinates selected; pending Central verification and publication",
+    "Central namespace and protected credentials configured; v0.1.0 unpublished",
     "Authorized repository source checkout",
   ],
 ];

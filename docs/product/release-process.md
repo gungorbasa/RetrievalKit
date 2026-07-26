@@ -3,8 +3,9 @@
 Status: release-candidate and runtime authorization implementation complete.
 The public repository, protected GitHub environments, npm and PyPI bootstrap
 packages, npm and PyPI trusted publishers, and Maven signing identity are
-configured. v0.1.0 publication remains blocked on the Central owner setup and
-release evidence gates below.
+configured. The Maven Central namespace and protected user token are also
+configured. v0.1.0 publication remains blocked on the signed tag and release
+evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
 previews from one signed source revision. Python, Node, and Kotlin retain
@@ -18,8 +19,9 @@ name as too similar to an existing package, so both Node packages use one
 consistent owner scope. The approved Maven group is
 `io.github.gungorbasa`. The npm names were bootstrapped and connected to the
 protected GitHub publication workflow on 2026-07-26. Both PyPI names were also
-bootstrapped and connected to that workflow on 2026-07-26. Maven Central
-namespace verification and credentials, the signed tag, and the provisioned
+bootstrapped and connected to that workflow on 2026-07-26. The
+`io.github.gungorbasa` Central namespace was verified and its protected
+credentials were installed on 2026-07-26. The signed tag and provisioned
 release evidence remain fail-closed external prerequisites.
 
 ## Release contents
@@ -216,11 +218,13 @@ The `maven` environment must contain:
 - `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`: Central Portal
   user-token credentials.
 
-Central namespace verification, public signing-key distribution, token
-creation, and environment protection are external owner actions. The required
-`maven_central_ready` dispatch input is an explicit assertion that they are
-complete; missing secrets, signing failures, namespace rejection, or upload
-failure stops publication.
+The owner completed Central setup on 2026-07-26: `io.github.gungorbasa` is
+verified, the public signing key is distributed, a six-month Portal user token
+is installed as the two Central secrets, all three signing secrets are present,
+and the protected `maven` environment accepts only `v*` tags. Rotate the Portal
+token before 2027-01-26. The required `maven_central_ready` dispatch input is an
+explicit re-verification assertion; missing secrets, signing failures,
+namespace rejection, or upload failure stops publication.
 
 The dedicated RetrievalKit release key is checked in as a public verification
 artifact at
@@ -246,8 +250,8 @@ already configured controls:
   trusted publisher for this repository and workflow;
 - re-verify the protected `npm` environment and both bootstrapped packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
-- verify `io.github.gungorbasa` in Central Portal, publish the PGP public key,
-  and configure the protected `maven` environment using the
+- re-verify `io.github.gungorbasa` in Central Portal, the published PGP public
+  key, and all five secrets in the protected `maven` environment using the
   [Central Publisher API](https://central.sonatype.org/publish/publish-portal-api/);
 - confirm the workflow token can read Actions run metadata and the
   [`GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals` review-history endpoint](https://docs.github.com/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run);

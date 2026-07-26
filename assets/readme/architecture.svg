@@ -1,95 +1,90 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="560" viewBox="0 0 1200 560"
      role="img" aria-labelledby="title desc">
-  <title id="title">RetrievalKit unified retrieval flow</title>
-  <desc id="desc">Records and caller-provided embeddings enter one corpus. Optional graph relationships and metadata filters choose the candidate scope. Exact semantic and BM25 hybrid ranking order those candidates into ranked hits with traces. Transactional checksummed snapshots persist the same state. Every stage runs in the shared Rust core.</desc>
+  <title id="title">RetrievalKit query paths</title>
+  <desc id="desc">One canonical corpus supports three independent paths in the shared Rust core: retrieval-only exact vector, BM25, or hybrid ranking; graph-only traversal and projection without embeddings; and graph-scoped retrieval that selects related candidates before ranking.</desc>
 
   <rect width="1200" height="560" rx="20" fill="#0A0D12"/>
 
   <text x="48" y="58" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-        font-size="20" letter-spacing="2" fill="#E8A13D">ONE LOCAL FLOW · SHARED RUST CORE</text>
+        font-size="20" letter-spacing="2" fill="#E8A13D">THREE QUERY PATHS · SHARED RUST CORE</text>
+  <text x="48" y="92" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="21" fill="#C6CFD8">Choose only the capabilities your application needs.</text>
 
-  <g id="query">
-    <rect x="48" y="88" width="1104" height="70" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-    <text x="76" y="119" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="22" font-weight="650" fill="#F3F5F7">Query context</text>
-    <text x="250" y="119" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="19" fill="#9AA6B2">text + embedding + optional starting record + hard filters</text>
-    <text x="76" y="145" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#9AA6B2">Embeddings are caller-provided; relationships come from your application.</text>
+  <g id="corpus">
+    <rect x="48" y="148" width="222" height="286" rx="14" fill="#10161E"
+          stroke="#2A3542" stroke-width="1.5"/>
+    <text x="72" y="190" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="26" font-weight="700" fill="#F3F5F7">One corpus</text>
+    <text x="72" y="230" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#9AA6B2">records</text>
+    <text x="72" y="260" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#9AA6B2">chunks</text>
+    <text x="72" y="290" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#9AA6B2">metadata</text>
+    <text x="72" y="320" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#9AA6B2">relationships</text>
+    <path d="M72 350 H246" stroke="#2A3542" stroke-width="1.5"/>
+    <text x="72" y="384" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="16" fill="#E8A13D">store once</text>
+    <text x="72" y="411" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="16" fill="#9AA6B2">derive capabilities</text>
   </g>
 
-  <g id="main-flow">
-    <g id="corpus">
-      <rect x="48" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="72" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-            font-size="24" font-weight="650" fill="#F3F5F7">One corpus</text>
-      <text x="72" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">records · chunks</text>
-      <text x="72" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">metadata · graph</text>
-    </g>
+  <g id="retrieval-path">
+    <rect x="314" y="148" width="836" height="82" rx="12" fill="#10161E"
+          stroke="#2A3542" stroke-width="1.5"/>
+    <text x="338" y="178" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="14" font-weight="700" fill="#E8A13D">01 RETRIEVALDATABASE</text>
+    <text x="338" y="207" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="650" fill="#F3F5F7">Exact vector · BM25 · hybrid</text>
+    <path d="M684 189 H850" stroke="#5B6673" stroke-width="2"/>
+    <path d="M850 183 L860 189 L850 195 Z" fill="#5B6673"/>
+    <text x="892" y="196" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#C6CFD8">ranked hits + trace</text>
+  </g>
 
-    <g id="scope">
-      <rect x="332" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="356" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-            font-size="24" font-weight="650" fill="#F3F5F7">Choose candidates</text>
-      <text x="356" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">graph neighborhood</text>
-      <text x="356" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">+ metadata filters</text>
-    </g>
+  <g id="graph-path">
+    <rect x="314" y="250" width="836" height="82" rx="12" fill="#10161E"
+          stroke="#2A3542" stroke-width="1.5"/>
+    <text x="338" y="280" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="14" font-weight="700" fill="#E8A13D">02 GRAPHDATABASE</text>
+    <text x="338" y="309" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="650" fill="#F3F5F7">Traverse · match · project</text>
+    <path d="M684 291 H850" stroke="#5B6673" stroke-width="2"/>
+    <path d="M850 285 L860 291 L850 297 Z" fill="#5B6673"/>
+    <text x="892" y="283" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#C6CFD8">related records</text>
+    <text x="892" y="308" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="15" fill="#75C9AE">no embeddings</text>
+  </g>
 
-    <g id="rank">
-      <rect x="616" y="214" width="250" height="124" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-      <text x="640" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-            font-size="24" font-weight="650" fill="#F3F5F7">Rank candidates</text>
-      <text x="640" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">exact semantic</text>
-      <text x="640" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#9AA6B2">+ BM25 hybrid</text>
-    </g>
+  <g id="combined-path">
+    <rect x="314" y="352" width="836" height="82" rx="12" fill="#1B1F1A"
+          stroke="#E8A13D" stroke-width="1.5"/>
+    <text x="338" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="14" font-weight="700" fill="#E8A13D">03 GRAPHRETRIEVALDATABASE</text>
+    <text x="338" y="411" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="650" fill="#F3F5F7">Graph scope → exact vector · BM25 · hybrid</text>
+    <path d="M760 393 H850" stroke="#E8A13D" stroke-width="2"/>
+    <path d="M850 387 L860 393 L850 399 Z" fill="#E8A13D"/>
+    <text x="892" y="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#E8A13D">scoped ranked hits</text>
+  </g>
 
-    <g id="results">
-      <rect x="900" y="214" width="250" height="124" rx="10" fill="#1B1F1A" stroke="#E8A13D" stroke-width="1.5"/>
-      <text x="924" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-            font-size="24" font-weight="650" fill="#E8A13D">Return results</text>
-      <text x="924" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#C6CFD8">ranked hits</text>
-      <text x="924" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-            font-size="19" fill="#C6CFD8">+ search trace</text>
-    </g>
-
-    <g stroke="#5B6673" stroke-width="2" fill="#5B6673">
-      <path d="M298 276 H320"/>
-      <path d="M320 270 L330 276 L320 282 Z"/>
-      <path d="M582 276 H604"/>
-      <path d="M604 270 L614 276 L604 282 Z"/>
-      <path d="M866 276 H888"/>
-      <path d="M888 270 L898 276 L888 282 Z"/>
-    </g>
+  <g id="fanout" stroke="#5B6673" stroke-width="2" fill="#5B6673">
+    <path d="M270 291 H292 V189 H302"/>
+    <path d="M302 183 L312 189 L302 195 Z"/>
+    <path d="M292 291 H302"/>
+    <path d="M302 285 L312 291 L302 297 Z"/>
+    <path d="M292 291 V393 H302"/>
+    <path d="M302 387 L312 393 L302 399 Z"/>
   </g>
 
   <g id="persistence">
-    <rect x="48" y="400" width="534" height="104" rx="10" fill="#10161E" stroke="#2A3542" stroke-width="1.5"/>
-    <text x="72" y="438" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="23" font-weight="650" fill="#F3F5F7">Persist the same product state</text>
-    <text x="72" y="468" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="19" fill="#9AA6B2">transactional · checksummed</text>
-    <text x="72" y="494" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="19" fill="#9AA6B2">crash-safe snapshots</text>
-    <path d="M173 338 V388" stroke="#5B6673" stroke-width="2"/>
-    <path d="M167 388 L173 398 L179 388 Z" fill="#5B6673"/>
+    <rect x="48" y="474" width="1102" height="48" rx="10" fill="#10161E"
+          stroke="#2A3542" stroke-width="1.5"/>
+    <text x="72" y="505" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="17" fill="#9AA6B2">LOCAL-FIRST · DETERMINISTIC · TRANSACTIONAL SNAPSHOTS · RUST-OWNED VALIDATION, FILTERING, ORDERING, AND TRACES</text>
   </g>
-
-  <g id="clarification">
-    <rect x="616" y="400" width="534" height="104" rx="10" fill="#15191A" stroke="#E8A13D" stroke-width="1.5"/>
-    <text x="640" y="438" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="23" font-weight="650" fill="#E8A13D">Graph changes where search runs.</text>
-    <text x="640" y="472" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="19" fill="#C6CFD8">It is not a third hybrid scoring signal.</text>
-  </g>
-
-  <text x="48" y="540" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-        font-size="18" fill="#9AA6B2">No SQLite query, JSON parse, network call, or avoidable server hop on the hot query path.</text>
 </svg>

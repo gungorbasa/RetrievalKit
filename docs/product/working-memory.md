@@ -960,6 +960,20 @@ Verification completed without benchmark workloads:
   built-wheel metadata inspection pass. The next DX blocker is rebuilding the
   public website and source preview from the same current release truth.
 
+## 2026-07-26 Public Query-Path Positioning
+
+- The website and GitHub README must present three first-class query paths:
+  retrieval-only exact vector/BM25/hybrid search with `RetrievalDatabase`,
+  graph-only traversal and candidate projection with `GraphDatabase`, and
+  graph-scoped exact vector/BM25/hybrid retrieval with
+  `GraphRetrievalDatabase`.
+- Graph-only search is a complete standalone path, not merely a setup step for
+  retrieval. Public explanations and examples must make clear that it accepts
+  no retrieval configuration, vector index, or embeddings.
+- Graph-scoped retrieval uses graph relationships to choose the candidate
+  neighborhood; the graph is not a separate scoring signal. The same retrieval
+  engine ranks within the selected scope.
+
 ## Likely Next Tasks
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped

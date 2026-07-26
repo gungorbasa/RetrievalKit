@@ -2,7 +2,7 @@
      width="1200" height="400" viewBox="0 0 1200 400"
      role="img" aria-labelledby="title desc">
   <title id="title">RetrievalKit</title>
-  <desc id="desc">Local hybrid search for Swift and Python. Graph relationships and metadata choose the candidate scope, then semantic and BM25 evidence rank one explainable result list.</desc>
+  <desc id="desc">Local retrieval, standalone graph search, and graph-scoped retrieval for Swift, Python, Node.js, and Kotlin.</desc>
 
   <rect width="1200" height="400" rx="20" fill="#0A0D12"/>
 
@@ -14,27 +14,23 @@
           font-size="88" font-weight="800" fill="#F3F5F7">RetrievalKit</text>
 
     <text x="64" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="26" fill="#C6CFD8">Meaning + exact keywords, grounded by</text>
+          font-size="26" fill="#C6CFD8">Vector + hybrid retrieval. Graph-only search.</text>
     <text x="64" y="274" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="26" fill="#C6CFD8">your app's relationships.</text>
+          font-size="26" fill="#C6CFD8">Or bring both together.</text>
 
     <g id="product-flow" transform="translate(64 304)"
        font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-       font-size="20">
-      <rect x="0" y="0" width="162" height="38" rx="7" fill="#10161E" stroke="#2A3542"/>
-      <text x="81" y="26" text-anchor="middle" fill="#F3F5F7">choose scope</text>
-      <path d="M174 19 H202" stroke="#5B6673" stroke-width="2"/>
-      <path d="M202 13 L212 19 L202 25 Z" fill="#5B6673"/>
-      <rect x="224" y="0" width="184" height="38" rx="7" fill="#10161E" stroke="#2A3542"/>
-      <text x="316" y="26" text-anchor="middle" fill="#F3F5F7">hybrid rank</text>
-      <path d="M420 19 H448" stroke="#5B6673" stroke-width="2"/>
-      <path d="M448 13 L458 19 L448 25 Z" fill="#5B6673"/>
-      <rect x="470" y="0" width="178" height="38" rx="7" fill="#1B1F1A" stroke="#E8A13D"/>
-      <text x="559" y="26" text-anchor="middle" fill="#E8A13D">hits + trace</text>
+       font-size="17">
+      <rect x="0" y="0" width="190" height="38" rx="7" fill="#10161E" stroke="#2A3542"/>
+      <text x="95" y="25" text-anchor="middle" fill="#F3F5F7">retrieval</text>
+      <rect x="206" y="0" width="190" height="38" rx="7" fill="#10161E" stroke="#2A3542"/>
+      <text x="301" y="25" text-anchor="middle" fill="#F3F5F7">graph only</text>
+      <rect x="412" y="0" width="236" height="38" rx="7" fill="#1B1F1A" stroke="#E8A13D"/>
+      <text x="530" y="25" text-anchor="middle" fill="#E8A13D">graph + retrieval</text>
     </g>
 
     <text x="64" y="374" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" letter-spacing="1" fill="#9AA6B2">RUST CORE · SWIFT · PYTHON · IOS 15+ · MACOS 14+</text>
+          font-size="16" letter-spacing="1" fill="#9AA6B2">RUST CORE · SWIFT · PYTHON · NODE.JS · KOTLIN</text>
   </g>
 
   <g id="apollo-example">
@@ -42,25 +38,21 @@
           stroke="#2A3542" stroke-width="1.5"/>
 
     <text x="800" y="80" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" letter-spacing="2" fill="#E8A13D">PROJECT APOLLO</text>
-    <text x="800" y="124" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          font-size="23" font-weight="600" fill="#F3F5F7">“Why did we choose Swift?”</text>
+          font-size="18" letter-spacing="2" fill="#E8A13D">CHOOSE A QUERY PATH</text>
 
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19">
-      <rect x="800" y="154" width="304" height="46" rx="8" fill="#161E28" stroke="#2A3542"/>
-      <text x="820" y="184" fill="#C6CFD8">scope: Apollo + approved</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <rect x="800" y="110" width="304" height="58" rx="8" fill="#161E28" stroke="#2A3542"/>
+      <text x="820" y="134" font-size="13" fill="#E8A13D">01 RETRIEVAL</text>
+      <text x="820" y="155" font-size="16" fill="#C6CFD8">vector · BM25 · hybrid</text>
 
-      <path d="M952 200 V216" stroke="#5B6673" stroke-width="2"/>
-      <path d="M946 216 L952 226 L958 216 Z" fill="#5B6673"/>
+      <rect x="800" y="184" width="304" height="58" rx="8" fill="#161E28" stroke="#2A3542"/>
+      <text x="820" y="208" font-size="13" fill="#E8A13D">02 GRAPH</text>
+      <text x="820" y="229" font-size="16" fill="#C6CFD8">traverse · project</text>
 
-      <rect x="800" y="226" width="304" height="46" rx="8" fill="#161E28" stroke="#2A3542"/>
-      <text x="820" y="256" fill="#C6CFD8">rank: semantic + BM25</text>
-
-      <path d="M952 272 V288" stroke="#5B6673" stroke-width="2"/>
-      <path d="M946 288 L952 298 L958 288 Z" fill="#5B6673"/>
-
-      <rect x="800" y="298" width="304" height="46" rx="8" fill="#1B1F1A" stroke="#E8A13D"/>
-      <text x="820" y="328" fill="#E8A13D">decision-swift</text>
+      <rect x="800" y="258" width="304" height="74" rx="8" fill="#1B1F1A" stroke="#E8A13D"/>
+      <text x="820" y="282" font-size="13" fill="#E8A13D">03 GRAPH + RETRIEVAL</text>
+      <text x="820" y="304" font-size="16" fill="#F3F5F7">scope relationships</text>
+      <text x="820" y="324" font-size="16" fill="#F3F5F7">then rank</text>
     </g>
   </g>
 </svg>

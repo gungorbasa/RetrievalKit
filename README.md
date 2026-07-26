@@ -1,9 +1,10 @@
-# ![RetrievalKit — local hybrid search grounded by your app's relationships](assets/readme/hero.svg)
+# ![RetrievalKit — local retrieval, graph search, and graph-scoped retrieval](assets/readme/hero.svg)
 
 RetrievalKit is one local retrieval engine for Swift, Python, TypeScript/Node,
-and Kotlin apps. It combines semantic meaning with BM25 keyword evidence and can use
-application-defined relationships to search only the relevant part of your
-corpus. One corpus, one ranked list, one trace, and no retrieval server.
+and Kotlin apps. Use it for exact vector and BM25 hybrid retrieval, graph-only
+search with no embeddings, or graph-scoped retrieval that ranks only the
+records related to the user's context. One Rust core, native APIs, and no
+retrieval server.
 
 <div align="center">
 
@@ -47,6 +48,27 @@ graph-enabled packages already include base retrieval.
 The downloadable Python graph source preview is also available from the
 [public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site).
 
+## Three ways to search
+
+Choose the smallest product that matches the question. The three paths share
+the same canonical corpus and Rust-owned correctness guarantees, but you do
+not have to configure capabilities you do not use.
+
+| Query path | Use | What it does |
+|---|---|---|
+| **Retrieval search** | `RetrievalDatabase` | Exact vector, BM25 text, or hybrid ranking over a flat corpus |
+| **Graph search** | `GraphDatabase` | Traverses relationships and projects stable candidates with no retrieval configuration or embeddings |
+| **Graph-scoped retrieval** | `GraphRetrievalDatabase` | Uses a graph query to choose candidates, then runs exact vector, BM25 text, or hybrid ranking inside that scope |
+
+Within either retrieval-capable product, the query inputs select the ranking
+mode: pass an embedding for vector-only search, text for BM25-only search, or
+both with `alpha` for hybrid search. Metadata filters are hard constraints and
+work with every retrieval variation.
+
+Graph search is a complete standalone path. If you only need to follow
+relationships, match graph fields, or project related records, build a
+`GraphDatabase`; no embedding model or vector index is involved.
+
 ## One search, the right context
 
 Imagine a workspace with notes from many teams and projects. Someone opens
@@ -69,30 +91,21 @@ chooses the candidate neighborhood; the same hybrid ranker then orders those
 candidates. Relationships are supplied by your application. RetrievalKit does
 not automatically extract or invent a graph.
 
-## Choose how to search
-
-| Need | Choose |
-|---|---|
-| Meaning-based matching without query text | Semantic search |
-| Normal app/document search | Hybrid search |
-| Search inside a project, team, citation network, folder, or related records | Graph-scoped hybrid search |
-| Hard tenant, status, type, or date constraints | Metadata filters with any mode |
-
-Hybrid search should be the normal default when a user types a query: semantic
+Hybrid search should be the normal default when a user types a query: vector
 similarity catches paraphrases while BM25 preserves exact names and terms.
-Choose semantic-only when there is no useful query text—such as finding records
+Choose vector-only when there is no useful query text—such as finding records
 similar to another record—or when keyword overlap should intentionally have no
 effect.
 
 Graph scope and metadata filters solve different problems. A graph answers
 “what is related to this record?” A filter answers “which records satisfy this
-rule?” They can be used together.
+rule?” They can be used together, or the graph can be queried on its own.
 
 ## How RetrievalKit works
 
 <p align="center">
   <img src="assets/readme/architecture.svg" width="100%"
-       alt="RetrievalKit data flow: caller-provided records and embeddings enter one corpus; graph relationships and metadata optionally narrow the candidate set; exact semantic and BM25 hybrid ranking order those candidates; ranked hits and traces return to the app; transactional checksummed snapshots persist the same state.">
+       alt="RetrievalKit data flow: records enter one corpus; retrieval-only queries use exact vector, BM25, or hybrid ranking; graph-only queries traverse and project related records without embeddings; graph-scoped retrieval narrows candidates by relationships before ranking; transactional checksummed snapshots persist the same state.">
 </p>
 
 Indexing, graph traversal, filtering, ranking, trace construction, and
@@ -110,11 +123,10 @@ private, even though RetrievalKit still indexes and searches locally.
 The canonical guides use the same Project Apollo data and explain what to
 choose, when, and why:
 
-- **[Swift guide](docs/guides/swift.md)** — graph-scoped hybrid search, the
-  simpler base package, semantic-only queries, traces, persistence, and local
-  embeddings.
-- **[Python guide](docs/guides/python.md)** — the same product flow with
-  Pythonic builders, queries, lifecycle, and packaging.
+- **[Swift guide](docs/guides/swift.md)** — retrieval-only search, graph-only
+  traversal, graph-scoped retrieval, traces, persistence, and local embeddings.
+- **[Python guide](docs/guides/python.md)** — all three query paths with
+  Pythonic builders, checked-in examples, lifecycle, and packaging.
 - **[TypeScript guide](docs/guides/typescript.md)** — asynchronous Node.js
   builders and typed N-API values on macOS arm64.
 - **[Kotlin guide](docs/guides/kotlin.md)** — Kotlin/JVM and Android
@@ -127,10 +139,10 @@ examples.
 ## Package selection and platform support
 
 Choose the graph-enabled distribution when relationships are meaningful to
-your product. It is RetrievalKit with graph capabilities included: semantic
-search, BM25 hybrid ranking, filters, traces, and persistence are already
-there. Choose the base distribution for flat corpora that do not need
-traversal.
+your product. It includes both `GraphDatabase` for graph-only search and
+`GraphRetrievalDatabase` for graph-scoped retrieval; the latter also includes
+exact vector, BM25, hybrid ranking, filters, traces, and persistence. Choose
+the base distribution for flat corpora that do not need traversal.
 
 | SDK | Capability | Status |
 | --- | --- | --- |
@@ -175,10 +187,25 @@ public registry.
 ### Python
 
 The initial wheel target is macOS arm64 with CPython 3.10-3.14. Install
-[Rust](https://rustup.rs/) and a supported Python interpreter, then run:
+[Rust](https://rustup.rs/) and a supported Python interpreter, then build the
+graph-enabled wrapper once:
 
 ```bash
 PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+```
+
+Run graph-only search with no embeddings:
+
+```bash
+target/python-graph-wrapper-check-venv-py*/bin/python \
+  wrappers/python-graph/examples/graph_quickstart.py
+```
+
+Expected output includes: `graph-only=retrieval`.
+
+Or run graph-scoped hybrid retrieval:
+
+```bash
 target/python-graph-wrapper-check-venv-py*/bin/python \
   wrappers/python-graph/examples/graph_retrieval_quickstart.py
 ```

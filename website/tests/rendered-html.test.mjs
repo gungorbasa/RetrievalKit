@@ -38,6 +38,15 @@ test("server-renders the public RetrievalKit documentation", async () => {
   const html = await response.text();
   assert.match(html, /<title>RetrievalKit Docs · Local retrieval SDK<\/title>/i);
   assert.match(html, /Search locally\./);
+  assert.match(html, /Three local query paths/);
+  assert.match(html, /Retrieval, graph search, or both/);
+  assert.match(html, /Retrieval search/);
+  assert.match(html, /Graph search/);
+  assert.match(html, /Graph-scoped retrieval/);
+  assert.match(html, /GraphDatabase/);
+  assert.match(html, /No retrieval configuration, vector index, or embeddings/);
+  assert.match(html, /Traverse relationships without embeddings/);
+  assert.match(html, /graph-only=retrieval/);
   assert.match(html, /Public installs are pending; source paths are available/);
   assert.match(html, /Source-qualified does not mean registry-published/);
   assert.match(html, /Package release readiness/);
@@ -80,6 +89,7 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /schema = GraphSchema/);
   assert.match(html, /GraphRelationship/);
   assert.match(html, /database\.graph\.query/);
+  assert.match(html, /database\.graph\.query_equals/);
   assert.match(html, /GraphTraversal\(&quot;contains&quot;\)/);
   assert.match(html, /within=selection/);
   assert.match(html, /import ai\.retrievalkit\.Document/);
@@ -109,6 +119,8 @@ test("documentation search matches release-audit queries by term", async () => {
   for (const phrase of [
     "hybrid alpha",
     "graph scoped search",
+    "graph only",
+    "no embeddings",
     "embedding dimension",
   ]) {
     assert.match(page.toLowerCase(), new RegExp(phrase));
@@ -128,9 +140,18 @@ test("documentation search matches release-audit queries by term", async () => {
     body: "An embedding dimension mismatch reports expected and actual values.",
     tags: ["errors"],
   };
+  const graphOnly = {
+    eyebrow: "Graph-only Python",
+    title: "Traverse relationships without embeddings",
+    summary: "Standalone graph search",
+    body: "No embeddings are required.",
+    tags: ["graph only"],
+  };
 
   assert.equal(matchesDocumentationSection(python, "hybrid alpha"), true);
   assert.equal(matchesDocumentationSection(python, "graph scoped search"), true);
+  assert.equal(matchesDocumentationSection(graphOnly, "graph only"), true);
+  assert.equal(matchesDocumentationSection(graphOnly, "no embeddings"), true);
   assert.equal(matchesDocumentationSection(errors, "embedding dimension"), true);
   assert.equal(matchesDocumentationSection(python, "android jni"), false);
 });

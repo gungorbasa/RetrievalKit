@@ -17,6 +17,33 @@ type DocSection = {
   tags: string[];
 };
 
+const searchModes = [
+  {
+    number: "01",
+    eyebrow: "Vector · BM25 · hybrid",
+    title: "Retrieval search",
+    body:
+      "Search a flat corpus with an embedding, query text, or both. Query-time alpha selects vector-only, BM25-only, or hybrid ranking.",
+    api: "RetrievalDatabase\n.search(text?, embedding?, alpha?)",
+  },
+  {
+    number: "02",
+    eyebrow: "Traversal · projection",
+    title: "Graph search",
+    body:
+      "Follow relationships, match graph fields, and project stable candidates. No retrieval configuration, vector index, or embeddings.",
+    api: "GraphDatabase\n.graph.query(...)",
+  },
+  {
+    number: "03",
+    eyebrow: "Relationships → ranked hits",
+    title: "Graph-scoped retrieval",
+    body:
+      "Let the graph choose the candidate neighborhood, then run exact vector, BM25, or hybrid ranking only inside that scope.",
+    api: "GraphRetrievalDatabase\ngraph.query(...) → retrieval.search(... within)",
+  },
+];
+
 const sections: DocSection[] = [
   {
     id: "install",
@@ -55,13 +82,62 @@ cd RetrievalKit`,
     ],
   },
   {
+    id: "graph-only",
+    eyebrow: "Graph-only Python",
+    title: "Traverse relationships without embeddings",
+    summary:
+      "GraphDatabase is a complete standalone product for graph queries and stable candidate projection.",
+    body:
+      "Use the graph-enabled distribution but build GraphDatabase when relationships are the result—not a scope for retrieval. The builder accepts no metric, vector encoding, embedding dimension, or embeddings. Rust owns validation, traversal, filtering, ordering, and generation safety.",
+    code: `from retrievalkit_graph import (
+    GraphDatabaseBuilder,
+    GraphRecordNode,
+    GraphSchema,
+)
+
+builder = GraphDatabaseBuilder(
+    corpus_id="topics",
+    schema=GraphSchema(
+        record_nodes=[
+            GraphRecordNode("Topic", "Topic", ["title"])
+        ]
+    ),
+)
+builder.upsert({
+    "id": "retrieval",
+    "record_type": "Topic",
+    "fields": {"title": "Local retrieval"},
+})
+database = builder.build()
+
+selection = database.graph.query_equals(
+    node_type="Topic",
+    field="title",
+    values="Local retrieval",
+)
+print(selection.matches[0]["node"]["record_id"])`,
+    quickstart: `PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+target/python-graph-wrapper-check-venv-py*/bin/python \\
+  wrappers/python-graph/examples/graph_quickstart.py`,
+    expected: "graph-only=retrieval",
+    guide: "docs/guides/python.md",
+    tags: [
+      "graph only",
+      "graph search",
+      "graph traversal",
+      "candidate projection",
+      "no embeddings",
+      "python",
+    ],
+  },
+  {
     id: "python",
     eyebrow: "Python",
-    title: "Progressive builders, Rust-owned retrieval",
+    title: "Scope by relationships, then rank",
     summary:
-      "Graph scoped search selects candidates before hybrid alpha ranking. Rust owns identity, filtering, ranking, traces, and persistence.",
+      "Graph-scoped retrieval selects candidates before exact vector, BM25, or hybrid ranking. Rust owns identity, filtering, ranking, traces, and persistence.",
     body:
-      "Both PyPI names are reserved with 0.0.0a0 non-SDK placeholders and trust the protected publication workflow. v0.1.0 is unpublished. Today, download the macOS arm64 graph source preview or build from a repository checkout. The graph query chooses the candidate scope; hybrid alpha then balances vector and BM25 evidence inside it. After publication, choose retrievalkit-graph for graph scoped search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
+      "Both PyPI names are reserved with 0.0.0a0 non-SDK placeholders and trust the protected publication workflow. v0.1.0 is unpublished. Today, download the macOS arm64 graph source preview or build from a repository checkout. The graph query chooses the candidate scope; the same retrieval engine then ranks inside it. After publication, choose retrievalkit-graph for graph-only or graph-scoped search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
     code: `from retrievalkit_graph import (
     GraphNode,
     GraphRecordNode,
@@ -208,14 +284,18 @@ await builder.add([{
   embedding: new Float32Array([1, 0, 0])
 }]);
 
-await using database = await builder.build();
-const hits = await database.search({
-  mode: "hybrid",
-  text: "Why Swift?",
-  embedding: new Float32Array([1, 0, 0]),
-  alpha: 0.6
-});
-console.log(hits[0]?.documentId);`,
+const database = await builder.build();
+try {
+  const hits = await database.search({
+    mode: "hybrid",
+    text: "Why Swift?",
+    embedding: new Float32Array([1, 0, 0]),
+    alpha: 0.6
+  });
+  console.log(hits[0]?.documentId);
+} finally {
+  await database.close();
+}`,
     quickstart: `cd wrappers/typescript
 npm ci
 npm run preflight
@@ -352,9 +432,9 @@ export default function Home() {
           <span>RetrievalKit</span>
         </a>
         <nav aria-label="Primary navigation">
+          <a href="#search-modes">Search modes</a>
           <a href="#release-readiness">Release status</a>
           <a href="#languages">Languages</a>
-          <a href="#platform-matrix">Platforms</a>
           <a href={release.repositoryUrl}>GitHub</a>
         </nav>
         <a className="header-cta" href={release.archiveUrl}>
@@ -368,12 +448,12 @@ export default function Home() {
             <span />
             v0.1.0 publication pending
           </div>
-          <p className="kicker">Fast, private retrieval for edge AI</p>
+          <p className="kicker">Three local query paths · one Rust core</p>
           <h1>Search locally.<br />Keep the evidence.</h1>
           <p className="hero-lede">
-            Exact vectors, BM25 keyword evidence, metadata filters, and
-            relationship-scoped retrieval. One Rust core with native Python,
-            Swift, Kotlin, and Node.js APIs.
+            Use exact vector, BM25, or hybrid retrieval; query relationships
+            without embeddings; or rank only the records selected by a graph.
+            Native Python, Swift, Kotlin, and Node.js APIs.
           </p>
           <div className="hero-actions">
             <a className="primary-button" href="#release-readiness">
@@ -397,7 +477,7 @@ export default function Home() {
             <span />
             <span />
             <span />
-            <b>apollo.search</b>
+            <b>graph_scoped.search</b>
           </div>
           <div className="query-block">
             <small>QUERY</small>
@@ -431,7 +511,32 @@ export default function Home() {
         <div><strong>Local-first</strong><span>No retrieval server</span></div>
         <div><strong>Explainable</strong><span>Scores and traces</span></div>
         <div><strong>Deterministic</strong><span>Stable exact search</span></div>
-        <div><strong>Native</strong><span>Rust-owned hot path</span></div>
+        <div><strong>Composable</strong><span>Graph-only or combined</span></div>
+      </section>
+
+      <section className="mode-section" id="search-modes">
+        <div className="mode-heading">
+          <p className="kicker">Choose the smallest product that fits</p>
+          <h2>Retrieval, graph search, or both.</h2>
+          <p>
+            Graph search is not an add-on that requires vectors. Use it alone,
+            or use a graph selection as the candidate scope for the same exact
+            vector, BM25, and hybrid ranker.
+          </p>
+        </div>
+        <div className="mode-grid">
+          {searchModes.map((mode) => (
+            <article className="mode-card" key={mode.number}>
+              <div className="mode-card-heading">
+                <span>{mode.number}</span>
+                <p>{mode.eyebrow}</p>
+              </div>
+              <h3>{mode.title}</h3>
+              <p>{mode.body}</p>
+              <pre><code>{mode.api}</code></pre>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="release-section" id="release-readiness">

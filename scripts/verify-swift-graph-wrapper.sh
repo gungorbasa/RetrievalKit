@@ -21,19 +21,22 @@ for binary in "$BASE_BINARY" "$GRAPH_BINARY"; do
   [[ -f "$binary" ]] || { echo "missing native artifact: $binary" >&2; exit 1; }
 done
 
-if nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null; then
+BASE_SYMBOLS="$(nm -g "$BASE_BINARY" 2>/dev/null || true)"
+GRAPH_SYMBOLS="$(nm -g "$GRAPH_BINARY" 2>/dev/null || true)"
+
+if grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null <<<"$BASE_SYMBOLS"; then
   echo "base RetrievalKitFFI unexpectedly exports graph symbols" >&2
   exit 1
 fi
-nm -g "$BASE_BINARY" 2>/dev/null | grep -F '_retrievalkit_index_new' >/dev/null || {
+grep -F '_retrievalkit_index_new' >/dev/null <<<"$BASE_SYMBOLS" || {
   echo "base RetrievalKitFFI does not export the core API" >&2
   exit 1
 }
-nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_retrievalkit_index_new' >/dev/null || {
+grep -F '_retrievalkit_index_new' >/dev/null <<<"$GRAPH_SYMBOLS" || {
   echo "graph aggregate does not export the core API" >&2
   exit 1
 }
-nm -g "$GRAPH_BINARY" 2>/dev/null | grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null || {
+grep -F '_retrievalkit_graph_ffi_abi_version' >/dev/null <<<"$GRAPH_SYMBOLS" || {
   echo "graph aggregate does not export the graph API" >&2
   exit 1
 }

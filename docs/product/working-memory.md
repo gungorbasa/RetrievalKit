@@ -73,14 +73,20 @@ implemented, or superseded by the product spec.
   monthly and on demand. Swift quickstarts use a checked entrypoint that reports
   the exact XCFramework build and retry commands. TypeScript supports maintained
   Node.js 22.13+ and 24 LTS ranges through one tested policy shared by preflight
-  and package engines; the refreshed development dependency tree has zero npm
-  audit findings. Kotlin builds require JDK 17 while published bytecode targets
-  Java 11+, and preflight validates the exact `JAVA_HOME` binary with actionable
+  and package engines. Runnable Node.js 22 quickstarts use explicit
+  `try`/`finally` lifecycle cleanup; `await using` remains an optional Node.js 24
+  convenience. The refreshed development dependency tree has zero npm audit
+  findings. Kotlin builds require JDK 17 while published bytecode targets Java
+  11+, and preflight validates the exact `JAVA_HOME` binary with actionable
   recovery. Android preflight reads the NDK `source.properties` revision and
   requires major version 26; linker presence alone is not sufficient evidence
-  of a supported NDK. The public Sites source now includes Swift, complete
-  language snippets, responsive mobile actions, and a custom 404; this Phase A
-  work is deployed to `https://retrievalkit-docs.gungorbasa.chatgpt.site`.
+  of a supported NDK. Apple symbol verification captures the readable `nm`
+  output before checking required core/graph exports because Rust 1.97 LLVM 22
+  archives can make Apple LLVM 21 `nm` return nonzero after it has emitted the
+  RetrievalKit FFI symbols. The public Sites source now includes Swift,
+  complete language snippets, responsive mobile actions, and a custom 404;
+  this Phase A work is deployed to
+  `https://retrievalkit-docs.gungorbasa.chatgpt.site`.
 - 2026-07-26 Swift distribution decision: the root `Package.swift` is the only
   public Swift manifest. It exposes `RetrievalKit`, `RetrievalKitGraph`,
   `EmbeddingKit`, and `RetrievalKitPipeline` over the single

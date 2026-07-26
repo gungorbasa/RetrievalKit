@@ -75,6 +75,16 @@ All notable user-facing changes and persistence migrations are recorded here.
   audit findings after its development-tool refresh. Kotlin preflight now
   distinguishes the required JDK 17 build toolchain from the Java 11 bytecode
   target and reports the exact selected Java binary with recovery commands.
+- Fail-closed Node and Kotlin release assemblers now produce inspected,
+  deterministic macOS arm64 npm tarballs and JVM/Android Maven artifacts
+  without changing the repository-local package identities. Public npm names,
+  the Maven namespace, signing keys, and registry credentials remain explicit
+  external publication prerequisites.
+- Publication authorization is now created at runtime after a required reviewer
+  approves the protected GitHub release environment. The resulting provenance
+  record binds the signed tag, source revision, workflow runs, Phase 7 results,
+  candidate inventory, and checksums without requiring an impossible
+  self-referential authorization file in the release commit.
 
 ### Compatibility
 

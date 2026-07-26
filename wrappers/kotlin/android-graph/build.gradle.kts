@@ -66,7 +66,7 @@ afterEvaluate {
                 artifactId = "retrievalkit-graph-android"
                 pom {
                     name.set("RetrievalKit Graph Android arm64-v8a")
-                    description.set("Repository-local Android graph artifact; coordinates are provisional")
+                    description.set("Optional local graph and graph-scoped retrieval for Android arm64-v8a")
                 }
             }
         }

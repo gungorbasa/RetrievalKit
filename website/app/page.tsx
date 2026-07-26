@@ -16,24 +16,36 @@ type DocSection = {
 const sections: DocSection[] = [
   {
     id: "install",
-    eyebrow: "Golden path",
-    title: "Install the Python source preview",
+    eyebrow: "Release readiness",
+    title: "Public installs are pending; source paths are available",
     summary:
-      "The first public path is intentionally narrow: macOS arm64, Python 3.10–3.14, and a local Rust build.",
+      "SwiftPM, PyPI, npm, and Maven publication have not happened. The commands below show the intended install shape, not packages that are available today.",
     body:
-      "Download the versioned source bundle, extract it, run the checked-in validation script, then execute the Project Apollo example. The script creates an isolated environment, builds the native wheel, checks typing and lint, runs the tests, and verifies an installed wheel.",
-    code: `# First use the Download preview link on this page.
-ARCHIVE="$HOME/Downloads/${release.archiveName}"
-tar -xzf "$ARCHIVE"
-cd ${release.directoryName}
+      "Python and Swift have intended package names. npm names and Maven coordinates still require approval, so their placeholders must not be pasted literally. Until publication, use the repository source quickstarts; the Python graph source bundle is the only public download.",
+    code: `# PENDING — not published
+python -m pip install retrievalkit-graph
+npm install <approved-retrievalkit-graph-package>
 
-PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
-target/python-graph-wrapper-check-venv-py*/bin/python \\
-  wrappers/python-graph/examples/graph_retrieval_quickstart.py
+// Package.swift — PENDING
+.package(
+  url: "https://github.com/gungorbasa/RetrievalKit.git",
+  from: "0.1.0"
+)
 
-# expected
-# graph-hybrid=decision-swift`,
-    tags: ["python", "install", "quickstart", "macos", "source"],
+// build.gradle.kts — PENDING
+implementation(
+  "<approved-group>:retrievalkit-graph:0.1.0"
+)`,
+    tags: [
+      "install",
+      "publication",
+      "pending",
+      "swiftpm",
+      "pypi",
+      "npm",
+      "maven",
+      "source",
+    ],
   },
   {
     id: "python",
@@ -42,7 +54,7 @@ target/python-graph-wrapper-check-venv-py*/bin/python \\
     summary:
       "Pass ordinary records and direct embeddings. Rust infers dimensions and owns identity, filtering, ranking, traces, and persistence.",
     body:
-      "Choose retrievalkit-graph when relationships should constrain search. Choose retrievalkit for a flat corpus. The graph aggregate already contains retrieval, so install or load exactly one distribution per process.",
+      "PyPI publication is pending. Today, download the macOS arm64 graph source preview or build from a repository checkout. After publication, choose retrievalkit-graph when relationships should constrain search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
     code: `from retrievalkit_graph import (
     GraphRecordNode,
     GraphRetrievalDatabaseBuilder,
@@ -84,7 +96,7 @@ print(hits[0]["document_id"])  # decision-swift`,
     summary:
       "Choose RetrievalKit for local search or RetrievalKitGraph for graph traversal and scoped retrieval. Both products share one graph-capable native artifact.",
     body:
-      "The repository-local preview supports macOS and iOS on arm64. Build the XCFramework before running source examples. RetrievalKit infers the vector dimension from the first embedding, keeps native work off the caller actor, and exposes typed filters, errors, results, and deterministic async lifetime through Swift concurrency.",
+      "SwiftPM publication is pending because the repository, version tag, and release XCFramework are not public. The source preview supports macOS 14+ arm64 and iOS 15+ arm64 devices and Apple-silicon simulators. Build the XCFramework before running source examples.",
     code: `import RetrievalKit
 
 @main
@@ -132,7 +144,7 @@ struct ApolloSearch {
     summary:
       "Promise-based N-API calls keep native work off the event loop and preserve Float32Array, bigint, and typed graph values.",
     body:
-      "The repository-local preview currently targets Node.js 22.13+ LTS or Node.js 24 LTS on macOS arm64, with Node.js 24 recommended. Browser and WebAssembly builds are not part of this target. The base and graph packages are mutually exclusive in one process.",
+      "npm names are not approved and no package is published. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed. Base and graph packages are mutually exclusive in one process.",
     code: `import { RetrievalDatabaseBuilder }
   from "retrievalkit-node-local";
 
@@ -162,7 +174,7 @@ console.log(hits[0]?.documentId);`,
     summary:
       "Kotlin uses FloatArray, sealed value types, typed exceptions, and AutoCloseable resources over the shared Rust core.",
     body:
-      "Use JDK 17 for the build. Run disk, build, and search work on an application-selected background dispatcher on Android. The current Android artifact targets API 24+ and arm64-v8a.",
+      "Maven coordinates are not approved and no artifact is published. The source build uses JDK 17 and targets a macOS arm64 JVM native library; compiled bytecode can run on Java 11+. Android targets API 24+ and arm64-v8a. Other desktop targets and Android ABIs are not claimed.",
     code: `import ai.retrievalkit.Document
 import ai.retrievalkit.RetrievalDatabase
 import ai.retrievalkit.VectorEncoding
@@ -218,12 +230,40 @@ use 1 for vector-only or 0 for BM25-only`,
 ];
 
 const platforms = [
-  ["Swift", "macOS / iOS arm64", "Source-qualified XCFramework"],
-  ["Python", "macOS arm64", "Release target"],
-  ["Python", "Ubuntu / Windows", "Portability CI"],
-  ["Node.js", "macOS arm64", "Repository preview"],
-  ["Kotlin/JVM", "macOS arm64 + JDK 17", "Repository preview"],
-  ["Android", "API 24+ / arm64-v8a", "Repository preview"],
+  ["Swift", "macOS 14+ arm64", "Source-qualified; release pending"],
+  ["Swift", "iOS 15+ arm64 device / simulator", "Source-qualified; release pending"],
+  ["Python", "macOS arm64 / CPython 3.10–3.14", "Initial wheel target; unpublished"],
+  ["Python", "Ubuntu / Windows", "Portability CI only"],
+  ["Node.js", "macOS arm64 / Node 22.13+ or 24 LTS", "Source-qualified; unpublished"],
+  ["Kotlin/JVM", "macOS arm64 / JDK 17 build", "Source-qualified; unpublished"],
+  ["Android", "API 24+ / arm64-v8a", "Source-qualified; unpublished"],
+];
+
+const releaseReadiness = [
+  [
+    "Swift",
+    "One package: RetrievalKit and RetrievalKitGraph products",
+    "Pending public repository, v0.1.0 tag, and XCFramework release",
+    "Authorized repository source checkout",
+  ],
+  [
+    "Python",
+    "retrievalkit or retrievalkit-graph",
+    "Pending PyPI publication",
+    "Public graph source bundle and authorized checkout",
+  ],
+  [
+    "Node.js",
+    "Choose one base or graph package; names unapproved",
+    "Pending npm name approval and publication",
+    "Authorized repository source checkout",
+  ],
+  [
+    "Kotlin",
+    "Choose one JVM/Android base or graph artifact; group unapproved",
+    "Pending Maven coordinates and publication",
+    "Authorized repository source checkout",
+  ],
 ];
 
 export default function Home() {
@@ -257,7 +297,7 @@ export default function Home() {
           <span>RetrievalKit</span>
         </a>
         <nav aria-label="Primary navigation">
-          <a href="#install">Install</a>
+          <a href="#release-readiness">Release status</a>
           <a href="#languages">Languages</a>
           <a href="#platform-matrix">Platforms</a>
         </nav>
@@ -270,7 +310,7 @@ export default function Home() {
         <div className="hero-copy">
           <div className="status-pill">
             <span />
-            v0.1.0 source preview
+            v0.1.0 publication pending
           </div>
           <p className="kicker">Fast, private retrieval for edge AI</p>
           <h1>Search locally.<br />Keep the evidence.</h1>
@@ -280,8 +320,8 @@ export default function Home() {
             Swift, Kotlin, and Node.js APIs.
           </p>
           <div className="hero-actions">
-            <a className="primary-button" href="#install">
-              Run the Python quickstart
+            <a className="primary-button" href="#release-readiness">
+              Check install status
             </a>
             <a className="secondary-button" href="#languages">
               Explore the APIs
@@ -332,6 +372,38 @@ export default function Home() {
         <div><strong>Explainable</strong><span>Scores and traces</span></div>
         <div><strong>Deterministic</strong><span>Stable exact search</span></div>
         <div><strong>Native</strong><span>Rust-owned hot path</span></div>
+      </section>
+
+      <section className="release-section" id="release-readiness">
+        <div className="release-heading">
+          <p className="kicker">Release readiness</p>
+          <h2>Source-qualified does not mean registry-published.</h2>
+          <p>
+            No SwiftPM, PyPI, npm, or Maven release is live. The shortest
+            eventual commands are documented in the language sections below,
+            while the available route remains source.
+          </p>
+        </div>
+        <div
+          className="release-table"
+          role="table"
+          aria-label="Package release readiness"
+        >
+          <div className="release-row release-header" role="row">
+            <strong role="columnheader">SDK</strong>
+            <span role="columnheader">Select</span>
+            <span role="columnheader">Publication</span>
+            <span role="columnheader">Available now</span>
+          </div>
+          {releaseReadiness.map(([sdk, selection, status, available]) => (
+            <div className="release-row" role="row" key={sdk}>
+              <strong role="cell">{sdk}</strong>
+              <span role="cell">{selection}</span>
+              <small role="cell">{status}</small>
+              <span role="cell">{available}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="docs-shell" id="languages">

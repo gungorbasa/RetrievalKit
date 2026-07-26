@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import plistlib
 import re
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -145,7 +145,13 @@ def validate_workflows(repo: Path) -> None:
     require("contents: write" not in candidate and "id-token: write" not in candidate, "candidate workflow has publication permissions")
     publication = (repo / ".github/workflows/publish-release.yml").read_text()
     require("environment: release" in publication and "environment: pypi" in publication, "publication jobs lack protected environments")
-    require("git verify-tag" in publication and "--publication" in publication, "publication workflow bypasses signed-tag or authority validation")
+    require(
+        "git verify-tag" in publication
+        and "publication_authorization.py candidate" in publication
+        and "publication_authorization.py authorize" in publication
+        and "--authorization-record" in publication,
+        "publication workflow bypasses signed-tag, candidate, or runtime authority validation",
+    )
     release_workflows = candidate + publication.lower()
     forbidden_device_commands = ("xcrun devicectl", "ios-deploy", "xcodebuild test-without-building")
     require(not any(command in release_workflows for command in forbidden_device_commands), "distribution workflow contains a physical-device command")
@@ -191,27 +197,75 @@ def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
                 continue
             if not copy_file.is_file() or copy_file.read_bytes() != root_file.read_bytes():
                 blockers.append(f"wrapper legal file out of sync: {wrapper}/{legal_name}")
-    authorization = repo / "release/publication-authorization-v1.json"
-    if not authorization.is_file():
-        blockers.append("owner publication authorization is absent")
-    else:
-        auth = load_json(authorization)
-        if auth.get("license_approved") is not True or auth.get("notices_approved") is not True:
-            blockers.append("license or notices are not owner-approved")
-        revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
-        if auth.get("source_revision") != revision:
-            blockers.append("authorization does not match release revision")
-        for key in ("phase7_scheduled_result", "phase7_release_result"):
-            path = repo / str(auth.get(key, ""))
-            if not path.is_file() or load_json(path).get("overall_status") != "passed":
-                blockers.append(f"{key} is missing or not passed")
-        if auth.get("claims_mode") not in {"historical_frozen_revision", "release_revision_authorized"}:
-            blockers.append("README claim mode is not authorized")
     for checksum in (row["swiftpm_checksum"] for row in config["apple"]["artifacts"].values()):
         if checksum == ZERO_CHECKSUM:
             blockers.append("SwiftPM release checksums are placeholders")
             break
     return blockers
+
+
+def validate_runtime_authorization(
+    repo: Path,
+    bundle: Path,
+    record: Path,
+    candidate_evidence: Path,
+    scheduled_result: Path,
+    release_gate_result: Path,
+    repository: str,
+    source_revision: str,
+    candidate_run_id: int,
+    scheduled_run_id: int,
+    release_gate_run_id: int,
+    publication_run_id: int,
+    publication_run_attempt: int,
+) -> None:
+    module_path = repo / "scripts/release/publication_authorization.py"
+    spec = importlib.util.spec_from_file_location("publication_authorization", module_path)
+    require(spec is not None and spec.loader is not None, "cannot load publication authorization validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = load_json(repo / "release/release-v0.1.0.json")
+    try:
+        module.validate_authorization_record(
+            module.load_object(record),
+            candidate_path=candidate_evidence,
+            repository=repository,
+            tag=config["tag"],
+            revision=source_revision,
+            candidate_run_id=candidate_run_id,
+            scheduled_run_id=scheduled_run_id,
+            release_gate_run_id=release_gate_run_id,
+            publication_run_id=publication_run_id,
+            publication_run_attempt=publication_run_attempt,
+        )
+        candidate = module.load_object(candidate_evidence)
+        require(
+            candidate["bundle"]
+            == module.bundle_evidence(bundle, config["tag"], source_revision),
+            "authorized bundle differs from candidate evidence",
+        )
+        require(
+            candidate["gate_results"]["scheduled_gate"]
+            == module.validate_gate_result(
+                scheduled_result,
+                tier="scheduled_full",
+                revision=source_revision,
+                label="scheduled gate result",
+            ),
+            "scheduled gate result differs from candidate evidence",
+        )
+        require(
+            candidate["gate_results"]["release_gate"]
+            == module.validate_gate_result(
+                release_gate_result,
+                tier="release",
+                revision=source_revision,
+                label="release gate result",
+            ),
+            "release gate result differs from candidate evidence",
+        )
+    except module.AuthorizationError as error:
+        raise ValidationError(str(error)) from error
 
 
 def validate_xcframework_archive(path: Path, version: str, checksum: str) -> None:
@@ -292,7 +346,7 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     )
     manifest = load_json(bundle / "release-manifest.json")
     require(manifest["version"] == config["version"], "release manifest version mismatch")
-    require(manifest["publication_ready"] is False, "unlicensed release bundle claims publication readiness")
+    require(manifest["publication_ready"] is False, "candidate release bundle claims publication readiness")
     archives = list((bundle / "artifacts").glob("*.xcframework.zip"))
     require({path.name for path in archives} == set(config["apple"]["artifacts"]), "Apple artifact inventory mismatch")
     for path in archives:
@@ -312,12 +366,49 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--publication", action="store_true")
+    parser.add_argument("--authorization-record", type=Path)
+    parser.add_argument("--candidate-evidence", type=Path)
+    parser.add_argument("--scheduled-result", type=Path)
+    parser.add_argument("--release-gate-result", type=Path)
+    parser.add_argument("--repository")
+    parser.add_argument("--source-revision")
+    parser.add_argument("--candidate-run-id", type=int)
+    parser.add_argument("--scheduled-run-id", type=int)
+    parser.add_argument("--release-gate-run-id", type=int)
+    parser.add_argument("--publication-run-id", type=int)
+    parser.add_argument("--publication-run-attempt", type=int)
     args = parser.parse_args()
     repo = args.repo.resolve()
     try:
         result = bundle_validation(repo, args.bundle.resolve()) if args.bundle else {"result": "PASS", **static_validation(repo)}
         if args.publication:
             require(not result["publication_blockers"], "publication blocked: " + "; ".join(result["publication_blockers"]))
+            require(args.authorization_record is not None, "publication authorization record is required")
+            require(args.candidate_evidence is not None, "publication candidate evidence is required")
+            require(args.scheduled_result is not None, "scheduled gate result is required")
+            require(args.release_gate_result is not None, "release gate result is required")
+            require(bool(args.repository), "publication repository identity is required")
+            require(bool(args.source_revision), "publication source revision is required")
+            require(args.candidate_run_id is not None, "candidate workflow run ID is required")
+            require(args.scheduled_run_id is not None, "scheduled workflow run ID is required")
+            require(args.release_gate_run_id is not None, "release gate workflow run ID is required")
+            require(args.publication_run_id is not None, "publication workflow run ID is required")
+            require(args.publication_run_attempt is not None, "publication workflow run attempt is required")
+            validate_runtime_authorization(
+                repo,
+                args.bundle.resolve(),
+                args.authorization_record.resolve(),
+                args.candidate_evidence.resolve(),
+                args.scheduled_result.resolve(),
+                args.release_gate_result.resolve(),
+                args.repository,
+                args.source_revision,
+                args.candidate_run_id,
+                args.scheduled_run_id,
+                args.release_gate_run_id,
+                args.publication_run_id,
+                args.publication_run_attempt,
+            )
             result["publication_ready"] = True
     except (OSError, KeyError, TypeError, ValueError, ValidationError, zipfile.BadZipFile) as error:
         print(f"FAIL: {error}", file=sys.stderr)

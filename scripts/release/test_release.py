@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -24,6 +26,10 @@ assembler = load("release_assembler", REPO / "scripts/release/assemble_release.p
 canonical_zip = load("canonical_zip", REPO / "scripts/release/canonical_zip.py")
 compare_artifacts = load("compare_artifacts", REPO / "scripts/release/compare_artifacts.py")
 canonicalize_wheel = load("canonicalize_wheel", REPO / "scripts/release/canonicalize_wheel.py")
+publication_authorization = load(
+    "publication_authorization",
+    REPO / "scripts/release/publication_authorization.py",
+)
 
 
 class ReleaseTests(unittest.TestCase):
@@ -32,13 +38,13 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result["version"], "0.1.0")
         self.assertNotIn("root LICENSE is absent", result["publication_blockers"])
         self.assertNotIn("owner-approved NOTICE is absent", result["publication_blockers"])
-        self.assertIn("owner publication authorization is absent", result["publication_blockers"])
+        self.assertNotIn("owner publication authorization is absent", result["publication_blockers"])
         self.assertNotIn("standalone graph Swift package repository", " ".join(result["publication_blockers"]))
 
-    def test_publication_fails_closed_without_authorization(self) -> None:
+    def test_static_candidate_validation_does_not_claim_runtime_authority(self) -> None:
         result = validator.static_validation(REPO)
-        with self.assertRaises(validator.ValidationError):
-            validator.require(not result["publication_blockers"], "publication blocked")
+        self.assertNotIn(REPO / "release/publication-authorization-v1.json", REPO.glob("release/*"))
+        self.assertNotIn("publication_ready", result)
 
     def test_swift_package_exposes_base_and_graph_through_one_aggregate(self) -> None:
         package = (REPO / "Package.swift").read_text()
@@ -167,6 +173,352 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(first, wheel.read_bytes())
             with zipfile.ZipFile(wheel) as archive:
                 self.assertIn(b"path+file:///workspace/crates/", archive.read(sbom_name))
+
+
+class PublicationAuthorizationTests(unittest.TestCase):
+    repository = "gungorbasa/RetrievalKit"
+    tag = "v0.1.0"
+    revision = "a" * 40
+
+    def write_json(self, path: Path, value: object) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return path
+
+    def run_payload(
+        self,
+        run_id: int,
+        workflow_path: str,
+        *,
+        event: str = "workflow_dispatch",
+        status: str = "completed",
+        conclusion: str | None = "success",
+        revision: str | None = None,
+    ) -> dict[str, object]:
+        return {
+            "id": run_id,
+            "run_attempt": 1,
+            "head_sha": revision or self.revision,
+            "path": workflow_path,
+            "event": event,
+            "status": status,
+            "conclusion": conclusion,
+            "run_started_at": "2026-07-26T06:59:00Z",
+            "html_url": f"https://github.com/{self.repository}/actions/runs/{run_id}",
+            "repository": {"full_name": self.repository},
+        }
+
+    def fixture(self, root: Path) -> tuple[SimpleNamespace, Path]:
+        bundle = root / "bundle"
+        bundle.mkdir()
+        inventory = self.write_json(bundle / "inventory.json", {"schema_version": 1, "files": {}})
+        (bundle / "checksums.sha256").write_text("candidate\n", encoding="utf-8")
+        self.write_json(
+            bundle / "release-manifest.json",
+            {
+                "tag": self.tag,
+                "source_revision": self.revision,
+                "publication_ready": False,
+                "artifact_count": 11,
+                "inventory_sha256": publication_authorization.sha256(inventory),
+            },
+        )
+        candidate_run = self.write_json(
+            root / "candidate-run.json",
+            self.run_payload(101, publication_authorization.WORKFLOW_PATHS["candidate"]),
+        )
+        scheduled_run = self.write_json(
+            root / "scheduled-run.json",
+            self.run_payload(
+                102,
+                publication_authorization.WORKFLOW_PATHS["scheduled_gate"],
+                event="schedule",
+            ),
+        )
+        release_run = self.write_json(
+            root / "release-run.json",
+            self.run_payload(103, publication_authorization.WORKFLOW_PATHS["release_gate"]),
+        )
+        scheduled_result = self.write_json(
+            root / "scheduled-result.json",
+            {
+                "tier": "scheduled_full",
+                "overall_status": "passed",
+                "source_revision": self.revision,
+            },
+        )
+        release_result = self.write_json(
+            root / "release-result.json",
+            {
+                "tier": "release",
+                "overall_status": "passed",
+                "source_revision": self.revision,
+            },
+        )
+        output = root / "candidate-evidence.json"
+        args = SimpleNamespace(
+            repository=self.repository,
+            tag=self.tag,
+            source_revision=self.revision,
+            candidate_run_id=101,
+            candidate_run_json=candidate_run,
+            scheduled_run_id=102,
+            scheduled_run_json=scheduled_run,
+            release_gate_run_id=103,
+            release_gate_run_json=release_run,
+            bundle=bundle,
+            scheduled_result=scheduled_result,
+            release_gate_result=release_result,
+            output=output,
+        )
+        return args, output
+
+    def authorize_args(self, root: Path, candidate_path: Path) -> SimpleNamespace:
+        publication_run = self.write_json(
+            root / "publication-run.json",
+            self.run_payload(
+                104,
+                publication_authorization.WORKFLOW_PATHS["publication"],
+                status="in_progress",
+                conclusion=None,
+            ),
+        )
+        approvals = self.write_json(
+            root / "approvals.json",
+            [
+                {
+                    "environments": [{"name": "release"}],
+                    "user": {"login": "release-owner"},
+                    "comment": "Approved exact v0.1.0 candidate",
+                    "state": "approved",
+                    "created_at": "2026-07-26T07:00:00Z",
+                }
+            ],
+        )
+        return SimpleNamespace(
+            repository=self.repository,
+            tag=self.tag,
+            source_revision=self.revision,
+            candidate_run_id=101,
+            scheduled_run_id=102,
+            release_gate_run_id=103,
+            candidate_evidence=candidate_path,
+            publication_run_id=104,
+            publication_run_attempt=1,
+            publication_run_json=publication_run,
+            approvals_json=approvals,
+            workflow_ref=(
+                f"{self.repository}/.github/workflows/publish-release.yml"
+                f"@refs/tags/{self.tag}"
+            ),
+            actor="release-operator",
+            triggering_actor="release-operator",
+            environment="release",
+            generated_at="2026-07-26T07:00:01Z",
+            output=root / "authorization.json",
+        )
+
+    def test_protected_environment_approval_closes_exact_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            candidate = publication_authorization.build_candidate_evidence(candidate_args)
+            publication_authorization.write_object(candidate_path, candidate)
+            authorization_args = self.authorize_args(root, candidate_path)
+            record = publication_authorization.build_authorization_record(authorization_args)
+            publication_authorization.write_object(authorization_args.output, record)
+            publication_authorization.validate_authorization_record(
+                record,
+                candidate_path=candidate_path,
+                repository=self.repository,
+                tag=self.tag,
+                revision=self.revision,
+                candidate_run_id=101,
+                scheduled_run_id=102,
+                release_gate_run_id=103,
+                publication_run_id=104,
+                publication_run_attempt=1,
+            )
+            validator.validate_runtime_authorization(
+                REPO,
+                candidate_args.bundle,
+                authorization_args.output,
+                candidate_path,
+                candidate_args.scheduled_result,
+                candidate_args.release_gate_result,
+                self.repository,
+                self.revision,
+                101,
+                102,
+                103,
+                104,
+                1,
+            )
+            self.assertEqual(
+                record["authority"]["type"],
+                "github_environment_required_reviewer",
+            )
+            self.assertEqual(
+                record["candidate_evidence"]["runs"]["release_gate"]["run_id"],
+                103,
+            )
+
+    def test_runtime_validation_rejects_bundle_changed_after_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            publication_authorization.write_object(
+                authorization_args.output,
+                publication_authorization.build_authorization_record(authorization_args),
+            )
+            (candidate_args.bundle / "checksums.sha256").write_text(
+                "changed after approval\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "authorized bundle differs",
+            ):
+                validator.validate_runtime_authorization(
+                    REPO,
+                    candidate_args.bundle,
+                    authorization_args.output,
+                    candidate_path,
+                    candidate_args.scheduled_result,
+                    candidate_args.release_gate_result,
+                    self.repository,
+                    self.revision,
+                    101,
+                    102,
+                    103,
+                    104,
+                    1,
+                )
+
+    def test_candidate_rejects_gate_result_from_another_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args, _ = self.fixture(root)
+            self.write_json(
+                args.release_gate_result,
+                {
+                    "tier": "release",
+                    "overall_status": "passed",
+                    "source_revision": "b" * 40,
+                },
+            )
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "source revision mismatch",
+            ):
+                publication_authorization.build_candidate_evidence(args)
+
+    def test_candidate_rejects_successful_run_from_another_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args, _ = self.fixture(root)
+            self.write_json(
+                args.candidate_run_json,
+                self.run_payload(
+                    101,
+                    publication_authorization.WORKFLOW_PATHS["candidate"],
+                    revision="b" * 40,
+                ),
+            )
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "run revision mismatch",
+            ):
+                publication_authorization.build_candidate_evidence(args)
+
+    def test_unprotected_environment_without_approval_event_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            self.write_json(authorization_args.approvals_json, [])
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "no approved required-reviewer event",
+            ):
+                publication_authorization.build_authorization_record(authorization_args)
+
+    def test_approval_from_an_earlier_run_attempt_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            publication_run = publication_authorization.load_object(
+                authorization_args.publication_run_json
+            )
+            publication_run["run_started_at"] = "2026-07-26T07:01:00Z"
+            self.write_json(authorization_args.publication_run_json, publication_run)
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "no approved required-reviewer event",
+            ):
+                publication_authorization.build_authorization_record(authorization_args)
+
+    def test_publication_workflow_must_run_from_exact_signed_tag_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            authorization_args.workflow_ref = (
+                f"{self.repository}/.github/workflows/publish-release.yml@refs/heads/main"
+            )
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "exact signed tag",
+            ):
+                publication_authorization.build_authorization_record(authorization_args)
+
+    def test_authorization_rejects_modified_candidate_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            record = publication_authorization.build_authorization_record(authorization_args)
+            candidate = publication_authorization.load_object(candidate_path)
+            candidate["bundle"]["artifact_count"] = 12
+            publication_authorization.write_object(candidate_path, candidate)
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "digest mismatch",
+            ):
+                publication_authorization.validate_authorization_record(
+                    record,
+                    candidate_path=candidate_path,
+                    repository=self.repository,
+                    tag=self.tag,
+                    revision=self.revision,
+                    candidate_run_id=101,
+                    scheduled_run_id=102,
+                    release_gate_run_id=103,
+                    publication_run_id=104,
+                    publication_run_attempt=1,
+                )
 
 
 if __name__ == "__main__":

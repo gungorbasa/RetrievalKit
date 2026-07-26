@@ -6,6 +6,8 @@ Every item is required unless explicitly marked candidate-only.
 
 - [ ] `VERSION`, Cargo, Python, Swift, changelog, and manifests equal `0.1.0`.
 - [ ] Release revision is clean and matches the verified signed `v0.1.0` tag.
+- [ ] The publication workflow is dispatched with `--ref v0.1.0`; its
+  `github.sha` and `github.workflow_ref` resolve to the exact signed tag commit.
 - [ ] Root `LICENSE` remains the owner-approved Apache-2.0 text.
 - [ ] `NOTICE` retains the owner-approved company attribution and required
   third-party notices.
@@ -37,7 +39,21 @@ Every item is required unless explicitly marked candidate-only.
 
 ## Publication
 
-- [ ] Protected release environment approval is recorded.
+- [ ] The repository plan/visibility supports required reviewers for private
+  environments, or the repository has been made public.
+- [ ] The `release` environment has an owner-approved required reviewer and is
+  restricted to signed release tags; prevention of self-review is enabled when
+  the reviewer topology permits it.
+- [ ] The candidate, scheduled Phase 7, and release Phase 7 workflow runs all
+  succeeded at the exact signed-tag revision.
+- [ ] `candidate-evidence.json` binds the three run IDs, two passing result
+  hashes, and the bundle inventory/checksum/manifest hashes.
+- [ ] The protected `release` environment approval is present in the GitHub
+  workflow-run approvals API response.
+- [ ] `publication-authorization-provenance.json` validates against the exact
+  candidate evidence, tag, revision, publication run ID, and run attempt.
+- [ ] The authorization record, SHA-256, and candidate evidence are retained as
+  a 180-day Actions artifact and attached to the GitHub Release.
 - [ ] GitHub Release is created from the verified tag with validated assets only.
 - [ ] The Swift package publishes all four products from the signed revision and
   resolves only `RetrievalKitGraphFFI`.

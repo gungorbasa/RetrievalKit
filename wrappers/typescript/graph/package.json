@@ -3,6 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "description": "Repository-local RetrievalKit Node.js graph aggregate (provisional name)",
+  "keywords": [
+    "retrieval",
+    "knowledge-graph",
+    "graph-search",
+    "hybrid-search",
+    "local-first"
+  ],
+  "homepage": "https://retrievalkit-docs.gungorbasa.chatgpt.site",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+    "directory": "wrappers/typescript/graph"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

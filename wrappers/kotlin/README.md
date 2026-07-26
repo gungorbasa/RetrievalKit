@@ -142,3 +142,43 @@ The inspection tasks fail unless each AAR has exactly its intended
 `jni/arm64-v8a` aggregate, and the base artifact inspection fails if graph
 classes or the graph native library are present. `LICENSE` and `NOTICE` are
 included in JARs and generated native-resource trees.
+
+## Assemble Maven release artifacts
+
+`local.retrievalkit` remains an intentionally unpublishable placeholder.
+Release assembly requires an explicit Maven group whose ownership has already
+been approved; the build never infers a public namespace:
+
+```bash
+python3 ../../scripts/release/assemble_kotlin_packages.py \
+  --group '<approved-maven-group>' \
+  --version 0.1.0 \
+  --java-home "$JAVA_HOME" \
+  --output ../../dist/release/kotlin
+```
+
+The assembler builds the macOS arm64 JVM and Android arm64-v8a native
+aggregates, then creates four isolated publications:
+
+```text
+<group>:retrievalkit
+<group>:retrievalkit-graph
+<group>:retrievalkit-android
+<group>:retrievalkit-graph-android
+```
+
+Every publication contains its main JAR or AAR, sources JAR, Javadoc JAR,
+Apache-2.0 POM metadata, and MD5/SHA-1/SHA-256/SHA-512 checksum companions.
+The output also includes an inventory and a deterministic Central Portal bundle.
+Base artifacts are rejected if they contain graph classes or graph native code.
+
+Central requires PGP signatures. Pass `--signing-key <gpg-key-id>` only from an
+approved secret-bearing release environment, and pass `--namespace-verified`
+only after confirming the group in Central Portal. Without those assertions,
+the inventory records the exact blockers and reports `publicationReady: false`.
+Assembly never uploads or publishes. Run the deterministic package test with:
+
+```bash
+RETRIEVALKIT_JAVA_HOME="$JAVA_HOME" \
+  python3 ../../scripts/release/test_assemble_kotlin_packages.py
+```

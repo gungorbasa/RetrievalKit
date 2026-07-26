@@ -66,7 +66,7 @@ afterEvaluate {
                 artifactId = "retrievalkit-android"
                 pom {
                     name.set("RetrievalKit Android arm64-v8a")
-                    description.set("Repository-local Android base artifact; coordinates are provisional")
+                    description.set("Local-first exact, BM25, and hybrid retrieval for Android arm64-v8a")
                 }
             }
         }

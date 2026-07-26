@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "kind": "retrievalkit-publication-authorization-provenance",
+  "decision": "approved",
+  "release": {
+    "repository": "gungorbasa/RetrievalKit",
+    "source_revision": "replace-with-40-character-signed-tag-revision",
+    "tag": "v0.1.0"
+  },
+  "authority": {
+    "type": "github_environment_required_reviewer",
+    "environment": "release",
+    "approvals": [
+      {
+        "reviewer": "replace-with-github-reviewer",
+        "state": "approved",
+        "created_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "comment": "Approved the exact signed-tag candidate."
+      }
+    ]
+  },
+  "publication_run": {
+    "run_id": 123456789,
+    "run_attempt": 1,
+    "workflow_path": ".github/workflows/publish-release.yml",
+    "workflow_ref": "gungorbasa/RetrievalKit/.github/workflows/publish-release.yml@refs/tags/v0.1.0",
+    "event": "workflow_dispatch",
+    "head_sha": "replace-with-40-character-signed-tag-revision",
+    "run_started_at": "YYYY-MM-DDTHH:MM:SSZ",
+    "html_url": "https://github.com/gungorbasa/RetrievalKit/actions/runs/123456789",
+    "actor": "replace-with-dispatch-actor",
+    "triggering_actor": "replace-with-triggering-actor"
+  },
+  "candidate_evidence": {
+    "schema_version": 1,
+    "kind": "retrievalkit-publication-candidate-evidence",
+    "release": {
+      "repository": "gungorbasa/RetrievalKit",
+      "source_revision": "replace-with-40-character-signed-tag-revision",
+      "tag": "v0.1.0"
+    },
+    "runs": {
+      "candidate": {
+        "run_id": 123456780,
+        "run_attempt": 1,
+        "workflow_path": ".github/workflows/release-candidate.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "replace-with-40-character-signed-tag-revision",
+        "run_started_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "html_url": "https://github.com/gungorbasa/RetrievalKit/actions/runs/123456780"
+      },
+      "scheduled_gate": {
+        "run_id": 123456781,
+        "run_attempt": 1,
+        "workflow_path": ".github/workflows/regression-full.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "replace-with-40-character-signed-tag-revision",
+        "run_started_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "html_url": "https://github.com/gungorbasa/RetrievalKit/actions/runs/123456781"
+      },
+      "release_gate": {
+        "run_id": 123456782,
+        "run_attempt": 1,
+        "workflow_path": ".github/workflows/release-qualification.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "replace-with-40-character-signed-tag-revision",
+        "run_started_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "html_url": "https://github.com/gungorbasa/RetrievalKit/actions/runs/123456782"
+      }
+    },
+    "gate_results": {
+      "scheduled_gate": {
+        "overall_status": "passed",
+        "source_revision": "replace-with-40-character-signed-tag-revision",
+        "tier": "scheduled_full",
+        "sha256": "replace-with-64-character-result-sha256"
+      },
+      "release_gate": {
+        "overall_status": "passed",
+        "source_revision": "replace-with-40-character-signed-tag-revision",
+        "tier": "release",
+        "sha256": "replace-with-64-character-result-sha256"
+      }
+    },
+    "bundle": {
+      "artifact_count": 11,
+      "checksums_sha256": "replace-with-64-character-checksums-sha256",
+      "inventory_sha256": "replace-with-64-character-inventory-sha256",
+      "release_manifest_sha256": "replace-with-64-character-manifest-sha256"
+    }
+  },
+  "candidate_evidence_sha256": "replace-with-64-character-candidate-evidence-sha256",
+  "generated_at": "YYYY-MM-DDTHH:MM:SSZ"
+}

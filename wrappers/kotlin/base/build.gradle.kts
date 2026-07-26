@@ -69,13 +69,7 @@ publishing {
             artifactId = "retrievalkit"
             pom {
                 name.set("RetrievalKit Kotlin/JVM")
-                description.set("Repository-local base RetrievalKit Kotlin/JVM artifact")
-                licenses {
-                    license {
-                        name.set("Apache License, Version 2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
-                    }
-                }
+                description.set("Local-first exact, BM25, and hybrid retrieval for Kotlin/JVM on macOS arm64")
             }
         }
     }

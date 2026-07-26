@@ -59,13 +59,7 @@ publishing {
             artifactId = "retrievalkit-graph"
             pom {
                 name.set("RetrievalKit Graph Kotlin/JVM")
-                description.set("Repository-local graph-capable RetrievalKit Kotlin/JVM artifact")
-                licenses {
-                    license {
-                        name.set("Apache License, Version 2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
-                    }
-                }
+                description.set("Optional local graph and graph-scoped retrieval for Kotlin/JVM on macOS arm64")
             }
         }
     }

@@ -11,6 +11,36 @@ Install or load exactly one package in a process. The graph package already
 contains retrieval capability, and its loader rejects mixing native aggregates.
 Browser and WebAssembly builds are not part of this target.
 
+## Installation status
+
+The eventual shortest install will be:
+
+```bash
+# PENDING — do not paste this placeholder literally.
+npm install <approved-retrievalkit-graph-package>
+```
+
+The npm package names are not approved and no package is published. Choose the
+graph package when relationships matter; it already includes retrieval.
+Choose the base package for a flat corpus. Install exactly one native aggregate
+in a process.
+
+The available route is the repository source build:
+
+```bash
+cd wrappers/typescript
+npm ci
+npm run preflight
+npm run build
+node graph/examples/graph-retrieval.mjs
+```
+
+The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
+24 LTS. Browser, WebAssembly, Windows, Linux, and other architectures are not
+claimed. The checked-in names `retrievalkit-node-local` and
+`retrievalkit-node-graph-local` are repository-local and provisional; they are
+not npm availability claims.
+
 ## Retrieval-only quickstart
 
 Embeddings are supplied by the application as `Float32Array`. The first

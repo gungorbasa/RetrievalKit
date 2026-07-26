@@ -11,6 +11,34 @@ The distributions embed alternative native aggregates, so they are mutually
 exclusive within one process. The examples below use the same Project Apollo
 notes to show how the choice changes scope, not the underlying search model.
 
+## Installation status
+
+The intended public installs are:
+
+```bash
+# PENDING — these packages are not published on PyPI yet.
+python -m pip install retrievalkit
+python -m pip install retrievalkit-graph
+```
+
+Install exactly one. Choose `retrievalkit-graph` when relationships should
+scope retrieval; it already contains base retrieval. Choose `retrievalkit` for
+a flat corpus.
+
+**The PyPI commands do not work today.** The available public route is the
+macOS arm64 graph source preview linked from the
+[public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site). From a
+repository checkout, the available graph route is:
+
+```bash
+PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+target/python-graph-wrapper-check-venv-py*/bin/python \
+  wrappers/python-graph/examples/graph_retrieval_quickstart.py
+```
+
+The initial wheel target is macOS arm64 with CPython 3.10–3.14. Ubuntu and
+Windows source portability checks are CI evidence, not published wheel support.
+
 ## Choose the right path
 
 | Your data and question | Use | Why |

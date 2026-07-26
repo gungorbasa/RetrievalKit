@@ -10,7 +10,7 @@ corpus. One corpus, one ranked list, one trace, and no retrieval server.
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust)](https://www.rust-lang.org/)
 [![Swift](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift)](https://www.swift.org/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://www.python.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.13%2B%20%7C%2024%20LTS-339933?logo=node.js)](https://nodejs.org/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-JVM%2011-7F52FF?logo=kotlin)](https://kotlinlang.org/)
 [![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
 [![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
@@ -18,6 +18,31 @@ corpus. One corpus, one ranked list, one trace, and no retrieval server.
 **[Public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site)** · **[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[TypeScript guide](docs/guides/typescript.md)** · **[Kotlin guide](docs/guides/kotlin.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
 
 </div>
+
+## Install status
+
+RetrievalKit is still a source preview. **None of the registry commands below
+are active yet.** They show the intended shortest install experience after the
+v0.1.0 publication gates pass; use the linked source quickstarts today.
+
+| SDK | Intended public install | Publication status | Qualified initial target |
+| --- | --- | --- | --- |
+| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Pending public repository access, tag, and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
+| Python | `python -m pip install retrievalkit-graph` | Pending PyPI publication | macOS arm64; CPython 3.10–3.14 |
+| Node.js | `npm install <approved-retrievalkit-graph-package>` | Pending npm name approval and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Kotlin/JVM | `implementation("<approved-group>:retrievalkit-graph:0.1.0")` | Pending Maven coordinates and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
+| Android | `implementation("<approved-group>:retrievalkit-graph-android:0.1.0")` | Pending Maven coordinates and publication | Android API 24+; arm64-v8a |
+
+Do not paste the angle-bracketed npm or Maven placeholders: those identifiers
+cannot be finalized until naming and registry ownership are approved. For
+Swift, add one package and select `RetrievalKit` for a flat corpus,
+`RetrievalKitGraph` for relationships plus retrieval, or both. For Python,
+Node, and Kotlin, choose exactly one native distribution in a process:
+graph-enabled packages already include base retrieval.
+
+**Available now:** [run the checked-in source quickstarts](#run-from-source).
+The downloadable Python graph source preview is also available from the
+[public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site).
 
 ## One search, the right context
 
@@ -96,7 +121,7 @@ The complete programs are checked into the repository and are exercised by the
 wrapper validation scripts, so the documentation stays tied to executable
 examples.
 
-## Packages and platform support
+## Package selection and platform support
 
 Choose the graph-enabled distribution when relationships are meaningful to
 your product. It is RetrievalKit with graph capabilities included: semantic

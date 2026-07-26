@@ -10,6 +10,40 @@ the graph artifact already contains retrieval. The initial Android target is
 API 24+ on `arm64-v8a`; Kotlin Multiplatform and other Android ABIs are not
 claimed.
 
+## Installation status
+
+The eventual Gradle dependency will have this shape:
+
+```kotlin
+dependencies {
+    // PENDING — do not paste the placeholder group literally.
+    implementation("<approved-group>:retrievalkit-graph:0.1.0")
+}
+```
+
+For Android, the graph artifact will use
+`<approved-group>:retrievalkit-graph-android:0.1.0`. Base applications will use
+`retrievalkit` on JVM or `retrievalkit-android` on Android. The group ID is not
+approved and none of these artifacts is published to a public Maven repository.
+Choose exactly one base or graph artifact; graph already includes retrieval.
+
+The available JVM route is the repository source build:
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
+cd wrappers/kotlin
+./scripts/preflight.sh jvm
+./scripts/build-native.sh jvm
+./gradlew :example-retrieval:run
+```
+
+The initial Kotlin/JVM native library target is macOS arm64. JDK 17 builds the
+wrapper, while applications consuming the compiled bytecode may run Java 11+.
+The initial Android target is API 24+ on arm64-v8a. Windows, Linux, other
+desktop architectures, Kotlin Multiplatform, and other Android ABIs are not
+claimed.
+
 ## Retrieval-only quickstart
 
 Kotlin uses blocking, typed JNI calls. Run build, persistence, and search work

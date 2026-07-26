@@ -6,6 +6,34 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-26 Phase B registry-package decision: checked-in Node package names
+  and Kotlin group IDs remain private/repository-local placeholders. Dedicated
+  fail-closed assemblers require explicit public npm names or a Maven group,
+  build isolated base/graph artifacts for the qualified macOS arm64 JVM/Node
+  and Android arm64-v8a targets, inspect native architecture and graph
+  exclusion, and emit deterministic inventories and checksums. Maven assembly
+  can add PGP signatures only from a secret-bearing release environment.
+  Nothing is uploaded. npm ownership/trusted publishing and Maven namespace,
+  signing key, and Portal token remain external blockers; the current automated
+  release-candidate/publish workflows still cover Swift and Python only until
+  those identities are approved and the new outputs are integrated into the
+  closed bundle.
+- 2026-07-26 Phase B publication-authorization decision: no completed
+  authorization file is committed to the release revision. The exact signed-tag
+  candidate, candidate/scheduled/release workflow run IDs, passing Phase 7
+  result hashes, and bundle inventory/checksum/manifest hashes are closed
+  before approval. The protected GitHub `release` environment is the authority;
+  after its required-reviewer approval, the publication job records the GitHub
+  approval event and exact workflow run/tag/commit in a runtime
+  authorization-provenance record, validates it against the unchanged
+  candidate, retains and attests it, and attaches it to the GitHub Release.
+  Approval events predating the current workflow-run attempt are rejected;
+  unprotected environments fail closed because they produce no required-review
+  event. The repository is currently private and its GitHub plan does
+  not support required environment reviewers, so external publication remains
+  blocked until the plan supports private-repository reviewer protection or the
+  repository becomes public. A signed tag and provisioned passing release gates
+  are also still required.
 - 2026-07-26 Phase A DX implementation: the clean-source onboarding harness now
   measures Python, Swift, Node.js, and Kotlin with schema-v2 evidence; it runs
   monthly and on demand. Swift quickstarts use a checked entrypoint that reports

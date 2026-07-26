@@ -29,8 +29,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  authorize:
-    name: Validate signed identity and publication authority
+  validate-candidate:
+    name: Validate signed identity and immutable candidate evidence
     runs-on: ubuntu-24.04
     steps:
       - name: Check out signed tag
@@ -45,7 +45,8 @@ jobs:
           test "$RELEASE_TAG" = "v$(tr -d '[:space:]' < VERSION)"
           git verify-tag "$RELEASE_TAG"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
-      - name: Download candidate and gate evidence
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+      - name: Download candidate, gate, and workflow-run evidence
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -53,33 +54,59 @@ jobs:
           SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
           RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
         run: |
-          gh run download "$CANDIDATE_RUN" --repo "$REPOSITORY" --name release-candidate-v0.1.0 --dir target/release-bundle-v0.1.0
+          evidence=target/publication-evidence
+          mkdir -p "$evidence/runs" "$evidence/gates"
+          gh api "repos/$REPOSITORY/actions/runs/$CANDIDATE_RUN" > "$evidence/runs/candidate.json"
+          gh api "repos/$REPOSITORY/actions/runs/$SCHEDULED_RUN" > "$evidence/runs/scheduled.json"
+          gh api "repos/$REPOSITORY/actions/runs/$RELEASE_GATE_RUN" > "$evidence/runs/release-gate.json"
+          gh run download "$CANDIDATE_RUN" --repo "$REPOSITORY" --name release-candidate-v0.1.0 --dir "$evidence/release-bundle-v0.1.0"
           gh run download "$SCHEDULED_RUN" --repo "$REPOSITORY" --dir target/downloaded-scheduled
           gh run download "$RELEASE_GATE_RUN" --repo "$REPOSITORY" --dir target/downloaded-release
-          mkdir -p target/phase7-scheduled-result target/phase7-release-result
-          cp "$(find target/downloaded-scheduled -name result.json -print -quit)" target/phase7-scheduled-result/result.json
-          cp "$(find target/downloaded-release -name result.json -print -quit)" target/phase7-release-result/result.json
-      - name: Fail closed on every publication prerequisite
+          test "$(find target/downloaded-scheduled -name result.json | wc -l | tr -d ' ')" = "1"
+          test "$(find target/downloaded-release -name result.json | wc -l | tr -d ' ')" = "1"
+          cp "$(find target/downloaded-scheduled -name result.json)" "$evidence/gates/scheduled-result.json"
+          cp "$(find target/downloaded-release -name result.json)" "$evidence/gates/release-result.json"
+      - name: Fail closed on every pre-approval prerequisite
+        env:
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
+          RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
         run: |
           python3 benchmarks/publication/validate_readme.py --repo .
           python3 scripts/release/validate_release.py \
             --repo . \
-            --bundle target/release-bundle-v0.1.0 \
-            --publication
-      - name: Preserve authorized bundle for protected jobs
+            --bundle target/publication-evidence/release-bundle-v0.1.0
+          python3 scripts/release/publication_authorization.py candidate \
+            --repository "$REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --source-revision "$GITHUB_SHA" \
+            --candidate-run-id "$CANDIDATE_RUN" \
+            --candidate-run-json target/publication-evidence/runs/candidate.json \
+            --scheduled-run-id "$SCHEDULED_RUN" \
+            --scheduled-run-json target/publication-evidence/runs/scheduled.json \
+            --release-gate-run-id "$RELEASE_GATE_RUN" \
+            --release-gate-run-json target/publication-evidence/runs/release-gate.json \
+            --bundle target/publication-evidence/release-bundle-v0.1.0 \
+            --scheduled-result target/publication-evidence/gates/scheduled-result.json \
+            --release-gate-result target/publication-evidence/gates/release-result.json \
+            --output target/publication-evidence/candidate-evidence.json
+      - name: Preserve verified candidate for the protected publication job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: authorized-release-v0.1.0
-          path: target/release-bundle-v0.1.0
+          name: verified-release-candidate-v0.1.0
+          path: target/publication-evidence
           if-no-files-found: error
           retention-days: 180
 
   github-release:
-    name: Attest and publish GitHub/SwiftPM assets
-    needs: authorize
+    name: Record approval, attest, and publish GitHub/SwiftPM assets
+    needs: validate-candidate
     runs-on: ubuntu-24.04
     environment: release
     permissions:
+      actions: read
       contents: write
       id-token: write
       attestations: write
@@ -88,50 +115,132 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ inputs.tag }}
-      - name: Download authorized bundle
+          fetch-depth: 0
+      - name: Download verified candidate evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: authorized-release-v0.1.0
-          path: target/release-bundle-v0.1.0
-      - name: Attest release artifacts
+          name: verified-release-candidate-v0.1.0
+          path: target/publication-evidence
+      - name: Record and validate protected-environment authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
+          RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
+          PUBLICATION_RUN: ${{ github.run_id }}
+          PUBLICATION_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          test "$GITHUB_SHA" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          mkdir -p target/publication-record
+          gh api "repos/$REPOSITORY/actions/runs/$PUBLICATION_RUN" > target/publication-record/run.json
+          gh api "repos/$REPOSITORY/actions/runs/$PUBLICATION_RUN/approvals" > target/publication-record/approvals.json
+          python3 scripts/release/publication_authorization.py authorize \
+            --repository "$REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --source-revision "$GITHUB_SHA" \
+            --candidate-run-id "$CANDIDATE_RUN" \
+            --scheduled-run-id "$SCHEDULED_RUN" \
+            --release-gate-run-id "$RELEASE_GATE_RUN" \
+            --candidate-evidence target/publication-evidence/candidate-evidence.json \
+            --publication-run-id "$PUBLICATION_RUN" \
+            --publication-run-attempt "$PUBLICATION_ATTEMPT" \
+            --publication-run-json target/publication-record/run.json \
+            --approvals-json target/publication-record/approvals.json \
+            --workflow-ref "$WORKFLOW_REF" \
+            --actor "$ACTOR" \
+            --triggering-actor "$TRIGGERING_ACTOR" \
+            --environment release \
+            --output target/publication-record/publication-authorization-provenance.json
+          python3 scripts/release/publication_authorization.py validate \
+            --record target/publication-record/publication-authorization-provenance.json \
+            --candidate-evidence target/publication-evidence/candidate-evidence.json \
+            --repository "$REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --source-revision "$GITHUB_SHA" \
+            --candidate-run-id "$CANDIDATE_RUN" \
+            --scheduled-run-id "$SCHEDULED_RUN" \
+            --release-gate-run-id "$RELEASE_GATE_RUN" \
+            --publication-run-id "$PUBLICATION_RUN" \
+            --publication-run-attempt "$PUBLICATION_ATTEMPT"
+          python3 scripts/release/validate_release.py \
+            --repo . \
+            --bundle target/publication-evidence/release-bundle-v0.1.0 \
+            --publication \
+            --authorization-record target/publication-record/publication-authorization-provenance.json \
+            --candidate-evidence target/publication-evidence/candidate-evidence.json \
+            --scheduled-result target/publication-evidence/gates/scheduled-result.json \
+            --release-gate-result target/publication-evidence/gates/release-result.json \
+            --repository "$REPOSITORY" \
+            --source-revision "$GITHUB_SHA" \
+            --candidate-run-id "$CANDIDATE_RUN" \
+            --scheduled-run-id "$SCHEDULED_RUN" \
+            --release-gate-run-id "$RELEASE_GATE_RUN" \
+            --publication-run-id "$PUBLICATION_RUN" \
+            --publication-run-attempt "$PUBLICATION_ATTEMPT"
+          (
+            cd target/publication-record
+            sha256sum publication-authorization-provenance.json \
+              > publication-authorization-provenance.sha256
+          )
+      - name: Preserve authorization and provenance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publication-authorization-v0.1.0
+          path: |
+            target/publication-record/publication-authorization-provenance.json
+            target/publication-record/publication-authorization-provenance.sha256
+            target/publication-evidence/candidate-evidence.json
+          if-no-files-found: error
+          retention-days: 180
+      - name: Attest release artifacts and authorization record
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: target/release-bundle-v0.1.0/artifacts/*
+          subject-path: |
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/*
+            target/publication-record/publication-authorization-provenance.json
       - name: Create immutable GitHub Release assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           gh release create "$RELEASE_TAG" \
-            target/release-bundle-v0.1.0/artifacts/* \
-            target/release-bundle-v0.1.0/LICENSE \
-            target/release-bundle-v0.1.0/NOTICE \
-            target/release-bundle-v0.1.0/THIRD_PARTY_NOTICES.md \
-            target/release-bundle-v0.1.0/checksums.sha256 \
-            target/release-bundle-v0.1.0/inventory.json \
-            target/release-bundle-v0.1.0/sbom.spdx.json \
-            target/release-bundle-v0.1.0/provenance.intoto.json \
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/* \
+            target/publication-evidence/release-bundle-v0.1.0/LICENSE \
+            target/publication-evidence/release-bundle-v0.1.0/NOTICE \
+            target/publication-evidence/release-bundle-v0.1.0/THIRD_PARTY_NOTICES.md \
+            target/publication-evidence/release-bundle-v0.1.0/checksums.sha256 \
+            target/publication-evidence/release-bundle-v0.1.0/inventory.json \
+            target/publication-evidence/release-bundle-v0.1.0/sbom.spdx.json \
+            target/publication-evidence/release-bundle-v0.1.0/provenance.intoto.json \
+            target/publication-evidence/candidate-evidence.json \
+            target/publication-record/publication-authorization-provenance.json \
+            target/publication-record/publication-authorization-provenance.sha256 \
             --verify-tag \
             --title "RetrievalKit $RELEASE_TAG preview" \
             --notes-file CHANGELOG.md
 
   pypi:
     name: Trusted PyPI publication
-    needs: authorize
+    needs: github-release
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - name: Download authorized bundle
+      - name: Download the authorized candidate bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: authorized-release-v0.1.0
-          path: target/release-bundle-v0.1.0
+          name: verified-release-candidate-v0.1.0
+          path: target/publication-evidence
       - name: Stage the closed wheel inventory only
         run: |
           mkdir -p target/pypi
-          cp target/release-bundle-v0.1.0/artifacts/*.whl target/pypi/
+          cp target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl target/pypi/
           test "$(find target/pypi -name '*.whl' | wc -l | tr -d ' ')" = "10"
       - name: Publish through PyPI trusted publishing
         uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0

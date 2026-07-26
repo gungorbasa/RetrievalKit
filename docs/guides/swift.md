@@ -9,7 +9,39 @@ database types:
 | Graph records and traversal without retrieval | `GraphDatabase` |
 | Graph traversal followed by scoped retrieval | `GraphRetrievalDatabase` |
 
-The public Swift package exposes both `RetrievalKit` and `RetrievalKitGraph`
+## Installation status
+
+The eventual public SwiftPM dependency is intentionally shown first:
+
+```swift
+// Package.swift — PENDING, not installable until the repository, tag, and
+// versioned XCFramework release asset are public.
+.package(
+  url: "https://github.com/gungorbasa/RetrievalKit.git",
+  from: "0.1.0"
+)
+```
+
+Then select `RetrievalKit` for a flat corpus, `RetrievalKitGraph` for graph
+traversal and graph-scoped retrieval, or both products from that one package.
+`EmbeddingKit` and `RetrievalKitPipeline` are additional products in the same
+package.
+
+**This dependency is not active today.** The repository is private and the
+v0.1.0 release asset required by the root package manifest is not publicly
+available. The available route is the checked-in source quickstart:
+
+```bash
+scripts/build-xcframework.sh --macos-only --graph
+scripts/run-swift-quickstart.sh graph-retrieval
+```
+
+The initial qualified package target is macOS 14+ arm64 and iOS 15+ arm64 for
+physical devices and Apple-silicon simulators. Intel macOS and x86_64 iOS
+simulators are not claimed.
+
+The planned public Swift package exposes both `RetrievalKit` and
+`RetrievalKitGraph`
 products over one graph-capable native aggregate. An application may select
 either product or both. Selecting only `RetrievalKit` keeps graph APIs out of
 the Swift target, but SwiftPM still downloads the shared graph-capable binary.

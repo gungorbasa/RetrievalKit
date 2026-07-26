@@ -388,6 +388,73 @@ h1 {
   padding: 96px 5vw 120px;
 }
 
+.release-section {
+  background: #eef1ed;
+  display: grid;
+  gap: clamp(42px, 7vw, 100px);
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+  padding: 96px 6vw;
+  scroll-margin-top: 72px;
+}
+
+.release-heading h2 {
+  font-size: clamp(36px, 4vw, 58px);
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+  margin: 12px 0 0;
+}
+
+.release-heading > p:last-child {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+  margin-top: 24px;
+}
+
+.release-table {
+  border-top: 1px solid #bac4c0;
+  min-width: 0;
+}
+
+.release-row {
+  align-items: center;
+  border-bottom: 1px solid #bac4c0;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 0.5fr 1.25fr 1.25fr 1fr;
+  min-height: 84px;
+}
+
+.release-row strong {
+  font-size: 13px;
+}
+
+.release-row span,
+.release-row small {
+  color: #4f5d5f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.release-row small {
+  color: #8a3d20;
+  font-weight: 700;
+}
+
+.release-header {
+  min-height: 48px;
+}
+
+.release-header strong,
+.release-header span {
+  color: #788587;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .docs-shell aside {
   align-self: start;
   border-right: 1px solid var(--line);
@@ -685,6 +752,10 @@ footer .brand-mark {
   .platform-section {
     grid-template-columns: 1fr;
   }
+
+  .release-section {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 780px) {
@@ -733,6 +804,21 @@ footer .brand-mark {
   .docs-shell {
     display: block;
     padding: 72px 20px 82px;
+  }
+
+  .release-section {
+    padding: 72px 20px;
+  }
+
+  .release-row {
+    align-items: start;
+    gap: 7px;
+    grid-template-columns: 1fr;
+    padding: 18px 0;
+  }
+
+  .release-header {
+    display: none;
   }
 
   .docs-shell aside {

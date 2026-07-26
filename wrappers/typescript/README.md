@@ -54,3 +54,40 @@ never round silently.
 
 See [base/README.md](base/README.md) and [graph/README.md](graph/README.md) for
 API examples and lifecycle details.
+
+## Assemble npm release tarballs
+
+The checked-in package names remain private placeholders to prevent accidental
+publication. Release assembly therefore requires two names whose ownership has
+already been approved in npm; it never guesses or reserves names:
+
+```bash
+python3 ../../scripts/release/assemble_node_packages.py \
+  --base-name '<approved-base-name>' \
+  --graph-name '<approved-graph-name>' \
+  --names-approved \
+  --version 0.1.0 \
+  --output ../../dist/release/node
+```
+
+The assembler builds both native aggregates and TypeScript distributions,
+checks the graph-free base dependency tree and Mach-O architecture, rewrites
+only staged package metadata, and runs `npm pack`. It emits two macOS arm64
+tarballs plus `inventory.json`, `SHA256SUMS`, and `SHA512SUMS`. The source
+packages retain `"private": true`; only the verified staged tarballs remove the
+publication blocker.
+
+`--names-approved` is an explicit owner assertion. Omit it until the npm account
+or organization controls both names; assembly then fails before changing staged
+metadata.
+
+Run the deterministic package-content test after building the native addons:
+
+```bash
+python3 ../../scripts/release/test_assemble_node_packages.py
+```
+
+Assembly does not publish. npm account ownership of both selected names and a
+trusted-publisher configuration are external release prerequisites. The
+inventory marks the tarballs `artifactReady` after inspection while keeping
+`publicationReady` false until that external upload authorization exists.

@@ -68,11 +68,26 @@ if [ "$MODE" = "android" ] || [ "$MODE" = "all" ]; then
   fi
 
   : "${ANDROID_NDK_HOME:=$HOME/Library/Android/sdk/ndk/26.1.10909125}"
+  NDK_PROPERTIES="$ANDROID_NDK_HOME/source.properties"
+  if [ ! -f "$NDK_PROPERTIES" ]; then
+    fail "Android NDK metadata not found at $NDK_PROPERTIES. Set ANDROID_NDK_HOME to the installed NDK 26 directory."
+  fi
+  NDK_VERSION=$(
+    sed -n \
+      's/^[[:space:]]*Pkg\.Revision[[:space:]]*=[[:space:]]*\([^[:space:]]*\).*$/\1/p' \
+      "$NDK_PROPERTIES" |
+      head -n 1
+  )
+  NDK_MAJOR=${NDK_VERSION%%.*}
+  if [ -z "$NDK_VERSION" ] || [ "$NDK_MAJOR" != "26" ]; then
+    fail "Android NDK 26 is required; detected NDK ${NDK_VERSION:-unknown} at $ANDROID_NDK_HOME. Set ANDROID_NDK_HOME to the installed NDK 26 directory."
+  fi
+
   TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin"
   LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
   if [ ! -x "$LINKER" ]; then
     fail "Android NDK 26 arm64 linker not found at $LINKER. Set ANDROID_NDK_HOME to the installed NDK 26 directory."
   fi
 
-  echo "  Android: required API 24 arm64-v8a with NDK 26; detected toolchain at $ANDROID_NDK_HOME"
+  echo "  Android: required API 24 arm64-v8a with NDK 26; detected NDK $NDK_VERSION at $ANDROID_NDK_HOME"
 fi

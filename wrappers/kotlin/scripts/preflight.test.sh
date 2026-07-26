@@ -45,7 +45,14 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$TEST_ROOT/bin" "$TEST_ROOT/jdk17/bin" "$TEST_ROOT/jdk25/bin"
+mkdir -p \
+  "$TEST_ROOT/bin" \
+  "$TEST_ROOT/jdk17/bin" \
+  "$TEST_ROOT/jdk25/bin" \
+  "$TEST_ROOT/ndk-missing" \
+  "$TEST_ROOT/ndk-malformed/toolchains/llvm/prebuilt/darwin-x86_64/bin" \
+  "$TEST_ROOT/ndk25/toolchains/llvm/prebuilt/darwin-x86_64/bin" \
+  "$TEST_ROOT/ndk26/toolchains/llvm/prebuilt/darwin-x86_64/bin"
 
 cat >"$TEST_ROOT/bin/uname" <<'EOF'
 #!/bin/sh
@@ -66,10 +73,57 @@ cat >"$TEST_ROOT/jdk25/bin/java" <<'EOF'
 echo 'openjdk version "25.0.2" 2026-01-20' >&2
 EOF
 
+cat >"$TEST_ROOT/bin/cargo" <<'EOF'
+#!/bin/sh
+echo 'cargo 1.92.0 (test)'
+EOF
+
+cat >"$TEST_ROOT/bin/rustup" <<'EOF'
+#!/bin/sh
+if [ "$*" = "target list --installed" ]; then
+  echo aarch64-linux-android
+  exit 0
+fi
+exit 2
+EOF
+
+cat >"$TEST_ROOT/ndk25/source.properties" <<'EOF'
+Pkg.Desc = Android NDK
+Pkg.Revision = 25.1.8937393
+EOF
+
+cat >"$TEST_ROOT/ndk-malformed/source.properties" <<'EOF'
+Pkg.Desc = Android NDK
+Revision is unavailable
+EOF
+
+cat >"$TEST_ROOT/ndk26/source.properties" <<'EOF'
+Pkg.Desc = Android NDK
+Pkg.Revision = 26.1.10909125
+EOF
+
+cat >"$TEST_ROOT/ndk25/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+
+cat >"$TEST_ROOT/ndk26/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+
+cp \
+  "$TEST_ROOT/ndk26/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang" \
+  "$TEST_ROOT/ndk-malformed/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang"
+
 chmod +x \
+  "$TEST_ROOT/bin/cargo" \
+  "$TEST_ROOT/bin/rustup" \
   "$TEST_ROOT/bin/uname" \
   "$TEST_ROOT/jdk17/bin/java" \
-  "$TEST_ROOT/jdk25/bin/java"
+  "$TEST_ROOT/jdk25/bin/java" \
+  "$TEST_ROOT/ndk25/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang" \
+  "$TEST_ROOT/ndk26/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang"
 
 PREFLIGHT_OUTPUT=$(
   JAVA_HOME="$TEST_ROOT/jdk17" \
@@ -90,5 +144,65 @@ set -e
 assert_equal "1" "$UNSUPPORTED_STATUS" "unsupported JDK exit status"
 assert_contains "$UNSUPPORTED_OUTPUT" "detected Java 25.0.2 from $TEST_ROOT/jdk25/bin/java" "unsupported JDK source"
 assert_contains "$UNSUPPORTED_OUTPUT" "Install a JDK 17 distribution" "unsupported JDK recovery"
+
+ANDROID_OUTPUT=$(
+  ANDROID_NDK_HOME="$TEST_ROOT/ndk26" \
+    JAVA_HOME="$TEST_ROOT/jdk17" \
+    PATH="$TEST_ROOT/bin:$PATH" \
+    "$SCRIPT_DIR/preflight.sh" android
+)
+assert_contains \
+  "$ANDROID_OUTPUT" \
+  "detected NDK 26.1.10909125 at $TEST_ROOT/ndk26" \
+  "supported NDK detection"
+
+set +e
+UNSUPPORTED_NDK_OUTPUT=$(
+  ANDROID_NDK_HOME="$TEST_ROOT/ndk25" \
+    JAVA_HOME="$TEST_ROOT/jdk17" \
+    PATH="$TEST_ROOT/bin:$PATH" \
+    "$SCRIPT_DIR/preflight.sh" android 2>&1
+)
+UNSUPPORTED_NDK_STATUS=$?
+set -e
+assert_equal "1" "$UNSUPPORTED_NDK_STATUS" "unsupported NDK exit status"
+assert_contains \
+  "$UNSUPPORTED_NDK_OUTPUT" \
+  "Android NDK 26 is required; detected NDK 25.1.8937393 at $TEST_ROOT/ndk25" \
+  "unsupported NDK source"
+assert_contains \
+  "$UNSUPPORTED_NDK_OUTPUT" \
+  "Set ANDROID_NDK_HOME to the installed NDK 26 directory" \
+  "unsupported NDK recovery"
+
+set +e
+MISSING_NDK_OUTPUT=$(
+  ANDROID_NDK_HOME="$TEST_ROOT/ndk-missing" \
+    JAVA_HOME="$TEST_ROOT/jdk17" \
+    PATH="$TEST_ROOT/bin:$PATH" \
+    "$SCRIPT_DIR/preflight.sh" android 2>&1
+)
+MISSING_NDK_STATUS=$?
+set -e
+assert_equal "1" "$MISSING_NDK_STATUS" "missing NDK metadata exit status"
+assert_contains \
+  "$MISSING_NDK_OUTPUT" \
+  "Android NDK metadata not found at $TEST_ROOT/ndk-missing/source.properties" \
+  "missing NDK metadata source"
+
+set +e
+MALFORMED_NDK_OUTPUT=$(
+  ANDROID_NDK_HOME="$TEST_ROOT/ndk-malformed" \
+    JAVA_HOME="$TEST_ROOT/jdk17" \
+    PATH="$TEST_ROOT/bin:$PATH" \
+    "$SCRIPT_DIR/preflight.sh" android 2>&1
+)
+MALFORMED_NDK_STATUS=$?
+set -e
+assert_equal "1" "$MALFORMED_NDK_STATUS" "malformed NDK metadata exit status"
+assert_contains \
+  "$MALFORMED_NDK_OUTPUT" \
+  "Android NDK 26 is required; detected NDK unknown at $TEST_ROOT/ndk-malformed" \
+  "malformed NDK metadata source"
 
 echo "Kotlin preflight tests passed"

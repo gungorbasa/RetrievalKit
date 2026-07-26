@@ -76,9 +76,11 @@ implemented, or superseded by the product spec.
   and package engines; the refreshed development dependency tree has zero npm
   audit findings. Kotlin builds require JDK 17 while published bytecode targets
   Java 11+, and preflight validates the exact `JAVA_HOME` binary with actionable
-  recovery. The local Sites source now includes Swift, complete language
-  snippets, responsive mobile actions, and a custom 404, but this Phase A work
-  has not been saved or deployed to the public site.
+  recovery. Android preflight reads the NDK `source.properties` revision and
+  requires major version 26; linker presence alone is not sufficient evidence
+  of a supported NDK. The public Sites source now includes Swift, complete
+  language snippets, responsive mobile actions, and a custom 404; this Phase A
+  work is deployed to `https://retrievalkit-docs.gungorbasa.chatgpt.site`.
 - 2026-07-26 Swift distribution decision: the root `Package.swift` is the only
   public Swift manifest. It exposes `RetrievalKit`, `RetrievalKitGraph`,
   `EmbeddingKit`, and `RetrievalKitPipeline` over the single
@@ -101,7 +103,9 @@ implemented, or superseded by the product spec.
   Searchable public
   source-preview docs are deployed at
   `https://retrievalkit-docs.gungorbasa.chatgpt.site`; their versioned Python
-  bundle is built from commit `68b5517`, carries its SHA-256 on the page, and
+  bundle is built from commit `d73eaf6`, carries SHA-256
+  `cde4d966c4bf39ea372b6a871ae9638ca1173383e98658df52c4028413f026c0`
+  on the page, and
   passed the documented graph quickstart from a fresh extraction. This is a
   narrow source-preview path, not registry publication or expanded platform
   support. Its earlier standalone graph Swift publication blocker was

@@ -241,16 +241,19 @@ combined database exposes separate `graph` and `retrieval` query namespaces.
 Applications may install both distributions for environment compatibility but
 must import only one native distribution in a process.
 
-TypeScript and Kotlin follow the same aggregate boundary. TypeScript uses
-separate repository-local Node packages backed by separate napi-rs native
-aggregates; the initial supported runtime is Node.js LTS on macOS arm64, with
-no browser or WebAssembly claim. Kotlin uses separate base and graph-capable
-Kotlin/JVM modules backed by thin JNI aggregates; the initial native package is
-Android arm64-v8a, with no Kotlin Multiplatform claim. Base consumers in either
-ecosystem must not load or depend on graph code, and applications must not load
-both native aggregates in one process. npm names and Maven coordinates remain
-provisional until naming clearance and do not imply public registry
-availability.
+TypeScript and Kotlin follow the same aggregate boundary. TypeScript uses the
+separate `@gungorbasa/retrievalkit` and
+`@gungorbasa/retrievalkit-graph` Node packages backed by separate napi-rs
+native aggregates. The initial supported runtime range is
+`^22.13.0 || ^24.0.0` on macOS arm64, with no browser or WebAssembly claim.
+Kotlin uses separate base and graph-capable Kotlin/JVM modules under the fixed
+`io.github.gungorbasa` Maven group, backed by thin JNI aggregates. The initial
+native targets are macOS arm64 for JVM use and Android arm64-v8a, with no
+Kotlin Multiplatform claim. Their release target IDs are `jvm-macos-arm64` and
+`android-arm64-v8a`. Base consumers in either ecosystem must not load or depend
+on graph code, and applications must not load both native aggregates in one
+process. These npm names and Maven coordinates are fixed for `0.1.0`, but the
+SDK packages remain unpublished until the release gates pass.
 
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed

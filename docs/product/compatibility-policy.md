@@ -14,7 +14,7 @@ and accompanied by migration guidance.
 - Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
   preview. Kotlin Multiplatform is not supported.
 - Persistence: V1–V4 base snapshots remain readable; new saves use the current
-  checksummed format. Graph capability formats are validated independently.
+  checksummed V4 format. Graph capability formats are validated independently.
 
 Patch releases preserve documented public source compatibility unless a
 correctness or security defect makes that unsafe. Deprecated APIs receive a

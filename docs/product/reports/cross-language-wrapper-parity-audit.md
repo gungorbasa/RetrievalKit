@@ -2,6 +2,15 @@
 
 Date: 2026-07-25
 
+> **Historical evidence:** This report records wrapper parity at source
+> revision `fccb3a9`. Swift distribution and Node/Maven identities were
+> finalized afterward. See
+> [release-v0.1.0.json](../../../release/release-v0.1.0.json),
+> [release-process.md](../release-process.md), and
+> [compatibility-policy.md](../compatibility-policy.md) for current release
+> guidance. The architectural observations remain evidence for that revision;
+> the package table and remaining-work list are not current.
+
 ## Verdict
 
 All five language surfaces now implement the same capability-separated

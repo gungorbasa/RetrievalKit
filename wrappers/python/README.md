@@ -11,7 +11,7 @@ graph scope, and metadata filters, start with the canonical
 The wrapper does not include an embedding model. Callers provide embeddings from
 the same local or remote provider for indexing and querying.
 
-Requires Python 3.10 or newer.
+Requires CPython 3.10 through 3.14.
 
 ## Capability API
 
@@ -154,7 +154,7 @@ index.save(path)
 loaded_index = Index.load(path)
 ```
 
-New saves use a checksummed V3 manifest. Validate a stored index without keeping
+New saves use a checksummed V4 manifest. Validate a stored index without keeping
 it loaded for search:
 
 ```python
@@ -166,9 +166,10 @@ except CorruptIndexError as error:
     print(error)  # restore a known-good copy or rebuild the index
 ```
 
-V1 and V2 indexes remain readable without checksums. Their next save publishes
-a V3 generation. Corrupt payloads fail with `CorruptIndexError`; invalid or
-unsupported manifests fail with `UnsupportedFormatError`.
+V1, V2, and V3 indexes remain readable; their next save publishes a checksummed
+V4 snapshot. V1 and V2 do not have payload checksums; V3 and V4 do. Corrupt
+payloads fail with `CorruptIndexError`; invalid or unsupported manifests fail
+with `UnsupportedFormatError`.
 
 `save` returns actual persisted file sizes. It raises `PersistenceError` with
 the failed operation, path, operating-system cause, and a recovery hint when the

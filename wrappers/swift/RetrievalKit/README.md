@@ -207,7 +207,7 @@ defaults to 50 vector candidates, 50 keyword candidates, and `alpha = 0.6`.
 Pass `encoding: .f32`, a different `alpha`, or explicit candidate options when
 a different tradeoff is required.
 
-New saves use a checksummed V3 manifest. Validate a stored index without
+New saves use a checksummed V4 manifest. Validate a stored index without
 retaining it for search:
 
 ```swift
@@ -218,9 +218,9 @@ do {
 }
 ```
 
-V1 and V2 indexes remain readable without checksums. Their next save publishes
-a V3 generation. Integrity failures are surfaced as
-`RetrievalKitError.corruptIndex`.
+V1, V2, and V3 indexes remain readable; their next save publishes a checksummed
+V4 snapshot. V1 and V2 do not have payload checksums; V3 and V4 do. Integrity
+failures are surfaced as `RetrievalKitError.corruptIndex`.
 
 Filesystem failures surface as `RetrievalKitError.core` values whose message
 contains the failed operation, path, operating-system cause, and a recovery

@@ -14,6 +14,7 @@ import struct
 import sys
 import tarfile
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -42,6 +43,221 @@ def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def normalize_whitespace(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def normalize_python_specifier(value: str) -> tuple[str, ...]:
+    return tuple(sorted(part.strip() for part in value.split(",") if part.strip()))
+
+
+def validate_python_release_metadata(repo: Path, config: dict[str, Any]) -> None:
+    expected = config["python"]["requires_python"]
+    require(
+        expected == ">=3.10,<3.15",
+        "Python requires-python release range changed",
+    )
+    for relative in (
+        Path("wrappers/python/pyproject.toml"),
+        Path("wrappers/python-graph/pyproject.toml"),
+    ):
+        text = (repo / relative).read_text(encoding="utf-8")
+        project = re.search(
+            r"^\[project\]\s*$\n(.*?)(?=^\[|\Z)",
+            text,
+            re.MULTILINE | re.DOTALL,
+        )
+        require(project is not None, f"Python project table missing: {relative}")
+        match = re.search(
+            r'^requires-python\s*=\s*"([^"]+)"\s*$',
+            project.group(1),
+            re.MULTILINE,
+        )
+        require(match is not None, f"Python requires-python missing: {relative}")
+        require(
+            match.group(1) == expected,
+            (
+                f"Python requires-python mismatch: {relative}: "
+                f"expected {expected}, observed {match.group(1)}"
+            ),
+        )
+
+
+def validate_persistence_release_contract(
+    repo: Path,
+    config: dict[str, Any],
+) -> None:
+    expected = {
+        "base_write_format": 4,
+        "base_readable_formats": [1, 2, 3, 4],
+    }
+    require(
+        config["persistence"] == expected,
+        "base persistence release contract changed",
+    )
+    core = (repo / "crates/retrievalkit-core/src/index.rs").read_text(encoding="utf-8")
+    constant_names = (
+        "LEGACY_FORMAT_VERSION",
+        "TRANSACTIONAL_FORMAT_VERSION",
+        "CHECKSUM_FORMAT_VERSION",
+        "FORMAT_VERSION",
+    )
+    observed_formats = []
+    for constant in constant_names:
+        match = re.search(rf"const {constant}: u32 = (\d+);", core)
+        require(
+            match is not None,
+            f"Rust base persistence constant missing: {constant}",
+        )
+        observed_formats.append(int(match.group(1)))
+    require(
+        observed_formats == expected["base_readable_formats"],
+        "Rust base readable persistence formats differ from release contract",
+    )
+    require(
+        observed_formats[-1] == expected["base_write_format"],
+        "Rust base write persistence format differs from release contract",
+    )
+
+    claims = {
+        Path("CHANGELOG.md"): (
+            "Checksummed persistence format V4",
+            (
+                "V1, V2, and V3 indexes remain readable; their next save "
+                "publishes a checksummed V4 snapshot"
+            ),
+        ),
+        Path("docs/product/compatibility-policy.md"): (
+            (
+                "Persistence: V1–V4 base snapshots remain readable; new saves "
+                "use the current checksummed V4 format"
+            ),
+            "Graph capability formats are validated independently",
+        ),
+        Path("docs/product/v0.1.0-migration.md"): (
+            (
+                "V1, V2, and V3 base indexes remain readable; their next save "
+                "publishes a checksummed V4 snapshot"
+            ),
+            "Graph capability formats are versioned and validated independently",
+        ),
+        Path("docs/product/retrievalkit-product-spec.md"): (
+            (
+                "V1, V2, and V3 indexes remain readable; their next save "
+                "publishes a checksummed V4 snapshot"
+            ),
+            "Format V3 and V4 require SHA-256 checksums",
+            (
+                "V4 adds the canonical record payload and stable "
+                "external/internal chunk mapping"
+            ),
+        ),
+        Path("wrappers/python/README.md"): (
+            "New saves use a checksummed V4 manifest",
+            (
+                "V1, V2, and V3 indexes remain readable; their next save "
+                "publishes a checksummed V4 snapshot"
+            ),
+        ),
+        Path("wrappers/swift/RetrievalKit/README.md"): (
+            "New saves use a checksummed V4 manifest",
+            (
+                "V1, V2, and V3 indexes remain readable; their next save "
+                "publishes a checksummed V4 snapshot"
+            ),
+        ),
+    }
+    forbidden = (
+        "New saves use a checksummed V3 manifest",
+        "publishes a V3 generation",
+        "writes format V3",
+    )
+    for relative, required_claims in claims.items():
+        text = normalize_whitespace((repo / relative).read_text(encoding="utf-8"))
+        require(
+            all(claim in text for claim in required_claims),
+            f"base persistence documentation mismatch: {relative}",
+        )
+        require(
+            not any(claim in text for claim in forbidden),
+            f"stale base persistence documentation: {relative}",
+        )
+
+
+def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
+    spec_path = repo / "docs/product/retrievalkit-product-spec.md"
+    spec_text = spec_path.read_text(encoding="utf-8")
+    section = re.search(
+        r"TypeScript and Kotlin follow the same aggregate boundary\.(.*?)"
+        r"The first optional graph release",
+        spec_text,
+        re.DOTALL,
+    )
+    require(section is not None, "active TypeScript and Kotlin product section missing")
+    spec = normalize_whitespace(section.group(1))
+    expected_claims = (
+        f'`{config["node"]["packages"]["base"]["name"]}`',
+        f'`{config["node"]["packages"]["graph"]["name"]}`',
+        f'`{config["node"]["engines"]}`',
+        f'`{config["kotlin"]["group"]}`',
+        *(f"`{target}`" for target in config["kotlin"]["targets"]),
+        (
+            f"These npm names and Maven coordinates are fixed for "
+            f"`{config['version']}`, but the SDK packages remain unpublished "
+            "until the release gates pass"
+        ),
+    )
+    require(
+        all(claim in spec for claim in expected_claims),
+        "active product spec lacks fixed Node or Maven release identities",
+    )
+    require(
+        "retrievalkit-node-local" not in spec
+        and "retrievalkit-node-graph-local" not in spec
+        and "npm names and Maven coordinates remain provisional" not in spec,
+        "active product spec contains obsolete release identities",
+    )
+    blocker_text = " ".join(config["publication_blockers"])
+    require(
+        "npm trusted publishing configured" not in blocker_text
+        and "Maven Central namespace verification" not in blocker_text,
+        "release config lists completed registry setup as a publication blocker",
+    )
+    require(
+        all(
+            claim in blocker_text
+            for claim in (
+                "public docs and source preview",
+                "fresh complete release candidate",
+                "wrapper onboarding qualification",
+                "Phase 7 scheduled and release gates",
+                "signed v0.1.0 tag and owner release approval",
+            )
+        ),
+        "release config omits an outstanding publication evidence gate",
+    )
+
+    report = normalize_whitespace(
+        (
+            repo
+            / "docs/product/reports/cross-language-wrapper-parity-audit.md"
+        ).read_text(encoding="utf-8")
+    )
+    require(
+        all(
+            claim in report
+            for claim in (
+                "Historical evidence:",
+                "fccb3a9",
+                "../../../release/release-v0.1.0.json",
+                "../release-process.md",
+                "../compatibility-policy.md",
+            )
+        ),
+        "historical parity audit lacks its revision or current-guidance links",
+    )
+
+
 def static_validation(repo: Path) -> dict[str, Any]:
     config = load_json(repo / "release/release-v0.1.0.json")
     version = (repo / "VERSION").read_text().strip()
@@ -56,6 +272,9 @@ def static_validation(repo: Path) -> dict[str, Any]:
         require("version.workspace = true" in manifest.read_text(), f"crate does not inherit workspace version: {manifest}")
     for pyproject in (repo / "wrappers/python/pyproject.toml", repo / "wrappers/python-graph/pyproject.toml"):
         require(f'version = "{version}"' in pyproject.read_text(), f"Python version mismatch: {pyproject}")
+    validate_python_release_metadata(repo, config)
+    validate_persistence_release_contract(repo, config)
+    validate_active_release_claims(repo, config)
     swift_packages = config["apple"]["packages"]
     require(set(swift_packages) == {"unified"}, "Swift package set changed")
     package_texts: dict[str, str] = {}
@@ -184,7 +403,9 @@ def validate_markdown_links(repo: Path) -> None:
         repo / "docs/product/release-approval-checklist.md",
         repo / "docs/product/compatibility-policy.md",
         repo / "docs/product/artifact-retention-policy.md",
+        repo / "docs/product/retrievalkit-product-spec.md",
         repo / "docs/product/v0.1.0-migration.md",
+        repo / "docs/product/reports/cross-language-wrapper-parity-audit.md",
     ]
     for path in paths:
         text = path.read_text(encoding="utf-8")
@@ -368,6 +589,11 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
         observed.add((normalized, tag))
         with zipfile.ZipFile(path) as wheel:
             require(any(item.endswith(".dist-info/RECORD") for item in wheel.namelist()), f"wheel RECORD missing: {name}")
+            validate_wheel_requires_python(
+                wheel,
+                name,
+                config["python"]["requires_python"],
+            )
             sboms = [item for item in wheel.namelist() if ".dist-info/sboms/" in item]
             require(len(sboms) == 1, f"wheel SBOM inventory mismatch: {name}")
             sbom_bytes = wheel.read(sboms[0])
@@ -375,6 +601,31 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
             require(b"path+file:///private/" not in sbom_bytes, f"wheel SBOM leaks checkout paths: {name}")
     expected = {(distribution, tag) for distribution in config["python"]["distributions"] for tag in config["python"]["implementations"]}
     require(observed == expected, f"Python wheel matrix mismatch: missing={sorted(expected - observed)}, extra={sorted(observed - expected)}")
+
+
+def validate_wheel_requires_python(
+    wheel: zipfile.ZipFile,
+    name: str,
+    expected: str,
+) -> None:
+    metadata_names = [
+        item for item in wheel.namelist() if item.endswith(".dist-info/METADATA")
+    ]
+    require(
+        len(metadata_names) == 1,
+        f"wheel METADATA inventory mismatch: {name}",
+    )
+    metadata = BytesParser().parsebytes(wheel.read(metadata_names[0]))
+    observed = metadata.get_all("Requires-Python", [])
+    require(
+        len(observed) == 1
+        and normalize_python_specifier(observed[0])
+        == normalize_python_specifier(expected),
+        (
+            f"wheel Requires-Python mismatch: {name}: "
+            f"expected {expected}, observed {observed}"
+        ),
+    )
 
 
 def validate_checksum_manifest(

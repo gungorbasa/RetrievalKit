@@ -58,6 +58,22 @@ class ReleaseTests(unittest.TestCase):
 
     def test_release_identities_are_fixed_for_node_and_kotlin(self) -> None:
         config = validator.load_json(REPO / "release/release-v0.1.0.json")
+        self.assertEqual(config["python"]["requires_python"], ">=3.10,<3.15")
+        self.assertEqual(
+            config["persistence"],
+            {
+                "base_write_format": 4,
+                "base_readable_formats": [1, 2, 3, 4],
+            },
+        )
+        self.assertNotIn(
+            "npm trusted publishing configured",
+            " ".join(config["publication_blockers"]),
+        )
+        self.assertNotIn(
+            "Maven Central namespace verification",
+            " ".join(config["publication_blockers"]),
+        )
         self.assertEqual(
             config["node"]["packages"],
             {
@@ -90,6 +106,194 @@ class ReleaseTests(unittest.TestCase):
             validator.digest(REPO / signing["public_key"]),
             signing["sha256"],
         )
+
+    def test_python_metadata_rejects_open_ended_support(self) -> None:
+        config = validator.load_json(REPO / "release/release-v0.1.0.json")
+        validator.validate_python_release_metadata(REPO, config)
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            for relative in (
+                Path("wrappers/python/pyproject.toml"),
+                Path("wrappers/python-graph/pyproject.toml"),
+            ):
+                target = fake / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO / relative, target)
+            graph_project = fake / "wrappers/python-graph/pyproject.toml"
+            graph_project.write_text(
+                graph_project.read_text(encoding="utf-8").replace(
+                    'requires-python = ">=3.10,<3.15"',
+                    'requires-python = ">=3.10"',
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "Python requires-python mismatch: wrappers/python-graph",
+            ):
+                validator.validate_python_release_metadata(fake, config)
+            graph_project.write_text(
+                graph_project.read_text(encoding="utf-8").replace(
+                    'requires-python = ">=3.10"',
+                    "",
+                )
+                + '\n[tool.release-test]\nrequires-python = ">=3.10,<3.15"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "Python requires-python missing: wrappers/python-graph",
+            ):
+                validator.validate_python_release_metadata(fake, config)
+
+    def test_persistence_documentation_rejects_v3_as_current(self) -> None:
+        config = validator.load_json(REPO / "release/release-v0.1.0.json")
+        validator.validate_persistence_release_contract(REPO, config)
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            for relative in (
+                Path("CHANGELOG.md"),
+                Path("crates/retrievalkit-core/src/index.rs"),
+                Path("docs/product/compatibility-policy.md"),
+                Path("docs/product/retrievalkit-product-spec.md"),
+                Path("docs/product/v0.1.0-migration.md"),
+                Path("wrappers/python/README.md"),
+                Path("wrappers/swift/RetrievalKit/README.md"),
+            ):
+                target = fake / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO / relative, target)
+            python_readme = fake / "wrappers/python/README.md"
+            python_readme.write_text(
+                python_readme.read_text(encoding="utf-8").replace(
+                    "New saves use a checksummed V4 manifest",
+                    "New saves use a checksummed V3 manifest",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "base persistence documentation mismatch: wrappers/python/README.md",
+            ):
+                validator.validate_persistence_release_contract(fake, config)
+            shutil.copy2(REPO / "wrappers/python/README.md", python_readme)
+            core = fake / "crates/retrievalkit-core/src/index.rs"
+            core.write_text(
+                core.read_text(encoding="utf-8").replace(
+                    "const LEGACY_FORMAT_VERSION: u32 = 1;",
+                    "const LEGACY_FORMAT_VERSION: u32 = 0;",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "Rust base readable persistence formats differ",
+            ):
+                validator.validate_persistence_release_contract(fake, config)
+            shutil.copy2(REPO / "crates/retrievalkit-core/src/index.rs", core)
+            compatibility = fake / "docs/product/compatibility-policy.md"
+            compatibility.write_text(
+                compatibility.read_text(encoding="utf-8").replace(
+                    "Graph capability formats are validated independently.",
+                    "",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                (
+                    "base persistence documentation mismatch: "
+                    "docs/product/compatibility-policy.md"
+                ),
+            ):
+                validator.validate_persistence_release_contract(fake, config)
+
+    def test_active_release_claims_reject_obsolete_node_identity(self) -> None:
+        config = validator.load_json(REPO / "release/release-v0.1.0.json")
+        validator.validate_active_release_claims(REPO, config)
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            for relative in (
+                Path("docs/product/retrievalkit-product-spec.md"),
+                Path(
+                    "docs/product/reports/"
+                    "cross-language-wrapper-parity-audit.md"
+                ),
+            ):
+                target = fake / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO / relative, target)
+            product_spec = fake / "docs/product/retrievalkit-product-spec.md"
+            product_spec.write_text(
+                product_spec.read_text(encoding="utf-8").replace(
+                    "`@gungorbasa/retrievalkit`",
+                    "`@gungorbasa/retrievalkit-graph`",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "active product spec lacks fixed Node or Maven release identities",
+            ):
+                validator.validate_active_release_claims(fake, config)
+
+    def test_wheel_requires_python_matches_qualified_range(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid = root / "valid.whl"
+            invalid = root / "invalid.whl"
+            with zipfile.ZipFile(valid, "w") as wheel:
+                wheel.writestr(
+                    "retrievalkit-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.4\n"
+                    "Name: retrievalkit\n"
+                    "Requires-Python: >=3.10,\n"
+                    " <3.15\n",
+                )
+            with zipfile.ZipFile(valid) as wheel:
+                validator.validate_wheel_requires_python(
+                    wheel,
+                    valid.name,
+                    ">=3.10,<3.15",
+                )
+            with zipfile.ZipFile(invalid, "w") as wheel:
+                wheel.writestr(
+                    "retrievalkit-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.4\n"
+                    "Name: retrievalkit\n"
+                    "Requires-Python: >=3.10\n",
+                )
+            with zipfile.ZipFile(invalid) as wheel, self.assertRaisesRegex(
+                validator.ValidationError,
+                "wheel Requires-Python mismatch",
+            ):
+                validator.validate_wheel_requires_python(
+                    wheel,
+                    invalid.name,
+                    ">=3.10,<3.15",
+                )
+            integration = (
+                root
+                / "retrievalkit-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+            )
+            with zipfile.ZipFile(integration, "w") as wheel:
+                wheel.writestr(
+                    "retrievalkit-0.1.0.dist-info/RECORD",
+                    "",
+                )
+                wheel.writestr(
+                    "retrievalkit-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.4\n"
+                    "Name: retrievalkit\n"
+                    "Requires-Python: >=3.10\n",
+                )
+            config = validator.load_json(REPO / "release/release-v0.1.0.json")
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "wheel Requires-Python mismatch",
+            ):
+                validator.validate_wheels([integration], config)
 
     def test_release_bundle_includes_license_and_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

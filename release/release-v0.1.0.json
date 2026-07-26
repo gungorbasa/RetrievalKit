@@ -22,6 +22,7 @@
   "python": {
     "platform": "macosx_arm64",
     "implementations": ["cp310", "cp311", "cp312", "cp313", "cp314"],
+    "requires_python": ">=3.10,<3.15",
     "distributions": ["retrievalkit", "retrievalkit-graph"],
     "co_installation": "unsupported; one native capability distribution per process"
   },
@@ -53,6 +54,10 @@
     },
     "co_installation": "unsupported; one native capability aggregate per process"
   },
+  "persistence": {
+    "base_write_format": 4,
+    "base_readable_formats": [1, 2, 3, 4]
+  },
   "phase6_claims": {
     "mapping": "benchmarks/publication/readme-claims-v1.json",
     "source_revision": "9c784d2f11b91bb907150aa1b6046880ff89fde6",
@@ -60,10 +65,11 @@
     "release_revision_transfer": false
   },
   "publication_blockers": [
-    "Phase 7 scheduled and release gates provisioned and passing for the release revision",
+    "public docs and source preview rebuilt from the exact release revision",
+    "fresh complete release candidate assembled from the exact release revision",
+    "wrapper onboarding qualification passing for the release revision",
+    "Phase 7 scheduled and release gates passing for the release revision",
     "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
-    "npm trusted publishing configured for @gungorbasa/retrievalkit and @gungorbasa/retrievalkit-graph",
-    "Maven Central namespace verification, PGP signing key, and Portal token configured",
     "signed v0.1.0 tag and owner release approval"
   ]
 }

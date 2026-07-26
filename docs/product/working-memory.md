@@ -932,6 +932,24 @@ Verification completed without benchmark workloads:
   wrapper changes. It was not regenerated because benchmark and release
   qualification remain explicitly paused.
 
+## 2026-07-26 Release Truth Lock
+
+- `release/release-v0.1.0.json` is the machine-readable source for the qualified
+  Python range (`>=3.10,<3.15`) and the base persistence contract (new writes
+  use V4; V1–V4 remain readable).
+- Release validation now fails closed when Python source metadata or built-wheel
+  `Requires-Python` metadata exceeds the qualified CPython 3.10–3.14 range,
+  when active base persistence documentation drifts from V4, or when the active
+  product spec reintroduces obsolete Node/Maven identities.
+- Active migration, compatibility, changelog, Python, and Swift documentation
+  now distinguish base V4 snapshots from independently versioned graph
+  capability formats. The 2026-07-25 cross-language parity audit is explicitly
+  historical evidence for revision `fccb3a9`, not current packaging guidance.
+- Focused release tests, static release validation, Python base/graph wrapper
+  checks, CPython 3.14 wheel builds, isolated installation smoke tests, and
+  built-wheel metadata inspection pass. The next DX blocker is rebuilding the
+  public website and source preview from the same current release truth.
+
 ## Likely Next Tasks
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
@@ -951,10 +969,14 @@ or resume physical-device work until the corresponding documented gate is
 explicitly reached.
 
 The canonical result/trace contracts and shared retrieval/graph conformance
-expectations now cover Rust, Swift, Python, TypeScript, and Kotlin. Base and
-graph runners remain separate because their native aggregates are intentionally
-mutually exclusive. The formal status source is
-`docs/product/reports/cross-language-wrapper-parity-audit.md`.
+expectations now cover Rust, Swift, Python, TypeScript, and Kotlin. Python,
+Node, and Kotlin base and graph runners remain separate because their native
+aggregates are intentionally mutually exclusive; Swift uses the documented
+unified aggregate exception. Current packaging and compatibility status comes
+from `release/release-v0.1.0.json`, `docs/product/release-process.md`,
+`docs/product/compatibility-policy.md`, and the active product spec. The dated
+cross-language parity audit is preserved as historical evidence for its
+recorded source revision.
 
 When the owner explicitly resumes release work, continue the parked release
 gates from `docs/product/release-process.md` and

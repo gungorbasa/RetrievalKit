@@ -33,9 +33,10 @@ All notable user-facing changes and persistence migrations are recorded here.
   cheap no-op when there is nothing to reclaim. Compaction is a synchronous
   maintenance operation and temporarily retains old and replacement structures
   to guarantee an all-or-nothing swap.
-- Checksummed persistence format V3 verifies vectors, chunks, BM25, and
-  tombstones with SHA-256 before loading. Rust, Swift, and Python expose
-  read-only validation APIs and typed corruption failures.
+- Checksummed persistence format V4 verifies vectors, chunks, canonical records
+  and their stable external/internal chunk mappings, BM25, and tombstones with
+  SHA-256 before loading. Rust, Swift, and Python expose read-only validation
+  APIs and typed corruption failures.
 - Parallel Swift exact, keyword, and hybrid searches on one `VectorIndex`, with
   writer-preferring exclusive access for upsert, delete, save, and compaction.
   The C/FFI threading and handle-lifetime contract is now explicit.
@@ -128,9 +129,8 @@ All notable user-facing changes and persistence migrations are recorded here.
   Python rather than being mislabeled as an invalid persisted index format.
 - `RetrievalKitPipeline` now accepts the shared typed `DocumentID` used by the
   progressive Swift API while preserving its existing string result surface.
-- Existing persistence format V1 indexes remain readable.
-- Saving a V1 or V2 index writes format V3 and migrates or upgrades its payload
-  into a checksummed generation under `.snapshots`.
+- V1, V2, and V3 indexes remain readable; their next save publishes a
+  checksummed V4 snapshot under `.snapshots`.
 - Index directories should be treated as RetrievalKit-owned. Applications must
   not modify `.snapshots` or `manifest.json` directly.
 

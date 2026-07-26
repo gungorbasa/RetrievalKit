@@ -1,8 +1,10 @@
 # RetrievalKit v0.1.0 release process
 
-Status: release-candidate and runtime authorization implementation complete;
-external publication blocked on repository/environment configuration and the
-remaining release gates.
+Status: release-candidate and runtime authorization implementation complete.
+The public repository, protected GitHub environments, npm bootstrap packages,
+npm trusted publishers, and Maven signing identity are configured. v0.1.0
+publication remains blocked on the other registry owner setup and release
+evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
 previews from one signed source revision. Python, Node, and Kotlin retain
@@ -14,10 +16,10 @@ The approved npm package names are `@gungorbasa/retrievalkit` and
 `@gungorbasa/retrievalkit-graph`. npm rejected the equivalent unscoped base
 name as too similar to an existing package, so both Node packages use one
 consistent owner scope. The approved Maven group is
-`io.github.gungorbasa`. Approval of those identities does not imply that the
-registries are configured: npm bootstrap/trusted-publisher setup, Maven Central
-namespace verification, signing keys, protected environments, and registry
-credentials remain fail-closed external prerequisites.
+`io.github.gungorbasa`. The npm names were bootstrapped and connected to the
+protected GitHub publication workflow on 2026-07-26. Maven Central namespace
+verification and credentials, PyPI trusted-publisher setup, the signed tag, and
+the provisioned release evidence remain fail-closed external prerequisites.
 
 ## Release contents
 
@@ -149,23 +151,24 @@ value with the authorized inventory, attests the tarballs/evidence, and retains
 the publication record for 180 days.
 
 npm trusted publishing cannot establish a package name that does not exist.
-Before the first RetrievalKit release, an npm owner must:
+The owner completed the one-time bootstrap setup on 2026-07-26:
 
-1. bootstrap both names with a separately reviewed non-release version using a
-   short-lived granular token and required 2FA;
-2. configure each package's trusted publisher for the public
+1. both names received the non-release `0.0.0-bootstrap.0` placeholder;
+2. each package trusts the public
    `gungorbasa/RetrievalKit` repository, `publish-release.yml` workflow, and
    `npm` environment;
-3. revoke the bootstrap token; and
-4. confirm both names and trusted-publisher configuration through the required
-   `npm_trusted_publishers_ready` dispatch input.
+3. the local bootstrap credential was removed; and
+4. neither package contains v0.1.0 SDK artifacts.
 
-The pre-approval job verifies that both public package records exist. The npm
-job verifies that `0.1.0` is unused. Missing bootstrap, missing OIDC trust, an
-existing version, a changed tarball, or a registry integrity mismatch fails
-closed. Because two npm uploads cannot be transactional, a failure after the
-first succeeds requires an incident record and fix-forward release; published
-npm versions are never overwritten.
+Both public records resolved anonymously on 2026-07-26. Re-verify the records
+and exact trusted-publisher settings before setting the required
+`npm_trusted_publishers_ready` dispatch input to true. The pre-approval job then
+verifies that both public package records exist, and the npm job verifies that
+`0.1.0` is unused. Missing bootstrap, missing OIDC trust, an existing version, a
+changed tarball, or a registry integrity mismatch fails closed. Because two npm
+uploads cannot be transactional, a failure after the first succeeds requires an
+incident record and fix-forward release; published npm versions are never
+overwritten.
 
 ## Maven Central publication
 
@@ -204,18 +207,17 @@ environment secrets.
 
 ## Required external GitHub configuration
 
-Before dispatching publication:
+Before dispatching publication, complete the remaining items and re-verify the
+already configured controls:
 
 - the repository plan and visibility must support required reviewers for the
   `release` environment as described by
   [GitHub's deployment protection rules](https://docs.github.com/actions/reference/deployments-and-environments#deployment-protection-rules);
-- create the `release` environment, add at least one owner-approved required
-  reviewer, restrict deployment to signed release tags, and preferably enable
-  prevention of self-review;
+- re-verify the existing `release` environment owner-review rule and `v*` tag
+  restriction;
 - create the separate `pypi` environment and configure PyPI trusted publishing
   for this repository and workflow;
-- create the protected `npm` environment and configure both bootstrapped
-  packages for
+- re-verify the protected `npm` environment and both bootstrapped packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - verify `io.github.gungorbasa` in Central Portal, publish the PGP public key,
   and configure the protected `maven` environment using the

@@ -35,7 +35,7 @@ class ReadmeClaimMutationTests(unittest.TestCase):
     def test_readme_quickstarts_reference_checked_in_sources(self) -> None:
         quickstarts = (
             "wrappers/python-graph/examples/graph_retrieval_quickstart.py",
-            "RetrievalKitGraphRetrievalQuickstart",
+            "scripts/run-swift-quickstart.sh graph-retrieval",
             "wrappers/typescript",
         )
         for quickstart in quickstarts:

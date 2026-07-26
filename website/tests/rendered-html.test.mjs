@@ -36,7 +36,8 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /Public installs are pending; source paths are available/);
   assert.match(html, /Source-qualified does not mean registry-published/);
   assert.match(html, /Package release readiness/);
-  assert.match(html, /No SwiftPM, PyPI, npm, or Maven release is live/);
+  assert.match(html, /No v0\.1\.0 SwiftPM, PyPI, npm, or Maven release is live/);
+  assert.match(html, /bootstrap-only placeholders/);
   assert.match(html, /npm install @gungorbasa\/retrievalkit-graph/);
   assert.match(
     html,
@@ -45,6 +46,10 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(
     html,
     /Coordinates selected; pending Central verification and publication/,
+  );
+  assert.match(
+    html,
+    /Scoped names reserved; trusted publishing configured; v0\.1\.0 unpublished/,
   );
   assert.match(html, /Public source; pending v0\.1\.0 tag and XCFramework release/);
   assert.match(html, /Public repository source checkout/);

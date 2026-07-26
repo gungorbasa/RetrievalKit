@@ -28,11 +28,15 @@ implemented, or superseded by the product spec.
   Node/JVM and Android arm64-v8a and integrates them into the same closed
   Swift/Python/Node/Kotlin bundle. Protected publication jobs consume those
   exact bytes: npm uses OIDC trusted publishing with provenance, and Maven signs
-  the 16 authorized primary artifacts before Central Portal upload. Nothing has
-  been published. npm ownership/bootstrap and trusted-publisher configuration,
-  PyPI trusted publishers, Central namespace verification and user token,
-  protected GitHub environments, the signed tag, and provisioned Phase 7
-  evidence remain external gates.
+  the 16 authorized primary artifacts before Central Portal upload. On
+  2026-07-26 both scoped npm names received the reviewed non-release
+  `0.0.0-bootstrap.0` placeholder and were configured to trust
+  `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected `npm`
+  environment. The local npm bootstrap credential was removed afterward.
+  Both public records resolve anonymously. These placeholders are name
+  reservations, not v0.1.0 SDK releases. PyPI trusted publishers, Central
+  namespace verification and user token, the signed tag, and provisioned
+  Phase 7 evidence remain external gates.
 - 2026-07-26 Phase B publication-authorization decision: no completed
   authorization file is committed to the release revision. The exact signed-tag
   candidate, candidate/scheduled/release workflow run IDs, passing Phase 7
@@ -916,20 +920,21 @@ Verification completed without benchmark workloads:
 
 ## Likely Next Tasks
 
-The scoped SDK wrapper implementation is complete. Benchmark Phases 0–7 and
-release-candidate work remain parked. Do not rebuild frozen fixtures, provision
-release evidence, publish packages, or resume physical-device work without a
-new explicit owner task.
+The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
+npm names, protected GitHub environments, and Maven signing identity are
+configured. Continue one owner-interactive registry step at a time:
 
-The next owner decisions are:
+1. re-verify both npm bootstrap records and their exact trusted-publisher
+   configuration immediately before publication dispatch;
+2. create or authenticate the PyPI owner account and configure both projects'
+   trusted publishers without publishing v0.1.0;
+3. verify the `io.github.gungorbasa` Central namespace and install its user
+   token in the protected `maven` environment;
+4. only then resume the signed-tag and provisioned Phase 7 evidence gates.
 
-1. clear final npm names and Maven coordinates;
-2. decide when to qualify more Node operating systems/architectures and Android
-   ABIs;
-3. separately authorize repair or regeneration of the inconsistent frozen V3
-   quality fixture;
-4. authorize wrapper-overhead measurements before making any cross-language
-   performance claim.
+Do not publish v0.1.0, create its tag, rebuild frozen qualification fixtures,
+or resume physical-device work until the corresponding documented gate is
+explicitly reached.
 
 The canonical result/trace contracts and shared retrieval/graph conformance
 expectations now cover Rust, Swift, Python, TypeScript, and Kotlin. Base and

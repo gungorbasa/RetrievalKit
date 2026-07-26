@@ -61,19 +61,28 @@ def validate_status_labels(readme: str) -> None:
     for sdk in ("Swift `RetrievalKit`", "Swift `RetrievalKitGraph`", "Swift `EmbeddingKit`", "Swift `RetrievalKitPipeline`", "Python `retrievalkit`", "Python `retrievalkit-graph`"):
         require(re.search(rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source\*\* \|", readme), f"incorrect source status for {sdk}")
     for sdk in (
-        "TypeScript `retrievalkit-node-local`",
-        "TypeScript `retrievalkit-node-graph-local`",
-        "Kotlin/JVM `retrievalkit`",
-        "Kotlin/JVM `retrievalkit-graph`",
-        "Android `retrievalkit-android`",
-        "Android `retrievalkit-graph-android`",
+        "TypeScript `@gungorbasa/retrievalkit`",
+        "TypeScript `@gungorbasa/retrievalkit-graph`",
     ):
         require(
             re.search(
-                rf"\| {re.escape(sdk)} \|.*provisional.*\| \*\*Available from source\*\* \|",
+                rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source; bootstrap placeholder only\*\* \|",
                 readme,
             ),
-            f"incorrect provisional source status for {sdk}",
+            f"incorrect npm bootstrap status for {sdk}",
+        )
+    for sdk in (
+        "Kotlin/JVM `io.github.gungorbasa:retrievalkit`",
+        "Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph`",
+        "Android `io.github.gungorbasa:retrievalkit-android`",
+        "Android `io.github.gungorbasa:retrievalkit-graph-android`",
+    ):
+        require(
+            re.search(
+                rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source; Maven unpublished\*\* \|",
+                readme,
+            ),
+            f"incorrect Maven source status for {sdk}",
         )
     require(
         re.search(

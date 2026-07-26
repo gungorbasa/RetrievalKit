@@ -19,9 +19,9 @@ const sections: DocSection[] = [
     eyebrow: "Release readiness",
     title: "Public installs are pending; source paths are available",
     summary:
-      "SwiftPM, PyPI, npm, and Maven publication have not happened. The commands below show the intended install shape, not packages that are available today.",
+      "No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. The npm names contain bootstrap-only placeholders; the commands below show the intended install shape, not an SDK available today.",
     body:
-      "The package identities are selected, but npm ownership, Central namespace verification, and registry publication have not happened. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
+      "The package identities are selected, and npm ownership plus GitHub trusted publishing are configured. Central namespace verification and all v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
 npm install @gungorbasa/retrievalkit-graph
@@ -144,7 +144,7 @@ struct ApolloSearch {
     summary:
       "Promise-based N-API calls keep native work off the event loop and preserve Float32Array, bigint, and typed graph values.",
     body:
-      "The @gungorbasa/retrievalkit and @gungorbasa/retrievalkit-graph npm identities are selected after npm rejected the equivalent unscoped base name. Bootstrap and publication are pending. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed.",
+      "The @gungorbasa/retrievalkit and @gungorbasa/retrievalkit-graph npm names are reserved with bootstrap-only placeholders, and both trust this repository's protected publication workflow. v0.1.0 is not published. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed.",
     code: `import { RetrievalDatabaseBuilder }
   from "@gungorbasa/retrievalkit";
 
@@ -234,7 +234,7 @@ const platforms = [
   ["Swift", "iOS 15+ arm64 device / simulator", "Source-qualified; release pending"],
   ["Python", "macOS arm64 / CPython 3.10–3.14", "Initial wheel target; unpublished"],
   ["Python", "Ubuntu / Windows", "Portability CI only"],
-  ["Node.js", "macOS arm64 / Node 22.13+ or 24 LTS", "Source-qualified; unpublished"],
+  ["Node.js", "macOS arm64 / Node 22.13+ or 24 LTS", "Bootstrap placeholder only; v0.1.0 unpublished"],
   ["Kotlin/JVM", "macOS arm64 / JDK 17 build", "Source-qualified; unpublished"],
   ["Android", "API 24+ / arm64-v8a", "Source-qualified; unpublished"],
 ];
@@ -255,7 +255,7 @@ const releaseReadiness = [
   [
     "Node.js",
     "@gungorbasa/retrievalkit or @gungorbasa/retrievalkit-graph",
-    "Scoped identities selected; pending npm bootstrap and publication",
+    "Scoped names reserved; trusted publishing configured; v0.1.0 unpublished",
     "Authorized repository source checkout",
   ],
   [
@@ -379,9 +379,9 @@ export default function Home() {
           <p className="kicker">Release readiness</p>
           <h2>Source-qualified does not mean registry-published.</h2>
           <p>
-            No SwiftPM, PyPI, npm, or Maven release is live. The shortest
-            eventual commands are documented in the language sections below,
-            while the available route remains source.
+            No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. npm contains
+            bootstrap-only placeholders; the shortest eventual commands are
+            documented below, while the available SDK route remains source.
           </p>
         </div>
         <div

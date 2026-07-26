@@ -8,17 +8,19 @@ The selected npm identities are:
 
 The equivalent unscoped base name was rejected by npm as too similar to an
 existing package, so both Node packages use the release owner's public scope.
-Neither scoped package is published yet. From source or after publication,
-install or load exactly one package in a process. The graph package already
-contains retrieval capability, and its loader rejects mixing native aggregates.
-Browser and WebAssembly builds are not part of this target.
+Both scoped names have bootstrap-only placeholder versions and GitHub trusted
+publishers configured. Those placeholders are not SDK releases; v0.1.0 remains
+unpublished. From source or after the real release, install or load exactly one
+package in a process. The graph package already contains retrieval capability,
+and its loader rejects mixing native aggregates. Browser and WebAssembly builds
+are not part of this target.
 
 ## Installation status
 
 The eventual shortest install will be:
 
 ```bash
-# PENDING — npm bootstrap and publication are not complete.
+# PENDING — bootstrap placeholder only; v0.1.0 is not published.
 npm install @gungorbasa/retrievalkit-graph
 ```
 
@@ -38,8 +40,8 @@ node graph/examples/graph-retrieval.mjs
 
 The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
 24 LTS. Browser, WebAssembly, Windows, Linux, and other architectures are not
-claimed. The selected names are package identities, not npm availability
-claims.
+claimed. The reserved package names and bootstrap placeholders are not SDK
+availability claims.
 
 ## Retrieval-only quickstart
 

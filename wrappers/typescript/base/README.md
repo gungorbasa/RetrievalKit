@@ -23,14 +23,18 @@ await builder.add([
   }
 ]);
 
-await using database = await builder.build();
-const results = await database.search({
-  mode: "hybrid",
-  text: "local search",
-  embedding: new Float32Array([0.1, 0.2, 0.3]),
-  alpha: 0.6,
-  limit: 5
-});
+const database = await builder.build();
+try {
+  const results = await database.search({
+    mode: "hybrid",
+    text: "local search",
+    embedding: new Float32Array([0.1, 0.2, 0.3]),
+    alpha: 0.6,
+    limit: 5
+  });
+} finally {
+  await database.close();
+}
 ```
 
 `search()` is the single retrieval family:
@@ -45,10 +49,11 @@ bulk before `build()`. Embeddings always remain caller-provided
 `Float32Array`s. Results expose `documentId`; internal chunk IDs and chunk keys
 are not part of the common API.
 
-All native operations return promises. Await `close()` or use `await using` to
-release native state after in-flight work. Operations after close reject with
-`RetrievalKitLifecycleError`. Persistence uses `save`, `load`, and read-only
-`validate`; loaded indexes stay resident during search.
+All native operations return promises. Await `close()` in `finally` on every
+supported Node.js version. Node.js 24 callers may use `await using` instead.
+Operations after close reject with `RetrievalKitLifecycleError`. Persistence
+uses `save`, `load`, and read-only `validate`; loaded indexes stay resident
+during search.
 
 Metadata supports strings, booleans, integer `bigint`s, floating-point values,
 and `timestampMillis`. Plain safe integral numbers become integers; use

@@ -19,14 +19,22 @@ await builder.add([
     retrieval: { kind: "content", embedding: new Float32Array([1, 0]) }
   }
 ]);
-await using database = await builder.build();
-await using selection = await database.graph.query({
-  seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["Local"] }
-});
-console.log(
-  await database.retrieval.search({
-    mode: "vector",
-    embedding: new Float32Array([1, 0]),
-    within: selection
-  })
-);
+const database = await builder.build();
+try {
+  const selection = await database.graph.query({
+    seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["Local"] }
+  });
+  try {
+    console.log(
+      await database.retrieval.search({
+        mode: "vector",
+        embedding: new Float32Array([1, 0]),
+        within: selection
+      })
+    );
+  } finally {
+    await selection.close();
+  }
+} finally {
+  await database.close();
+}

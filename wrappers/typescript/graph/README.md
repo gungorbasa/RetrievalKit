@@ -33,20 +33,28 @@ await builder.add([
     retrieval: { kind: "content", embedding: new Float32Array([1, 0]) }
   }
 ]);
-await using database = await builder.build();
-await using selection = await database.graph.query({
-  seed: {
-    kind: "equals",
-    nodeType: "Topic",
-    field: ["title"],
-    values: ["Local"]
+const database = await builder.build();
+try {
+  const selection = await database.graph.query({
+    seed: {
+      kind: "equals",
+      nodeType: "Topic",
+      field: ["title"],
+      values: ["Local"]
+    }
+  });
+  try {
+    const results = await database.retrieval.search({
+      mode: "text",
+      text: "retrieval",
+      within: selection
+    });
+  } finally {
+    await selection.close();
   }
-});
-const results = await database.retrieval.search({
-  mode: "text",
-  text: "retrieval",
-  within: selection
-});
+} finally {
+  await database.close();
+}
 ```
 
 Graph queries return typed matches, complete typed path edges and provenance,
@@ -56,10 +64,10 @@ materializes stable `(recordId, chunkKey)` identities; it preserves Rust-owned
 corpus/generation validation, metadata filtering, lexical ordering, and counts
 before and after filtering.
 
-All potentially blocking work returns promises. Await `close()` on builders,
-databases, and selections, or use `await using`. Errors are mapped to typed
-classes while retaining actionable Rust messages. Integer fields use `bigint`
-for exact signed 64-bit transport.
+All potentially blocking work returns promises. Await `close()` in `finally` on
+builders, databases, and selections. Node.js 24 callers may use `await using`
+instead. Errors are mapped to typed classes while retaining actionable Rust
+messages. Integer fields use `bigint` for exact signed 64-bit transport.
 
 Do not load this package together with `@gungorbasa/retrievalkit` in one process.
 The loader rejects the second aggregate.

@@ -11,8 +11,16 @@ const builder = new GraphDatabaseBuilder({
 await builder.add([
   { id: "local", type: "Topic", fields: { title: "Local" }, content: "Local graph" }
 ]);
-await using database = await builder.build();
-await using selection = await database.graph.query({
-  seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["Local"] }
-});
-console.log(selection.matches);
+const database = await builder.build();
+try {
+  const selection = await database.graph.query({
+    seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["Local"] }
+  });
+  try {
+    console.log(selection.matches);
+  } finally {
+    await selection.close();
+  }
+} finally {
+  await database.close();
+}

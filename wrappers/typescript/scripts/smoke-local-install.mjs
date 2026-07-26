@@ -24,8 +24,14 @@ try {
       `import { RetrievalDatabaseBuilder } from "@gungorbasa/retrievalkit";
 const b = new RetrievalDatabaseBuilder({ corpusId: "smoke", metric: "dotProduct", encoding: "f32" });
 await b.add([{ id: "one", text: "local", embedding: new Float32Array([1, 0]) }]);
-await using db = await b.build();
-if ((await db.search({ mode: "vector", embedding: new Float32Array([1, 0]) }))[0]?.documentId !== "one") process.exit(2);`
+const db = await b.build();
+let matched = false;
+try {
+  matched = (await db.search({ mode: "vector", embedding: new Float32Array([1, 0]) }))[0]?.documentId === "one";
+} finally {
+  await db.close();
+}
+if (!matched) process.exit(2);`
     ],
     [
       "graph",
@@ -33,9 +39,19 @@ if ((await db.search({ mode: "vector", embedding: new Float32Array([1, 0]) }))[0
       `import { GraphDatabaseBuilder } from "@gungorbasa/retrievalkit-graph";
 const b = new GraphDatabaseBuilder({ corpusId: "smoke", schema: { recordNodes: [{ recordType: "Topic", nodeType: "Topic", queryableFields: [["title"]] }] } });
 await b.add([{ id: "one", type: "Topic", fields: { title: "One" }, content: "one" }]);
-await using db = await b.build();
-await using selection = await db.graph.query({ seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["One"] } });
-if (selection.matches[0]?.node.recordId !== "one") process.exit(2);`
+const db = await b.build();
+let matched = false;
+try {
+  const selection = await db.graph.query({ seed: { kind: "equals", nodeType: "Topic", field: ["title"], values: ["One"] } });
+  try {
+    matched = selection.matches[0]?.node.recordId === "one";
+  } finally {
+    await selection.close();
+  }
+} finally {
+  await db.close();
+}
+if (!matched) process.exit(2);`
     ]
   ]) {
     const project = join(temporary, name);

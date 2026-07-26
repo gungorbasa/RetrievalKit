@@ -77,18 +77,21 @@ await builder.add([
   }
 ]);
 
-await using database = await builder.build();
+const database = await builder.build();
+try {
+  const hits = await database.search({
+    mode: "hybrid",
+    text: "Why did we choose Swift?",
+    embedding: new Float32Array([1, 0, 0]),
+    alpha: 0.6,
+    where: { kind: "equals", field: "project", value: "apollo" },
+    limit: 5
+  });
 
-const hits = await database.search({
-  mode: "hybrid",
-  text: "Why did we choose Swift?",
-  embedding: new Float32Array([1, 0, 0]),
-  alpha: 0.6,
-  where: { kind: "equals", field: "project", value: "apollo" },
-  limit: 5
-});
-
-console.log(hits[0]?.documentId);
+  console.log(hits[0]?.documentId);
+} finally {
+  await database.close();
+}
 ```
 
 `search()` is one discriminated family:
@@ -138,24 +141,31 @@ await builder.add([
   }
 ]);
 
-await using database = await builder.build();
-await using selection = await database.graph.query({
-  seed: {
-    kind: "equals",
-    nodeType: "Decision",
-    field: ["project"],
-    values: ["apollo"]
+const database = await builder.build();
+try {
+  const selection = await database.graph.query({
+    seed: {
+      kind: "equals",
+      nodeType: "Decision",
+      field: ["project"],
+      values: ["apollo"]
+    }
+  });
+  try {
+    const projection = await database.graph.projectCandidates(selection);
+    const hits = await database.retrieval.search({
+      mode: "hybrid",
+      text: "native integration",
+      embedding: new Float32Array([1, 0, 0]),
+      alpha: 0.6,
+      within: selection
+    });
+  } finally {
+    await selection.close();
   }
-});
-
-const projection = await database.graph.projectCandidates(selection);
-const hits = await database.retrieval.search({
-  mode: "hybrid",
-  text: "native integration",
-  embedding: new Float32Array([1, 0, 0]),
-  alpha: 0.6,
-  within: selection
-});
+} finally {
+  await database.close();
+}
 ```
 
 Selections are opaque and generation-bound. Projection, metadata filtering,

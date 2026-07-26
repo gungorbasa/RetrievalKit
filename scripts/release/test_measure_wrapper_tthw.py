@@ -93,6 +93,18 @@ class WrapperTthwPlanTests(unittest.TestCase):
             completed.stdout,
         )
 
+    def test_node_22_quickstarts_avoid_node_24_only_await_using_syntax(self) -> None:
+        repository = SCRIPT.parents[2]
+        quickstarts = (
+            repository / "wrappers/typescript/base/examples/retrieval.mjs",
+            repository / "wrappers/typescript/graph/examples/graph-only.mjs",
+            repository / "wrappers/typescript/graph/examples/graph-retrieval.mjs",
+            repository / "wrappers/typescript/scripts/smoke-local-install.mjs",
+        )
+        for quickstart in quickstarts:
+            with self.subTest(quickstart=quickstart):
+                self.assertNotIn("await using", quickstart.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

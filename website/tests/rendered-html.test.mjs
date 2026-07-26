@@ -34,6 +34,7 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /<title>RetrievalKit Docs · Local retrieval SDK<\/title>/i);
   assert.match(html, /Search locally\./);
   assert.match(html, /Install the Python source preview/);
+  assert.match(html, /Swift, Kotlin, and Node\.js APIs/);
   assert.match(html, /TypeScript \/ Node\.js/);
   assert.match(html, /Kotlin \/ Android/);
   assert.match(html, /Search documentation/);

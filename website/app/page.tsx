@@ -200,7 +200,7 @@ export default function Home() {
           <p className="hero-lede">
             Exact vectors, BM25 keyword evidence, metadata filters, and
             relationship-scoped retrieval. One Rust core with native Python,
-            Node.js, and Kotlin APIs.
+            Swift, Kotlin, and Node.js APIs.
           </p>
           <div className="hero-actions">
             <a className="primary-button" href="#install">

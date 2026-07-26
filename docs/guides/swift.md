@@ -26,8 +26,7 @@ Build the local XCFramework and run the checked-in example:
 
 ```bash
 scripts/build-xcframework.sh --macos-only
-swift run --package-path wrappers/swift/RetrievalKit \
-  RetrievalKitRetrievalQuickstart
+scripts/run-swift-quickstart.sh base-retrieval
 ```
 
 The caller owns document IDs, text, metadata, and embeddings. RetrievalKit
@@ -160,8 +159,7 @@ Build and run the combined example:
 
 ```bash
 scripts/build-xcframework.sh --macos-only --graph
-swift run --package-path wrappers/swift/RetrievalKitGraph \
-  RetrievalKitGraphRetrievalQuickstart
+scripts/run-swift-quickstart.sh graph-retrieval
 ```
 
 The common path stores graph records without embeddings and searchable records

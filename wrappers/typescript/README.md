@@ -12,8 +12,10 @@ names remain provisional until naming clearance.
 
 ## Build and verify
 
-The initial target requires macOS arm64, Node.js 20 or newer, and Rust `cargo`.
-From this directory:
+The initial target requires macOS arm64, Node.js 22.13+ LTS or Node.js 24 LTS,
+and Rust `cargo`. Node.js 24 LTS is recommended for a new setup. Current,
+odd-numbered, and end-of-life Node.js releases are rejected even when their
+major version is numerically newer. From this directory:
 
 ```bash
 npm ci
@@ -29,6 +31,8 @@ npm run smoke:install
 `preflight` prints the detected Node.js, Rust, and host values and exits before
 compilation when a requirement is not met. `build:native` invokes the same
 preflight, so it cannot accidentally bypass the platform check.
+Supported LTS ranges are centralized in `scripts/node-support.mjs`; its tests
+also require every package's `engines.node` declaration to match.
 
 `build:native` compiles the same napi-rs crate twice. The base build has no
 `retrievalkit-graph` dependency; the graph build enables the off-by-default

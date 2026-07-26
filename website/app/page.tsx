@@ -43,24 +43,87 @@ target/python-graph-wrapper-check-venv-py*/bin/python \\
       "Pass ordinary records and direct embeddings. Rust infers dimensions and owns identity, filtering, ranking, traces, and persistence.",
     body:
       "Choose retrievalkit-graph when relationships should constrain search. Choose retrievalkit for a flat corpus. The graph aggregate already contains retrieval, so install or load exactly one distribution per process.",
-    code: `from retrievalkit_graph import GraphRetrievalDatabaseBuilder
+    code: `from retrievalkit_graph import (
+    GraphRecordNode,
+    GraphRetrievalDatabaseBuilder,
+    GraphSchema,
+)
 
+schema = GraphSchema(
+    record_nodes=[GraphRecordNode("Note", "Note", ["title"])]
+)
 builder = GraphRetrievalDatabaseBuilder(
     corpus_id="apollo",
     graph=schema,
+    encoding="f32",
 )
 builder.upsert(
-    record,
-    embedding=[1.0, 0.0, 0.0],
+    {
+        "id": "decision-swift",
+        "record_type": "Note",
+        "fields": {"title": "Apple client decision"},
+        "content": "Apollo chose Swift for its Apple client.",
+    },
+    embedding=[1.0, 0.0],
 )
 database = builder.build()
 
 hits = database.retrieval.hybrid_search(
     "Why did we choose Swift?",
-    [1.0, 0.0, 0.0],
+    [1.0, 0.0],
     alpha=0.6,
-)`,
-    tags: ["python", "api", "graph", "hybrid", "builder"],
+    limit=1,
+)
+print(hits[0]["document_id"])  # decision-swift`,
+    tags: ["python", "api", "graph", "hybrid", "builder", "self-contained"],
+  },
+  {
+    id: "swift",
+    eyebrow: "Swift / Apple platforms",
+    title: "One package, selectable retrieval and graph products",
+    summary:
+      "Choose RetrievalKit for local search or RetrievalKitGraph for graph traversal and scoped retrieval. Both products share one graph-capable native artifact.",
+    body:
+      "The repository-local preview supports macOS and iOS on arm64. Build the XCFramework before running source examples. RetrievalKit infers the vector dimension from the first embedding, keeps native work off the caller actor, and exposes typed filters, errors, results, and deterministic async lifetime through Swift concurrency.",
+    code: `import RetrievalKit
+
+@main
+struct ApolloSearch {
+  static func main() async throws {
+    let builder = try RetrievalDatabase.Builder(
+      corpusID: "apollo",
+      encoding: .f32
+    )
+    try await builder.upsert(
+      Document(
+        id: "decision-swift",
+        text: "Apollo chose Swift for its Apple client."
+      ),
+      embedding: [1, 0]
+    )
+    let database = try await builder.build()
+    let hits = try await database.search(
+      text: "Why did we choose Swift?",
+      embedding: [1, 0],
+      alpha: 0.6,
+      limit: 1
+    )
+    print(hits[0].documentID)
+  }
+}
+
+// Build first:
+// scripts/build-xcframework.sh --macos-only`,
+    tags: [
+      "swift",
+      "ios",
+      "macos",
+      "apple",
+      "swiftpm",
+      "api",
+      "graph",
+      "async",
+    ],
   },
   {
     id: "node",
@@ -69,7 +132,7 @@ hits = database.retrieval.hybrid_search(
     summary:
       "Promise-based N-API calls keep native work off the event loop and preserve Float32Array, bigint, and typed graph values.",
     body:
-      "The repository-local preview currently targets Node.js 20+ on macOS arm64. Browser and WebAssembly builds are not part of this target. The base and graph packages are mutually exclusive in one process.",
+      "The repository-local preview currently targets Node.js 22.13+ LTS or Node.js 24 LTS on macOS arm64, with Node.js 24 recommended. Browser and WebAssembly builds are not part of this target. The base and graph packages are mutually exclusive in one process.",
     code: `import { RetrievalDatabaseBuilder }
   from "retrievalkit-node-local";
 
@@ -88,7 +151,8 @@ const hits = await database.search({
   text: "Why Swift?",
   embedding: new Float32Array([1, 0, 0]),
   alpha: 0.6
-});`,
+});
+console.log(hits[0]?.documentId);`,
     tags: ["typescript", "node", "napi", "api", "async"],
   },
   {
@@ -99,17 +163,28 @@ const hits = await database.search({
       "Kotlin uses FloatArray, sealed value types, typed exceptions, and AutoCloseable resources over the shared Rust core.",
     body:
       "Use JDK 17 for the build. Run disk, build, and search work on an application-selected background dispatcher on Android. The current Android artifact targets API 24+ and arm64-v8a.",
-    code: `RetrievalDatabase.Builder("apollo").use { builder ->
-    builder.upsert(
-        Document("decision-swift", "Apollo chose Swift."),
-        floatArrayOf(1f, 0f, 0f),
-    )
-    builder.build().use { database ->
-        val hits = database.search(
-            text = "Why Swift?",
-            embedding = floatArrayOf(1f, 0f, 0f),
-            alpha = 0.6f,
+    code: `import ai.retrievalkit.Document
+import ai.retrievalkit.RetrievalDatabase
+import ai.retrievalkit.VectorEncoding
+
+fun main() {
+    RetrievalDatabase.Builder(
+        "apollo",
+        encoding = VectorEncoding.F32,
+    ).use { builder ->
+        builder.upsert(
+            Document("decision-swift", "Apollo chose Swift."),
+            floatArrayOf(1f, 0f),
         )
+        builder.build().use { database ->
+            val hits = database.search(
+                text = "Why Swift?",
+                embedding = floatArrayOf(1f, 0f),
+                alpha = 0.6f,
+                limit = 1,
+            )
+            println(hits.first().documentId)
+        }
     }
 }`,
     tags: ["kotlin", "android", "jni", "api", "jdk17"],
@@ -137,12 +212,13 @@ use 1 for vector-only or 0 for BM25-only`,
     summary:
       "Portability checks and released-platform support are tracked separately so CI evidence never becomes an accidental product promise.",
     body:
-      "Python source portability is checked on Ubuntu and Windows, while the initial release wheel target remains macOS arm64. Node is macOS arm64. Kotlin/JVM is qualified on macOS with JDK 17, and Android packages arm64-v8a. Other targets remain unclaimed until their full package and consumer matrices pass.",
+      "Swift source qualification covers arm64 macOS and iOS through one XCFramework. Python source portability is checked on Ubuntu and Windows, while the initial release wheel target remains macOS arm64. Node is macOS arm64. Kotlin/JVM is qualified on macOS with JDK 17, and Android packages arm64-v8a. Other targets remain unclaimed until their full package and consumer matrices pass.",
     tags: ["platforms", "windows", "linux", "macos", "android", "support"],
   },
 ];
 
 const platforms = [
+  ["Swift", "macOS / iOS arm64", "Source-qualified XCFramework"],
   ["Python", "macOS arm64", "Release target"],
   ["Python", "Ubuntu / Windows", "Portability CI"],
   ["Node.js", "macOS arm64", "Repository preview"],
@@ -162,6 +238,7 @@ export default function Home() {
               section.title,
               section.summary,
               section.body,
+              section.code ?? "",
               ...section.tags,
             ]
               .join(" ")
@@ -211,7 +288,7 @@ export default function Home() {
             </a>
           </div>
           <p className="release-meta">
-            Source revision <code>{release.sourceRevision}</code> · SHA-256{" "}
+            Python preview revision <code>{release.sourceRevision}</code> · SHA-256{" "}
             <code>{release.archiveSha256}</code>
           </p>
         </div>

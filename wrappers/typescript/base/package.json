@@ -27,7 +27,7 @@
     "prepack": "npm run build"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.13.0 || ^24.0.0"
   },
   "os": ["darwin"],
   "cpu": ["arm64"],

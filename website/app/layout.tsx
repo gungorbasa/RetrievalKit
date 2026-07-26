@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
   const title = "RetrievalKit Docs · Local retrieval SDK";
   const description =
-    "Install and integrate RetrievalKit for private, explainable local search with native Python, Node.js, and Kotlin APIs.";
+    "Install and integrate RetrievalKit for private, explainable local search with native Swift, Python, Node.js, and Kotlin APIs.";
   const socialImage = new URL("/og.png", origin).toString();
 
   return {

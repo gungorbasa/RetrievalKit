@@ -4,13 +4,13 @@ import test from "node:test";
 
 const templateRoot = new URL("../", import.meta.url);
 
-async function render() {
+async function render(pathname = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", {
+    new Request(new URL(pathname, "http://localhost"), {
       headers: { accept: "text/html" },
     }),
     {
@@ -35,23 +35,45 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /Search locally\./);
   assert.match(html, /Install the Python source preview/);
   assert.match(html, /Swift, Kotlin, and Node\.js APIs/);
+  assert.match(html, /Swift \/ Apple platforms/);
+  assert.match(html, /One package, selectable retrieval and graph products/);
+  assert.match(html, /macOS \/ iOS arm64/);
   assert.match(html, /TypeScript \/ Node\.js/);
+  assert.match(html, /Node\.js 22\.13\+ LTS or Node\.js 24 LTS/);
   assert.match(html, /Kotlin \/ Android/);
+  assert.match(html, /schema = GraphSchema/);
+  assert.match(html, /import ai\.retrievalkit\.Document/);
+  assert.match(html, /Python preview revision/);
   assert.match(html, /Search documentation/);
   assert.match(html, /retrievalkit-python-source-preview\.tar\.gz/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });
 
+test("server-renders a useful custom not-found page", async () => {
+  const response = await render("/missing-documentation-route");
+  assert.equal(response.status, 404);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /This route is not in the corpus\./);
+  assert.match(html, /Back to documentation/);
+  assert.match(html, /Browse SDK guides/);
+  assert.match(html, /href="\/#languages"/);
+  assert.doesNotMatch(html, /^Not found$/i);
+});
+
 test("removes starter-only files and dependencies", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, notFound, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/not-found.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /RetrievalKit/);
   assert.match(page, /type="search"/);
   assert.match(layout, /RetrievalKit Docs/);
+  assert.match(notFound, /Page not found/);
   assert.doesNotMatch(layout, /codex-preview|Starter Project/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 

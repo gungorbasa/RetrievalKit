@@ -6,6 +6,17 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-26 Phase A DX implementation: the clean-source onboarding harness now
+  measures Python, Swift, Node.js, and Kotlin with schema-v2 evidence; it runs
+  monthly and on demand. Swift quickstarts use a checked entrypoint that reports
+  the exact XCFramework build and retry commands. TypeScript supports maintained
+  Node.js 22.13+ and 24 LTS ranges through one tested policy shared by preflight
+  and package engines; the refreshed development dependency tree has zero npm
+  audit findings. Kotlin builds require JDK 17 while published bytecode targets
+  Java 11+, and preflight validates the exact `JAVA_HOME` binary with actionable
+  recovery. The local Sites source now includes Swift, complete language
+  snippets, responsive mobile actions, and a custom 404, but this Phase A work
+  has not been saved or deployed to the public site.
 - 2026-07-26 Swift distribution decision: the root `Package.swift` is the only
   public Swift manifest. It exposes `RetrievalKit`, `RetrievalKitGraph`,
   `EmbeddingKit`, and `RetrievalKitPipeline` over the single
@@ -18,12 +29,14 @@ implemented, or superseded by the product spec.
   separate Swift product. Public release is no longer blocked on a standalone
   graph repository; owner authorization, signed-tag, claims, and Phase 7 gates
   remain.
-- 2026-07-25 wrapper onboarding qualification: CI now exercises Node/macOS
+- 2026-07-25 wrapper onboarding qualification baseline: CI now exercises Node/macOS
   arm64, Kotlin/JVM/macOS arm64 with JDK 17, Android arm64-v8a, and explicitly
   non-release Python source portability on Windows. Wrapper build entrypoints
   run actionable Python, Node, or Kotlin/JDK/NDK preflights. The manual
-  onboarding workflow records clean-export time-to-first-result evidence and
-  environment/cache caveats for Python, Node, and Kotlin. Searchable public
+  onboarding workflow originally recorded clean-export time-to-first-result
+  evidence and environment/cache caveats for Python, Node, and Kotlin; the
+  2026-07-26 Phase A update above supersedes that wrapper set and cadence.
+  Searchable public
   source-preview docs are deployed at
   `https://retrievalkit-docs.gungorbasa.chatgpt.site`; their versioned Python
   bundle is built from commit `68b5517`, carries its SHA-256 on the page, and

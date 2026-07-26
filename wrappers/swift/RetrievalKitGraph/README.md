@@ -84,9 +84,12 @@ Run the focused examples:
 
 ```bash
 scripts/build-xcframework.sh --macos-only --graph
-swift run --package-path wrappers/swift/RetrievalKitGraph RetrievalKitGraphQuickstart
-swift run --package-path wrappers/swift/RetrievalKitGraph RetrievalKitGraphRetrievalQuickstart
+scripts/run-swift-quickstart.sh graph
+scripts/run-swift-quickstart.sh graph-retrieval
 ```
+
+The checked entrypoint stops before SwiftPM when the graph-capable XCFramework
+is missing and prints the exact build command and retry command.
 
 Run `scripts/verify-swift-graph-wrapper.sh` for linkage isolation, all Swift
 tests, and exact output checks for retrieval-only, graph-only, and combined

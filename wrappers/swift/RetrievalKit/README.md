@@ -41,6 +41,17 @@ The script writes:
 target/apple/RetrievalKitFFI.xcframework
 ```
 
+Use the checked quickstart entrypoint after the build:
+
+```bash
+scripts/run-swift-quickstart.sh base-retrieval
+```
+
+If the XCFramework is missing, this command stops before SwiftPM and prints the
+exact build command and retry command. This avoids the lower-level binary-target
+resolution error produced by invoking `swift run` directly in a fresh source
+checkout.
+
 `Package.local.swift` exists for low-level development against
 `target/debug/libretrievalkit_ffi.a`, but release validation should use the
 default `Package.swift` and the XCFramework.
@@ -86,10 +97,10 @@ Every result returns effective metadata (chunk values override document
 values). Hybrid traces expose `alpha`, source ranks, normalized scores, and
 matched terms. Returned hits already passed any filter.
 
-Run the focused example with:
+Run the focused example with the checked entrypoint:
 
 ```bash
-swift run --package-path wrappers/swift/RetrievalKit RetrievalKitRetrievalQuickstart
+scripts/run-swift-quickstart.sh base-retrieval
 ```
 
 ## Lower-level API

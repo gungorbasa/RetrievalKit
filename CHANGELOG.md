@@ -27,7 +27,9 @@ All notable user-facing changes and persistence migrations are recorded here.
   if a process exits or crashes.
 - Explicit Rust, Swift, and Python index compaction removes tombstoned payloads,
   preserves active chunk IDs, reports estimated reclaimed memory, and remains a
-  cheap no-op when there is nothing to reclaim.
+  cheap no-op when there is nothing to reclaim. Compaction is a synchronous
+  maintenance operation and temporarily retains old and replacement structures
+  to guarantee an all-or-nothing swap.
 - Checksummed persistence format V3 verifies vectors, chunks, BM25, and
   tombstones with SHA-256 before loading. Rust, Swift, and Python expose
   read-only validation APIs and typed corruption failures.
@@ -61,10 +63,18 @@ All notable user-facing changes and persistence migrations are recorded here.
   capability-oriented quickstarts.
 - Combined Swift/Python release-candidate tooling with reproducible artifact
   inventory, SBOM, provenance, and fail-closed publication authorization.
-
-Compaction is a synchronous maintenance operation. It temporarily retains old
-and replacement structures to guarantee an all-or-nothing swap.
 - Token-aware Swift and Python ingestion pipelines with custom chunker support.
+- Clean-source onboarding qualification now measures Python, Swift, Node.js,
+  and Kotlin time to first result, records an explicit evidence schema and
+  Swift toolchain metadata, and runs monthly or on demand.
+- Source-preview documentation now includes searchable Swift guidance,
+  self-contained language examples, responsive mobile actions, and a recovery
+  page for unknown routes.
+- Node.js wrapper tooling now accepts the maintained Node.js 22.13+ and 24 LTS
+  ranges, keeps package engine declarations synchronized, and has zero npm
+  audit findings after its development-tool refresh. Kotlin preflight now
+  distinguishes the required JDK 17 build toolchain from the Java 11 bytecode
+  target and reports the exact selected Java binary with recovery commands.
 
 ### Compatibility
 

@@ -24,8 +24,31 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
-SCHEMA_VERSION = 1
-WRAPPERS = ("python", "node", "kotlin")
+SCHEMA_VERSION = 2
+WRAPPERS = ("python", "swift", "node", "kotlin")
+RESULT_SCHEMA = {
+    "duration_unit": "seconds",
+    "status_values": ["passed", "failed"],
+    "result_required_fields": [
+        "wrapper",
+        "status",
+        "duration_seconds",
+        "phases",
+    ],
+    "phase_required_fields": [
+        "name",
+        "command",
+        "duration_seconds",
+        "status",
+        "expected_output",
+        "output_tail",
+        "error",
+    ],
+    "success_condition": (
+        "Every planned phase passes and the final phase output contains its "
+        "declared expected_output marker."
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -43,6 +66,7 @@ class PhaseResult:
     command: list[str]
     duration_seconds: float
     status: str
+    expected_output: str | None
     output_tail: str
     error: str | None = None
 
@@ -121,6 +145,7 @@ def machine_metadata(repo: Path, python_bin: str) -> dict[str, Any]:
             "python": version_output([python_bin, "--version"], cwd=repo),
             "rustc": version_output(["rustc", "--version"], cwd=repo),
             "cargo": version_output(["cargo", "--version"], cwd=repo),
+            "swift": version_output(["swift", "--version"], cwd=repo),
             "node": version_output(["node", "--version"], cwd=repo),
             "npm": version_output(["npm", "--version"], cwd=repo),
             "java": version_output(["java", "-version"], cwd=repo),
@@ -225,6 +250,20 @@ def wrapper_phases(wrapper: str, python_bin: str) -> tuple[Phase, ...]:
                 expected_output="documentId: 'two'",
             ),
         )
+    if wrapper == "swift":
+        return (
+            Phase(
+                "build-native",
+                ("scripts/build-xcframework.sh", "--macos-only", "--graph"),
+                ".",
+            ),
+            Phase(
+                "first-result",
+                ("scripts/run-swift-quickstart.sh", "graph-retrieval"),
+                ".",
+                expected_output="graph-hybrid=decision-swift",
+            ),
+        )
     if wrapper == "kotlin":
         return (
             Phase(
@@ -283,6 +322,7 @@ def run_phase(root: Path, phase: Phase) -> PhaseResult:
         command=list(phase.command),
         duration_seconds=duration,
         status=status,
+        expected_output=phase.expected_output,
         output_tail=output[-4000:],
         error=error,
     )
@@ -331,6 +371,7 @@ def build_report(
     return {
         "schema_version": SCHEMA_VERSION,
         "kind": "wrapper-onboarding-tthw",
+        "result_schema": RESULT_SCHEMA,
         "recorded_at": datetime.now(UTC).isoformat(),
         "source": {
             "revision": source_revision(repo),
@@ -373,7 +414,7 @@ def build_report(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Measure clean-source Python, Node, and Kotlin onboarding time. "
+            "Measure clean-source Python, Swift, Node, and Kotlin onboarding time. "
             "This is not a runtime performance benchmark."
         )
     )

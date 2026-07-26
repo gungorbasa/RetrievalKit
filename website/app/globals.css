@@ -146,6 +146,7 @@ nav a:hover {
 
 .hero-copy,
 .result-card {
+  min-width: 0;
   position: relative;
   z-index: 1;
 }
@@ -238,6 +239,7 @@ h1 {
 
 .release-meta code {
   color: #435154;
+  overflow-wrap: anywhere;
 }
 
 .result-card {
@@ -624,6 +626,43 @@ footer .brand-mark {
   background: #223033;
 }
 
+.not-found-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.not-found {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 920px;
+  padding: 96px 7vw 120px;
+  width: 100%;
+}
+
+.not-found .status-pill {
+  align-self: flex-start;
+}
+
+.not-found .kicker {
+  margin: 42px 0 14px;
+}
+
+.not-found h1 {
+  font-size: clamp(54px, 7vw, 96px);
+}
+
+.not-found > p:not(.kicker) {
+  color: var(--muted);
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.65;
+  margin: 30px 0 0;
+  max-width: 720px;
+}
+
 @media (max-width: 1050px) {
   .hero {
     grid-template-columns: 1fr;
@@ -666,6 +705,16 @@ footer .brand-mark {
   .hero {
     min-height: auto;
     padding: 64px 22px 74px;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .hero-actions a {
+    text-align: center;
   }
 
   h1 {
@@ -736,6 +785,10 @@ footer .brand-mark {
     flex-direction: column;
     gap: 20px;
     padding: 34px 22px;
+  }
+
+  .not-found {
+    padding: 76px 22px 88px;
   }
 }
 

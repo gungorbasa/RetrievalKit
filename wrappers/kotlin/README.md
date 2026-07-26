@@ -83,13 +83,22 @@ The base native crate is built without the Cargo `graph` feature and has no
 
 ## Build and test
 
-The checked-in Gradle wrapper pins Gradle 8.10.2. Use JDK 17 for the build
-toolchain; the produced JVM bytecode targets Java 11. On macOS, select JDK 17
-and run the preflight before compiling:
+The checked-in Gradle wrapper pins Gradle 8.10.2. These are two different Java
+requirements:
+
+- **Build toolchain:** JDK 17 is required to run Gradle and compile the wrapper.
+- **Produced library:** JVM bytecode targets Java 11, so consuming applications
+  may run the built JVM artifact on a Java 11+ runtime.
+
+Having Java 11 or a newer non-LTS JDK such as Java 25 on `PATH` does not satisfy
+the build requirement. On macOS, select an installed JDK 17, verify the actual
+binary, and run the preflight before compiling:
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 export PATH="$JAVA_HOME/bin:$PATH"
+"$JAVA_HOME/bin/java" -version
+./scripts/preflight.test.sh
 ./scripts/preflight.sh jvm
 ./scripts/build-native.sh jvm
 ./gradlew :base:test :graph:test
@@ -102,9 +111,11 @@ The three examples cover retrieval-only, graph-only, and graph-scoped
 retrieval. They use progressive Rust builders and do not expose native handles,
 internal chunk IDs, or keyed embedding maps.
 
-The preflight prints required and detected Java, Rust, and host values.
-`build-native.sh` invokes it again and stops with a corrective JDK message
-instead of passing an unsupported Java version to Gradle.
+The preflight uses `$JAVA_HOME/bin/java` when `JAVA_HOME` is set, prints the
+selected binary plus required and detected Java, Rust, and host values, and
+explains the JDK 17 versus Java 11 distinction. `build-native.sh` invokes it
+again and stops with installation, selection, and verification commands instead
+of passing an unsupported Java version to Gradle.
 
 Android requires Rust's `aarch64-linux-android` standard library plus Android
 NDK 26. The script defaults to the standard macOS SDK location and accepts

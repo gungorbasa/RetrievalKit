@@ -1,8 +1,9 @@
 # RetrievalKit Docs
 
 Public, searchable documentation for the RetrievalKit source preview. The site
-publishes one end-to-end Python installation path for macOS Apple Silicon and
-keeps the Node.js, Kotlin/JVM, Android, and Windows portability status explicit.
+publishes one end-to-end Python installation path for macOS Apple Silicon,
+documents Swift, Node.js, Kotlin/JVM, and Android APIs, and keeps released
+platform support separate from portability evidence.
 
 ## Prerequisites
 

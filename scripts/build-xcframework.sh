@@ -20,7 +20,9 @@ usage() {
 usage:
   scripts/build-xcframework.sh [--macos-only] [--graph]
 
-Builds target/apple/RetrievalKitFFI.xcframework from retrievalkit-ffi.
+Builds a local Apple XCFramework from retrievalkit-ffi. The default output is
+target/apple/RetrievalKitFFI.xcframework; --graph selects the graph-capable
+target/apple/RetrievalKitGraphFFI.xcframework aggregate.
 
 Options:
   --macos-only   build only the local macOS arm64 slice; useful for script smoke checks

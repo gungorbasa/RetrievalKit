@@ -159,8 +159,9 @@ Expected output: `graph-hybrid=decision-swift`.
 
 ### TypeScript/Node
 
-The initial Node target is macOS arm64 with Node.js 20 or newer. Install
-[Rust](https://rustup.rs/) and Node.js, then run:
+The initial Node target is macOS arm64 with Node.js 22.13+ LTS or Node.js 24
+LTS. Install [Rust](https://rustup.rs/) and a supported Node.js LTS release,
+then run:
 
 ```bash
 cd wrappers/typescript
@@ -174,9 +175,9 @@ The printed result contains `documentId: 'local'`.
 
 ### Kotlin/JVM
 
-The initial Kotlin/JVM native package runs on macOS arm64. It requires Rust and
-JDK 17; the produced bytecode targets Java 11. On macOS, select an installed
-JDK 17 and run:
+The initial Kotlin/JVM native package runs on macOS arm64. Building requires
+Rust and JDK 17; the produced bytecode can run on Java 11+. On macOS, select an
+installed JDK 17 and run:
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
@@ -196,8 +197,7 @@ Run the Swift graph-enabled Apollo example:
 
 ```bash
 scripts/build-xcframework.sh --macos-only --graph
-swift run --package-path wrappers/swift/RetrievalKitGraph \
-  RetrievalKitGraphRetrievalQuickstart
+scripts/run-swift-quickstart.sh graph-retrieval
 ```
 
 Expected output: `graph-hybrid=decision-swift`.

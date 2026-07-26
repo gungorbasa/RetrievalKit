@@ -94,15 +94,24 @@ filtering, lexical order, stale/cross-corpus rejection, and ranking.
 ## Build and verify from source
 
 The JNI crate is compiled twice: base without the `graph` feature and graph with
-it. Use JDK 17 with the pinned Gradle/Android plugin toolchain. On macOS, select
-an installed JDK 17 before running the preflight. It reports both required and
-detected Java, Rust, host, and (for Android) NDK values, then exits before a
-build if they do not match:
+it. **JDK 17 is the build toolchain requirement:** it runs Gradle and compiles
+the wrapper. **Java 11 is the produced bytecode/runtime target:** applications
+consuming the already-built JVM artifact may use Java 11 or newer. A Java 11
+runtime—or a newer non-JDK-17 installation such as Java 25—does not replace the
+JDK 17 required to build from source.
+
+On macOS, select an installed JDK 17 and verify the selected binary before
+running the preflight. When `JAVA_HOME` is set, the preflight checks that exact
+`$JAVA_HOME/bin/java`, reports required and detected Java, Rust, host, and (for
+Android) NDK values, then exits with installation and selection commands before
+a build if they do not match:
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 export PATH="$JAVA_HOME/bin:$PATH"
+"$JAVA_HOME/bin/java" -version
 cd wrappers/kotlin
+./scripts/preflight.test.sh
 ./scripts/preflight.sh jvm
 ./scripts/build-native.sh jvm
 ./gradlew :base:test :graph:test

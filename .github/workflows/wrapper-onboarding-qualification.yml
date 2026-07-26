@@ -2,6 +2,9 @@ name: Wrapper Onboarding Qualification
 
 on:
   workflow_dispatch:
+  schedule:
+    # This expensive clean-source qualification runs monthly on the default branch.
+    - cron: "17 4 1 * *"
 
 permissions:
   contents: read
@@ -12,7 +15,7 @@ concurrency:
 
 jobs:
   clean-source-tthw:
-    name: Measure Python, Node, and Kotlin time to first result
+    name: Measure Python, Swift, Node, and Kotlin time to first result
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -42,6 +45,8 @@ jobs:
       - name: Validate fixed onboarding plan
         run: |
           python -m unittest scripts.release.test_measure_wrapper_tthw
+          node --test wrappers/typescript/scripts/preflight.test.mjs
+          bash wrappers/kotlin/scripts/preflight.test.sh
           python scripts/release/measure_wrapper_tthw.py \
             --repo . \
             --output target/wrapper-onboarding/plan-unused.json \

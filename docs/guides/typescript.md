@@ -131,9 +131,11 @@ from Rust as typed values.
 
 ## Build and verify from source
 
-The initial target requires macOS arm64, Node.js 20 or newer, and Rust `cargo`.
-The preflight prints detected values and exits before compilation when they do
-not match.
+The initial target requires macOS arm64, Node.js 22.13+ LTS or Node.js 24 LTS,
+and Rust `cargo`. Node.js 24 LTS is recommended for a new setup. The preflight
+rejects Current, odd-numbered, and end-of-life Node.js releases even when their
+major version is numerically newer, then prints an actionable LTS recovery
+message before compilation.
 
 ```bash
 cd wrappers/typescript

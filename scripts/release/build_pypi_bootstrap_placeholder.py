@@ -37,7 +37,7 @@ def write_source(repo: Path, project: str, source: Path) -> None:
     (source / "pyproject.toml").write_text(
         f"""\
 [build-system]
-requires = ["setuptools==80.9.0"]
+requires = ["setuptools==74.1.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -46,13 +46,13 @@ version = "{VERSION}"
 description = "Ownership bootstrap placeholder; not a RetrievalKit SDK release"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license = {{ text = "Apache-2.0" }}
 authors = [
   {{ name = "EGGYOLK YAZILIM TİCARET LİMİTED ŞİRKETİ" }}
 ]
 classifiers = [
   "Development Status :: 1 - Planning",
+  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
 ]
 
@@ -61,6 +61,7 @@ Repository = "https://github.com/gungorbasa/RetrievalKit"
 
 [tool.setuptools]
 py-modules = ["{module}"]
+license-files = ["LICENSE", "NOTICE"]
 """,
         encoding="utf-8",
     )
@@ -100,16 +101,29 @@ def validate_artifacts(project: str, output: Path) -> None:
         )
         metadata = wheel.read(metadata_name).decode("utf-8")
         names = set(wheel.namelist())
+    metadata_version = next(
+        line.removeprefix("Metadata-Version: ")
+        for line in metadata.splitlines()
+        if line.startswith("Metadata-Version: ")
+    )
+    if metadata_version not in {"2.1", "2.2", "2.3"}:
+        raise SystemExit(
+            f"unsupported Metadata-Version {metadata_version} in {wheel_path.name}"
+        )
     required_metadata = (
         f"Name: {project}\n",
         f"Version: {VERSION}\n",
-        "License-Expression: Apache-2.0\n",
+        "License: Apache-2.0\n",
     )
     for value in required_metadata:
         if value not in metadata:
             raise SystemExit(f"missing {value.strip()!r} in {wheel_path.name}")
     for license_name in ("LICENSE", "NOTICE"):
-        if not any(name.endswith(f".dist-info/licenses/{license_name}") for name in names):
+        if not any(
+            name.endswith(f".dist-info/{license_name}")
+            or name.endswith(f".dist-info/licenses/{license_name}")
+            for name in names
+        ):
             raise SystemExit(f"missing {license_name} in {wheel_path.name}")
 
 

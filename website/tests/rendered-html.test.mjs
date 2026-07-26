@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { matchesDocumentationSection } from "../app/search.js";
 
 const templateRoot = new URL("../", import.meta.url);
 
@@ -58,7 +59,12 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /0\.0\.0a0 non-SDK placeholders/);
   assert.match(html, /Public source; pending v0\.1\.0 tag and XCFramework release/);
   assert.match(html, /Public repository source checkout/);
-  assert.match(html, /Public graph source bundle and authorized checkout/);
+  assert.match(html, /Public graph source bundle and repository checkout/);
+  assert.match(
+    html,
+    /href="https:\/\/github\.com\/gungorbasa\/RetrievalKit"/,
+  );
+  assert.match(html, /View source on GitHub/);
   assert.match(html, /Swift, Kotlin, and Node\.js APIs/);
   assert.match(html, /Swift \/ Apple platforms/);
   assert.match(html, /One package, selectable retrieval and graph products/);
@@ -68,11 +74,61 @@ test("server-renders the public RetrievalKit documentation", async () => {
   assert.match(html, /Node\.js 22\.13\+ LTS or Node\.js 24 LTS/);
   assert.match(html, /Kotlin \/ Android/);
   assert.match(html, /schema = GraphSchema/);
+  assert.match(html, /GraphRelationship/);
+  assert.match(html, /database\.graph\.query/);
+  assert.match(html, /GraphTraversal\(&quot;contains&quot;\)/);
+  assert.match(html, /within=selection/);
   assert.match(html, /import ai\.retrievalkit\.Document/);
+  assert.match(
+    html,
+    /git clone https:\/\/github\.com\/gungorbasa\/RetrievalKit\.git/,
+  );
+  assert.match(html, /scripts\/run-swift-quickstart\.sh base-retrieval/);
+  assert.match(html, /scripts\/check-python-graph-wrapper\.sh/);
+  assert.match(html, /node base\/examples\/retrieval\.mjs/);
+  assert.match(html, /\.\/gradlew :example-retrieval:run/);
+  assert.match(html, /Expected:/);
+  assert.match(html, /graph-hybrid=decision-swift/);
   assert.match(html, /Python preview revision/);
   assert.match(html, /Search documentation/);
   assert.match(html, /retrievalkit-python-source-preview\.tar\.gz/);
+  assert.doesNotMatch(html, /\/Users\/|\.vinext\/fonts|file:/);
+  assert.doesNotMatch(
+    html,
+    /<link[^>]+rel="preload"[^>]+as="font"/i,
+  );
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
+});
+
+test("documentation search matches release-audit queries by term", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  for (const phrase of [
+    "hybrid alpha",
+    "graph scoped search",
+    "embedding dimension",
+  ]) {
+    assert.match(page.toLowerCase(), new RegExp(phrase));
+  }
+
+  const python = {
+    eyebrow: "Python",
+    title: "Scoped retrieval",
+    summary: "Graph scoped search",
+    body: "Tune hybrid ranking with query-time alpha.",
+    tags: ["python"],
+  };
+  const errors = {
+    eyebrow: "Debugging",
+    title: "Embedding errors",
+    summary: "Correct the query",
+    body: "An embedding dimension mismatch reports expected and actual values.",
+    tags: ["errors"],
+  };
+
+  assert.equal(matchesDocumentationSection(python, "hybrid alpha"), true);
+  assert.equal(matchesDocumentationSection(python, "graph scoped search"), true);
+  assert.equal(matchesDocumentationSection(errors, "embedding dimension"), true);
+  assert.equal(matchesDocumentationSection(python, "android jni"), false);
 });
 
 test("server-renders a useful custom not-found page", async () => {
@@ -101,6 +157,8 @@ test("removes starter-only files and dependencies", async () => {
   assert.match(layout, /RetrievalKit Docs/);
   assert.match(notFound, /Page not found/);
   assert.doesNotMatch(layout, /codex-preview|Starter Project/);
+  assert.doesNotMatch(layout, /next\/font|Geist/);
+  assert.doesNotMatch(page, /authorized repository|authorized checkout/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 
   await assert.rejects(

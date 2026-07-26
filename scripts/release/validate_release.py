@@ -268,6 +268,10 @@ def static_validation(repo: Path) -> dict[str, Any]:
     require((repo / f"docs/product/v{version}-migration.md").is_file(), "release migration guide missing")
     cargo = (repo / "Cargo.toml").read_text()
     require(f'version = "{version}"' in cargo, "Cargo workspace version mismatch")
+    require(
+        f'repository = "{config["repository"]}"' in cargo,
+        "Cargo workspace repository differs from release config",
+    )
     for manifest in sorted((repo / "crates").glob("*/Cargo.toml")):
         require("version.workspace = true" in manifest.read_text(), f"crate does not inherit workspace version: {manifest}")
     for pyproject in (repo / "wrappers/python/pyproject.toml", repo / "wrappers/python-graph/pyproject.toml"):

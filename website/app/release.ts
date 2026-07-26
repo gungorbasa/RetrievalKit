@@ -1,5 +1,6 @@
 export const release = {
   sourceRevision: "68b5517",
+  repositoryUrl: "https://github.com/gungorbasa/RetrievalKit",
   archiveName: "retrievalkit-python-source-preview.tar.gz",
   directoryName: "retrievalkit-python-source-preview",
   archiveUrl: "/downloads/retrievalkit-python-source-preview.tar.gz",

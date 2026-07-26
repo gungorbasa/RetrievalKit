@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { release } from "./release";
+import { matchesDocumentationSection } from "./search.js";
 
 type DocSection = {
   id: string;
@@ -10,6 +11,9 @@ type DocSection = {
   summary: string;
   body: string;
   code?: string;
+  quickstart?: string;
+  expected?: string;
+  guide?: string;
   tags: string[];
 };
 
@@ -21,7 +25,7 @@ const sections: DocSection[] = [
     summary:
       "No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. The npm and PyPI names contain bootstrap-only placeholders; the commands below show the intended install shape, not an SDK available today.",
     body:
-      "The package identities are selected. npm plus PyPI ownership and trusted publishing are configured, and the Maven Central namespace and protected credentials are ready. All v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
+      "The package identities are selected. npm plus PyPI ownership and trusted publishing are configured, and the Maven Central namespace and protected credentials are ready. All v0.1.0 registry publications remain pending. Until publication, use the public repository source quickstarts; the Python graph source bundle is the only packaged public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
 npm install @gungorbasa/retrievalkit-graph
@@ -36,6 +40,9 @@ npm install @gungorbasa/retrievalkit-graph
 implementation(
   "io.github.gungorbasa:retrievalkit-graph:0.1.0"
 )`,
+    quickstart: `git clone https://github.com/gungorbasa/RetrievalKit.git
+cd RetrievalKit`,
+    expected: "Next: choose a language quickstart below.",
     tags: [
       "install",
       "publication",
@@ -52,42 +59,82 @@ implementation(
     eyebrow: "Python",
     title: "Progressive builders, Rust-owned retrieval",
     summary:
-      "Pass ordinary records and direct embeddings. Rust infers dimensions and owns identity, filtering, ranking, traces, and persistence.",
+      "Graph scoped search selects candidates before hybrid alpha ranking. Rust owns identity, filtering, ranking, traces, and persistence.",
     body:
-      "Both PyPI names are reserved with 0.0.0a0 non-SDK placeholders and trust the protected publication workflow. v0.1.0 is unpublished. Today, download the macOS arm64 graph source preview or build from a repository checkout. After publication, choose retrievalkit-graph when relationships should constrain search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
+      "Both PyPI names are reserved with 0.0.0a0 non-SDK placeholders and trust the protected publication workflow. v0.1.0 is unpublished. Today, download the macOS arm64 graph source preview or build from a repository checkout. The graph query chooses the candidate scope; hybrid alpha then balances vector and BM25 evidence inside it. After publication, choose retrievalkit-graph for graph scoped search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
     code: `from retrievalkit_graph import (
+    GraphNode,
     GraphRecordNode,
+    GraphRelationship,
     GraphRetrievalDatabaseBuilder,
     GraphSchema,
+    GraphTraversal,
 )
 
 schema = GraphSchema(
-    record_nodes=[GraphRecordNode("Note", "Note", ["title"])]
+    record_nodes=[
+        GraphRecordNode("Project", "Project", ["title"]),
+        GraphRecordNode("Note", "Note", ["title"]),
+    ],
+    relationships=[
+        GraphRelationship(
+            "contains", "Project", "Note", "note_ids", "many"
+        )
+    ],
 )
 builder = GraphRetrievalDatabaseBuilder(
-    corpus_id="apollo",
+    corpus_id="project-notes",
     graph=schema,
     encoding="f32",
 )
+builder.upsert({
+    "id": "apollo",
+    "record_type": "Project",
+    "fields": {
+        "title": "Project Apollo",
+        "note_ids": ["decision-swift"],
+    },
+})
 builder.upsert(
     {
         "id": "decision-swift",
         "record_type": "Note",
         "fields": {"title": "Apple client decision"},
         "content": "Apollo chose Swift for its Apple client.",
+        "metadata": {"status": "approved"},
     },
     embedding=[1.0, 0.0],
 )
 database = builder.build()
 
+selection = database.graph.query(
+    seeds=[GraphNode("Project", "apollo")],
+    traversals=[GraphTraversal("contains")],
+)
 hits = database.retrieval.hybrid_search(
     "Why did we choose Swift?",
     [1.0, 0.0],
+    within=selection,
+    where={"status": "approved"},
     alpha=0.6,
     limit=1,
 )
 print(hits[0]["document_id"])  # decision-swift`,
-    tags: ["python", "api", "graph", "hybrid", "builder", "self-contained"],
+    quickstart: `PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
+target/python-graph-wrapper-check-venv-py*/bin/python \\
+  wrappers/python-graph/examples/graph_retrieval_quickstart.py`,
+    expected: "graph-hybrid=decision-swift",
+    guide: "docs/guides/python.md",
+    tags: [
+      "python",
+      "api",
+      "graph",
+      "hybrid",
+      "hybrid alpha",
+      "graph scoped search",
+      "builder",
+      "self-contained",
+    ],
   },
   {
     id: "swift",
@@ -126,6 +173,10 @@ struct ApolloSearch {
 
 // Build first:
 // scripts/build-xcframework.sh --macos-only`,
+    quickstart: `scripts/build-xcframework.sh --macos-only
+scripts/run-swift-quickstart.sh base-retrieval`,
+    expected: "hybrid=decision-swift",
+    guide: "docs/guides/swift.md",
     tags: [
       "swift",
       "ios",
@@ -165,6 +216,13 @@ const hits = await database.search({
   alpha: 0.6
 });
 console.log(hits[0]?.documentId);`,
+    quickstart: `cd wrappers/typescript
+npm ci
+npm run preflight
+npm run build
+node base/examples/retrieval.mjs`,
+    expected: "The top hit contains documentId: 'two'.",
+    guide: "docs/guides/typescript.md",
     tags: ["typescript", "node", "napi", "api", "async"],
   },
   {
@@ -199,6 +257,14 @@ fun main() {
         }
     }
 }`,
+    quickstart: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
+cd wrappers/kotlin
+./scripts/preflight.sh jvm
+./scripts/build-native.sh jvm
+./gradlew :example-retrieval:run`,
+    expected: "kotlin: Kotlin calls the local Rust retrieval core. (1.0)",
+    guide: "docs/guides/kotlin.md",
     tags: ["kotlin", "android", "jni", "api", "jdk17"],
   },
   {
@@ -215,7 +281,7 @@ use the same embedding model for indexing and queries
 invalid query parameter 'alpha':
 alpha must be finite and between 0 and 1;
 use 1 for vector-only or 0 for BM25-only`,
-    tags: ["errors", "debugging", "dimension", "alpha"],
+    tags: ["errors", "debugging", "dimension", "embedding dimension", "alpha"],
   },
   {
     id: "platforms",
@@ -250,43 +316,32 @@ const releaseReadiness = [
     "Python",
     "retrievalkit or retrievalkit-graph",
     "Names reserved; trusted publishing configured; v0.1.0 unpublished",
-    "Public graph source bundle and authorized checkout",
+    "Public graph source bundle and repository checkout",
   ],
   [
     "Node.js",
     "@gungorbasa/retrievalkit or @gungorbasa/retrievalkit-graph",
     "Scoped names reserved; trusted publishing configured; v0.1.0 unpublished",
-    "Authorized repository source checkout",
+    "Public repository source checkout",
   ],
   [
     "Kotlin",
     "io.github.gungorbasa base or graph artifact",
     "Central namespace and protected credentials configured; v0.1.0 unpublished",
-    "Authorized repository source checkout",
+    "Public repository source checkout",
   ],
 ];
 
 export default function Home() {
   const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(
     () =>
-      normalizedQuery
+      query.trim()
         ? sections.filter((section) =>
-            [
-              section.eyebrow,
-              section.title,
-              section.summary,
-              section.body,
-              section.code ?? "",
-              ...section.tags,
-            ]
-              .join(" ")
-              .toLowerCase()
-              .includes(normalizedQuery),
+            matchesDocumentationSection(section, query),
           )
         : sections,
-    [normalizedQuery],
+    [query],
   );
 
   return (
@@ -300,6 +355,7 @@ export default function Home() {
           <a href="#release-readiness">Release status</a>
           <a href="#languages">Languages</a>
           <a href="#platform-matrix">Platforms</a>
+          <a href={release.repositoryUrl}>GitHub</a>
         </nav>
         <a className="header-cta" href={release.archiveUrl}>
           Download preview
@@ -326,9 +382,13 @@ export default function Home() {
             <a className="secondary-button" href="#languages">
               Explore the APIs
             </a>
+            <a className="secondary-button" href={release.repositoryUrl}>
+              View source on GitHub
+            </a>
           </div>
           <p className="release-meta">
-            Python preview revision <code>{release.sourceRevision}</code> · SHA-256{" "}
+            Python preview revision{" "}
+            <code>{release.sourceRevision.slice(0, 12)}</code> · SHA-256{" "}
             <code>{release.archiveSha256}</code>
           </p>
         </div>
@@ -381,7 +441,10 @@ export default function Home() {
           <p>
             No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. npm and PyPI
             contain bootstrap-only placeholders; the shortest eventual commands
-            are documented below, while the available SDK route remains source.
+            are documented below, while the available SDK route remains the{" "}
+            <a className="text-link" href={release.repositoryUrl}>
+              public GitHub repository
+            </a>.
           </p>
         </div>
         <div
@@ -447,13 +510,44 @@ export default function Home() {
                   <p className="summary">{section.summary}</p>
                   <p>{section.body}</p>
                   {section.id === "install" && (
-                    <a className="text-link" href={release.archiveUrl}>
-                      Download {release.archiveName} →
+                    <div className="doc-links">
+                      <a className="text-link" href={release.repositoryUrl}>
+                        Browse the repository →
+                      </a>
+                      <a className="text-link" href={release.archiveUrl}>
+                        Download {release.archiveName} →
+                      </a>
+                    </div>
+                  )}
+                  {section.guide && (
+                    <a
+                      className="text-link"
+                      href={`${release.repositoryUrl}/blob/main/${section.guide}`}
+                    >
+                      Read the complete {section.eyebrow} guide →
                     </a>
                   )}
                 </div>
-                {section.code && (
-                  <pre><code>{section.code}</code></pre>
+                {(section.code || section.quickstart) && (
+                  <div className="code-stack">
+                    {section.code && (
+                      <div>
+                        <p>API example</p>
+                        <pre><code>{section.code}</code></pre>
+                      </div>
+                    )}
+                    {section.quickstart && (
+                      <div>
+                        <p>Run from source</p>
+                        <pre><code>{section.quickstart}</code></pre>
+                        {section.expected && (
+                          <small>
+                            Expected: <code>{section.expected}</code>
+                          </small>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </article>
             ))
@@ -492,7 +586,10 @@ export default function Home() {
           <span className="brand-mark">RK</span>
           <p>RetrievalKit v0.1.0 source preview</p>
         </div>
-        <p>Apache-2.0 · Local retrieval for fewer than 50K chunks</p>
+        <p>
+          <a href={release.repositoryUrl}>GitHub</a> · Apache-2.0 · Local
+          retrieval for fewer than 50K chunks
+        </p>
       </footer>
     </main>
   );

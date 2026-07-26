@@ -25,21 +25,17 @@ with OpenAI Sites. Hosting identity is recorded in `.openai/hosting.json`.
 ## Source Preview Archive
 
 The public download at
-`public/downloads/retrievalkit-python-source-preview.tar.gz` is generated from a
-committed repository revision:
+`public/downloads/retrievalkit-python-source-preview.tar.gz` is a deterministic
+archive of a committed repository revision. It includes the complete
+repository source and guides except for the website itself, so README links and
+all checked-in language quickstarts remain usable after extraction.
 
 ```bash
-git archive \
-  --format=tar.gz \
-  --prefix=retrievalkit-python-source-preview/ \
-  --output=website/public/downloads/retrievalkit-python-source-preview.tar.gz \
-  <revision> \
-  Cargo.toml Cargo.lock LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md \
-  crates wrappers/python-graph \
-  scripts/check-python-graph-wrapper.sh \
-  scripts/preflight-python-wrapper.sh \
-  benchmarks/graph-conformance/v1/fixture.json
+python3 scripts/release/build_source_preview.py --revision <full-commit-sha>
+python3 scripts/release/build_source_preview.py --check
 ```
 
-After regenerating it, update `app/release.ts` with the source revision and
-SHA-256 digest, then run `npm test`.
+The builder atomically replaces the archive and updates `app/release.ts` with
+the full source revision and SHA-256 digest. Check mode regenerates from that
+revision and fails if the bytes, checksum, path safety, or required inventory
+drift.

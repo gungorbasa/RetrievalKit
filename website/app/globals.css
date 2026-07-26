@@ -11,6 +11,9 @@
   --lime: #c9ef85;
   --orange: #e8703a;
   --code: #111a1b;
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 * {
@@ -25,7 +28,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 a {
@@ -40,7 +43,7 @@ input {
 
 code,
 pre {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .sr-only {
@@ -85,7 +88,7 @@ pre {
   border-radius: 7px;
   color: var(--lime);
   display: inline-flex;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
   height: 30px;
@@ -157,7 +160,7 @@ nav a:hover {
   border-radius: 999px;
   color: var(--green);
   display: inline-flex;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   gap: 8px;
@@ -178,7 +181,7 @@ nav a:hover {
 .eyebrow,
 .aside-label {
   color: var(--green);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -274,7 +277,7 @@ h1 {
 
 .terminal-bar b {
   color: #879493;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -289,7 +292,7 @@ h1 {
 .query-block small,
 .hit small {
   color: #72cbb2;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -314,7 +317,7 @@ h1 {
 
 .trace-step > span {
   color: #6d7d7e;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -324,7 +327,7 @@ h1 {
 
 .trace-step p {
   color: #9eacab;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   margin: 5px 0 0;
 }
@@ -340,14 +343,14 @@ h1 {
 
 .hit strong {
   display: block;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   margin-top: 7px;
 }
 
 .hit > b {
   color: var(--lime);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 24px;
 }
 
@@ -411,6 +414,11 @@ h1 {
   margin-top: 24px;
 }
 
+.release-heading .text-link {
+  display: inline;
+  margin: 0;
+}
+
 .release-table {
   border-top: 1px solid #bac4c0;
   min-width: 0;
@@ -448,7 +456,7 @@ h1 {
 .release-header strong,
 .release-header span {
   color: #788587;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.09em;
@@ -512,7 +520,7 @@ h1 {
 .side-links span {
   color: #8a9698;
   display: block;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -544,7 +552,7 @@ h1 {
 
 .section-heading > p {
   color: #7b898b;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -584,12 +592,39 @@ h1 {
   font-weight: 600;
 }
 
+.doc-links {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+
 .text-link {
   color: var(--green);
   display: inline-block;
   font-size: 13px;
   font-weight: 750;
   margin-top: 10px;
+}
+
+.code-stack {
+  background: var(--code);
+  color: #dfe9e6;
+  min-width: 0;
+}
+
+.code-stack > div + div {
+  border-top: 1px solid #2a3738;
+}
+
+.code-stack > div > p {
+  color: #72cbb2;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0;
+  padding: 24px 34px 0;
+  text-transform: uppercase;
 }
 
 .doc-card pre {
@@ -599,8 +634,20 @@ h1 {
   line-height: 1.65;
   margin: 0;
   overflow: auto;
-  padding: 34px;
+  padding: 18px 34px 28px;
   white-space: pre-wrap;
+}
+
+.code-stack small {
+  color: #9eacab;
+  display: block;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 34px 28px;
+}
+
+.code-stack small code {
+  color: var(--lime);
 }
 
 .empty-state {
@@ -655,7 +702,7 @@ h1 {
 
 .platform-row span {
   color: #465456;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 

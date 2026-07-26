@@ -11,11 +11,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{
     Chunk, CompactionReport, ExactVectorIndex, HybridQuery, IndexConfig, IndexFileSizeReport,
     IndexPersistenceOptions, Metadata, SearchQuery, VectorEncoding, VectorMetric,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::bench::ProcessMemorySnapshot;
 use crate::json_to_c_string;
@@ -568,8 +568,8 @@ enum ResultClassification {
 }
 
 mod encoding_json {
-    use serde::{Deserialize, Deserializer, Serializer};
     use retrievalkit_core::VectorEncoding;
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S>(encoding: &VectorEncoding, serializer: S) -> Result<S::Ok, S::Error>
     where

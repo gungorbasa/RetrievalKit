@@ -3,12 +3,12 @@ use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use retrievalkit_core::{
     ChunkInput, Document, ExactVectorIndex, HybridQuery, IndexConfig, KeywordQuery, Metadata,
     SearchQuery, VectorEncoding, VectorMetric,
 };
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::json_to_c_string;
 

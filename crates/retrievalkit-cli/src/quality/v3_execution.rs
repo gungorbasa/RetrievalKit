@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use retrievalkit_core::{HybridHit, HybridQuery, RetrievalDatabase, SearchQuery, VectorEncoding};
 use serde::Serialize;
 use serde_json::{json, Value};
-use retrievalkit_core::{HybridHit, HybridQuery, RetrievalDatabase, SearchQuery, VectorEncoding};
 
 use super::v3_canonical::{canonical_json, canonical_json_line, sha256, write_canonical_json};
 use super::v3_execution_status::{ExecutionFailures, FailureReason};

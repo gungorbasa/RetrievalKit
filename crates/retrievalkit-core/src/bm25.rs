@@ -745,15 +745,19 @@ impl<'a> Bm25ByteReader<'a> {
 }
 
 fn checked_usize_to_u32(value: usize, label: &str) -> Result<u32> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in u32"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in u32"),
+        })
 }
 
 fn checked_u32_to_usize(value: u32, label: &str) -> Result<usize> {
-    value.try_into().map_err(|_| RetrievalKitError::InvalidFormat {
-        message: format!("{label} does not fit in usize"),
-    })
+    value
+        .try_into()
+        .map_err(|_| RetrievalKitError::InvalidFormat {
+            message: format!("{label} does not fit in usize"),
+        })
 }
 
 fn bm25_term_score(

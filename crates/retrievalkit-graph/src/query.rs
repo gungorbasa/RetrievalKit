@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{CorpusId, GenerationId};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{GraphError, Result};
 use crate::schema::{FieldPath, NodeType, RelationshipType};

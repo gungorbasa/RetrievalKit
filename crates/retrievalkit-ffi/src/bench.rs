@@ -9,12 +9,12 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
-use simsimd::capabilities;
 use retrievalkit_core::{
     Chunk, ExactVectorIndex, Filter, IndexConfig, IndexFileSizeReport, IndexPersistenceOptions,
     Metadata, MetadataValue, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
+use serde::{Deserialize, Serialize};
+use simsimd::capabilities;
 
 use crate::json_to_c_string;
 
@@ -33,7 +33,9 @@ static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// `config_json`, when non-null, must point to a valid null-terminated UTF-8 C
 /// string that remains alive for the duration of the call.
 #[no_mangle]
-pub unsafe extern "C" fn retrievalkit_bench_synthetic_json(config_json: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn retrievalkit_bench_synthetic_json(
+    config_json: *const c_char,
+) -> *mut c_char {
     let response = catch_unwind(AssertUnwindSafe(|| {
         let config = unsafe { read_config(config_json) }?;
         run_benchmark(config)
@@ -518,9 +520,9 @@ pub(crate) struct BenchmarkConfig {
 }
 
 mod encoding_list_json {
+    use retrievalkit_core::VectorEncoding;
     use serde::de::{Error, SeqAccess, Visitor};
     use serde::{Deserializer, Serializer};
-    use retrievalkit_core::VectorEncoding;
 
     use super::encoding_name;
 
@@ -575,9 +577,9 @@ mod encoding_list_json {
 }
 
 mod metric_json {
+    use retrievalkit_core::VectorMetric;
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serializer};
-    use retrievalkit_core::VectorMetric;
 
     use super::metric_name;
 

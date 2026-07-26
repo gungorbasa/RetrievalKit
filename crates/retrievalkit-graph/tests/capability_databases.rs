@@ -23,8 +23,10 @@ impl TestDirectory {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("retrievalkit-{label}-{}-{nonce}", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "retrievalkit-{label}-{}-{nonce}",
+            std::process::id()
+        ));
         fs::create_dir(&path).unwrap();
         Self(path)
     }

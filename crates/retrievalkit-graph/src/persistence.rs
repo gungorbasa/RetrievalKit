@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{CorpusId, CorpusIndex, ExactVectorIndex, GenerationId};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{GraphError, Result};
 use crate::{

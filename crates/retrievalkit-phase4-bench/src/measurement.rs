@@ -4,9 +4,9 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{Filter, SearchQuery};
 use retrievalkit_graph::GraphRetrievalDatabase;
+use serde::{Deserialize, Serialize};
 
 use super::{
     sha256_hex, source_embedding, stable_identity, WorkloadSpec, CHUNKS_PER_RECORD, TOP_K,

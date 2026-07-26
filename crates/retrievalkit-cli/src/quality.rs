@@ -4,11 +4,11 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{
     Chunk, ChunkInput, Document, ExactVectorIndex, Filter, HybridQuery, IndexConfig, KeywordQuery,
     Metadata, MetadataValue, SearchQuery, VectorEncoding, VectorMetric,
 };
+use serde::{Deserialize, Serialize};
 
 mod artifacts;
 pub(crate) mod v3;

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{ChunkId, ChunkIdentity, RecordId};
+use serde::{Deserialize, Serialize};
 
 use crate::schema::{FieldPath, NodeType, RelationshipType};
 

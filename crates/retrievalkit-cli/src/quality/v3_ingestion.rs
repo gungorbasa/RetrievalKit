@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use serde_json::Value;
 use retrievalkit_core::{
     ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, FieldName, Filter,
     IndexConfig, Metadata, MetadataValue, Record, RecordChunkInput, RecordId, RecordInput,
     RecordType, RecordValue, RetrievalConfiguration, RetrievalDatabase, VectorEncoding,
     VectorMetric,
 };
+use serde_json::Value;
 
 use super::v3_canonical::sha256;
 use super::v3_schema::{Query, Record as V3Record};
@@ -681,7 +681,10 @@ mod tests {
         let validated = validate(&fixture_root()).unwrap();
         let inputs = V3ProductionInputs::from_validated(&validated).unwrap();
 
-        assert_eq!(inputs.corpus_id.as_str(), "retrievalkit-v3-synthetic-corpus");
+        assert_eq!(
+            inputs.corpus_id.as_str(),
+            "retrievalkit-v3-synthetic-corpus"
+        );
         assert_eq!(inputs.dimension, 3);
         assert_eq!(inputs.records.len(), 7);
         assert_eq!(

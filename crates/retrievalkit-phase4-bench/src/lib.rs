@@ -4,8 +4,6 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use retrievalkit_core::{
     ChunkIdentity, ChunkKey, CorpusId, ExactVectorIndex, FieldName, Filter, HybridQuery,
     IndexConfig, KeywordQuery, Metadata, Record, RecordChunkInput, RecordId, RecordType,
@@ -17,6 +15,8 @@ use retrievalkit_graph::{
     GraphRetrievalDatabase, GraphSchema, MissingTargetPolicy, NodeId, NodeType, QueryLimits,
     RecordNodeSchema, RelationshipSchema, RelationshipType, Seed, Traverse,
 };
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 mod device;
 mod lifecycle;

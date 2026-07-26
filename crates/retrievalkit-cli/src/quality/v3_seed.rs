@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use icu_casemap::CaseMapper;
 use icu_normalizer::ComposingNormalizer;
-use serde::Serialize;
-use serde_json::{json, Value};
 use retrievalkit_core::{ChunkIdentity, ChunkKey, FieldName, RecordId};
 use retrievalkit_graph::{FieldPath, GraphScalar, NodeId, NodeType, Seed};
+use serde::Serialize;
+use serde_json::{json, Value};
 
 use super::v3_canonical::{canonical_json, sha256};
 use super::v3_schema::{NodeIdentity, NodeSource};

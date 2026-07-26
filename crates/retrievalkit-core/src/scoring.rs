@@ -199,12 +199,11 @@ impl EncodedVectorStore {
         dimension: usize,
         bytes: &[u8],
     ) -> Result<Self> {
-        let value_count =
-            vector_count
-                .checked_mul(dimension)
-                .ok_or_else(|| RetrievalKitError::InvalidFormat {
-                    message: "vector count and dimension overflow".to_owned(),
-                })?;
+        let value_count = vector_count.checked_mul(dimension).ok_or_else(|| {
+            RetrievalKitError::InvalidFormat {
+                message: "vector count and dimension overflow".to_owned(),
+            }
+        })?;
 
         match encoding {
             VectorEncoding::F32 => {
@@ -413,7 +412,8 @@ unsafe fn aarch64_dot_product_i8_neon(left: &[i8], right: &[i8]) -> f32 {
 
 #[cfg(target_arch = "aarch64")]
 extern "C" {
-    fn retrievalkit_dot_i8_aarch64_dotprod(left: *const i8, right: *const i8, length: usize) -> i32;
+    fn retrievalkit_dot_i8_aarch64_dotprod(left: *const i8, right: *const i8, length: usize)
+        -> i32;
 }
 
 pub(crate) fn normalize(vector: &mut [f32]) {

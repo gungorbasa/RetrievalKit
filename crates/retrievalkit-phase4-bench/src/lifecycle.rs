@@ -2,9 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{ExactVectorIndex, VectorEncoding};
 use retrievalkit_graph::GraphRetrievalDatabase;
+use serde::{Deserialize, Serialize};
 
 use super::{
     active_capability_directory, build_retrieval_database, directory_size, phase4_graph_schema,

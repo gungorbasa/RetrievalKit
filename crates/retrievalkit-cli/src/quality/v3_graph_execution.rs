@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
-use serde_json::{json, Map, Value};
 use retrievalkit_core::ChunkIdentity;
 use retrievalkit_graph::{
     Direction, GraphDatabase, GraphPathEdge, GraphQuery, NodeId, NodeSource, QueryLimits,
     RelationshipType, Traverse, TruncationReason,
 };
+use serde::Serialize;
+use serde_json::{json, Map, Value};
 
 use super::v3::d_generation_fingerprint;
 use super::v3_canonical::{canonical_json, canonical_json_line, write_canonical_json};

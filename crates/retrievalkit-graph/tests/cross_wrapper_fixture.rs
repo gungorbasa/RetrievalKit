@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
 use retrievalkit_core::{
     ChunkKey, CorpusId, ExactVectorIndex, Filter, IndexConfig, KeywordQuery, Metadata,
     MetadataValue, Record, RecordChunkInput, SearchQuery, VectorMetric,
@@ -9,6 +8,7 @@ use retrievalkit_graph::{
     Direction, FieldPath, GraphIndex, GraphQuery, GraphScalar, GraphSchema, NodeId, NodeSource,
     NodeType, RelationshipType, Seed, Traverse,
 };
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Fixture {

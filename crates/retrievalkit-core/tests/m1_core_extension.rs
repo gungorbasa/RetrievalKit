@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use retrievalkit_core::{
     ChunkId, ChunkIdentity, ChunkInput, ChunkKey, CorpusId, Document, ExactVectorIndex, FieldName,
     Filter, HybridQuery, IndexConfig, KeywordQuery, Metadata, MetadataValue, Record,
-    RecordChunkInput, RecordId, RecordType, RecordValue, SearchQuery, VectorEncoding,
-    RetrievalKitError, VectorMetric,
+    RecordChunkInput, RecordId, RecordType, RecordValue, RetrievalKitError, SearchQuery,
+    VectorEncoding, VectorMetric,
 };
 
 fn build_index(corpus: &str, count: usize) -> (ExactVectorIndex, Vec<ChunkId>) {

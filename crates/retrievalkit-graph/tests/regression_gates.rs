@@ -3,8 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
-use serde_json::{json, Value};
 use retrievalkit_core::{
     ChunkKey, CorpusId, ExactVectorIndex, FieldName, Filter, HybridQuery, IndexConfig,
     KeywordQuery, Metadata, MetadataValue, Record, RecordChunkInput, RecordId, RecordType,
@@ -15,6 +13,8 @@ use retrievalkit_graph::{
     GraphRetrievalDatabase, GraphScalar, GraphSchema, MissingTargetPolicy, NodeId, NodeSource,
     NodeType, RecordNodeSchema, RelationshipSchema, RelationshipType, Seed, Traverse,
 };
+use serde::Deserialize;
+use serde_json::{json, Value};
 
 #[derive(Debug, Deserialize)]
 struct Fixture {

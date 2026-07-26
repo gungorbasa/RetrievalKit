@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
-use serde_json::Value;
 use retrievalkit_graph::{GraphError, GraphIndex, GraphQuery, GraphScalar, Seed};
+use serde_json::Value;
 
 use common::{field, node_type, social_core, social_schema};
 

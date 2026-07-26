@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{FieldName, RecordType};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{GraphError, Result};
 

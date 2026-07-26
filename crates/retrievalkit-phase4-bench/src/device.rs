@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
 use retrievalkit_core::{
     CandidateScope, Filter, HybridQuery, KeywordQuery, SearchQuery, VectorEncoding,
 };
 use retrievalkit_graph::{GraphResult, GraphRetrievalDatabase};
+use serde::{Deserialize, Serialize};
 
 use super::{
     build_retrieval_database, expect_top_identity, next_hop_graph_query, phase4_graph_schema,

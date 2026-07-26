@@ -1,7 +1,9 @@
 mod common;
 
 use retrievalkit_core::RecordId;
-use retrievalkit_graph::{Direction, GraphError, GraphIndex, GraphQuery, GraphScalar, Seed, Traverse};
+use retrievalkit_graph::{
+    Direction, GraphError, GraphIndex, GraphQuery, GraphScalar, Seed, Traverse,
+};
 
 use common::{field, node_type, record_node, relationship, social_core, social_schema};
 

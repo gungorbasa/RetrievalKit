@@ -8,13 +8,13 @@ use std::hint::black_box;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use simsimd::{bf16, capabilities, f16, SpatialSimilarity};
 use retrievalkit_core::{
     diagnostic_dot_product_i8, Chunk, ExactVectorIndex, Filter, HybridQuery, IndexConfig,
     IndexFileSizeReport, IndexSizeEstimate, KeywordQuery, Metadata, MetadataValue, SearchQuery,
     VectorEncoding, VectorMetric,
 };
 use retrievalkit_ffi::memory_benchmark_json;
+use simsimd::{bf16, capabilities, f16, SpatialSimilarity};
 
 mod quality;
 
@@ -56,7 +56,8 @@ fn run(args: Vec<String>) -> Result<(), CliError> {
             run_quality_v3_hotpotqa(rest)
         }
         [command, subcommand, rest @ ..] if command == "bench" && subcommand == "phase4" => {
-            let json = retrievalkit_phase4_bench::run_cli(rest).map_err(CliError::InvalidArgument)?;
+            let json =
+                retrievalkit_phase4_bench::run_cli(rest).map_err(CliError::InvalidArgument)?;
             println!("{json}");
             Ok(())
         }
@@ -89,18 +90,17 @@ fn run_quality_bench(args: &[String]) -> Result<(), CliError> {
 }
 
 fn run_memory_bench(args: &[String]) -> Result<(), CliError> {
-    let config_json =
-        match args {
-            [] => String::new(),
-            [flag, path] if flag == "--config" => fs::read_to_string(path).map_err(|error| {
-                CliError::InvalidArgument(format!("failed to read memory config '{path}': {error}"))
-            })?,
-            [flag, json] if flag == "--config-json" => json.clone(),
-            _ => return Err(CliError::InvalidArgument(
-                "usage: retrievalkit bench memory [--config <scenario.json> | --config-json <json>]"
-                    .to_owned(),
-            )),
-        };
+    let config_json = match args {
+        [] => String::new(),
+        [flag, path] if flag == "--config" => fs::read_to_string(path).map_err(|error| {
+            CliError::InvalidArgument(format!("failed to read memory config '{path}': {error}"))
+        })?,
+        [flag, json] if flag == "--config-json" => json.clone(),
+        _ => return Err(CliError::InvalidArgument(
+            "usage: retrievalkit bench memory [--config <scenario.json> | --config-json <json>]"
+                .to_owned(),
+        )),
+    };
     let (json, passed) = memory_benchmark_json(&config_json);
     println!("{json}");
     if passed {

@@ -1,10 +1,10 @@
-use serde_json::{json, Value};
 use retrievalkit_core::{FieldName, RecordType, VectorEncoding, VectorMetric};
 use retrievalkit_graph::{
     Cardinality, ChunkNodeSchema, DuplicateReferencePolicy, FieldPath, GraphDatabase,
     GraphRetrievalDatabase, GraphSchema, MissingTargetPolicy, NodeType, RecordNodeSchema,
     RelationshipSchema, RelationshipType,
 };
+use serde_json::{json, Value};
 
 use super::v3_ingestion::{build_graph_corpus, V3ProductionInputs};
 use super::v3_schema::{

@@ -26,9 +26,10 @@ with OpenAI Sites. Hosting identity is recorded in `.openai/hosting.json`.
 
 The public download at
 `public/downloads/retrievalkit-python-source-preview.tar.gz` is a deterministic
-archive of a committed repository revision. It includes the complete
-repository source and guides except for the website itself, so README links and
-all checked-in language quickstarts remain usable after extraction.
+archive of a committed repository revision. It includes the Rust workspace,
+graph-capable Python wrapper, release truth, legal files, and a dedicated
+`SOURCE_PREVIEW.md` quickstart. Other language source paths remain available
+from the linked public repository.
 
 ```bash
 python3 scripts/release/build_source_preview.py --revision <full-commit-sha>

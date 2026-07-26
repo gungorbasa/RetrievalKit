@@ -17,17 +17,29 @@ DIRECTORY_NAME = "retrievalkit-python-source-preview"
 DEFAULT_OUTPUT = Path(
     "website/public/downloads/retrievalkit-python-source-preview.tar.gz"
 )
+ARCHIVE_PATHS = (
+    "Cargo.toml",
+    "Cargo.lock",
+    "LICENSE",
+    "NOTICE",
+    "SOURCE_PREVIEW.md",
+    "THIRD_PARTY_NOTICES.md",
+    "VERSION",
+    "benchmarks/graph-conformance/v1/fixture.json",
+    "crates",
+    "release/release-v0.1.0.json",
+    "scripts/check-python-graph-wrapper.sh",
+    "scripts/preflight-python-wrapper.sh",
+    "scripts/release/build_source_preview.py",
+    "wrappers/python-graph",
+)
 REQUIRED_MEMBERS = (
     "Cargo.toml",
     "LICENSE",
     "NOTICE",
-    "README.md",
+    "SOURCE_PREVIEW.md",
     "THIRD_PARTY_NOTICES.md",
-    "assets/readme/hero.svg",
-    "docs/guides/kotlin.md",
-    "docs/guides/python.md",
-    "docs/guides/swift.md",
-    "docs/guides/typescript.md",
+    "VERSION",
     "release/release-v0.1.0.json",
     "scripts/check-python-graph-wrapper.sh",
     "scripts/release/build_source_preview.py",
@@ -63,8 +75,7 @@ def build_archive(repo: Path, revision: str, output: Path) -> None:
             f"--output={output}",
             revision,
             "--",
-            ".",
-            ":(exclude)website",
+            *ARCHIVE_PATHS,
         ],
         cwd=repo,
         env=environment,
@@ -100,7 +111,7 @@ def validate_inventory(path: Path) -> None:
                 f"source preview is missing required members: {', '.join(missing)}"
             )
         if any(name.startswith(f"{prefix}website/") for name in names):
-            raise PreviewError("source preview recursively contains the website")
+            raise PreviewError("source preview contains website build inputs")
 
 
 def release_metadata(release_path: Path) -> tuple[str, str]:

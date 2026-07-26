@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { matchesDocumentationSection } from "../app/search.js";
 
 const templateRoot = new URL("../", import.meta.url);
+const execFileAsync = promisify(execFile);
 
 async function render(pathname = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -129,6 +133,14 @@ test("documentation search matches release-audit queries by term", async () => {
   assert.equal(matchesDocumentationSection(python, "graph scoped search"), true);
   assert.equal(matchesDocumentationSection(errors, "embedding dimension"), true);
   assert.equal(matchesDocumentationSection(python, "android jni"), false);
+});
+
+test("source preview exactly matches its declared revision and checksum", async () => {
+  const validator = fileURLToPath(
+    new URL("../../scripts/release/build_source_preview.py", import.meta.url),
+  );
+  const { stdout } = await execFileAsync("python3", [validator, "--check"]);
+  assert.match(stdout, /^verified [0-9a-f]{40} sha256=[0-9a-f]{64}$/m);
 });
 
 test("server-renders a useful custom not-found page", async () => {

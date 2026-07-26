@@ -96,7 +96,7 @@ print(hits[0]["document_id"])  # decision-swift`,
     summary:
       "Choose RetrievalKit for local search or RetrievalKitGraph for graph traversal and scoped retrieval. Both products share one graph-capable native artifact.",
     body:
-      "SwiftPM publication is pending because the repository, version tag, and release XCFramework are not public. The source preview supports macOS 14+ arm64 and iOS 15+ arm64 devices and Apple-silicon simulators. Build the XCFramework before running source examples.",
+      "The repository source is public. SwiftPM publication is pending because the v0.1.0 tag and release XCFramework are not available yet. The source preview supports macOS 14+ arm64 and iOS 15+ arm64 devices and Apple-silicon simulators. Build the XCFramework before running source examples.",
     code: `import RetrievalKit
 
 @main
@@ -243,8 +243,8 @@ const releaseReadiness = [
   [
     "Swift",
     "One package: RetrievalKit and RetrievalKitGraph products",
-    "Pending public repository, v0.1.0 tag, and XCFramework release",
-    "Authorized repository source checkout",
+    "Public source; pending v0.1.0 tag and XCFramework release",
+    "Public repository source checkout",
   ],
   [
     "Python",

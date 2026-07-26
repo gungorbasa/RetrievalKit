@@ -14,7 +14,7 @@ database types:
 The eventual public SwiftPM dependency is intentionally shown first:
 
 ```swift
-// Package.swift — PENDING, not installable until the repository, tag, and
+// Package.swift — PENDING, not installable until the v0.1.0 tag and
 // versioned XCFramework release asset are public.
 .package(
   url: "https://github.com/gungorbasa/RetrievalKit.git",
@@ -27,8 +27,8 @@ traversal and graph-scoped retrieval, or both products from that one package.
 `EmbeddingKit` and `RetrievalKitPipeline` are additional products in the same
 package.
 
-**This dependency is not active today.** The repository is private and the
-v0.1.0 release asset required by the root package manifest is not publicly
+**This dependency is not active today.** The repository source is public, but
+the v0.1.0 tag and release asset required by the root package manifest are not
 available. The available route is the checked-in source quickstart:
 
 ```bash

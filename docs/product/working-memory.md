@@ -41,11 +41,12 @@ implemented, or superseded by the product spec.
   candidate, retains and attests it, and attaches it to the GitHub Release.
   Approval events predating the current workflow-run attempt are rejected;
   unprotected environments fail closed because they produce no required-review
-  event. The repository is currently private and its GitHub plan does
-  not support required environment reviewers, so external publication remains
-  blocked until the plan supports private-repository reviewer protection or the
-  repository becomes public. A signed tag and provisioned passing release gates
-  are also still required.
+  event. On 2026-07-26 the existing GitHub repository became public, and the
+  `release`, `pypi`, `npm`, and `maven` environments were restricted to `v*`
+  tags. `release` requires the sole owner as reviewer with self-review enabled
+  to avoid deadlock; registry jobs depend on that approval. A signed tag,
+  provisioned passing release gates, and registry-side trust/credentials are
+  still required.
 - 2026-07-26 Phase A DX implementation: the clean-source onboarding harness now
   measures Python, Swift, Node.js, and Kotlin with schema-v2 evidence; it runs
   monthly and on demand. Swift quickstarts use a checked entrypoint that reports

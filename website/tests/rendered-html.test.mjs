@@ -46,6 +46,8 @@ test("server-renders the public RetrievalKit documentation", async () => {
     html,
     /Coordinates selected; pending Central verification and publication/,
   );
+  assert.match(html, /Public source; pending v0\.1\.0 tag and XCFramework release/);
+  assert.match(html, /Public repository source checkout/);
   assert.match(html, /Public graph source bundle and authorized checkout/);
   assert.match(html, /Swift, Kotlin, and Node\.js APIs/);
   assert.match(html, /Swift \/ Apple platforms/);

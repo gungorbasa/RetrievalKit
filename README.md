@@ -27,7 +27,7 @@ v0.1.0 publication gates pass; use the linked source quickstarts today.
 
 | SDK | Intended public install | Publication status | Qualified initial target |
 | --- | --- | --- | --- |
-| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Pending public repository access, tag, and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
+| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
 | Python | `python -m pip install retrievalkit-graph` | Pending PyPI publication | macOS arm64; CPython 3.10–3.14 |
 | Node.js | `npm install retrievalkit-graph` | Identity selected; pending npm ownership and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
 | Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |

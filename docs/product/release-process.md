@@ -223,13 +223,11 @@ Before dispatching publication:
   must be dispatched with that tag as its workflow ref, not merely supplied as
   the `tag` input.
 
-Required environment reviewers are not available for private repositories on
-all GitHub plans. The repository is currently private and its present plan does
-not expose the required protection. An unprotected environment is not a
-substitute: no approval event will exist and publication will fail closed.
-The owner has approved making this existing repository public; that visibility
-change must be completed before attempting publication. No workflow or
-repository setting is changed automatically.
+The existing repository is public. The `release`, `pypi`, `npm`, and `maven`
+environments are restricted to `v*` tags; `release` requires approval from the
+repository owner. Self-review is enabled because the owner is currently the
+only eligible reviewer. The three registry environments run only after that
+protected release approval succeeds.
 
 Example dispatch after all external gates exist:
 

@@ -6,18 +6,30 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
-- 2026-07-26 Phase B registry-package decision: checked-in Node package names
-  and Kotlin group IDs remain private/repository-local placeholders. Dedicated
-  fail-closed assemblers require explicit public npm names or a Maven group,
-  build isolated base/graph artifacts for the qualified macOS arm64 JVM/Node
-  and Android arm64-v8a targets, inspect native architecture and graph
-  exclusion, and emit deterministic inventories and checksums. Maven assembly
-  can add PGP signatures only from a secret-bearing release environment.
-  Nothing is uploaded. npm ownership/trusted publishing and Maven namespace,
-  signing key, and Portal token remain external blockers; the current automated
-  release-candidate/publish workflows still cover Swift and Python only until
-  those identities are approved and the new outputs are integrated into the
-  closed bundle.
+- 2026-07-26 release signing identity: Maven primary artifacts use the dedicated
+  two-year `RetrievalKit Release <gungorbasa@users.noreply.github.com>` RSA-4096
+  key with fingerprint
+  `0E82 F1A5 487A 4EF3 CCF1 ED6C 3932 66CD 4DD1 58ED`, expiring
+  2028-07-25. The public key is
+  `release/retrievalkit-release-signing-key.asc` and is published to
+  keys.openpgp.org. The private key stays in the local GnuPG keyring; its
+  passphrase is in macOS Keychain service `RetrievalKit-Maven-GPG` and will be
+  copied only to protected GitHub environment secrets. Never commit or print
+  the private key or passphrase.
+- 2026-07-26 Phase B registry-package decision: the owner selected the npm
+  identities `retrievalkit` and `retrievalkit-graph` and Maven group
+  `io.github.gungorbasa`. Checked-in Node packages remain private to prevent an
+  accidental workspace publish, while fail-closed assemblers require exactly
+  those selected public identities. The two-root candidate workflow now builds,
+  inspects, and byte-compares isolated base/graph artifacts for macOS arm64
+  Node/JVM and Android arm64-v8a and integrates them into the same closed
+  Swift/Python/Node/Kotlin bundle. Protected publication jobs consume those
+  exact bytes: npm uses OIDC trusted publishing with provenance, and Maven signs
+  the 16 authorized primary artifacts before Central Portal upload. Nothing has
+  been published. npm ownership/bootstrap and trusted-publisher configuration,
+  PyPI trusted publishers, Central namespace verification and user token,
+  protected GitHub environments, the signed tag, and provisioned Phase 7
+  evidence remain external gates.
 - 2026-07-26 Phase B publication-authorization decision: no completed
   authorization file is committed to the release revision. The exact signed-tag
   candidate, candidate/scheduled/release workflow run IDs, passing Phase 7

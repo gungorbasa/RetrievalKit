@@ -25,6 +25,34 @@
     "distributions": ["retrievalkit", "retrievalkit-graph"],
     "co_installation": "unsupported; one native capability distribution per process"
   },
+  "node": {
+    "platform": {"os": "darwin", "cpu": "arm64"},
+    "engines": "^22.13.0 || ^24.0.0",
+    "packages": {
+      "base": {"name": "retrievalkit", "artifact": "retrievalkit-0.1.0.tgz"},
+      "graph": {"name": "retrievalkit-graph", "artifact": "retrievalkit-graph-0.1.0.tgz"}
+    },
+    "co_installation": "unsupported; one native capability aggregate per process"
+  },
+  "kotlin": {
+    "group": "io.github.gungorbasa",
+    "targets": ["jvm-macos-arm64", "android-arm64-v8a"],
+    "artifacts": {
+      "retrievalkit": "jar",
+      "retrievalkit-graph": "jar",
+      "retrievalkit-android": "aar",
+      "retrievalkit-graph-android": "aar"
+    },
+    "central_bundle": "retrievalkit-kotlin-0.1.0-unsigned-central-bundle.zip",
+    "signed_in_candidate": false,
+    "signing": {
+      "public_key": "release/retrievalkit-release-signing-key.asc",
+      "fingerprint": "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED",
+      "expires": "2028-07-25",
+      "sha256": "ce67105eb4e3f8b332e99c7d8fdac451ef74a81608c052fb905365922f7acc96"
+    },
+    "co_installation": "unsupported; one native capability aggregate per process"
+  },
   "phase6_claims": {
     "mapping": "benchmarks/publication/readme-claims-v1.json",
     "source_revision": "9c784d2f11b91bb907150aa1b6046880ff89fde6",
@@ -34,6 +62,8 @@
   "publication_blockers": [
     "Phase 7 scheduled and release gates provisioned and passing for the release revision",
     "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
+    "npm trusted publishing configured for retrievalkit and retrievalkit-graph",
+    "Maven Central namespace verification, PGP signing key, and Portal token configured",
     "signed v0.1.0 tag and owner release approval"
   ]
 }

@@ -29,13 +29,14 @@ v0.1.0 publication gates pass; use the linked source quickstarts today.
 | --- | --- | --- | --- |
 | Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Pending public repository access, tag, and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
 | Python | `python -m pip install retrievalkit-graph` | Pending PyPI publication | macOS arm64; CPython 3.10–3.14 |
-| Node.js | `npm install <approved-retrievalkit-graph-package>` | Pending npm name approval and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
-| Kotlin/JVM | `implementation("<approved-group>:retrievalkit-graph:0.1.0")` | Pending Maven coordinates and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
-| Android | `implementation("<approved-group>:retrievalkit-graph-android:0.1.0")` | Pending Maven coordinates and publication | Android API 24+; arm64-v8a |
+| Node.js | `npm install retrievalkit-graph` | Identity selected; pending npm ownership and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
+| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | Android API 24+; arm64-v8a |
 
-Do not paste the angle-bracketed npm or Maven placeholders: those identifiers
-cannot be finalized until naming and registry ownership are approved. For
-Swift, add one package and select `RetrievalKit` for a flat corpus,
+The public identities have been selected, but npm ownership and Central
+namespace verification are still pending, and the commands fail until their
+artifacts are published. For Swift, add one package and select `RetrievalKit`
+for a flat corpus,
 `RetrievalKitGraph` for relationships plus retrieval, or both. For Python,
 Node, and Kotlin, choose exactly one native distribution in a process:
 graph-enabled packages already include base retrieval.
@@ -137,12 +138,12 @@ traversal.
 | Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
 | Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
 | Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
-| TypeScript `retrievalkit-node-local` | Base corpus and retrieval; provisional repository-local name | **Available from source** |
-| TypeScript `retrievalkit-node-graph-local` | Graph aggregate with retrieval; provisional repository-local name | **Available from source** |
-| Kotlin/JVM `retrievalkit` | Base corpus and retrieval; provisional coordinates | **Available from source** |
-| Kotlin/JVM `retrievalkit-graph` | Graph aggregate with retrieval; provisional coordinates | **Available from source** |
-| Android `retrievalkit-android` | Base AAR for arm64-v8a; provisional coordinates | **Available from source** |
-| Android `retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a; provisional coordinates | **Available from source** |
+| TypeScript `retrievalkit` | Base corpus and retrieval; selected npm identity | **Available from source; npm unpublished** |
+| TypeScript `retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; npm unpublished** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
+| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Available from source; Maven unpublished** |
+| Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Available from source; Maven unpublished** |
 
 Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
 Their graph-enabled distributions already contain the base native retrieval
@@ -328,8 +329,8 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 
 - V1 is designed for local indexes with fewer than 50K chunks.
 - Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
-  iOS 15+, including the arm64 iOS Simulator. The provisional Node target is
-  macOS arm64; the provisional Android target is arm64-v8a.
+  iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
+  arm64; the initial Android target is arm64-v8a.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
 - Installation remains source-first until the remaining release gates are

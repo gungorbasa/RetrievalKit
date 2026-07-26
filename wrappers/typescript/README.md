@@ -1,14 +1,14 @@
 # RetrievalKit for Node.js
 
-This directory contains two repository-local, provisional packages:
+This directory contains two owner-approved packages:
 
-- `retrievalkit-node-local`: retrieval-only native aggregate.
-- `retrievalkit-node-graph-local`: graph-only and combined graph/retrieval
+- `retrievalkit`: retrieval-only native aggregate.
+- `retrievalkit-graph`: graph-only and combined graph/retrieval
   native aggregate.
 
 The initial supported target is Node.js LTS on macOS arm64. Browser, WebAssembly,
-other operating systems, and public npm distribution are not claimed. Package
-names remain provisional until naming clearance.
+other operating systems, and public npm distribution are not claimed. Both
+checked-in package manifests remain private until closed release assembly.
 
 ## Build and verify
 
@@ -63,8 +63,8 @@ already been approved in npm; it never guesses or reserves names:
 
 ```bash
 python3 ../../scripts/release/assemble_node_packages.py \
-  --base-name '<approved-base-name>' \
-  --graph-name '<approved-graph-name>' \
+  --base-name retrievalkit \
+  --graph-name retrievalkit-graph \
   --names-approved \
   --version 0.1.0 \
   --output ../../dist/release/node
@@ -77,9 +77,9 @@ tarballs plus `inventory.json`, `SHA256SUMS`, and `SHA512SUMS`. The source
 packages retain `"private": true`; only the verified staged tarballs remove the
 publication blocker.
 
-`--names-approved` is an explicit owner assertion. Omit it until the npm account
-or organization controls both names; assembly then fails before changing staged
-metadata.
+`--names-approved` records the explicit owner assertion for these two fixed
+identities. The assembler rejects alternative names and fails before changing
+staged metadata when the assertion is absent.
 
 Run the deterministic package-content test after building the native addons:
 

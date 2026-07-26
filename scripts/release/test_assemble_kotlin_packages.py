@@ -46,7 +46,6 @@ JDK17 = find_jdk17()
 class KotlinPackageAssemblyTests(unittest.TestCase):
     def test_rejects_placeholder_or_invalid_groups(self) -> None:
         for invalid in (
-            "local.retrievalkit",
             "retrievalkit",
             "AI.RetrievalKit",
             "ai..retrievalkit",
@@ -55,6 +54,16 @@ class KotlinPackageAssemblyTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(ASSEMBLER.AssemblyError):
                     ASSEMBLER.validate_group(invalid)
+
+    def test_rejects_other_syntactically_valid_groups(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="retrievalkit-kotlin-identity-gate-") as root:
+            with self.assertRaisesRegex(ASSEMBLER.AssemblyError, "must be exactly"):
+                ASSEMBLER.assemble(
+                    group="com.example.retrievalkit",
+                    version="0.1.0",
+                    output=Path(root) / "output",
+                    skip_native_build=True,
+                )
 
     @unittest.skipUnless(
         JDK17 is not None
@@ -68,7 +77,7 @@ class KotlinPackageAssemblyTests(unittest.TestCase):
             first = Path(root) / "first"
             second = Path(root) / "second"
             arguments = {
-                "group": "io.github.gungorbasa.release_test",
+                "group": "io.github.gungorbasa",
                 "version": "0.1.0-test.1",
                 "java_home": JDK17,
                 "skip_native_build": True,

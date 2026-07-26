@@ -56,8 +56,13 @@ def cargo_packages(repo: Path) -> list[dict[str, Any]]:
 
 def artifact_files(staging: Path) -> list[Path]:
     return sorted(
-        [*staging.glob("*.zip"), *staging.glob("*.whl")],
-        key=lambda path: path.name,
+        [
+            *staging.glob("*.zip"),
+            *staging.glob("*.whl"),
+            *(path for path in (staging / "node").rglob("*") if path.is_file()),
+            *(path for path in (staging / "kotlin").rglob("*") if path.is_file()),
+        ],
+        key=lambda path: path.relative_to(staging).as_posix(),
     )
 
 
@@ -70,11 +75,20 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
     artifacts = output / "artifacts"
     artifacts.mkdir()
     for source in files:
-        shutil.copy2(source, artifacts / source.name)
+        destination = artifacts / source.relative_to(staging)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
     for legal_name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
         shutil.copy2(repo / legal_name, output / legal_name)
 
-    subjects = [{"name": path.name, "digest": {"sha256": digest(path)}} for path in sorted(artifacts.iterdir())]
+    subjects = [
+        {
+            "name": path.relative_to(artifacts).as_posix(),
+            "digest": {"sha256": digest(path)},
+        }
+        for path in sorted(artifacts.rglob("*"))
+        if path.is_file()
+    ]
     sbom = {
         "spdxVersion": "SPDX-2.3",
         "dataLicense": "CC0-1.0",
@@ -92,7 +106,16 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
         "predicate": {
             "buildDefinition": {
                 "buildType": "https://github.com/gungorbasa/RetrievalKit/release/v1",
-                "externalParameters": {"version": config["version"], "platform": "arm64-apple"},
+                "externalParameters": {
+                    "version": config["version"],
+                    "targets": [
+                        "apple-arm64",
+                        "python-macos-arm64",
+                        "node-macos-arm64",
+                        "kotlin-jvm-macos-arm64",
+                        "kotlin-android-arm64-v8a",
+                    ],
+                },
                 "internalParameters": {},
                 "resolvedDependencies": [{"uri": "git+https://github.com/gungorbasa/RetrievalKit", "digest": {"gitCommit": revision}}],
             },
@@ -102,7 +125,7 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
     write_json(output / "provenance.intoto.json", provenance)
     payloads = sorted(
         [
-            *artifacts.iterdir(),
+            *(path for path in artifacts.rglob("*") if path.is_file()),
             output / "LICENSE",
             output / "NOTICE",
             output / "THIRD_PARTY_NOTICES.md",

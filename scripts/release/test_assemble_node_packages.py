@@ -21,8 +21,6 @@ SPEC.loader.exec_module(ASSEMBLER)
 class NodePackageAssemblyTests(unittest.TestCase):
     def test_rejects_provisional_or_invalid_public_names(self) -> None:
         for invalid in (
-            "retrievalkit-node-local",
-            "retrievalkit-node-graph-local",
             "RetrievalKit",
             "@missing-package",
             "name with spaces",
@@ -49,6 +47,19 @@ class NodePackageAssemblyTests(unittest.TestCase):
                     skip_typescript_build=True,
                 )
 
+    def test_rejects_other_syntactically_valid_names(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="retrievalkit-node-identity-gate-") as root:
+            with self.assertRaisesRegex(ASSEMBLER.AssemblyError, "must be exactly"):
+                ASSEMBLER.assemble(
+                    base_name="@example/retrievalkit",
+                    graph_name="@example/retrievalkit-graph",
+                    version="0.1.0",
+                    output=Path(root) / "output",
+                    names_approved=True,
+                    skip_native_build=True,
+                    skip_typescript_build=True,
+                )
+
     @unittest.skipUnless(
         ASSEMBLER.platform.system() == "Darwin"
         and ASSEMBLER.platform.machine() in {"arm64", "aarch64"},
@@ -59,8 +70,8 @@ class NodePackageAssemblyTests(unittest.TestCase):
             first = Path(root) / "first"
             second = Path(root) / "second"
             arguments = {
-                "base_name": "@retrievalkit-release-test/core",
-                "graph_name": "@retrievalkit-release-test/graph",
+                "base_name": "retrievalkit",
+                "graph_name": "retrievalkit-graph",
                 "version": "0.1.0-test.1",
                 "names_approved": True,
                 "skip_native_build": True,

@@ -1,29 +1,27 @@
 # TypeScript/Node Guide
 
-The repository contains two provisional, source-only packages for Node.js LTS
-on macOS arm64:
+The selected npm identities are:
 
-- `retrievalkit-node-local` for retrieval without graph state.
-- `retrievalkit-node-graph-local` for graph-only and combined graph/retrieval
-  applications.
+- `retrievalkit` for retrieval without graph state.
+- `retrievalkit-graph` for graph-only and combined graph/retrieval applications.
 
-Install or load exactly one package in a process. The graph package already
-contains retrieval capability, and its loader rejects mixing native aggregates.
-Browser and WebAssembly builds are not part of this target.
+Neither name is owned by the release account or published yet. From source or
+after publication, install or load exactly one package in a process. The graph
+package already contains retrieval capability, and its loader rejects mixing
+native aggregates. Browser and WebAssembly builds are not part of this target.
 
 ## Installation status
 
 The eventual shortest install will be:
 
 ```bash
-# PENDING — do not paste this placeholder literally.
-npm install <approved-retrievalkit-graph-package>
+# PENDING — npm ownership and publication are not complete.
+npm install retrievalkit-graph
 ```
 
-The npm package names are not approved and no package is published. Choose the
-graph package when relationships matter; it already includes retrieval.
-Choose the base package for a flat corpus. Install exactly one native aggregate
-in a process.
+Choose `retrievalkit-graph` when relationships matter; it already includes
+retrieval. Choose `retrievalkit` for a flat corpus. Install exactly one native
+aggregate in a process.
 
 The available route is the repository source build:
 
@@ -37,9 +35,8 @@ node graph/examples/graph-retrieval.mjs
 
 The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
 24 LTS. Browser, WebAssembly, Windows, Linux, and other architectures are not
-claimed. The checked-in names `retrievalkit-node-local` and
-`retrievalkit-node-graph-local` are repository-local and provisional; they are
-not npm availability claims.
+claimed. The selected names are package identities, not npm availability
+claims.
 
 ## Retrieval-only quickstart
 
@@ -50,7 +47,7 @@ document fixes dimension in Rust; callers do not configure it separately.
 import {
   RetrievalDatabaseBuilder,
   timestampMillis
-} from "retrievalkit-node-local";
+} from "retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({
   corpusId: "apollo",
@@ -106,8 +103,7 @@ candidate projection. Use `GraphRetrievalDatabaseBuilder` when graph scope
 should feed the same retrieval ranker. Both are exported by the graph package.
 
 ```ts
-import { GraphRetrievalDatabaseBuilder } from
-  "retrievalkit-node-graph-local";
+import { GraphRetrievalDatabaseBuilder } from "retrievalkit-graph";
 
 const builder = new GraphRetrievalDatabaseBuilder({
   corpusId: "apollo",

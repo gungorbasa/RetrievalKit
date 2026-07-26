@@ -1,14 +1,15 @@
 # Kotlin/JVM and Android Guide
 
-RetrievalKit has separate repository-local base and graph artifacts:
+RetrievalKit has separate base and graph artifacts:
 
 - Kotlin/JVM: `retrievalkit` and `retrievalkit-graph`.
 - Android: `retrievalkit-android` and `retrievalkit-graph-android`.
 
-The coordinates are provisional. Choose exactly one artifact per application;
-the graph artifact already contains retrieval. The initial Android target is
-API 24+ on `arm64-v8a`; Kotlin Multiplatform and other Android ABIs are not
-claimed.
+The `io.github.gungorbasa` coordinates are selected, but Central namespace
+verification and publication are not complete. Choose exactly one artifact per
+application; the graph artifact already contains retrieval. The initial
+Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and other Android
+ABIs are not claimed.
 
 ## Installation status
 
@@ -16,16 +17,17 @@ The eventual Gradle dependency will have this shape:
 
 ```kotlin
 dependencies {
-    // PENDING — do not paste the placeholder group literally.
-    implementation("<approved-group>:retrievalkit-graph:0.1.0")
+    // PENDING — Central verification and publication are not complete.
+    implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")
 }
 ```
 
 For Android, the graph artifact will use
-`<approved-group>:retrievalkit-graph-android:0.1.0`. Base applications will use
-`retrievalkit` on JVM or `retrievalkit-android` on Android. The group ID is not
-approved and none of these artifacts is published to a public Maven repository.
-Choose exactly one base or graph artifact; graph already includes retrieval.
+`io.github.gungorbasa:retrievalkit-graph-android:0.1.0`. Base applications will
+use `io.github.gungorbasa:retrievalkit:0.1.0` on JVM or
+`io.github.gungorbasa:retrievalkit-android:0.1.0` on Android. None of these
+artifacts is published to a public Maven repository yet. Choose exactly one
+base or graph artifact; graph already includes retrieval.
 
 The available JVM route is the repository source build:
 

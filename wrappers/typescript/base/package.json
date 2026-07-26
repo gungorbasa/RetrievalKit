@@ -1,8 +1,8 @@
 {
-  "name": "retrievalkit-node-local",
+  "name": "retrievalkit",
   "version": "0.1.0",
   "private": true,
-  "description": "Repository-local RetrievalKit Node.js base package (provisional name)",
+  "description": "RetrievalKit Node.js base package",
   "keywords": [
     "retrieval",
     "vector-search",

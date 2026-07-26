@@ -5,13 +5,13 @@ an idiomatic, blocking Kotlin/JVM API and a thin typed JNI boundary. The initial
 Android package contains an `arm64-v8a` native library. Kotlin Multiplatform,
 browsers, servers, and other Android ABIs are not claimed.
 
-The repository-local Maven coordinates are provisional:
+The owner-approved Maven coordinates are:
 
 ```text
-local.retrievalkit:retrievalkit:0.1.0
-local.retrievalkit:retrievalkit-graph:0.1.0
-local.retrievalkit:retrievalkit-android:0.1.0
-local.retrievalkit:retrievalkit-graph-android:0.1.0
+io.github.gungorbasa:retrievalkit:0.1.0
+io.github.gungorbasa:retrievalkit-graph:0.1.0
+io.github.gungorbasa:retrievalkit-android:0.1.0
+io.github.gungorbasa:retrievalkit-graph-android:0.1.0
 ```
 
 They do not imply that artifacts are available from a public Maven registry.
@@ -145,13 +145,13 @@ included in JARs and generated native-resource trees.
 
 ## Assemble Maven release artifacts
 
-`local.retrievalkit` remains an intentionally unpublishable placeholder.
-Release assembly requires an explicit Maven group whose ownership has already
-been approved; the build never infers a public namespace:
+The checked-in default is the owner-approved `io.github.gungorbasa` group.
+Release assembly still requires the group explicitly and does not claim that
+Central Portal has verified the namespace:
 
 ```bash
 python3 ../../scripts/release/assemble_kotlin_packages.py \
-  --group '<approved-maven-group>' \
+  --group io.github.gungorbasa \
   --version 0.1.0 \
   --java-home "$JAVA_HOME" \
   --output ../../dist/release/kotlin
@@ -174,8 +174,9 @@ Base artifacts are rejected if they contain graph classes or graph native code.
 
 Central requires PGP signatures. Pass `--signing-key <gpg-key-id>` only from an
 approved secret-bearing release environment, and pass `--namespace-verified`
-only after confirming the group in Central Portal. Without those assertions,
-the inventory records the exact blockers and reports `publicationReady: false`.
+only after the owner confirms control of the fixed namespace. Without those
+assertions, the inventory records the exact blockers and reports
+`publicationReady: false`.
 Assembly never uploads or publishes. Run the deterministic package test with:
 
 ```bash

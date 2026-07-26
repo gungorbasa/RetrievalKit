@@ -4,21 +4,26 @@ Status: release-candidate and runtime authorization implementation complete;
 external publication blocked on repository/environment configuration and the
 remaining release gates.
 
-The current automated release candidate ships the Swift and Python previews
-from one signed source revision. Python retains separate base and graph native
-aggregates because loading both into one process is unsupported. Swift publishes
-one graph-capable aggregate containing both native capability surfaces.
+The automated release candidate ships the Swift, Python, Node.js, and Kotlin
+previews from one signed source revision. Python, Node, and Kotlin retain
+separate base and graph native aggregates because loading both into one process
+is unsupported. Swift publishes one graph-capable aggregate containing both
+native capability surfaces.
 
-Node and Kotlin package construction is also implemented, but those artifacts
-are not yet part of the automated publication workflow. Their public identities
-and registry ownership remain unresolved, and Maven additionally requires a
-signing identity. They must not be described as registry-published until the
-external prerequisites below are completed.
+The approved npm package names are `retrievalkit` and
+`retrievalkit-graph`. The approved Maven group is
+`io.github.gungorbasa`. Approval of those identities does not imply that the
+registries are configured: npm bootstrap/trusted-publisher setup, Maven Central
+namespace verification, signing keys, protected environments, and registry
+credentials remain fail-closed external prerequisites.
 
 ## Release contents
 
 - `RetrievalKitGraphFFI.xcframework.zip` for all public Swift products.
 - macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
+- macOS arm64 npm tarballs for `retrievalkit` and `retrievalkit-graph`.
+- Maven publications under `io.github.gungorbasa` for JVM base/graph and
+  Android base/graph, limited to the targets declared in their package metadata.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
 - Apache-2.0 `LICENSE` and the RetrievalKit company `NOTICE`.
@@ -41,20 +46,22 @@ part of the public Swift release.
 3. Build the three-slice arm64 graph-capable XCFramework and canonical zip
    archive; separately run the internal graph-neutrality qualification.
 4. Build both wheel distributions for each CPython 3.10–3.14 interpreter.
-5. Smoke-test every Swift product and a combined base-plus-graph consumer from
-   the unified package, plus every Python artifact in fresh consumer
-   environments.
-6. Assemble the closed release bundle with checksums, SBOM, and provenance.
-7. Repeat from a second clean root and compare every byte.
-8. Validate the bundle independently and complete the
+5. Build and inspect the two approved npm tarballs and the four unsigned Maven
+   publications.
+6. Smoke-test every Swift product and a combined base-plus-graph consumer,
+   every Python artifact, both npm tarballs, and all JVM/Android publications
+   in fresh consumer environments.
+7. Assemble the closed release bundle with checksums, SBOM, and provenance.
+8. Repeat from a second clean root and compare every byte.
+9. Validate the bundle independently and complete the
    [release approval checklist](release-approval-checklist.md).
 
 The manual `release-candidate.yml` workflow performs the build and validation
 without publishing. It never invokes a physical-device command.
 
-## Pending Node and Kotlin distributions
+## Node and Kotlin candidate construction
 
-The Node assembler requires two owner-approved npm names and an explicit
+The Node assembler requires the approved npm names and an explicit
 `--names-approved` assertion. It builds and inspects separate macOS arm64 base
 and graph tarballs, preserves the checked-in packages as private repository
 placeholders, proves graph exclusion from the base artifact, and emits SHA-256,
@@ -62,14 +69,14 @@ SHA-512, and package-integrity evidence:
 
 ```bash
 python3 scripts/release/assemble_node_packages.py \
-  --base-name '<approved-base-name>' \
-  --graph-name '<approved-graph-name>' \
+  --base-name retrievalkit \
+  --graph-name retrievalkit-graph \
   --names-approved \
   --version 0.1.0 \
   --output dist/release/node
 ```
 
-The Kotlin assembler requires an owner-approved Maven group. It produces four
+The Kotlin assembler uses the approved Maven group. It produces four
 isolated publications—JVM base/graph and Android base/graph—with POM, sources,
 Javadoc, checksums, architecture validation, and a deterministic Central Portal
 bundle. Central publication also requires namespace verification, detached PGP
@@ -77,16 +84,16 @@ signatures, and a Portal token:
 
 ```bash
 python3 scripts/release/assemble_kotlin_packages.py \
-  --group '<approved-maven-group>' \
+  --group io.github.gungorbasa \
   --version 0.1.0 \
   --java-home "$JAVA_HOME" \
   --output dist/release/kotlin
 ```
 
 These commands only construct candidate packages; they never reserve names,
-upload artifacts, or publish. After the identities and registry accounts are
-approved, add the exact outputs to the closed release bundle and protected
-publication workflow before describing Node or Kotlin as part of v0.1.0.
+upload artifacts, or publish. The candidate workflow adds their exact outputs
+to the closed release bundle. Publication consumes those authorized bytes
+rather than rebuilding packages in a registry job.
 
 ## Authorization model
 
@@ -124,8 +131,73 @@ or stale gate evidence, or any changed candidate byte fails closed.
 
 The authorization record, its SHA-256, and the candidate evidence are retained
 for 180 days as a dedicated Actions artifact. They are also attested and
-attached to the GitHub Release alongside the package artifacts. PyPI
-publication depends on successful completion of this protected job.
+attached to the GitHub Release alongside the package artifacts. PyPI, npm, and
+Maven publication jobs depend on successful completion of this protected job.
+
+## npm trusted publication
+
+The npm job runs in the protected `npm` environment with `id-token: write` and
+no npm token. It installs the pinned OIDC-capable npm CLI, verifies the complete
+authorized bundle checksum set, stages only
+`artifacts/node/retrievalkit-0.1.0.tgz` and
+`artifacts/node/retrievalkit-graph-0.1.0.tgz`, and publishes those tarballs with
+`--provenance`. It then compares each registry `dist.integrity` value with the
+authorized inventory, attests the tarballs/evidence, and retains the
+publication record for 180 days.
+
+npm trusted publishing cannot establish a package name that does not exist.
+Before the first RetrievalKit release, an npm owner must:
+
+1. bootstrap both names with a separately reviewed non-release version using a
+   short-lived granular token and required 2FA;
+2. configure each package's trusted publisher for the public
+   `gungorbasa/RetrievalKit` repository, `publish-release.yml` workflow, and
+   `npm` environment;
+3. revoke the bootstrap token; and
+4. confirm both names and trusted-publisher configuration through the required
+   `npm_trusted_publishers_ready` dispatch input.
+
+The pre-approval job verifies that both public package records exist. The npm
+job verifies that `0.1.0` is unused. Missing bootstrap, missing OIDC trust, an
+existing version, a changed tarball, or a registry integrity mismatch fails
+closed. Because two npm uploads cannot be transactional, a failure after the
+first succeeds requires an incident record and fix-forward release; published
+npm versions are never overwritten.
+
+## Maven Central publication
+
+The Maven job runs in the protected `maven` environment. It verifies the
+authorized bundle, requires group `io.github.gungorbasa`, copies the exact 16
+authorized primary POM/JAR/AAR files, and records their SHA-256 values before
+signing. It imports the environment-protected PGP key, creates detached ASCII
+signatures without rebuilding any primary artifact, constructs the signed
+Central Portal bundle, and uploads it with `publishingType=AUTOMATIC` using the
+protected Central user-token secrets. The signed bundle, publication evidence,
+and deployment ID are attested or retained for 180 days.
+
+The `maven` environment must contain:
+
+- `MAVEN_GPG_PRIVATE_KEY`: armored private signing key;
+- `MAVEN_GPG_KEY_ID`: exact signing key identity;
+- `MAVEN_GPG_PASSPHRASE`: key passphrase;
+- `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`: Central Portal
+  user-token credentials.
+
+Central namespace verification, public signing-key distribution, token
+creation, and environment protection are external owner actions. The required
+`maven_central_ready` dispatch input is an explicit assertion that they are
+complete; missing secrets, signing failures, namespace rejection, or upload
+failure stops publication.
+
+The dedicated RetrievalKit release key is checked in as a public verification
+artifact at
+[`release/retrievalkit-release-signing-key.asc`](../../release/retrievalkit-release-signing-key.asc).
+Its fingerprint is
+`0E82 F1A5 487A 4EF3 CCF1 ED6C 3932 66CD 4DD1 58ED`; it expires on
+2028-07-25. The private key is never stored in the repository. Its local
+passphrase is retained in macOS Keychain under
+`RetrievalKit-Maven-GPG`, and CI receives the key only through protected
+environment secrets.
 
 ## Required external GitHub configuration
 
@@ -139,6 +211,12 @@ Before dispatching publication:
   prevention of self-review;
 - create the separate `pypi` environment and configure PyPI trusted publishing
   for this repository and workflow;
+- create the protected `npm` environment and configure both bootstrapped
+  packages for
+  [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
+- verify `io.github.gungorbasa` in Central Portal, publish the PGP public key,
+  and configure the protected `maven` environment using the
+  [Central Publisher API](https://central.sonatype.org/publish/publish-portal-api/);
 - confirm the workflow token can read Actions run metadata and the
   [`GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals` review-history endpoint](https://docs.github.com/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run);
 - create and push the verified signed release tag. The publication workflow
@@ -149,8 +227,8 @@ Required environment reviewers are not available for private repositories on
 all GitHub plans. The repository is currently private and its present plan does
 not expose the required protection. An unprotected environment is not a
 substitute: no approval event will exist and publication will fail closed.
-Upgrade to a plan that supports required reviewers for private repositories or
-make the repository public before attempting publication. No workflow or
+The owner has approved making this existing repository public; that visibility
+change must be completed before attempting publication. No workflow or
 repository setting is changed automatically.
 
 Example dispatch after all external gates exist:
@@ -161,7 +239,10 @@ gh workflow run publish-release.yml \
   -f tag=v0.1.0 \
   -f candidate_run_id=<candidate-run-id> \
   -f scheduled_run_id=<scheduled-phase7-run-id> \
-  -f release_gate_run_id=<release-phase7-run-id>
+  -f release_gate_run_id=<release-phase7-run-id> \
+  -f pypi_trusted_publishers_ready=true \
+  -f npm_trusted_publishers_ready=true \
+  -f maven_central_ready=true
 ```
 
 ## Publication gates
@@ -182,8 +263,9 @@ revision:
   is bound into the runtime authorization/provenance record.
 
 The publication workflow verifies these gates before requesting a GitHub
-Release or trusted PyPI identity token. Its default permissions are read-only;
-write and `id-token` permissions exist only in the protected publication jobs.
+Release or registry identity. Its default permissions are read-only; write,
+registry credentials, and `id-token` permissions exist only in protected
+publication jobs.
 
 ## Rollback
 
@@ -193,6 +275,7 @@ fix forward on a new revision. Never reuse a checksum for changed bytes.
 If an uploaded artifact is wrong but no consumer release has been announced,
 mark the GitHub Release as a draft, remove the incorrect assets, and create a
 new candidate from a new tag. PyPI files cannot be replaced; yank the affected
-release, publish a new patch version, update SwiftPM URLs/checksums, and record
-the incident in the changelog and security advisory when relevant. Never move
-or recreate a published tag.
+release. npm and Maven versions are also immutable; deprecate or otherwise
+withdraw the affected version according to registry policy and publish a new
+patch. Update SwiftPM URLs/checksums and record the incident in the changelog
+and security advisory when relevant. Never move or recreate a published tag.

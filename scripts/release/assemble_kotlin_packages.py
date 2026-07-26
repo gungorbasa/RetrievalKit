@@ -40,6 +40,7 @@ SEMVER = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+APPROVED_MAVEN_GROUP = "io.github.gungorbasa"
 
 
 class AssemblyError(RuntimeError):
@@ -59,11 +60,6 @@ def validate_group(group: str) -> str:
     if not MAVEN_GROUP.fullmatch(group):
         raise AssemblyError(
             f"invalid Maven group {group!r}; supply an owner-approved reverse-domain namespace"
-        )
-    if group == "local.retrievalkit":
-        raise AssemblyError(
-            "'local.retrievalkit' is a repository-local placeholder, not an approved "
-            "public Maven namespace"
         )
     return group
 
@@ -303,6 +299,10 @@ def assemble(
     namespace_verified: bool = False,
 ) -> dict[str, Any]:
     validate_group(group)
+    if group != APPROVED_MAVEN_GROUP:
+        raise AssemblyError(
+            f"Maven group must be exactly {APPROVED_MAVEN_GROUP!r} for this release"
+        )
     validate_version(version)
     if platform.system() != "Darwin" or platform.machine() not in {"arm64", "aarch64"}:
         raise AssemblyError(
@@ -446,7 +446,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--namespace-verified",
         action="store_true",
-        help="assert that the supplied groupId is verified in Central Portal",
+        help="assert that the owner controls the fixed Maven namespace",
     )
     return parser.parse_args()
 

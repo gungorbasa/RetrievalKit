@@ -21,10 +21,10 @@ const sections: DocSection[] = [
     summary:
       "SwiftPM, PyPI, npm, and Maven publication have not happened. The commands below show the intended install shape, not packages that are available today.",
     body:
-      "Python and Swift have intended package names. npm names and Maven coordinates still require approval, so their placeholders must not be pasted literally. Until publication, use the repository source quickstarts; the Python graph source bundle is the only public download.",
+      "The package identities are selected, but npm ownership, Central namespace verification, and registry publication have not happened. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
-npm install <approved-retrievalkit-graph-package>
+npm install retrievalkit-graph
 
 // Package.swift — PENDING
 .package(
@@ -34,7 +34,7 @@ npm install <approved-retrievalkit-graph-package>
 
 // build.gradle.kts — PENDING
 implementation(
-  "<approved-group>:retrievalkit-graph:0.1.0"
+  "io.github.gungorbasa:retrievalkit-graph:0.1.0"
 )`,
     tags: [
       "install",
@@ -144,9 +144,9 @@ struct ApolloSearch {
     summary:
       "Promise-based N-API calls keep native work off the event loop and preserve Float32Array, bigint, and typed graph values.",
     body:
-      "npm names are not approved and no package is published. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed. Base and graph packages are mutually exclusive in one process.",
+      "The retrievalkit and retrievalkit-graph npm identities are selected, but ownership and publication are pending. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed.",
     code: `import { RetrievalDatabaseBuilder }
-  from "retrievalkit-node-local";
+  from "retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({
   corpusId: "apollo"
@@ -174,7 +174,7 @@ console.log(hits[0]?.documentId);`,
     summary:
       "Kotlin uses FloatArray, sealed value types, typed exceptions, and AutoCloseable resources over the shared Rust core.",
     body:
-      "Maven coordinates are not approved and no artifact is published. The source build uses JDK 17 and targets a macOS arm64 JVM native library; compiled bytecode can run on Java 11+. Android targets API 24+ and arm64-v8a. Other desktop targets and Android ABIs are not claimed.",
+      "The io.github.gungorbasa Maven coordinates are selected, but Central namespace verification and publication are pending. The source build uses JDK 17 and targets a macOS arm64 JVM native library; compiled bytecode can run on Java 11+. Android targets API 24+ and arm64-v8a.",
     code: `import ai.retrievalkit.Document
 import ai.retrievalkit.RetrievalDatabase
 import ai.retrievalkit.VectorEncoding
@@ -254,14 +254,14 @@ const releaseReadiness = [
   ],
   [
     "Node.js",
-    "Choose one base or graph package; names unapproved",
-    "Pending npm name approval and publication",
+    "retrievalkit or retrievalkit-graph",
+    "Identity selected; pending npm ownership and publication",
     "Authorized repository source checkout",
   ],
   [
     "Kotlin",
-    "Choose one JVM/Android base or graph artifact; group unapproved",
-    "Pending Maven coordinates and publication",
+    "io.github.gungorbasa base or graph artifact",
+    "Coordinates selected; pending Central verification and publication",
     "Authorized repository source checkout",
   ],
 ];

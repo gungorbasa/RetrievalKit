@@ -8,6 +8,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -54,6 +55,41 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("RetrievalKitFFI.xcframework.zip", package)
         self.assertNotIn('.library(name: "RetrievalKitIngest"', package)
         self.assertFalse((REPO / "Package.graph.swift").exists())
+
+    def test_release_identities_are_fixed_for_node_and_kotlin(self) -> None:
+        config = validator.load_json(REPO / "release/release-v0.1.0.json")
+        self.assertEqual(
+            config["node"]["packages"],
+            {
+                "base": {
+                    "name": "retrievalkit",
+                    "artifact": "retrievalkit-0.1.0.tgz",
+                },
+                "graph": {
+                    "name": "retrievalkit-graph",
+                    "artifact": "retrievalkit-graph-0.1.0.tgz",
+                },
+            },
+        )
+        self.assertEqual(config["kotlin"]["group"], "io.github.gungorbasa")
+        self.assertEqual(
+            set(config["kotlin"]["artifacts"]),
+            {
+                "retrievalkit",
+                "retrievalkit-graph",
+                "retrievalkit-android",
+                "retrievalkit-graph-android",
+            },
+        )
+        signing = config["kotlin"]["signing"]
+        self.assertEqual(
+            signing["fingerprint"],
+            "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED",
+        )
+        self.assertEqual(
+            validator.digest(REPO / signing["public_key"]),
+            signing["sha256"],
+        )
 
     def test_release_bundle_includes_license_and_notice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -146,6 +182,71 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(validator.ValidationError, "root inventory mismatch"):
                 validator.bundle_validation(REPO, Path(directory))
+
+    def test_nested_package_artifacts_are_closed_and_provenanced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staging = root / "staging"
+            staging.mkdir()
+            (staging / "RetrievalKitGraphFFI.xcframework.zip").write_bytes(b"apple")
+            (staging / "node").mkdir()
+            (staging / "node/retrievalkit-0.1.0.tgz").write_bytes(b"node-base")
+            (staging / "node/inventory.json").write_text("{}", encoding="utf-8")
+            kotlin_coordinate = (
+                staging
+                / "kotlin/maven/io/github/gungorbasa/retrievalkit/0.1.0"
+            )
+            kotlin_coordinate.mkdir(parents=True)
+            (kotlin_coordinate / "retrievalkit-0.1.0.jar").write_bytes(b"kotlin-base")
+            (staging / "kotlin/inventory.json").write_text("{}", encoding="utf-8")
+            output = root / "bundle"
+            assembler.assemble(REPO, staging, output, "a" * 40)
+
+            with (
+                mock.patch.object(
+                    validator,
+                    "static_validation",
+                    return_value={
+                        "version": "0.1.0",
+                        "publication_blockers": ["candidate remains closed"],
+                    },
+                ),
+                mock.patch.object(validator, "validate_xcframework_archive"),
+                mock.patch.object(validator, "validate_wheels"),
+                mock.patch.object(validator, "validate_node_packages") as node_validation,
+                mock.patch.object(validator, "validate_kotlin_packages") as kotlin_validation,
+            ):
+                result = validator.bundle_validation(REPO, output)
+
+            self.assertEqual(result["artifact_count"], 5)
+            node_validation.assert_called_once_with(
+                output / "artifacts/node",
+                validator.load_json(REPO / "release/release-v0.1.0.json"),
+            )
+            kotlin_validation.assert_called_once_with(
+                output / "artifacts/kotlin",
+                validator.load_json(REPO / "release/release-v0.1.0.json"),
+            )
+            subjects = {
+                row["name"]
+                for row in validator.load_json(output / "provenance.intoto.json")["subject"]
+            }
+            self.assertEqual(
+                subjects,
+                {
+                    "RetrievalKitGraphFFI.xcframework.zip",
+                    "node/inventory.json",
+                    "node/retrievalkit-0.1.0.tgz",
+                    "kotlin/inventory.json",
+                    (
+                        "kotlin/maven/io/github/gungorbasa/retrievalkit/0.1.0/"
+                        "retrievalkit-0.1.0.jar"
+                    ),
+                },
+            )
+            (output / "artifacts/node/retrievalkit-0.1.0.tgz").write_bytes(b"changed")
+            with self.assertRaisesRegex(validator.ValidationError, "checksum mismatch"):
+                validator.bundle_validation(REPO, output)
 
     def test_two_root_comparison_rejects_changed_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

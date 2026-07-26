@@ -19,10 +19,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TYPESCRIPT_ROOT = REPO_ROOT / "wrappers" / "typescript"
-LOCAL_NAMES = {
-    "base": "retrievalkit-node-local",
-    "graph": "retrievalkit-node-graph-local",
+SOURCE_NAMES = {
+    "base": "retrievalkit",
+    "graph": "retrievalkit-graph",
 }
+APPROVED_NAMES = SOURCE_NAMES
 PACKAGE_DIRECTORIES = {
     "base": TYPESCRIPT_ROOT / "base",
     "graph": TYPESCRIPT_ROOT / "graph",
@@ -69,10 +70,6 @@ def validate_npm_name(name: str) -> str:
         raise AssemblyError(
             f"invalid npm package name {name!r}; supply an approved lowercase, URL-safe "
             "scoped or unscoped name"
-        )
-    if name in LOCAL_NAMES.values():
-        raise AssemblyError(
-            f"{name!r} is a repository-local placeholder, not an approved public npm name"
         )
     if name in {"node_modules", "favicon.ico"}:
         raise AssemblyError(f"{name!r} is reserved and cannot be used as an npm package name")
@@ -152,8 +149,10 @@ def release_metadata(
 
 def rewrite_readme(path: Path, names: dict[str, str]) -> None:
     content = path.read_text(encoding="utf-8")
-    for capability, local_name in LOCAL_NAMES.items():
-        content = content.replace(local_name, names[capability])
+    for capability, source_name in sorted(
+        SOURCE_NAMES.items(), key=lambda item: len(item[1]), reverse=True
+    ):
+        content = content.replace(source_name, names[capability])
     path.write_text(content, encoding="utf-8")
 
 
@@ -236,6 +235,10 @@ def assemble(
         "base": validate_npm_name(base_name),
         "graph": validate_npm_name(graph_name),
     }
+    if names != APPROVED_NAMES:
+        raise AssemblyError(
+            "release names must be exactly base='retrievalkit' and graph='retrievalkit-graph'"
+        )
     if names["base"] == names["graph"]:
         raise AssemblyError("base and graph npm package names must be different")
     validate_version(version)

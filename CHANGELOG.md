@@ -6,14 +6,15 @@ All notable user-facing changes and persistence migrations are recorded here.
 
 ### Added
 
-- Repository-local, provisionally named TypeScript/Node base and graph
-  aggregates for Node.js LTS on macOS arm64. Promise-based N-API operations use
-  typed values, `Float32Array`, exact `bigint` transport, Rust-owned search and
-  graph semantics, deterministic async disposal, package-content checks, and
-  local-install smoke tests.
-- Repository-local Kotlin/JVM and Android base and graph aggregates with typed
-  JNI transport, `FloatArray` embeddings, `AutoCloseable` lifecycle, opaque
-  synchronized handles, and Android arm64-v8a AAR packaging.
+- TypeScript/Node base and graph aggregates for Node.js LTS on macOS arm64,
+  selected for publication as `retrievalkit` and `retrievalkit-graph`.
+  Promise-based N-API operations use typed values, `Float32Array`, exact
+  `bigint` transport, Rust-owned search and graph semantics, deterministic
+  async disposal, package-content checks, and local-install smoke tests.
+- Kotlin/JVM and Android base and graph aggregates under the selected
+  `io.github.gungorbasa` Maven group, with typed JNI transport, `FloatArray`
+  embeddings, `AutoCloseable` lifecycle, opaque synchronized handles, and
+  Android arm64-v8a AAR packaging.
 - Python graph queries, results, and stable candidate projection now cross
   PyO3 as typed values without JSON. Projection filtering, stale-selection
   checks, ordering, and counts remain owned by the canonical Rust corpus.
@@ -76,15 +77,21 @@ All notable user-facing changes and persistence migrations are recorded here.
   distinguishes the required JDK 17 build toolchain from the Java 11 bytecode
   target and reports the exact selected Java binary with recovery commands.
 - Fail-closed Node and Kotlin release assemblers now produce inspected,
-  deterministic macOS arm64 npm tarballs and JVM/Android Maven artifacts
-  without changing the repository-local package identities. Public npm names,
-  the Maven namespace, signing keys, and registry credentials remain explicit
-  external publication prerequisites.
+  deterministic macOS arm64 npm tarballs and JVM/Android Maven artifacts using
+  the exact selected registry identities. The two-root release-candidate
+  workflow includes those artifacts in the same closed Swift/Python/Node/Kotlin
+  bundle and rejects any alternate npm name or Maven group.
 - Publication authorization is now created at runtime after a required reviewer
   approves the protected GitHub release environment. The resulting provenance
   record binds the signed tag, source revision, workflow runs, Phase 7 results,
   candidate inventory, and checksums without requiring an impossible
   self-referential authorization file in the release commit.
+- Guarded npm and Maven Central publication jobs consume the authorized
+  candidate bytes without rebuilding them. npm uses trusted publishing with
+  provenance; Maven signs the exact primary files with the dedicated
+  RetrievalKit release key before uploading a Central Portal bundle. Registry
+  ownership, trusted-publisher configuration, Central namespace verification,
+  and Central credentials remain external publication prerequisites.
 
 ### Compatibility
 

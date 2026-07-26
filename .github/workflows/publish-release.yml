@@ -19,6 +19,21 @@ on:
         description: Provisioned passing Phase 7 release qualification run ID
         required: true
         type: string
+      npm_trusted_publishers_ready:
+        description: Both npm names are bootstrapped and trust this public-repository workflow
+        required: true
+        default: false
+        type: boolean
+      pypi_trusted_publishers_ready:
+        description: Both PyPI projects trust this public-repository workflow and protected pypi environment
+        required: true
+        default: false
+        type: boolean
+      maven_central_ready:
+        description: Central namespace, signing identity, user token, and protected maven environment are configured
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -92,6 +107,19 @@ jobs:
             --scheduled-result target/publication-evidence/gates/scheduled-result.json \
             --release-gate-result target/publication-evidence/gates/release-result.json \
             --output target/publication-evidence/candidate-evidence.json
+      - name: Require externally bootstrapped registry identities
+        env:
+          NPM_READY: ${{ inputs.npm_trusted_publishers_ready }}
+          PYPI_READY: ${{ inputs.pypi_trusted_publishers_ready }}
+          MAVEN_READY: ${{ inputs.maven_central_ready }}
+        run: |
+          test "$NPM_READY" = "true"
+          test "$PYPI_READY" = "true"
+          test "$MAVEN_READY" = "true"
+          curl --fail --silent --show-error https://registry.npmjs.org/retrievalkit \
+            | jq --exit-status '.name == "retrievalkit"' > /dev/null
+          curl --fail --silent --show-error https://registry.npmjs.org/retrievalkit-graph \
+            | jq --exit-status '.name == "retrievalkit-graph"' > /dev/null
       - name: Preserve verified candidate for the protected publication job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -201,25 +229,39 @@ jobs:
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |
-            target/publication-evidence/release-bundle-v0.1.0/artifacts/*
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/*.xcframework.zip
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/node/*.tgz
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/kotlin/*-unsigned-central-bundle.zip
             target/publication-record/publication-authorization-provenance.json
       - name: Create immutable GitHub Release assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          bundle=target/publication-evidence/release-bundle-v0.1.0
+          assets=(
+            "$bundle"/artifacts/*.xcframework.zip
+            "$bundle"/artifacts/*.whl
+            "$bundle"/artifacts/node/*.tgz
+            "$bundle"/LICENSE
+            "$bundle"/NOTICE
+            "$bundle"/THIRD_PARTY_NOTICES.md
+            "$bundle"/checksums.sha256
+            "$bundle"/inventory.json
+            "$bundle"/sbom.spdx.json
+            "$bundle"/provenance.intoto.json
+            release/retrievalkit-release-signing-key.asc
+            target/publication-evidence/candidate-evidence.json
+            target/publication-record/publication-authorization-provenance.json
+            target/publication-record/publication-authorization-provenance.sha256
+          )
+          test "${#assets[@]}" -ge 20
+          for asset in "${assets[@]}"; do
+            test -f "$asset"
+          done
           gh release create "$RELEASE_TAG" \
-            target/publication-evidence/release-bundle-v0.1.0/artifacts/* \
-            target/publication-evidence/release-bundle-v0.1.0/LICENSE \
-            target/publication-evidence/release-bundle-v0.1.0/NOTICE \
-            target/publication-evidence/release-bundle-v0.1.0/THIRD_PARTY_NOTICES.md \
-            target/publication-evidence/release-bundle-v0.1.0/checksums.sha256 \
-            target/publication-evidence/release-bundle-v0.1.0/inventory.json \
-            target/publication-evidence/release-bundle-v0.1.0/sbom.spdx.json \
-            target/publication-evidence/release-bundle-v0.1.0/provenance.intoto.json \
-            target/publication-evidence/candidate-evidence.json \
-            target/publication-record/publication-authorization-provenance.json \
-            target/publication-record/publication-authorization-provenance.sha256 \
+            "${assets[@]}" \
             --verify-tag \
             --title "RetrievalKit $RELEASE_TAG preview" \
             --notes-file CHANGELOG.md
@@ -230,6 +272,8 @@ jobs:
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
+      actions: read
+      contents: read
       id-token: write
     steps:
       - name: Download the authorized candidate bundle
@@ -246,3 +290,281 @@ jobs:
         uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
         with:
           packages-dir: target/pypi
+
+  npm:
+    name: Trusted npm publication with provenance
+    needs: github-release
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - name: Install an OIDC-capable npm CLI
+        run: npm install --global npm@11.6.2
+      - name: Download the authorized candidate bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: verified-release-candidate-v0.1.0
+          path: target/publication-evidence
+      - name: Download protected authorization evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: publication-authorization-v0.1.0
+          path: target/publication-authorization
+      - name: Stage only the exact authorized npm tarballs
+        env:
+          VERSION: "0.1.0"
+        run: |
+          bundle=target/publication-evidence/release-bundle-v0.1.0
+          (
+            cd "$bundle"
+            sha256sum --check checksums.sha256
+          )
+          (
+            cd target/publication-authorization/publication-record
+            sha256sum --check publication-authorization-provenance.sha256
+          )
+          test "$(find "$bundle/artifacts/node" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "2"
+          test -f "$bundle/artifacts/node/retrievalkit-$VERSION.tgz"
+          test -f "$bundle/artifacts/node/retrievalkit-graph-$VERSION.tgz"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/node/inventory.json")" = "2"
+          test "$(jq -r '.artifacts[] | select(.capability == "base") | .npmName' "$bundle/artifacts/node/inventory.json")" = "retrievalkit"
+          test "$(jq -r '.artifacts[] | select(.capability == "graph") | .npmName' "$bundle/artifacts/node/inventory.json")" = "retrievalkit-graph"
+          mkdir -p target/npm
+          cp "$bundle/artifacts/node/retrievalkit-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/node/retrievalkit-graph-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/node/inventory.json" target/npm/authorized-inventory.json
+      - name: Require trusted-publisher bootstrap and unused version
+        env:
+          VERSION: "0.1.0"
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          test "$(npm --version)" = "11.6.2"
+          for package in retrievalkit retrievalkit-graph; do
+            test "$(npm view "$package" name)" = "$package"
+            if npm view "$package@$VERSION" version > /dev/null 2>&1; then
+              echo "$package@$VERSION already exists; npm versions are immutable" >&2
+              exit 1
+            fi
+          done
+      - name: Publish exact tarballs through npm trusted publishing
+        env:
+          VERSION: "0.1.0"
+        run: |
+          npm publish "target/npm/retrievalkit-$VERSION.tgz" \
+            --access public \
+            --ignore-scripts \
+            --provenance
+          npm publish "target/npm/retrievalkit-graph-$VERSION.tgz" \
+            --access public \
+            --ignore-scripts \
+            --provenance
+      - name: Verify published npm integrity and write evidence
+        env:
+          VERSION: "0.1.0"
+        run: |
+          inventory=target/npm/authorized-inventory.json
+          for package in retrievalkit retrievalkit-graph; do
+            expected="$(jq -r --arg package "$package" '.artifacts[] | select(.npmName == $package) | .npmIntegrity' "$inventory")"
+            actual=""
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              actual="$(npm view "$package@$VERSION" dist.integrity 2>/dev/null || true)"
+              if [ "$actual" = "$expected" ]; then
+                break
+              fi
+              echo "Waiting for npm integrity replication: $package attempt $attempt" >&2
+              sleep 3
+            done
+            test "$actual" = "$expected"
+          done
+          authorization_sha="$(cut -d ' ' -f 1 target/publication-authorization/publication-record/publication-authorization-provenance.sha256)"
+          artifacts="$(jq '[.artifacts[] | {capability, file, npmIntegrity, npmName, sha256, sha512, version}]' "$inventory")"
+          jq --null-input \
+            --arg authorizationSha256 "$authorization_sha" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg revision "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg tag "${{ inputs.tag }}" \
+            --argjson artifacts "$artifacts" \
+            '{
+              schemaVersion: 1,
+              kind: "retrievalkit-npm-publication",
+              repository: $repository,
+              sourceRevision: $revision,
+              tag: $tag,
+              workflowRunId: ($runId | tonumber),
+              authorizationSha256: $authorizationSha256,
+              registry: "https://registry.npmjs.org/",
+              trustedPublishing: true,
+              provenance: true,
+              artifacts: $artifacts
+            }' > target/npm/publication-evidence.json
+      - name: Attest npm tarballs and publication evidence
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            target/npm/retrievalkit-0.1.0.tgz
+            target/npm/retrievalkit-graph-0.1.0.tgz
+            target/npm/publication-evidence.json
+      - name: Preserve npm publication evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-publication-v0.1.0
+          path: |
+            target/npm/authorized-inventory.json
+            target/npm/publication-evidence.json
+          if-no-files-found: error
+          retention-days: 180
+
+  maven:
+    name: Sign and upload Maven Central Portal bundle
+    needs: github-release
+    runs-on: ubuntu-24.04
+    environment: maven
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the authorized candidate bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: verified-release-candidate-v0.1.0
+          path: target/publication-evidence
+      - name: Download protected authorization evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: publication-authorization-v0.1.0
+          path: target/publication-authorization
+      - name: Stage exact authorized Maven primary artifacts
+        run: |
+          bundle=target/publication-evidence/release-bundle-v0.1.0
+          (
+            cd "$bundle"
+            sha256sum --check checksums.sha256
+          )
+          (
+            cd target/publication-authorization/publication-record
+            sha256sum --check publication-authorization-provenance.sha256
+          )
+          test "$(jq -r '.group' "$bundle/artifacts/kotlin/inventory.json")" = "io.github.gungorbasa"
+          test "$(jq -r '.version' "$bundle/artifacts/kotlin/inventory.json")" = "0.1.0"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/kotlin/inventory.json")" = "4"
+          mkdir -p target/maven
+          cp -R "$bundle/artifacts/kotlin/maven" target/maven/repository
+          find target/maven/repository -type f \( -name '*.pom' -o -name '*.jar' -o -name '*.aar' \) \
+            | LC_ALL=C sort > target/maven/authorized-primary-files.txt
+          test "$(wc -l < target/maven/authorized-primary-files.txt | tr -d ' ')" = "16"
+          while IFS= read -r artifact; do
+            sha256sum "$artifact"
+          done < target/maven/authorized-primary-files.txt \
+            > target/maven/authorized-primary.sha256
+      - name: Sign exact authorized Maven artifacts
+        env:
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_KEY_ID: ${{ secrets.MAVEN_GPG_KEY_ID }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          test -n "$MAVEN_GPG_PRIVATE_KEY"
+          test -n "$MAVEN_GPG_KEY_ID"
+          test -n "$MAVEN_GPG_PASSPHRASE"
+          export GNUPGHOME="$RUNNER_TEMP/retrievalkit-gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --list-secret-keys "$MAVEN_GPG_KEY_ID" > /dev/null
+          while IFS= read -r artifact; do
+            printf '%s' "$MAVEN_GPG_PASSPHRASE" \
+              | gpg \
+                  --batch \
+                  --yes \
+                  --pinentry-mode loopback \
+                  --passphrase-fd 0 \
+                  --local-user "$MAVEN_GPG_KEY_ID" \
+                  --armor \
+                  --detach-sign \
+                  "$artifact"
+          done < target/maven/authorized-primary-files.txt
+          test "$(find target/maven/repository -type f -name '*.asc' | wc -l | tr -d ' ')" = "16"
+      - name: Construct signed Central Portal bundle
+        run: |
+          output="$GITHUB_WORKSPACE/target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip"
+          (
+            cd target/maven/repository
+            find . -type f -print | LC_ALL=C sort | zip -X "$output" -@
+          )
+          sha256sum target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip \
+            > target/maven/signed-central-bundle.sha256
+      - name: Upload signed bundle to Central Portal
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          test -n "$MAVEN_CENTRAL_USERNAME"
+          test -n "$MAVEN_CENTRAL_PASSWORD"
+          response=target/maven/central-deployment-id.txt
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            --form bundle=@target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip \
+            "https://central.sonatype.com/api/v1/publisher/upload?name=RetrievalKit-v0.1.0-run-$GITHUB_RUN_ID&publishingType=AUTOMATIC" \
+            > "$response"
+          tr -d '"\r\n' < "$response" > target/maven/central-deployment-id.normalized
+          mv target/maven/central-deployment-id.normalized "$response"
+          grep --extended-regexp --quiet '^[A-Za-z0-9-]+$' "$response"
+      - name: Write Maven publication evidence
+        run: |
+          authorization_sha="$(cut -d ' ' -f 1 target/publication-authorization/publication-record/publication-authorization-provenance.sha256)"
+          bundle_sha="$(cut -d ' ' -f 1 target/maven/signed-central-bundle.sha256)"
+          deployment_id="$(cat target/maven/central-deployment-id.txt)"
+          jq --null-input \
+            --arg authorizationSha256 "$authorization_sha" \
+            --arg bundleSha256 "$bundle_sha" \
+            --arg deploymentId "$deployment_id" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg revision "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg tag "${{ inputs.tag }}" \
+            '{
+              schemaVersion: 1,
+              kind: "retrievalkit-maven-central-publication",
+              repository: $repository,
+              sourceRevision: $revision,
+              tag: $tag,
+              workflowRunId: ($runId | tonumber),
+              authorizationSha256: $authorizationSha256,
+              group: "io.github.gungorbasa",
+              version: "0.1.0",
+              signedPrimaryArtifactCount: 16,
+              centralDeploymentId: $deploymentId,
+              publishingType: "AUTOMATIC",
+              signedBundleSha256: $bundleSha256
+            }' > target/maven/publication-evidence.json
+      - name: Attest signed Maven bundle and publication evidence
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip
+            target/maven/publication-evidence.json
+      - name: Preserve Maven publication evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maven-publication-v0.1.0
+          path: |
+            target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip
+            target/maven/authorized-primary.sha256
+            target/maven/signed-central-bundle.sha256
+            target/maven/central-deployment-id.txt
+            target/maven/publication-evidence.json
+          if-no-files-found: error
+          retention-days: 180

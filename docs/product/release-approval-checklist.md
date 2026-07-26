@@ -4,14 +4,15 @@ Every item is required unless explicitly marked candidate-only.
 
 ## Identity and legal
 
-- [ ] `VERSION`, Cargo, Python, Swift, changelog, and manifests equal `0.1.0`.
+- [ ] `VERSION`, Cargo, Python, Swift, Node, Kotlin, changelog, and manifests
+  equal `0.1.0`.
 - [ ] Release revision is clean and matches the verified signed `v0.1.0` tag.
 - [ ] The publication workflow is dispatched with `--ref v0.1.0`; its
   `github.sha` and `github.workflow_ref` resolve to the exact signed tag commit.
 - [ ] Root `LICENSE` remains the owner-approved Apache-2.0 text.
 - [ ] `NOTICE` retains the owner-approved company attribution and required
   third-party notices.
-- [ ] Cargo and Python metadata remain Apache-2.0.
+- [ ] Cargo, Python, npm, and Maven metadata remain Apache-2.0.
 
 ## Evidence and tests
 
@@ -31,6 +32,11 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] The public graph-capable XCFramework contains arm64 macOS, iOS, and iOS
   Simulator slices.
 - [ ] Both Python distributions pass on CPython 3.10–3.14 macOS arm64.
+- [ ] The authorized npm inventory contains exactly `retrievalkit@0.1.0` and
+  `retrievalkit-graph@0.1.0` macOS arm64 tarballs.
+- [ ] The authorized Maven inventory contains exactly four
+  `io.github.gungorbasa` JVM/Android base/graph publications and 16 primary
+  POM/JAR/AAR files.
 - [ ] Every Swift product and the combined base-plus-graph consumer pass; the
   internal graph-neutrality and Python co-import negative tests pass.
 - [ ] Two clean roots produce byte-identical artifacts.
@@ -58,5 +64,24 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] The Swift package publishes all four products from the signed revision and
   resolves only `RetrievalKitGraphFFI`.
 - [ ] Trusted PyPI publication uploads exactly the validated wheel inventory.
-- [ ] Fresh remote SwiftPM and PyPI consumer projects pass.
+- [ ] Both PyPI projects trust the public repository,
+  `publish-release.yml`, and protected `pypi` environment; the
+  `pypi_trusted_publishers_ready` dispatch gate is confirmed.
+- [ ] Both npm names were bootstrapped with a non-release version; the public
+  repository, `publish-release.yml`, and protected `npm` environment are
+  configured as trusted publishers; the bootstrap credential is revoked.
+- [ ] npm publication uses no registry token, uploads only the two authorized
+  tarballs with provenance, and the observed `dist.integrity` values equal the
+  authorized inventory.
+- [ ] Central Portal verifies `io.github.gungorbasa`; the protected `maven`
+  environment contains the PGP identity and Central user-token secrets.
+- [ ] The Maven signing key fingerprint is
+  `0E82 F1A5 487A 4EF3 CCF1 ED6C 3932 66CD 4DD1 58ED`, matches
+  `release/retrievalkit-release-signing-key.asc`, remains publicly retrievable,
+  and has not expired or been revoked.
+- [ ] Maven publication signs the exact 16 authorized primary files without
+  rebuilding them, attests the signed bundle, and retains the Central
+  deployment ID.
+- [ ] Fresh remote SwiftPM, PyPI, npm, Maven JVM, and Maven Android consumer
+  projects pass.
 - [ ] Changelog, compatibility notes, and rollback owner are confirmed.

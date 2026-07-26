@@ -1,4 +1,4 @@
-import { GraphDatabaseBuilder } from "retrievalkit-node-graph-local";
+import { GraphDatabaseBuilder } from "retrievalkit-graph";
 
 const builder = new GraphDatabaseBuilder({
   corpusId: "graph-example",

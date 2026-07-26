@@ -1,8 +1,8 @@
 # RetrievalKit Node graph aggregate
 
-`retrievalkit-node-graph-local` is the repository-local graph-capable
-aggregate. Its name is provisional and it is not claimed to be available from
-npm. The initial supported runtime is Node.js LTS on macOS arm64.
+`retrievalkit-graph` is the approved graph-capable aggregate package name. The
+package remains private in the source workspace until release assembly removes
+that safety gate. The initial supported runtime is Node.js LTS on macOS arm64.
 
 It contains two products:
 
@@ -60,5 +60,5 @@ databases, and selections, or use `await using`. Errors are mapped to typed
 classes while retaining actionable Rust messages. Integer fields use `bigint`
 for exact signed 64-bit transport.
 
-Do not load this package together with `retrievalkit-node-local` in one process.
+Do not load this package together with `retrievalkit` in one process.
 The loader rejects the second aggregate.

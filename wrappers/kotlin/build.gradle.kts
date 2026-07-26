@@ -8,7 +8,7 @@ plugins {
 }
 
 val publicationGroup = providers.gradleProperty("retrievalkitMavenGroup")
-    .orElse("local.retrievalkit")
+    .orElse("io.github.gungorbasa")
 val publicationVersion = providers.gradleProperty("retrievalkitVersion")
     .orElse("0.1.0")
 

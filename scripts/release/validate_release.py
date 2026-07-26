@@ -6,18 +6,23 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import io
 import json
 import plistlib
 import re
+import struct
 import sys
+import tarfile
 import zipfile
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 
 ZERO_CHECKSUM = "0" * 64
 ACTION_PATTERN = re.compile(r"uses:\s+[^\s@]+@([0-9a-f]{40})(?:\s|$)")
 BUNDLE_LEGAL_FILES = {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}
+MAVEN_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
 
 
 class ValidationError(RuntimeError):
@@ -97,6 +102,61 @@ def static_validation(repo: Path) -> dict[str, Any]:
     require("VERSION" in (repo / "scripts/build-xcframework.sh").read_text(), "XCFramework metadata does not read VERSION")
     require(config["python"]["implementations"] == ["cp310", "cp311", "cp312", "cp313", "cp314"], "Python release matrix changed")
     require(config["python"]["distributions"] == ["retrievalkit", "retrievalkit-graph"], "Python distribution set changed")
+    require(
+        config["node"]["packages"]
+        == {
+            "base": {"name": "retrievalkit", "artifact": "retrievalkit-0.1.0.tgz"},
+            "graph": {
+                "name": "retrievalkit-graph",
+                "artifact": "retrievalkit-graph-0.1.0.tgz",
+            },
+        },
+        "Node release identities changed",
+    )
+    for capability, expected_name in (
+        ("base", "retrievalkit"),
+        ("graph", "retrievalkit-graph"),
+    ):
+        package = load_json(repo / f"wrappers/typescript/{capability}/package.json")
+        require(package["name"] == expected_name, f"Node {capability} package identity mismatch")
+        require(package.get("private") is True, f"Node {capability} source package must remain private")
+        require(package["version"] == version, f"Node {capability} version mismatch")
+    require(
+        config["kotlin"]["group"] == "io.github.gungorbasa",
+        "Kotlin Maven group changed",
+    )
+    require(
+        config["kotlin"]["artifacts"]
+        == {
+            "retrievalkit": "jar",
+            "retrievalkit-graph": "jar",
+            "retrievalkit-android": "aar",
+            "retrievalkit-graph-android": "aar",
+        },
+        "Kotlin artifact identities changed",
+    )
+    signing = config["kotlin"]["signing"]
+    require(
+        signing["fingerprint"] == "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED",
+        "Maven signing fingerprint changed",
+    )
+    signing_key = repo / signing["public_key"]
+    require(signing_key.is_file(), "Maven public signing key is missing")
+    require(
+        digest(signing_key) == signing["sha256"],
+        "Maven public signing key checksum mismatch",
+    )
+    require(
+        signing_key.read_text(encoding="utf-8").startswith(
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+        ),
+        "Maven public signing key is not ASCII-armored PGP",
+    )
+    require(
+        'orElse("io.github.gungorbasa")'
+        in (repo / "wrappers/kotlin/build.gradle.kts").read_text(encoding="utf-8"),
+        "Kotlin checked-in Maven group mismatch",
+    )
     require("mutually exclusive" in (repo / "wrappers/python/python/retrievalkit/__init__.py").read_text(), "base Python co-install diagnostic missing")
     require("mutually exclusive" in (repo / "wrappers/python-graph/python/retrievalkit_graph/__init__.py").read_text(), "graph Python co-install diagnostic missing")
     validate_markdown_links(repo)
@@ -143,6 +203,17 @@ def validate_workflows(repo: Path) -> None:
                 require(ACTION_PATTERN.search(line) is not None, f"action is not pinned to a full commit: {path.name}: {line.strip()}")
     candidate = (repo / ".github/workflows/release-candidate.yml").read_text().lower()
     require("contents: write" not in candidate and "id-token: write" not in candidate, "candidate workflow has publication permissions")
+    require(
+        "assemble_node_packages.py" in candidate
+        and "--base-name retrievalkit" in candidate
+        and "--graph-name retrievalkit-graph" in candidate,
+        "candidate workflow lacks the approved Node release identities",
+    )
+    require(
+        "assemble_kotlin_packages.py" in candidate
+        and "--group io.github.gungorbasa" in candidate,
+        "candidate workflow lacks the approved Kotlin release identity",
+    )
     publication = (repo / ".github/workflows/publish-release.yml").read_text()
     require("environment: release" in publication and "environment: pypi" in publication, "publication jobs lack protected environments")
     require(
@@ -303,6 +374,302 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
     require(observed == expected, f"Python wheel matrix mismatch: missing={sorted(expected - observed)}, extra={sorted(observed - expected)}")
 
 
+def validate_checksum_manifest(
+    path: Path,
+    files: dict[str, Path],
+    algorithm: str,
+) -> None:
+    observed: dict[str, str] = {}
+    for line in path.read_text(encoding="ascii").splitlines():
+        checksum, name = line.split("  ", 1)
+        observed[name] = checksum
+    require(set(observed) == set(files), f"{path.name} inventory mismatch")
+    for name, file_path in files.items():
+        checksum = hashlib.new(algorithm, file_path.read_bytes()).hexdigest()
+        require(observed[name] == checksum, f"{path.name} checksum mismatch: {name}")
+
+
+def validate_macho_arm64(data: bytes, label: str) -> None:
+    require(len(data) >= 8, f"truncated Mach-O binary: {label}")
+    magic, cpu_type = struct.unpack("<II", data[:8])
+    require(
+        magic == 0xFEEDFACF and cpu_type == 0x0100000C,
+        f"native binary is not macOS arm64: {label}",
+    )
+
+
+def validate_elf_arm64(data: bytes, label: str) -> None:
+    require(len(data) >= 20 and data[:4] == b"\x7fELF", f"native binary is not ELF: {label}")
+    byte_order = "<" if data[5] == 1 else ">" if data[5] == 2 else ""
+    require(bool(byte_order), f"native binary has invalid ELF byte order: {label}")
+    require(
+        struct.unpack(f"{byte_order}H", data[18:20])[0] == 183,
+        f"native binary is not Android arm64: {label}",
+    )
+
+
+def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
+    expected_names = {
+        capability: row["artifact"]
+        for capability, row in config["node"]["packages"].items()
+    }
+    tarballs = {path.name: path for path in root.glob("*.tgz")}
+    require(set(tarballs) == set(expected_names.values()), "Node tarball inventory mismatch")
+    inventory = load_json(root / "inventory.json")
+    require(
+        inventory["kind"] == "retrievalkit-node-release"
+        and inventory["artifactReady"] is True
+        and inventory["publicationReady"] is False,
+        "Node package inventory readiness mismatch",
+    )
+    inventory_rows = {row["capability"]: row for row in inventory["artifacts"]}
+    require(set(inventory_rows) == set(expected_names), "Node capability inventory mismatch")
+    for capability, artifact_name in expected_names.items():
+        path = tarballs[artifact_name]
+        row = inventory_rows[capability]
+        expected_identity = config["node"]["packages"][capability]["name"]
+        require(row["npmName"] == expected_identity, f"Node {capability} identity mismatch")
+        require(row["file"] == artifact_name, f"Node {capability} filename mismatch")
+        require(row["version"] == config["version"], f"Node {capability} version mismatch")
+        require(
+            row["platform"] == config["node"]["platform"],
+            f"Node {capability} target mismatch",
+        )
+        require(row["sha256"] == digest(path), f"Node {capability} inventory hash mismatch")
+        with tarfile.open(path, "r:gz") as archive:
+            members = archive.getmembers()
+            require(
+                all(
+                    member.name.startswith("package/")
+                    and ".." not in Path(member.name).parts
+                    and not member.issym()
+                    and not member.islnk()
+                    for member in members
+                ),
+                f"unsafe Node archive inventory: {artifact_name}",
+            )
+            names = {
+                member.name.removeprefix("package/")
+                for member in members
+                if member.isfile()
+            }
+            require(
+                {
+                    "LICENSE",
+                    "NOTICE",
+                    "README.md",
+                    "dist/index.js",
+                    "dist/index.d.ts",
+                    "native/retrievalkit.node",
+                    "package.json",
+                }.issubset(names),
+                f"Node package contents incomplete: {artifact_name}",
+            )
+            package_file = archive.extractfile("package/package.json")
+            native_file = archive.extractfile("package/native/retrievalkit.node")
+            require(package_file is not None and native_file is not None, f"Node package payload unreadable: {artifact_name}")
+            package = json.load(package_file)
+            native = native_file.read()
+        require(set(row["files"]) == names, f"Node {capability} file inventory mismatch")
+        require(
+            row["sha512"] == hashlib.sha512(path.read_bytes()).hexdigest(),
+            f"Node {capability} SHA-512 inventory mismatch",
+        )
+        require(package["name"] == expected_identity, f"Node package.json identity mismatch: {artifact_name}")
+        require(package["version"] == config["version"], f"Node package.json version mismatch: {artifact_name}")
+        require("private" not in package, f"Node staged package remains private: {artifact_name}")
+        require(package["license"] == "Apache-2.0", f"Node license mismatch: {artifact_name}")
+        require(
+            package["os"] == ["darwin"] and package["cpu"] == ["arm64"],
+            f"Node package target mismatch: {artifact_name}",
+        )
+        validate_macho_arm64(native, artifact_name)
+        if capability == "base":
+            require(
+                not any(
+                    marker in native
+                    for marker in (
+                        b"retrievalkit_graph",
+                        b"NativeGraphHandle",
+                        b"GraphRetrievalDatabase",
+                    )
+                ),
+                "Node base native addon contains graph symbols",
+            )
+    package_files = {path.name: path for path in tarballs.values()}
+    validate_checksum_manifest(root / "SHA256SUMS", package_files, "sha256")
+    validate_checksum_manifest(root / "SHA512SUMS", package_files, "sha512")
+
+
+def validate_maven_pom(
+    path: Path,
+    *,
+    group: str,
+    artifact_id: str,
+    version: str,
+    packaging: str,
+) -> None:
+    root = ElementTree.parse(path).getroot()
+
+    def text(name: str) -> str:
+        return root.findtext(f"m:{name}", default="", namespaces=MAVEN_NAMESPACE)
+
+    require(
+        (text("groupId"), text("artifactId"), text("version"))
+        == (group, artifact_id, version),
+        f"Maven POM identity mismatch: {path.name}",
+    )
+    if packaging == "aar":
+        require(text("packaging") == "aar", f"Maven POM packaging mismatch: {path.name}")
+    for name in ("name", "description", "url", "licenses", "developers", "scm"):
+        require(root.find(f"m:{name}", MAVEN_NAMESPACE) is not None, f"Maven POM lacks {name}: {path.name}")
+    license_name = root.findtext(
+        "m:licenses/m:license/m:name",
+        default="",
+        namespaces=MAVEN_NAMESPACE,
+    )
+    require("Apache" in license_name, f"Maven POM license mismatch: {path.name}")
+    require(root.find("m:repositories", MAVEN_NAMESPACE) is None, f"Maven POM embeds repositories: {path.name}")
+
+
+def validate_kotlin_primary(path: Path, capability: str, packaging: str) -> None:
+    with zipfile.ZipFile(path) as archive:
+        names = set(archive.namelist())
+        if packaging == "jar":
+            require({"LICENSE", "NOTICE"}.issubset(names), f"Kotlin legal files missing: {path.name}")
+            classes = names
+            base_native = "native/macos-aarch64/libretrievalkit_jni.dylib"
+            graph_native = "native/macos-aarch64/libretrievalkit_jni_graph.dylib"
+            native_reader = archive.read
+        else:
+            classes_bytes = archive.read("classes.jar")
+            with zipfile.ZipFile(io.BytesIO(classes_bytes)) as classes_archive:
+                classes = set(classes_archive.namelist())
+            require({"LICENSE", "NOTICE"}.issubset(classes), f"Android legal files missing: {path.name}")
+            base_native = "jni/arm64-v8a/libretrievalkit_jni.so"
+            graph_native = "jni/arm64-v8a/libretrievalkit_jni_graph.so"
+            native_reader = archive.read
+        graph = capability.endswith("graph")
+        expected_native = graph_native if graph else base_native
+        excluded_native = base_native if graph else graph_native
+        require(expected_native in names and excluded_native not in names, f"Kotlin native isolation mismatch: {path.name}")
+        require(
+            graph == any("GraphDatabase" in name for name in classes if name.endswith(".class")),
+            f"Kotlin class isolation mismatch: {path.name}",
+        )
+        native = native_reader(expected_native)
+    if packaging == "jar":
+        validate_macho_arm64(native, path.name)
+    else:
+        validate_elf_arm64(native, path.name)
+
+
+def validate_kotlin_packages(root: Path, config: dict[str, Any]) -> None:
+    inventory = load_json(root / "inventory.json")
+    require(
+        inventory["kind"] == "retrievalkit-kotlin-release"
+        and inventory["group"] == config["kotlin"]["group"]
+        and inventory["version"] == config["version"],
+        "Kotlin package inventory identity mismatch",
+    )
+    require(inventory["targets"] == config["kotlin"]["targets"], "Kotlin target inventory mismatch")
+    require(
+        inventory["publicationReady"] is False
+        and inventory["bundle"]["signed"] is config["kotlin"]["signed_in_candidate"],
+        "Kotlin candidate must remain unsigned and publication-closed",
+    )
+    require(
+        inventory["artifactBlockers"]
+        == ["Central requires PGP signatures; no signing key was supplied"],
+        "Kotlin candidate blocker inventory mismatch",
+    )
+    bundle_name = config["kotlin"]["central_bundle"]
+    require(inventory["bundle"]["file"] == bundle_name, "Kotlin Central bundle name mismatch")
+    bundle_path = root / bundle_name
+    require(inventory["bundle"]["sha256"] == digest(bundle_path), "Kotlin Central bundle hash mismatch")
+    group = config["kotlin"]["group"]
+    version = config["version"]
+    group_path = Path(*group.split("."))
+    expected_maven_files: set[Path] = set()
+    inventory_rows = {row["coordinates"].split(":")[1]: row for row in inventory["artifacts"]}
+    require(set(inventory_rows) == set(config["kotlin"]["artifacts"]), "Kotlin artifact inventory mismatch")
+    for artifact_id, packaging in config["kotlin"]["artifacts"].items():
+        coordinate_root = root / "maven" / group_path / artifact_id / version
+        primary_names = [
+            f"{artifact_id}-{version}.{packaging}",
+            f"{artifact_id}-{version}-sources.jar",
+            f"{artifact_id}-{version}-javadoc.jar",
+            f"{artifact_id}-{version}.pom",
+        ]
+        primary_files = [coordinate_root / name for name in primary_names]
+        require(all(path.is_file() for path in primary_files), f"Kotlin Maven files missing: {artifact_id}")
+        for path in primary_files:
+            expected_maven_files.add(path.relative_to(root / "maven"))
+            for algorithm in ("md5", "sha1", "sha256", "sha512"):
+                companion = path.with_name(f"{path.name}.{algorithm}")
+                require(companion.is_file(), f"Kotlin checksum companion missing: {companion.name}")
+                require(
+                    companion.read_text(encoding="ascii").strip()
+                    == hashlib.new(algorithm, path.read_bytes()).hexdigest(),
+                    f"Kotlin checksum companion mismatch: {companion.name}",
+                )
+                expected_maven_files.add(companion.relative_to(root / "maven"))
+        primary = coordinate_root / f"{artifact_id}-{version}.{packaging}"
+        capability = next(
+            row["capability"]
+            for row in inventory["artifacts"]
+            if row["coordinates"] == f"{group}:{artifact_id}:{version}"
+        )
+        validate_kotlin_primary(primary, capability, packaging)
+        validate_maven_pom(
+            coordinate_root / f"{artifact_id}-{version}.pom",
+            group=group,
+            artifact_id=artifact_id,
+            version=version,
+            packaging=packaging,
+        )
+        require(
+            inventory_rows[artifact_id]["primarySha256"] == digest(primary),
+            f"Kotlin primary inventory hash mismatch: {artifact_id}",
+        )
+        require(
+            set(inventory_rows[artifact_id]["files"]) == set(primary_names),
+            f"Kotlin artifact file inventory mismatch: {artifact_id}",
+        )
+        for classifier in ("sources", "javadoc"):
+            require(
+                zipfile.is_zipfile(coordinate_root / f"{artifact_id}-{version}-{classifier}.jar"),
+                f"Kotlin {classifier} JAR is invalid: {artifact_id}",
+            )
+    observed_maven_files = {
+        path.relative_to(root / "maven")
+        for path in (root / "maven").rglob("*")
+        if path.is_file()
+    }
+    require(observed_maven_files == expected_maven_files, "Kotlin Maven layout is not closed")
+    with zipfile.ZipFile(bundle_path) as central:
+        require(
+            all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in central.infolist()),
+            "Kotlin Central bundle timestamps are not canonical",
+        )
+        central_files = set(central.namelist())
+        require(
+            central_files == {path.as_posix() for path in expected_maven_files},
+            "Kotlin Central bundle inventory mismatch",
+        )
+        for relative in expected_maven_files:
+            require(
+                central.read(relative.as_posix()) == (root / "maven" / relative).read_bytes(),
+                f"Kotlin Central bundle bytes mismatch: {relative}",
+            )
+    release_files = {
+        path.relative_to(root).as_posix(): path
+        for path in root.rglob("*")
+        if path.is_file() and path.name not in {"inventory.json", "SHA256SUMS"}
+    }
+    validate_checksum_manifest(root / "SHA256SUMS", release_files, "sha256")
+
+
 def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     static = static_validation(repo)
     config = load_json(repo / "release/release-v0.1.0.json")
@@ -327,7 +694,7 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     inventory = load_json(bundle / "inventory.json")
     inventory_paths = sorted(
         [
-            *bundle.glob("artifacts/*"),
+            *(path for path in (bundle / "artifacts").rglob("*") if path.is_file()),
             *(bundle / name for name in sorted(BUNDLE_LEGAL_FILES)),
             bundle / "sbom.spdx.json",
             bundle / "provenance.intoto.json",
@@ -352,10 +719,16 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
     for path in archives:
         validate_xcframework_archive(path, config["version"], config["apple"]["artifacts"][path.name]["swiftpm_checksum"])
     validate_wheels(list((bundle / "artifacts").glob("*.whl")), config)
+    validate_node_packages(bundle / "artifacts/node", config)
+    validate_kotlin_packages(bundle / "artifacts/kotlin", config)
     sbom = load_json(bundle / "sbom.spdx.json")
     require(sbom["spdxVersion"] == "SPDX-2.3" and sbom["packages"], "SBOM is missing package inventory")
     provenance = load_json(bundle / "provenance.intoto.json")
-    expected_subjects = {path.name: digest(path) for path in (bundle / "artifacts").iterdir()}
+    expected_subjects = {
+        path.relative_to(bundle / "artifacts").as_posix(): digest(path)
+        for path in (bundle / "artifacts").rglob("*")
+        if path.is_file()
+    }
     observed_subjects = {row["name"]: row["digest"]["sha256"] for row in provenance["subject"]}
     require(observed_subjects == expected_subjects, "provenance subjects mismatch")
     return {"result": "PASS", "version": static["version"], "artifact_count": len(expected_subjects), "publication_ready": False, "publication_blockers": static["publication_blockers"]}

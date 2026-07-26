@@ -1,8 +1,8 @@
 {
-  "name": "retrievalkit-node-graph-local",
+  "name": "retrievalkit-graph",
   "version": "0.1.0",
   "private": true,
-  "description": "Repository-local RetrievalKit Node.js graph aggregate (provisional name)",
+  "description": "RetrievalKit Node.js graph aggregate",
   "keywords": [
     "retrieval",
     "knowledge-graph",

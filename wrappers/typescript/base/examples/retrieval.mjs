@@ -1,4 +1,4 @@
-import { RetrievalDatabaseBuilder } from "retrievalkit-node-local";
+import { RetrievalDatabaseBuilder } from "retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({ corpusId: "example-notes" });
 await builder.add([

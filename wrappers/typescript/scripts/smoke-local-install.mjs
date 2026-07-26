@@ -21,7 +21,7 @@ try {
     [
       "base",
       baseTar,
-      `import { RetrievalDatabaseBuilder } from "retrievalkit-node-local";
+      `import { RetrievalDatabaseBuilder } from "retrievalkit";
 const b = new RetrievalDatabaseBuilder({ corpusId: "smoke", metric: "dotProduct", encoding: "f32" });
 await b.add([{ id: "one", text: "local", embedding: new Float32Array([1, 0]) }]);
 await using db = await b.build();
@@ -30,7 +30,7 @@ if ((await db.search({ mode: "vector", embedding: new Float32Array([1, 0]) }))[0
     [
       "graph",
       graphTar,
-      `import { GraphDatabaseBuilder } from "retrievalkit-node-graph-local";
+      `import { GraphDatabaseBuilder } from "retrievalkit-graph";
 const b = new GraphDatabaseBuilder({ corpusId: "smoke", schema: { recordNodes: [{ recordType: "Topic", nodeType: "Topic", queryableFields: [["title"]] }] } });
 await b.add([{ id: "one", type: "Topic", fields: { title: "One" }, content: "one" }]);
 await using db = await b.build();

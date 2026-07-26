@@ -34,9 +34,17 @@ implemented, or superseded by the product spec.
   `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected `npm`
   environment. The local npm bootstrap credential was removed afterward.
   Both public records resolve anonymously. These placeholders are name
-  reservations, not v0.1.0 SDK releases. PyPI trusted publishers, Central
-  namespace verification and user token, the signed tag, and provisioned
-  Phase 7 evidence remain external gates.
+  reservations, not v0.1.0 SDK releases.
+- 2026-07-26 PyPI owner setup: `retrievalkit` and `retrievalkit-graph` each
+  received a reviewed non-SDK `0.0.0a0` placeholder. Both projects now trust
+  only `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected
+  `pypi` environment. Separate temporary bootstrap workflows were required
+  because PyPI rejects one identical pending-publisher identity for multiple
+  uncreated project names; those temporary publishers and workflows were
+  removed after both projects existed. Both public records resolve
+  anonymously, and v0.1.0 remains unused. Central namespace verification and
+  user token, the signed tag, and provisioned Phase 7 evidence remain external
+  gates.
 - 2026-07-26 Phase B publication-authorization decision: no completed
   authorization file is committed to the release revision. The exact signed-tag
   candidate, candidate/scheduled/release workflow run IDs, passing Phase 7
@@ -921,16 +929,15 @@ Verification completed without benchmark workloads:
 ## Likely Next Tasks
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
-npm names, protected GitHub environments, and Maven signing identity are
-configured. Continue one owner-interactive registry step at a time:
+npm names, PyPI projects, protected GitHub environments, and Maven signing
+identity are configured. Continue one owner-interactive registry step at a
+time:
 
-1. re-verify both npm bootstrap records and their exact trusted-publisher
-   configuration immediately before publication dispatch;
-2. create or authenticate the PyPI owner account and configure both projects'
-   trusted publishers without publishing v0.1.0;
-3. verify the `io.github.gungorbasa` Central namespace and install its user
+1. re-verify both npm and PyPI bootstrap records and their exact
+   trusted-publisher configuration immediately before publication dispatch;
+2. verify the `io.github.gungorbasa` Central namespace and install its user
    token in the protected `maven` environment;
-4. only then resume the signed-tag and provisioned Phase 7 evidence gates.
+3. only then resume the signed-tag and provisioned Phase 7 evidence gates.
 
 Do not publish v0.1.0, create its tag, rebuild frozen qualification fixtures,
 or resume physical-device work until the corresponding documented gate is

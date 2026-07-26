@@ -24,24 +24,24 @@ corpus. One corpus, one ranked list, one trace, and no retrieval server.
 RetrievalKit is still a source preview. **No v0.1.0 registry release is
 available yet.** The commands below show the intended shortest install
 experience after the publication gates pass; use the linked source quickstarts
-today. The npm names currently contain bootstrap-only placeholders, not usable
-SDK releases.
+today. The npm and PyPI names currently contain bootstrap-only placeholders,
+not usable SDK releases.
 
 | SDK | Intended public install | Publication status | Qualified initial target |
 | --- | --- | --- | --- |
 | Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
-| Python | `python -m pip install retrievalkit-graph` | Pending PyPI publication | macOS arm64; CPython 3.10–3.14 |
+| Python | `python -m pip install retrievalkit-graph` | Names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; CPython 3.10–3.14 |
 | Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; Node.js 22.13+ or 24 LTS |
 | Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
 | Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | Android API 24+; arm64-v8a |
 
-The public identities have been selected. npm ownership and trusted-publisher
-setup are complete; Central namespace verification and every v0.1.0
-publication are still pending, so the install commands do not yet provide an
-SDK release. For Swift, add one package and select `RetrievalKit` for a flat
-corpus, `RetrievalKitGraph` for relationships plus retrieval, or both. For
-Python, Node, and Kotlin, choose exactly one native distribution in a process:
-graph-enabled packages already include base retrieval.
+The public identities have been selected. npm and PyPI ownership and
+trusted-publisher setup are complete; Central namespace verification and every
+v0.1.0 publication are still pending, so the install commands do not yet
+provide an SDK release. For Swift, add one package and select `RetrievalKit`
+for a flat corpus, `RetrievalKitGraph` for relationships plus retrieval, or
+both. For Python, Node, and Kotlin, choose exactly one native distribution in
+a process: graph-enabled packages already include base retrieval.
 
 **Available now:** [run the checked-in source quickstarts](#run-from-source).
 The downloadable Python graph source preview is also available from the

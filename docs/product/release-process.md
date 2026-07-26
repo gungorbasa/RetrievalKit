@@ -1,10 +1,10 @@
 # RetrievalKit v0.1.0 release process
 
 Status: release-candidate and runtime authorization implementation complete.
-The public repository, protected GitHub environments, npm bootstrap packages,
-npm trusted publishers, and Maven signing identity are configured. v0.1.0
-publication remains blocked on the other registry owner setup and release
-evidence gates below.
+The public repository, protected GitHub environments, npm and PyPI bootstrap
+packages, npm and PyPI trusted publishers, and Maven signing identity are
+configured. v0.1.0 publication remains blocked on the Central owner setup and
+release evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
 previews from one signed source revision. Python, Node, and Kotlin retain
@@ -17,9 +17,10 @@ The approved npm package names are `@gungorbasa/retrievalkit` and
 name as too similar to an existing package, so both Node packages use one
 consistent owner scope. The approved Maven group is
 `io.github.gungorbasa`. The npm names were bootstrapped and connected to the
-protected GitHub publication workflow on 2026-07-26. Maven Central namespace
-verification and credentials, PyPI trusted-publisher setup, the signed tag, and
-the provisioned release evidence remain fail-closed external prerequisites.
+protected GitHub publication workflow on 2026-07-26. Both PyPI names were also
+bootstrapped and connected to that workflow on 2026-07-26. Maven Central
+namespace verification and credentials, the signed tag, and the provisioned
+release evidence remain fail-closed external prerequisites.
 
 ## Release contents
 
@@ -139,6 +140,32 @@ for 180 days as a dedicated Actions artifact. They are also attested and
 attached to the GitHub Release alongside the package artifacts. PyPI, npm, and
 Maven publication jobs depend on successful completion of this protected job.
 
+## PyPI trusted publication
+
+The PyPI job runs in the protected `pypi` environment with `id-token: write`
+and no API token. It verifies the complete authorized bundle checksum set,
+publishes the ten macOS arm64 CPython wheels plus their source distributions,
+then verifies the public registry records and retains publication evidence.
+
+The owner completed the one-time PyPI bootstrap setup on 2026-07-26:
+
+1. `retrievalkit` and `retrievalkit-graph` each received a non-SDK `0.0.0a0`
+   placeholder;
+2. each project trusts the public `gungorbasa/RetrievalKit` repository,
+   `publish-release.yml` workflow, and `pypi` environment;
+3. the temporary bootstrap publishers and one-time bootstrap workflows were
+   removed; and
+4. neither project contains v0.1.0 SDK artifacts.
+
+PyPI requires different pending-publisher identities when multiple not-yet-
+created project names are bootstrapped, so the two names temporarily used
+separate bootstrap workflows. Once the projects existed, both were configured
+with the same protected production publisher. Both public records resolved
+anonymously on 2026-07-26. Re-verify the records and exact publisher settings
+before setting the required `pypi_trusted_publishers_ready` dispatch input to
+true. The `0.0.0a0` artifacts reserve ownership only and must never be
+described as usable SDK releases.
+
 ## npm trusted publication
 
 The npm job runs in the protected `npm` environment with `id-token: write` and
@@ -215,8 +242,8 @@ already configured controls:
   [GitHub's deployment protection rules](https://docs.github.com/actions/reference/deployments-and-environments#deployment-protection-rules);
 - re-verify the existing `release` environment owner-review rule and `v*` tag
   restriction;
-- create the separate `pypi` environment and configure PyPI trusted publishing
-  for this repository and workflow;
+- re-verify the protected `pypi` environment and both bootstrapped projects'
+  trusted publisher for this repository and workflow;
 - re-verify the protected `npm` environment and both bootstrapped packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - verify `io.github.gungorbasa` in Central Portal, publish the PGP public key,

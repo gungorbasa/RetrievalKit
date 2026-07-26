@@ -51,6 +51,11 @@ test("server-renders the public RetrievalKit documentation", async () => {
     html,
     /Scoped names reserved; trusted publishing configured; v0\.1\.0 unpublished/,
   );
+  assert.match(
+    html,
+    /Names reserved; trusted publishing configured; v0\.1\.0 unpublished/,
+  );
+  assert.match(html, /0\.0\.0a0 non-SDK placeholders/);
   assert.match(html, /Public source; pending v0\.1\.0 tag and XCFramework release/);
   assert.match(html, /Public repository source checkout/);
   assert.match(html, /Public graph source bundle and authorized checkout/);

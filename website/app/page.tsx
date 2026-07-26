@@ -19,9 +19,9 @@ const sections: DocSection[] = [
     eyebrow: "Release readiness",
     title: "Public installs are pending; source paths are available",
     summary:
-      "No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. The npm names contain bootstrap-only placeholders; the commands below show the intended install shape, not an SDK available today.",
+      "No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. The npm and PyPI names contain bootstrap-only placeholders; the commands below show the intended install shape, not an SDK available today.",
     body:
-      "The package identities are selected, and npm ownership plus GitHub trusted publishing are configured. Central namespace verification and all v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
+      "The package identities are selected, and npm plus PyPI ownership and GitHub trusted publishing are configured. Central namespace verification and all v0.1.0 registry publications remain pending. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
 npm install @gungorbasa/retrievalkit-graph
@@ -54,7 +54,7 @@ implementation(
     summary:
       "Pass ordinary records and direct embeddings. Rust infers dimensions and owns identity, filtering, ranking, traces, and persistence.",
     body:
-      "PyPI publication is pending. Today, download the macOS arm64 graph source preview or build from a repository checkout. After publication, choose retrievalkit-graph when relationships should constrain search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
+      "Both PyPI names are reserved with 0.0.0a0 non-SDK placeholders and trust the protected publication workflow. v0.1.0 is unpublished. Today, download the macOS arm64 graph source preview or build from a repository checkout. After publication, choose retrievalkit-graph when relationships should constrain search and retrievalkit for a flat corpus. Install exactly one distribution per process.",
     code: `from retrievalkit_graph import (
     GraphRecordNode,
     GraphRetrievalDatabaseBuilder,
@@ -232,7 +232,7 @@ use 1 for vector-only or 0 for BM25-only`,
 const platforms = [
   ["Swift", "macOS 14+ arm64", "Source-qualified; release pending"],
   ["Swift", "iOS 15+ arm64 device / simulator", "Source-qualified; release pending"],
-  ["Python", "macOS arm64 / CPython 3.10–3.14", "Initial wheel target; unpublished"],
+  ["Python", "macOS arm64 / CPython 3.10–3.14", "Bootstrap placeholder only; v0.1.0 unpublished"],
   ["Python", "Ubuntu / Windows", "Portability CI only"],
   ["Node.js", "macOS arm64 / Node 22.13+ or 24 LTS", "Bootstrap placeholder only; v0.1.0 unpublished"],
   ["Kotlin/JVM", "macOS arm64 / JDK 17 build", "Source-qualified; unpublished"],
@@ -249,7 +249,7 @@ const releaseReadiness = [
   [
     "Python",
     "retrievalkit or retrievalkit-graph",
-    "Pending PyPI publication",
+    "Names reserved; trusted publishing configured; v0.1.0 unpublished",
     "Public graph source bundle and authorized checkout",
   ],
   [
@@ -379,9 +379,9 @@ export default function Home() {
           <p className="kicker">Release readiness</p>
           <h2>Source-qualified does not mean registry-published.</h2>
           <p>
-            No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. npm contains
-            bootstrap-only placeholders; the shortest eventual commands are
-            documented below, while the available SDK route remains source.
+            No v0.1.0 SwiftPM, PyPI, npm, or Maven release is live. npm and PyPI
+            contain bootstrap-only placeholders; the shortest eventual commands
+            are documented below, while the available SDK route remains source.
           </p>
         </div>
         <div

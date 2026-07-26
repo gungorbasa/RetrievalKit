@@ -93,9 +93,11 @@ All notable user-facing changes and persistence migrations are recorded here.
   provenance; Maven signs the exact primary files with the dedicated
   RetrievalKit release key before uploading a Central Portal bundle. Both
   scoped npm names now have bootstrap-only placeholders and trust the protected
-  GitHub publication workflow; v0.1.0 remains unpublished. Central namespace
-  verification, Central credentials, and the other release gates remain
-  external publication prerequisites.
+  GitHub publication workflow. Both PyPI names now have non-SDK `0.0.0a0`
+  placeholders and trust the same protected workflow through the `pypi`
+  environment. v0.1.0 remains unpublished. Central namespace verification,
+  Central credentials, and the other release gates remain external
+  publication prerequisites.
 
 ### Compatibility
 

@@ -16,7 +16,7 @@ notes to show how the choice changes scope, not the underlying search model.
 The intended public installs are:
 
 ```bash
-# PENDING — these packages are not published on PyPI yet.
+# PENDING — PyPI contains ownership placeholders only; v0.1.0 is unpublished.
 python -m pip install retrievalkit
 python -m pip install retrievalkit-graph
 ```
@@ -25,8 +25,9 @@ Install exactly one. Choose `retrievalkit-graph` when relationships should
 scope retrieval; it already contains base retrieval. Choose `retrievalkit` for
 a flat corpus.
 
-**The PyPI commands do not work today.** The available public route is the
-macOS arm64 graph source preview linked from the
+Both names are reserved with `0.0.0a0` non-SDK placeholders and trust the
+protected release workflow. Do not install the placeholders. The available
+SDK route today is the macOS arm64 graph source preview linked from the
 [public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site). From a
 repository checkout, the available graph route is:
 

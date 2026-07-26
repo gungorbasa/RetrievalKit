@@ -1,4 +1,4 @@
-import { GraphRetrievalDatabaseBuilder } from "retrievalkit-graph";
+import { GraphRetrievalDatabaseBuilder } from "@gungorbasa/retrievalkit-graph";
 
 const builder = new GraphRetrievalDatabaseBuilder({
   corpusId: "combined-example",

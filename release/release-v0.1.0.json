@@ -29,8 +29,8 @@
     "platform": {"os": "darwin", "cpu": "arm64"},
     "engines": "^22.13.0 || ^24.0.0",
     "packages": {
-      "base": {"name": "retrievalkit", "artifact": "retrievalkit-0.1.0.tgz"},
-      "graph": {"name": "retrievalkit-graph", "artifact": "retrievalkit-graph-0.1.0.tgz"}
+      "base": {"name": "@gungorbasa/retrievalkit", "artifact": "gungorbasa-retrievalkit-0.1.0.tgz"},
+      "graph": {"name": "@gungorbasa/retrievalkit-graph", "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz"}
     },
     "co_installation": "unsupported; one native capability aggregate per process"
   },
@@ -62,7 +62,7 @@
   "publication_blockers": [
     "Phase 7 scheduled and release gates provisioned and passing for the release revision",
     "numeric README claims reauthorized for the release revision or retained as historical frozen-revision observations",
-    "npm trusted publishing configured for retrievalkit and retrievalkit-graph",
+    "npm trusted publishing configured for @gungorbasa/retrievalkit and @gungorbasa/retrievalkit-graph",
     "Maven Central namespace verification, PGP signing key, and Portal token configured",
     "signed v0.1.0 tag and owner release approval"
   ]

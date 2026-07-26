@@ -105,17 +105,20 @@ def static_validation(repo: Path) -> dict[str, Any]:
     require(
         config["node"]["packages"]
         == {
-            "base": {"name": "retrievalkit", "artifact": "retrievalkit-0.1.0.tgz"},
+            "base": {
+                "name": "@gungorbasa/retrievalkit",
+                "artifact": "gungorbasa-retrievalkit-0.1.0.tgz",
+            },
             "graph": {
-                "name": "retrievalkit-graph",
-                "artifact": "retrievalkit-graph-0.1.0.tgz",
+                "name": "@gungorbasa/retrievalkit-graph",
+                "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz",
             },
         },
         "Node release identities changed",
     )
     for capability, expected_name in (
-        ("base", "retrievalkit"),
-        ("graph", "retrievalkit-graph"),
+        ("base", "@gungorbasa/retrievalkit"),
+        ("graph", "@gungorbasa/retrievalkit-graph"),
     ):
         package = load_json(repo / f"wrappers/typescript/{capability}/package.json")
         require(package["name"] == expected_name, f"Node {capability} package identity mismatch")
@@ -205,8 +208,8 @@ def validate_workflows(repo: Path) -> None:
     require("contents: write" not in candidate and "id-token: write" not in candidate, "candidate workflow has publication permissions")
     require(
         "assemble_node_packages.py" in candidate
-        and "--base-name retrievalkit" in candidate
-        and "--graph-name retrievalkit-graph" in candidate,
+        and "--base-name @gungorbasa/retrievalkit" in candidate
+        and "--graph-name @gungorbasa/retrievalkit-graph" in candidate,
         "candidate workflow lacks the approved Node release identities",
     )
     require(

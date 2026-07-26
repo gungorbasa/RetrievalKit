@@ -2,8 +2,8 @@
 
 This directory contains two owner-approved packages:
 
-- `retrievalkit`: retrieval-only native aggregate.
-- `retrievalkit-graph`: graph-only and combined graph/retrieval
+- `@gungorbasa/retrievalkit`: retrieval-only native aggregate.
+- `@gungorbasa/retrievalkit-graph`: graph-only and combined graph/retrieval
   native aggregate.
 
 The initial supported target is Node.js LTS on macOS arm64. Browser, WebAssembly,
@@ -63,8 +63,8 @@ already been approved in npm; it never guesses or reserves names:
 
 ```bash
 python3 ../../scripts/release/assemble_node_packages.py \
-  --base-name retrievalkit \
-  --graph-name retrievalkit-graph \
+  --base-name @gungorbasa/retrievalkit \
+  --graph-name @gungorbasa/retrievalkit-graph \
   --names-approved \
   --version 0.1.0 \
   --output ../../dist/release/node

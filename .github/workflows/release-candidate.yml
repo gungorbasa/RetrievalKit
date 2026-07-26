@@ -122,8 +122,8 @@ jobs:
           npm ci
           cd ../..
           python3 scripts/release/assemble_node_packages.py \
-            --base-name retrievalkit \
-            --graph-name retrievalkit-graph \
+            --base-name @gungorbasa/retrievalkit \
+            --graph-name @gungorbasa/retrievalkit-graph \
             --names-approved \
             --version 0.1.0 \
             --output target/release-stage/node

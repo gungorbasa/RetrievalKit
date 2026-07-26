@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       npm_trusted_publishers_ready:
-        description: Both npm names are bootstrapped and trust this public-repository workflow
+        description: Both scoped npm packages are bootstrapped and trust this public-repository workflow
         required: true
         default: false
         type: boolean
@@ -116,10 +116,12 @@ jobs:
           test "$NPM_READY" = "true"
           test "$PYPI_READY" = "true"
           test "$MAVEN_READY" = "true"
-          curl --fail --silent --show-error https://registry.npmjs.org/retrievalkit \
-            | jq --exit-status '.name == "retrievalkit"' > /dev/null
-          curl --fail --silent --show-error https://registry.npmjs.org/retrievalkit-graph \
-            | jq --exit-status '.name == "retrievalkit-graph"' > /dev/null
+          curl --fail --silent --show-error \
+            'https://registry.npmjs.org/@gungorbasa%2fretrievalkit' \
+            | jq --exit-status '.name == "@gungorbasa/retrievalkit"' > /dev/null
+          curl --fail --silent --show-error \
+            'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-graph' \
+            | jq --exit-status '.name == "@gungorbasa/retrievalkit-graph"' > /dev/null
       - name: Preserve verified candidate for the protected publication job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -332,14 +334,14 @@ jobs:
             sha256sum --check publication-authorization-provenance.sha256
           )
           test "$(find "$bundle/artifacts/node" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "2"
-          test -f "$bundle/artifacts/node/retrievalkit-$VERSION.tgz"
-          test -f "$bundle/artifacts/node/retrievalkit-graph-$VERSION.tgz"
+          test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz"
+          test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz"
           test "$(jq -r '.artifacts | length' "$bundle/artifacts/node/inventory.json")" = "2"
-          test "$(jq -r '.artifacts[] | select(.capability == "base") | .npmName' "$bundle/artifacts/node/inventory.json")" = "retrievalkit"
-          test "$(jq -r '.artifacts[] | select(.capability == "graph") | .npmName' "$bundle/artifacts/node/inventory.json")" = "retrievalkit-graph"
+          test "$(jq -r '.artifacts[] | select(.capability == "base") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit"
+          test "$(jq -r '.artifacts[] | select(.capability == "graph") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit-graph"
           mkdir -p target/npm
-          cp "$bundle/artifacts/node/retrievalkit-$VERSION.tgz" target/npm/
-          cp "$bundle/artifacts/node/retrievalkit-graph-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz" target/npm/
           cp "$bundle/artifacts/node/inventory.json" target/npm/authorized-inventory.json
       - name: Require trusted-publisher bootstrap and unused version
         env:
@@ -347,7 +349,7 @@ jobs:
         run: |
           npm config set registry https://registry.npmjs.org/
           test "$(npm --version)" = "11.6.2"
-          for package in retrievalkit retrievalkit-graph; do
+          for package in @gungorbasa/retrievalkit @gungorbasa/retrievalkit-graph; do
             test "$(npm view "$package" name)" = "$package"
             if npm view "$package@$VERSION" version > /dev/null 2>&1; then
               echo "$package@$VERSION already exists; npm versions are immutable" >&2
@@ -358,11 +360,11 @@ jobs:
         env:
           VERSION: "0.1.0"
         run: |
-          npm publish "target/npm/retrievalkit-$VERSION.tgz" \
+          npm publish "target/npm/gungorbasa-retrievalkit-$VERSION.tgz" \
             --access public \
             --ignore-scripts \
             --provenance
-          npm publish "target/npm/retrievalkit-graph-$VERSION.tgz" \
+          npm publish "target/npm/gungorbasa-retrievalkit-graph-$VERSION.tgz" \
             --access public \
             --ignore-scripts \
             --provenance
@@ -371,7 +373,7 @@ jobs:
           VERSION: "0.1.0"
         run: |
           inventory=target/npm/authorized-inventory.json
-          for package in retrievalkit retrievalkit-graph; do
+          for package in @gungorbasa/retrievalkit @gungorbasa/retrievalkit-graph; do
             expected="$(jq -r --arg package "$package" '.artifacts[] | select(.npmName == $package) | .npmIntegrity' "$inventory")"
             actual=""
             for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -410,8 +412,8 @@ jobs:
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |
-            target/npm/retrievalkit-0.1.0.tgz
-            target/npm/retrievalkit-graph-0.1.0.tgz
+            target/npm/gungorbasa-retrievalkit-0.1.0.tgz
+            target/npm/gungorbasa-retrievalkit-graph-0.1.0.tgz
             target/npm/publication-evidence.json
       - name: Preserve npm publication evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

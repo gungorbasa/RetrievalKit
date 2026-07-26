@@ -20,8 +20,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TYPESCRIPT_ROOT = REPO_ROOT / "wrappers" / "typescript"
 SOURCE_NAMES = {
-    "base": "retrievalkit",
-    "graph": "retrievalkit-graph",
+    "base": "@gungorbasa/retrievalkit",
+    "graph": "@gungorbasa/retrievalkit-graph",
 }
 APPROVED_NAMES = SOURCE_NAMES
 PACKAGE_DIRECTORIES = {
@@ -237,7 +237,8 @@ def assemble(
     }
     if names != APPROVED_NAMES:
         raise AssemblyError(
-            "release names must be exactly base='retrievalkit' and graph='retrievalkit-graph'"
+            "release names must be exactly base='@gungorbasa/retrievalkit' "
+            "and graph='@gungorbasa/retrievalkit-graph'"
         )
     if names["base"] == names["graph"]:
         raise AssemblyError("base and graph npm package names must be different")

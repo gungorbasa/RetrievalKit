@@ -9,11 +9,11 @@
   "scripts": {
     "preflight": "node ./scripts/preflight.mjs",
     "build:native": "node ./scripts/build-native.mjs all",
-    "build": "npm run build:native && npm run build --workspace retrievalkit && npm run build --workspace retrievalkit-graph",
-    "typecheck": "npm run typecheck --workspace retrievalkit && npm run typecheck --workspace retrievalkit-graph",
+    "build": "npm run build:native && npm run build --workspace @gungorbasa/retrievalkit && npm run build --workspace @gungorbasa/retrievalkit-graph",
+    "typecheck": "npm run typecheck --workspace @gungorbasa/retrievalkit && npm run typecheck --workspace @gungorbasa/retrievalkit-graph",
     "lint": "eslint base/src base/test graph/src graph/test && node --check scripts/node-support.mjs && node --check scripts/preflight.mjs && node --check scripts/preflight.test.mjs && node --check scripts/build-native.mjs && node --check scripts/verify-package-content.mjs && node --check scripts/smoke-local-install.mjs",
     "test:preflight": "node --test scripts/preflight.test.mjs",
-    "test": "npm run test:preflight && npm run test --workspace retrievalkit && npm run test --workspace retrievalkit-graph",
+    "test": "npm run test:preflight && npm run test --workspace @gungorbasa/retrievalkit && npm run test --workspace @gungorbasa/retrievalkit-graph",
     "verify:contents": "node ./scripts/verify-package-content.mjs",
     "smoke:install": "node ./scripts/smoke-local-install.mjs"
   },

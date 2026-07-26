@@ -62,12 +62,12 @@ class ReleaseTests(unittest.TestCase):
             config["node"]["packages"],
             {
                 "base": {
-                    "name": "retrievalkit",
-                    "artifact": "retrievalkit-0.1.0.tgz",
+                    "name": "@gungorbasa/retrievalkit",
+                    "artifact": "gungorbasa-retrievalkit-0.1.0.tgz",
                 },
                 "graph": {
-                    "name": "retrievalkit-graph",
-                    "artifact": "retrievalkit-graph-0.1.0.tgz",
+                    "name": "@gungorbasa/retrievalkit-graph",
+                    "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz",
                 },
             },
         )
@@ -190,7 +190,9 @@ class ReleaseTests(unittest.TestCase):
             staging.mkdir()
             (staging / "RetrievalKitGraphFFI.xcframework.zip").write_bytes(b"apple")
             (staging / "node").mkdir()
-            (staging / "node/retrievalkit-0.1.0.tgz").write_bytes(b"node-base")
+            (staging / "node/gungorbasa-retrievalkit-0.1.0.tgz").write_bytes(
+                b"node-base"
+            )
             (staging / "node/inventory.json").write_text("{}", encoding="utf-8")
             kotlin_coordinate = (
                 staging
@@ -236,7 +238,7 @@ class ReleaseTests(unittest.TestCase):
                 {
                     "RetrievalKitGraphFFI.xcframework.zip",
                     "node/inventory.json",
-                    "node/retrievalkit-0.1.0.tgz",
+                    "node/gungorbasa-retrievalkit-0.1.0.tgz",
                     "kotlin/inventory.json",
                     (
                         "kotlin/maven/io/github/gungorbasa/retrievalkit/0.1.0/"
@@ -244,7 +246,9 @@ class ReleaseTests(unittest.TestCase):
                     ),
                 },
             )
-            (output / "artifacts/node/retrievalkit-0.1.0.tgz").write_bytes(b"changed")
+            (
+                output / "artifacts/node/gungorbasa-retrievalkit-0.1.0.tgz"
+            ).write_bytes(b"changed")
             with self.assertRaisesRegex(validator.ValidationError, "checksum mismatch"):
                 validator.bundle_validation(REPO, output)
 

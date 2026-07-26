@@ -1,5 +1,5 @@
 {
-  "name": "retrievalkit",
+  "name": "@gungorbasa/retrievalkit",
   "version": "0.1.0",
   "private": true,
   "description": "RetrievalKit Node.js base package",

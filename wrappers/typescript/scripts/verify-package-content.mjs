@@ -43,7 +43,7 @@ if (/retrievalkit[_-]graph|NativeGraphHandle|GraphRetrievalDatabase/i.test(baseS
 const basePackage = JSON.parse(
   await readFile(resolve(here, "../base/package.json"), "utf8")
 );
-if (JSON.stringify(basePackage).includes("retrievalkit-graph")) {
+if (JSON.stringify(basePackage).includes("@gungorbasa/retrievalkit-graph")) {
   throw new Error("base package metadata depends on the graph package");
 }
 console.log("Package contents and graph-free base dependency tree verified.");

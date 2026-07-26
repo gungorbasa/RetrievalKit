@@ -1,5 +1,5 @@
 {
-  "name": "retrievalkit-graph",
+  "name": "@gungorbasa/retrievalkit-graph",
   "version": "0.1.0",
   "private": true,
   "description": "RetrievalKit Node.js graph aggregate",

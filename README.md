@@ -29,7 +29,7 @@ v0.1.0 publication gates pass; use the linked source quickstarts today.
 | --- | --- | --- | --- |
 | Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
 | Python | `python -m pip install retrievalkit-graph` | Pending PyPI publication | macOS arm64; CPython 3.10–3.14 |
-| Node.js | `npm install retrievalkit-graph` | Identity selected; pending npm ownership and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped identity selected; pending npm bootstrap and publication | macOS arm64; Node.js 22.13+ or 24 LTS |
 | Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
 | Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Coordinates selected; pending Central namespace verification and publication | Android API 24+; arm64-v8a |
 
@@ -139,7 +139,7 @@ traversal.
 | Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
 | Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
 | TypeScript `retrievalkit` | Base corpus and retrieval; selected npm identity | **Available from source; npm unpublished** |
-| TypeScript `retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; npm unpublished** |
+| TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; npm unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
 | Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Available from source; Maven unpublished** |

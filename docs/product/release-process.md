@@ -10,8 +10,10 @@ separate base and graph native aggregates because loading both into one process
 is unsupported. Swift publishes one graph-capable aggregate containing both
 native capability surfaces.
 
-The approved npm package names are `retrievalkit` and
-`retrievalkit-graph`. The approved Maven group is
+The approved npm package names are `@gungorbasa/retrievalkit` and
+`@gungorbasa/retrievalkit-graph`. npm rejected the equivalent unscoped base
+name as too similar to an existing package, so both Node packages use one
+consistent owner scope. The approved Maven group is
 `io.github.gungorbasa`. Approval of those identities does not imply that the
 registries are configured: npm bootstrap/trusted-publisher setup, Maven Central
 namespace verification, signing keys, protected environments, and registry
@@ -21,7 +23,8 @@ credentials remain fail-closed external prerequisites.
 
 - `RetrievalKitGraphFFI.xcframework.zip` for all public Swift products.
 - macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
-- macOS arm64 npm tarballs for `retrievalkit` and `retrievalkit-graph`.
+- macOS arm64 npm tarballs for `@gungorbasa/retrievalkit` and
+  `@gungorbasa/retrievalkit-graph`.
 - Maven publications under `io.github.gungorbasa` for JVM base/graph and
   Android base/graph, limited to the targets declared in their package metadata.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
@@ -69,8 +72,8 @@ SHA-512, and package-integrity evidence:
 
 ```bash
 python3 scripts/release/assemble_node_packages.py \
-  --base-name retrievalkit \
-  --graph-name retrievalkit-graph \
+  --base-name @gungorbasa/retrievalkit \
+  --graph-name @gungorbasa/retrievalkit-graph \
   --names-approved \
   --version 0.1.0 \
   --output dist/release/node
@@ -139,11 +142,11 @@ Maven publication jobs depend on successful completion of this protected job.
 The npm job runs in the protected `npm` environment with `id-token: write` and
 no npm token. It installs the pinned OIDC-capable npm CLI, verifies the complete
 authorized bundle checksum set, stages only
-`artifacts/node/retrievalkit-0.1.0.tgz` and
-`artifacts/node/retrievalkit-graph-0.1.0.tgz`, and publishes those tarballs with
-`--provenance`. It then compares each registry `dist.integrity` value with the
-authorized inventory, attests the tarballs/evidence, and retains the
-publication record for 180 days.
+`artifacts/node/gungorbasa-retrievalkit-0.1.0.tgz` and
+`artifacts/node/gungorbasa-retrievalkit-graph-0.1.0.tgz`, and publishes those
+tarballs with `--provenance`. It then compares each registry `dist.integrity`
+value with the authorized inventory, attests the tarballs/evidence, and retains
+the publication record for 180 days.
 
 npm trusted publishing cannot establish a package name that does not exist.
 Before the first RetrievalKit release, an npm owner must:

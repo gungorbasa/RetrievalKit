@@ -31,9 +31,10 @@ consumer still downloads the shared graph-capable binary; graph APIs are not
 part of its selected Swift target.
 
 `retrievalkit` and `retrievalkit-graph` remain mutually exclusive inside one
-Python process. The TypeScript and Kotlin base and graph-capable packages use
-the same alternative-aggregate rule. Their native aggregate boundary is part
-of compatibility, not a temporary build limitation.
+Python process. `@gungorbasa/retrievalkit` and
+`@gungorbasa/retrievalkit-graph` use the same alternative-aggregate rule in
+Node, as do the Kotlin base and graph-capable packages. Their native aggregate
+boundary is part of compatibility, not a temporary build limitation.
 
 Packed result layouts are an aggregate-level ABI contract. Native libraries,
 headers, and wrappers must be upgraded together. The graph aggregate exposes
@@ -46,8 +47,8 @@ integrators migrating from an earlier development artifact must update the
 header, native library, and wrapper source as one unit; the public Swift and
 Python APIs are unaffected by this internal boundary rename.
 
-TypeScript npm names and Kotlin Maven coordinates are provisional repository
-local identifiers until naming clearance. Public registry availability is not
-claimed. x86_64 Apple, Linux desktop/server, Windows, browser/WASM, and Kotlin
-Multiplatform have no compatibility commitment until a release manifest lists
-them.
+The TypeScript npm names are fixed under the owner's `@gungorbasa` scope, and
+Kotlin Maven coordinates are fixed under `io.github.gungorbasa`. Registry
+publication is not claimed until the release gates pass. x86_64 Apple, Linux
+desktop/server, Windows, browser/WASM, and Kotlin Multiplatform have no
+compatibility commitment until a release manifest lists them.

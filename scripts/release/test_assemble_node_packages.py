@@ -70,8 +70,8 @@ class NodePackageAssemblyTests(unittest.TestCase):
             first = Path(root) / "first"
             second = Path(root) / "second"
             arguments = {
-                "base_name": "retrievalkit",
-                "graph_name": "retrievalkit-graph",
+                "base_name": "@gungorbasa/retrievalkit",
+                "graph_name": "@gungorbasa/retrievalkit-graph",
                 "version": "0.1.0-test.1",
                 "names_approved": True,
                 "skip_native_build": True,

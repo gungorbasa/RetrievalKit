@@ -1,4 +1,4 @@
-import { RetrievalDatabaseBuilder } from "retrievalkit";
+import { RetrievalDatabaseBuilder } from "@gungorbasa/retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({ corpusId: "example-notes" });
 await builder.add([

@@ -7,7 +7,9 @@ All notable user-facing changes and persistence migrations are recorded here.
 ### Added
 
 - TypeScript/Node base and graph aggregates for Node.js LTS on macOS arm64,
-  selected for publication as `retrievalkit` and `retrievalkit-graph`.
+  selected for publication as `@gungorbasa/retrievalkit` and
+  `@gungorbasa/retrievalkit-graph` after npm rejected the equivalent unscoped
+  base name as too similar to an existing package.
   Promise-based N-API operations use typed values, `Float32Array`, exact
   `bigint` transport, Rust-owned search and graph semantics, deterministic
   async disposal, package-content checks, and local-install smoke tests.

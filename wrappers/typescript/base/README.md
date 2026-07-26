@@ -1,14 +1,14 @@
 # RetrievalKit Node base package
 
-`retrievalkit` is the approved retrieval-only package name. The package remains
-private in the source workspace until release assembly removes that safety gate.
-The initial supported runtime is Node.js LTS on macOS arm64.
+`@gungorbasa/retrievalkit` is the approved retrieval-only package name. The
+package remains private in the source workspace until release assembly removes
+that safety gate. The initial supported runtime is Node.js LTS on macOS arm64.
 
 ```ts
 import {
   RetrievalDatabaseBuilder,
   timestampMillis
-} from "retrievalkit";
+} from "@gungorbasa/retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({
   corpusId: "notes",
@@ -54,5 +54,5 @@ Metadata supports strings, booleans, integer `bigint`s, floating-point values,
 and `timestampMillis`. Plain safe integral numbers become integers; use
 `floatingPoint(7)` when an integral-looking value must retain float type.
 
-Do not load this package together with `retrievalkit-graph` in one
+Do not load this package together with `@gungorbasa/retrievalkit-graph` in one
 process. The loader rejects the second aggregate.

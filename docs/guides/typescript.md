@@ -2,26 +2,29 @@
 
 The selected npm identities are:
 
-- `retrievalkit` for retrieval without graph state.
-- `retrievalkit-graph` for graph-only and combined graph/retrieval applications.
+- `@gungorbasa/retrievalkit` for retrieval without graph state.
+- `@gungorbasa/retrievalkit-graph` for graph-only and combined graph/retrieval
+  applications.
 
-Neither name is owned by the release account or published yet. From source or
-after publication, install or load exactly one package in a process. The graph
-package already contains retrieval capability, and its loader rejects mixing
-native aggregates. Browser and WebAssembly builds are not part of this target.
+The equivalent unscoped base name was rejected by npm as too similar to an
+existing package, so both Node packages use the release owner's public scope.
+Neither scoped package is published yet. From source or after publication,
+install or load exactly one package in a process. The graph package already
+contains retrieval capability, and its loader rejects mixing native aggregates.
+Browser and WebAssembly builds are not part of this target.
 
 ## Installation status
 
 The eventual shortest install will be:
 
 ```bash
-# PENDING — npm ownership and publication are not complete.
-npm install retrievalkit-graph
+# PENDING — npm bootstrap and publication are not complete.
+npm install @gungorbasa/retrievalkit-graph
 ```
 
-Choose `retrievalkit-graph` when relationships matter; it already includes
-retrieval. Choose `retrievalkit` for a flat corpus. Install exactly one native
-aggregate in a process.
+Choose `@gungorbasa/retrievalkit-graph` when relationships matter; it already
+includes retrieval. Choose `@gungorbasa/retrievalkit` for a flat corpus.
+Install exactly one native aggregate in a process.
 
 The available route is the repository source build:
 
@@ -47,7 +50,7 @@ document fixes dimension in Rust; callers do not configure it separately.
 import {
   RetrievalDatabaseBuilder,
   timestampMillis
-} from "retrievalkit";
+} from "@gungorbasa/retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({
   corpusId: "apollo",
@@ -103,7 +106,9 @@ candidate projection. Use `GraphRetrievalDatabaseBuilder` when graph scope
 should feed the same retrieval ranker. Both are exported by the graph package.
 
 ```ts
-import { GraphRetrievalDatabaseBuilder } from "retrievalkit-graph";
+import {
+  GraphRetrievalDatabaseBuilder
+} from "@gungorbasa/retrievalkit-graph";
 
 const builder = new GraphRetrievalDatabaseBuilder({
   corpusId: "apollo",

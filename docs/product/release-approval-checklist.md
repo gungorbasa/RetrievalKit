@@ -32,8 +32,9 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] The public graph-capable XCFramework contains arm64 macOS, iOS, and iOS
   Simulator slices.
 - [ ] Both Python distributions pass on CPython 3.10–3.14 macOS arm64.
-- [ ] The authorized npm inventory contains exactly `retrievalkit@0.1.0` and
-  `retrievalkit-graph@0.1.0` macOS arm64 tarballs.
+- [ ] The authorized npm inventory contains exactly
+  `@gungorbasa/retrievalkit@0.1.0` and
+  `@gungorbasa/retrievalkit-graph@0.1.0` macOS arm64 tarballs.
 - [ ] The authorized Maven inventory contains exactly four
   `io.github.gungorbasa` JVM/Android base/graph publications and 16 primary
   POM/JAR/AAR files.

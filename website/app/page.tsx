@@ -24,7 +24,7 @@ const sections: DocSection[] = [
       "The package identities are selected, but npm ownership, Central namespace verification, and registry publication have not happened. Until publication, use the authorized repository source quickstarts; the Python graph source bundle is the only public download.",
     code: `# PENDING — not published
 python -m pip install retrievalkit-graph
-npm install retrievalkit-graph
+npm install @gungorbasa/retrievalkit-graph
 
 // Package.swift — PENDING
 .package(
@@ -144,9 +144,9 @@ struct ApolloSearch {
     summary:
       "Promise-based N-API calls keep native work off the event loop and preserve Float32Array, bigint, and typed graph values.",
     body:
-      "The retrievalkit and retrievalkit-graph npm identities are selected, but ownership and publication are pending. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed.",
+      "The @gungorbasa/retrievalkit and @gungorbasa/retrievalkit-graph npm identities are selected after npm rejected the equivalent unscoped base name. Bootstrap and publication are pending. Use the repository source build on macOS arm64 with Node.js 22.13+ LTS or Node.js 24 LTS. Browser, WebAssembly, Windows, and Linux builds are not claimed.",
     code: `import { RetrievalDatabaseBuilder }
-  from "retrievalkit";
+  from "@gungorbasa/retrievalkit";
 
 const builder = new RetrievalDatabaseBuilder({
   corpusId: "apollo"
@@ -254,8 +254,8 @@ const releaseReadiness = [
   ],
   [
     "Node.js",
-    "retrievalkit or retrievalkit-graph",
-    "Identity selected; pending npm ownership and publication",
+    "@gungorbasa/retrievalkit or @gungorbasa/retrievalkit-graph",
+    "Scoped identities selected; pending npm bootstrap and publication",
     "Authorized repository source checkout",
   ],
   [

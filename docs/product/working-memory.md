@@ -16,11 +16,14 @@ implemented, or superseded by the product spec.
   passphrase is in macOS Keychain service `RetrievalKit-Maven-GPG` and will be
   copied only to protected GitHub environment secrets. Never commit or print
   the private key or passphrase.
-- 2026-07-26 Phase B registry-package decision: the owner selected the npm
-  identities `retrievalkit` and `retrievalkit-graph` and Maven group
-  `io.github.gungorbasa`. Checked-in Node packages remain private to prevent an
-  accidental workspace publish, while fail-closed assemblers require exactly
-  those selected public identities. The two-root candidate workflow now builds,
+- 2026-07-26 Phase B registry-package decision: npm rejected the selected
+  unscoped `retrievalkit` base name as too similar to the existing
+  `retrieval-kit` package before publishing any bytes. The owner then selected
+  `@gungorbasa/retrievalkit` and `@gungorbasa/retrievalkit-graph`; the Maven
+  group remains `io.github.gungorbasa`. Checked-in Node packages remain private
+  to prevent an accidental workspace publish, while fail-closed assemblers
+  require exactly those selected public identities. The two-root candidate
+  workflow now builds,
   inspects, and byte-compares isolated base/graph artifacts for macOS arm64
   Node/JVM and Android arm64-v8a and integrates them into the same closed
   Swift/Python/Node/Kotlin bundle. Protected publication jobs consume those

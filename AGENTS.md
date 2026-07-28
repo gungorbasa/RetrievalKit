@@ -168,6 +168,27 @@ Wrappers should not reimplement retrieval logic. They should call the Rust core 
 - Include examples that compile or can be run directly once code exists.
 - Prefer precise explanations over marketing language.
 
+## Website Repository Boundary
+
+- The public documentation website source lives exclusively in the private
+  `gungorbasa/RetrievalKit-Website` repository. Do not recreate a `website/`
+  directory or add website application, build, hosting, or deployment files to
+  this SDK repository.
+- Any request to change the website's content, design, behavior, dependencies,
+  hosting configuration, or deployment must be implemented, tested, committed,
+  and pushed in `gungorbasa/RetrievalKit-Website`. If that private repository is
+  unavailable, report the access blocker instead of implementing the website
+  change here.
+- This repository continues to own the SDK documentation, release truth, and
+  deterministic Python source-preview generator. When the website download
+  needs refreshing, run `scripts/release/build_source_preview.py` from this
+  repository with `--site-root` pointing to a
+  `gungorbasa/RetrievalKit-Website` checkout, then validate and commit the
+  generated archive and `app/release.ts` change in the website repository.
+- Preserve the existing OpenAI Sites project identity and hosting metadata in
+  the website repository. Do not create a replacement site from this
+  repository.
+
 ## Dependency Policy
 
 - Keep dependencies minimal and justified.

@@ -13,7 +13,9 @@ implemented, or superseded by the product spec.
   continues to own deterministic source-preview generation; invoke
   `scripts/release/build_source_preview.py` with an explicit `--site-root`
   pointing at a website checkout. The website repo independently validates the
-  checked-in archive and `app/release.ts` checksum.
+  checked-in archive and `app/release.ts` checksum. Never recreate `website/`
+  here: all site content, design, build, hosting, and deployment changes belong
+  in `gungorbasa/RetrievalKit-Website`.
 - 2026-07-26 release signing identity: Maven primary artifacts use the dedicated
   two-year `RetrievalKit Release <gungorbasa@users.noreply.github.com>` RSA-4096
   key with fingerprint

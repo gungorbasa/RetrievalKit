@@ -12,11 +12,8 @@ import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
 
-
 DIRECTORY_NAME = "retrievalkit-python-source-preview"
-DEFAULT_OUTPUT = Path(
-    "website/public/downloads/retrievalkit-python-source-preview.tar.gz"
-)
+DEFAULT_OUTPUT = Path("public/downloads/retrievalkit-python-source-preview.tar.gz")
 ARCHIVE_PATHS = (
     "Cargo.toml",
     "Cargo.lock",
@@ -149,6 +146,12 @@ def update_release_metadata(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", default="HEAD")
+    parser.add_argument(
+        "--site-root",
+        type=Path,
+        required=True,
+        help="Path to a gungorbasa/RetrievalKit-Website checkout",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--check",
@@ -158,8 +161,13 @@ def main() -> int:
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[2]
-    release_path = repo / "website/app/release.ts"
-    output = args.output if args.output.is_absolute() else repo / args.output
+    site_root = args.site_root.resolve()
+    release_path = site_root / "app/release.ts"
+    output = args.output if args.output.is_absolute() else site_root / args.output
+    if not release_path.is_file():
+        raise PreviewError(
+            f"website release metadata is missing from site root: {release_path}"
+        )
 
     if args.check:
         revision, expected_checksum = release_metadata(release_path)
@@ -199,7 +207,11 @@ def main() -> int:
     finally:
         temporary_path.unlink(missing_ok=True)
     update_release_metadata(release_path, revision, checksum)
-    print(f"built {output.relative_to(repo)}")
+    try:
+        display_output = output.relative_to(site_root)
+    except ValueError:
+        display_output = output
+    print(f"built {display_output}")
     print(f"revision={revision}")
     print(f"sha256={checksum}")
     return 0

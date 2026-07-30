@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>RetrievalKit Browser CacheStorage Qualification</title>
+  </head>
+  <body>
+    <pre id="result">running</pre>
+    <script type="module">
+      const result = document.querySelector("#result");
+      try {
+        const source = await fetch("./browser-cache-qualification.fixture").then(
+          (response) => response.text(),
+        );
+        const moduleUrl = URL.createObjectURL(
+          new Blob([source], { type: "text/javascript" }),
+        );
+        const { runBrowserCacheQualification } = await import(moduleUrl);
+        URL.revokeObjectURL(moduleUrl);
+        const qualification = await runBrowserCacheQualification();
+        globalThis.__retrievalKitCacheQualification = qualification;
+        result.textContent = JSON.stringify(qualification, null, 2);
+        document.title = "PASS: RetrievalKit Browser CacheStorage Qualification";
+      } catch (error) {
+        const failure = {
+          ok: false,
+          name: error instanceof Error ? error.name : "UnknownError",
+          message: error instanceof Error ? error.message : String(error)
+        };
+        globalThis.__retrievalKitCacheQualification = failure;
+        result.textContent = JSON.stringify(failure, null, 2);
+        document.title = "FAIL: RetrievalKit Browser CacheStorage Qualification";
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+{
+  "name": "@gungorbasa/retrievalkit-browser-embedding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provisional local FP32 MiniLM embeddings for dedicated browser Workers",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ./scripts/build-runtime-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "check:package": "npm run build && node ./scripts/validate-package.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@huggingface/tokenizers": "0.1.3",
+    "onnxruntime-web": "1.27.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.8.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.0.18"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  }
+}

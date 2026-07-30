@@ -58,8 +58,9 @@ modifying TypeScript, Node native-addon, or browser Worker code.
 
 ## Boundary And Performance
 
-- Search, filtering, graph query, candidate projection, and result paths must
-  use typed N-API conversion, never JSON.
+- Node search, filtering, graph query, candidate projection, and result paths
+  must use typed N-API conversion, never JSON. Browser query paths use typed
+  JavaScript/WASM conversion and contiguous typed arrays, never textual JSON.
 - Keep contiguous embedding buffers and use bulk result conversion. Do not
   implement ranking, filtering, graph traversal, generation checks, identity
   derivation, persistence, or fallback behavior in TypeScript.
@@ -74,6 +75,26 @@ modifying TypeScript, Node native-addon, or browser Worker code.
   WASM-only session; an explicit provider choice remains strict.
 - Browser close, cancellation, stale requests, Worker failure, and operations
   after close must fail deterministically with typed errors.
+
+## Website Demo Boundary
+
+- The website supplies curated documents, the independent browser embedding
+  provider, and a browser SLM. Those are orchestration dependencies of the
+  website, not dependencies of `retrievalkit-core` or the browser retrieval
+  package.
+- Every free-form or suggested question in the interactive demo must invoke
+  local embedding, WASM retrieval, and grounded local answer generation.
+  Static marketing examples may be pre-rendered only outside live-demo result
+  state.
+- The initial WASM database is in-memory. A clean browser session builds it
+  locally from the bundled documents. Model and deterministic document inputs
+  may be cached with version and integrity checks; database byte snapshots must
+  not be claimed until `save_to_bytes`/`load_from_bytes` is implemented.
+- Validate every exact evidence quote against a retrieved chunk before mapping
+  it through retained source offsets and highlighting the original document.
+  Invalid citations fall back to passage-level evidence.
+- Do not send questions, retrieved passages, embeddings, or generated answers
+  to analytics, a model API, or a retrieval service.
 
 ## Errors And Lifecycle
 

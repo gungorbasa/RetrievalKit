@@ -33,8 +33,12 @@ The current V1 direction is:
   vector search, text-only BM25 search, and text-plus-embedding ranking whose
   behavior is controlled by query-time `alpha`. BM25 is a query variation, not
   a separate database architecture or product capability.
-- Core priorities: correctness, speed, filtering, persistence, and native
-  cross-language integration.
+- The public website includes a real local browser demo over curated
+  first-party documents. Free-form and suggested questions use the same local
+  browser embedding, RetrievalKit WASM search, and browser SLM answer pipeline;
+  interactive results must never be selected from canned answers.
+- Core priorities: correctness, speed, filtering, persistence, and
+  cross-language integration across native and WebAssembly targets.
 
 Do not add HNSW, ANN indexing, server mode, sync, dashboards, or distributed database features unless the product spec is updated first. HNSW research exists in `docs/research/`, but it is deferred until exact/hybrid retrieval is polished and benchmarked.
 
@@ -81,10 +85,11 @@ active product documentation and add tests proving the intended behavior. Do
 not introduce architectural differences merely for implementation convenience.
 
 Speed and quality are first-class requirements across Rust and all wrappers.
-Keep performance-sensitive retrieval work in Rust, minimize wrapper overhead
-and data copying, use native language best practices, and verify parity,
-correctness, performance-sensitive behavior, and API ergonomics before treating
-a wrapper change as complete.
+Keep performance-sensitive retrieval work in Rust, compiled natively or to
+WebAssembly, minimize wrapper overhead and data copying, use platform-native
+language best practices, and verify parity, correctness,
+performance-sensitive behavior, and API ergonomics before treating a wrapper
+change as complete.
 
 ## Performance Expectations
 
@@ -95,6 +100,9 @@ The retrieval path should be designed for low latency on local devices.
 - Separate embedding latency from retrieval latency in benchmarks.
 - Use contiguous memory layouts for vector data where practical.
 - Prefer direct lookup by internal numeric IDs for hot-path metadata needed by ranking or display.
+- Run browser embedding, retrieval, and answer generation off the main thread.
+  After pinned assets are loaded, an interactive query must not require a
+  network or hosted inference call.
 - Use benchmarks before introducing complex optimizations.
 - Do not trade correctness for speed unless the behavior is explicitly documented and tested.
 
@@ -112,6 +120,7 @@ wrappers/
   python-graph/              # Python graph aggregate
   typescript/                # Node.js base and graph packages
   browser/                   # Browser/WASM Worker package
+  browser-embedding/         # Independent browser embedding Worker package
   kotlin/                    # Kotlin/JVM and Android modules
 docs/
   product/               # Active product decisions

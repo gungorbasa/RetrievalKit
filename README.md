@@ -4,7 +4,10 @@ RetrievalKit is one local retrieval engine for Swift, Python, TypeScript/Node,
 and Kotlin apps. Use it for exact vector and BM25 hybrid retrieval, graph-only
 search with no embeddings, or graph-scoped retrieval that ranks only the
 records related to the user's context. One Rust core, native APIs, and no
-retrieval server.
+retrieval server. The checked-in browser/WebAssembly runtime and browser
+embedding provider run in dedicated Workers and remain unpublished. The live
+local website Q&A orchestration and browser SLM integration are the next demo
+layer.
 
 <div align="center">
 
@@ -360,6 +363,10 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 - Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
   iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
   arm64; the initial Android target is arm64-v8a.
+- Browser/WebAssembly retrieval and browser embedding are implemented and
+  desktop-qualified in source, but remain unpublished and outside the current
+  release compatibility surface. The website's grounded browser-SLM demo
+  integration is still pending.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
 - Installation remains source-first until the remaining release gates are

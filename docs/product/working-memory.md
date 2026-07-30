@@ -6,6 +6,19 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-07-30 website demo direction: the browser/WASM retrieval package and
+  independent browser embedding Worker are implemented and desktop-qualified
+  but unpublished. The public website demo uses curated first-party documents,
+  accepts arbitrary visitor questions, and runs local browser embedding,
+  RetrievalKit WASM search, and a grounded browser SLM. Suggested questions and
+  pre-rendered marketing answers may advertise the experience, but interactive
+  results must use the same live local pipeline. The initial WASM database is
+  in-memory, so a clean session builds it locally from bundled documents;
+  versioned byte-snapshot persistence remains future work and must not be
+  claimed. Exact source highlighting requires a verbatim citation validated
+  against a retrieved chunk and mapped through retained source offsets. The
+  website orchestration and SLM integration belong in the private website
+  repository and remain to be implemented.
 - 2026-07-28 website repository boundary: the OpenAI Sites-hosted public docs
   source moved out of this public SDK monorepo into the private
   `gungorbasa/RetrievalKit-Website` repository with its subtree history. The

@@ -6,9 +6,12 @@ This directory contains two owner-approved packages:
 - `@gungorbasa/retrievalkit-graph`: graph-only and combined graph/retrieval
   native aggregate.
 
-The initial supported target is Node.js LTS on macOS arm64. Browser, WebAssembly,
-other operating systems, and public npm distribution are not claimed. Both
-checked-in package manifests remain private until closed release assembly.
+The initial implemented native target is Node.js LTS on macOS arm64. The
+separate browser/WebAssembly runtime and browser embedding provider live at
+`wrappers/browser` and `wrappers/browser-embedding`; they do not load these
+N-API packages and remain unpublished. Other native operating systems and
+public npm distribution are not claimed. All checked-in Node package manifests
+remain private until closed release assembly.
 
 ## Build and verify
 

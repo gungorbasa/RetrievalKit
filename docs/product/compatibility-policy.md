@@ -9,8 +9,10 @@ and accompanied by migration guidance.
 - Rust core and C ABI: exact behavior is revisioned with each release.
 - Swift: Swift 6.2, iOS 15+, and macOS 14+ on the published arm64 Apple slices.
 - Python: CPython 3.10–3.14 on macOS arm64 for the first preview.
-- TypeScript: Node.js LTS on macOS arm64 for the first preview. Browser and
-  WebAssembly runtimes are not supported.
+- TypeScript: Node.js LTS on macOS arm64 for the first preview. The separate
+  browser/WebAssembly and browser-embedding packages are implemented and
+  internally qualified but remain unpublished and outside this release
+  compatibility surface.
 - Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
   preview. Kotlin Multiplatform is not supported.
 - Persistence: V1–V4 base snapshots remain readable; new saves use the current
@@ -50,5 +52,6 @@ Python APIs are unaffected by this internal boundary rename.
 The TypeScript npm names are fixed under the owner's `@gungorbasa` scope, and
 Kotlin Maven coordinates are fixed under `io.github.gungorbasa`. Registry
 publication is not claimed until the release gates pass. x86_64 Apple, Linux
-desktop/server, Windows, browser/WASM, and Kotlin Multiplatform have no
-compatibility commitment until a release manifest lists them.
+desktop/server, Windows, the unpublished browser/WASM target, and Kotlin
+Multiplatform have no compatibility commitment until a release manifest lists
+them.

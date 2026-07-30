@@ -12,8 +12,11 @@ Both scoped names have bootstrap-only placeholder versions and GitHub trusted
 publishers configured. Those placeholders are not SDK releases; v0.1.0 remains
 unpublished. From source or after the real release, install or load exactly one
 package in a process. The graph package already contains retrieval capability,
-and its loader rejects mixing native aggregates. Browser and WebAssembly builds
-are not part of this target.
+and its loader rejects mixing native aggregates. A separate
+capability-separated browser/WebAssembly runtime is implemented under
+`wrappers/browser`, with an independent embedding provider under
+`wrappers/browser-embedding`. They remain unpublished and are not Node.js
+fallbacks or covered by this Node.js guide.
 
 ## Installation status
 
@@ -39,9 +42,10 @@ node graph/examples/graph-retrieval.mjs
 ```
 
 The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
-24 LTS. Browser, WebAssembly, Windows, Linux, and other architectures are not
-claimed. The reserved package names and bootstrap placeholders are not SDK
-availability claims.
+24 LTS. Browser qualification is recorded separately and does not create a
+published browser package or release compatibility commitment; Windows, Linux,
+and other native architectures are also not claimed. The reserved package
+names and bootstrap placeholders are not SDK availability claims.
 
 ## Retrieval-only quickstart
 

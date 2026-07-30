@@ -53,6 +53,8 @@ Initial target:
 - iOS/macOS developers building AI apps.
 - Node.js developers shipping local desktop or command-line AI features on
   macOS arm64.
+- Web developers shipping private local retrieval and grounded document
+  question-answering in supported desktop browsers.
 - Android developers integrating through Kotlin/JVM on arm64-v8a devices.
 - Apps with private local data.
 - Apps that need offline semantic search or RAG.
@@ -75,7 +77,11 @@ V1 must include:
 - Swift wrapper.
 - Python wrapper with capability parity.
 - TypeScript wrapper for Node.js LTS, initially on macOS arm64.
+- Browser/WebAssembly wrapper with Worker-owned capability-separated databases.
+- Independent local browser embedding provider.
 - Kotlin/JVM wrapper with Android arm64-v8a native packaging.
+- A public website demo that runs free-form document question-answering through
+  local browser embedding, RetrievalKit WASM retrieval, and a browser SLM.
 - Local persistent index.
 - Exact vector search.
 - BM25 lexical scoring as the internal lexical component of hybrid search.
@@ -459,8 +465,64 @@ Worker transfer time, and peak memory separately. It covers 10K, 25K, and 50K
 corpora at 384 and 768 dimensions, top-k 5 and 10, dense and sparse filters,
 vector/BM25/hybrid queries, graph traversal, and graph-scoped retrieval. Every
 reported latency includes p50 and p95. No browser speed claim is permitted
-until Chrome, Firefox, and Safari results are recorded on named desktop and
-mobile device classes.
+outside the named qualified desktop-browser contracts, and mobile-device
+qualification remains a separate release gate.
+
+## Public Website Local Q&A Demo
+
+The public website demo is an acceptance surface for the browser packages, not
+a separate retrieval implementation. Website source and deployment remain in
+the private `gungorbasa/RetrievalKit-Website` repository.
+
+The complete demo pipeline is:
+
+```text
+curated first-party documents
+  -> deterministic chunks with source offsets
+  -> local browser document embeddings
+  -> in-memory RetrievalKit WASM database build
+  -> arbitrary visitor question
+  -> local browser query embedding
+  -> exact/BM25/hybrid RetrievalKit search
+  -> bounded retrieved evidence and trace
+  -> grounded browser SLM answer
+  -> verified citation mapped to the original document span
+```
+
+Demo requirements:
+
+- Visitors do not upload documents. The site ships one or more curated,
+  redistribution-safe first-party documents with stable source identities.
+- A clean browser session chunks and embeds the bundled documents and builds
+  the database through the real WASM core. The UI exposes honest model,
+  embedding, and indexing progress.
+- Model assets and deterministic document inputs may be cached only with
+  version and integrity checks. The current WASM database is in-memory;
+  persistent database snapshots must not be claimed until the versioned
+  `save_to_bytes`/`load_from_bytes` work is implemented and qualified.
+- Visitors may type arbitrary questions. Suggested questions reduce onboarding
+  friction but must use exactly the same live pipeline and must never select a
+  canned answer by question text.
+- The website owns SLM selection, prompt construction, and orchestration.
+  RetrievalKit remains model-agnostic. The SLM receives only the question,
+  bounded retrieved passages, and the answer contract—not the full corpus.
+- Each exact citation includes a document identity and verbatim evidence quote.
+  The application validates that quote against a retrieved chunk before mapping
+  its range through retained source offsets. Only validated spans may be
+  underlined or highlighted; invalid citations fall back to passage evidence.
+- If the retrieved documents do not support an answer, the UI says so. A hosted
+  answer or retrieval fallback must never be presented as a successful local
+  demo run.
+- Questions, retrieved context, embeddings, and generated answers remain in the
+  browser and are excluded from telemetry. Once pinned assets are loaded, a
+  query requires no network request.
+- The UI reports embedding, retrieval, time-to-first-token, and total answer
+  latency separately and exposes the live RetrievalKit trace.
+
+The browser retrieval and embedding packages are implemented and
+desktop-qualified but unpublished. Website integration, browser SLM selection,
+and the complete grounded-answer interaction remain implementation work in the
+website repository.
 
 ## Optional Local Graph Roadmap
 
@@ -2029,7 +2091,26 @@ borrows, so conflicting calls fail safely with `RuntimeError` instead of racing.
 - Index updates are predictable and recoverable.
 - 50K chunks meet the configured on-device retrieval target.
 
-### Milestone 6: Future ANN Research
+### Milestone 6: Local Website Demo
+
+Deliverables:
+
+- Curated first-party documents with stable chunks and source offsets.
+- Local browser embedding and an in-memory RetrievalKit WASM database build.
+- Free-form questions and suggested questions through one live pipeline.
+- Grounded browser-SLM answers with validated source highlighting.
+- Capability detection, asset progress, privacy-safe telemetry, and honest
+  unsupported states.
+
+Success criteria:
+
+- Arbitrary questions run through local embedding, Rust WASM retrieval, and
+  local answer generation without a hosted query-time request.
+- Exact highlighted spans are verified against retrieved source text.
+- First-load bytes, peak memory, indexing, embedding, retrieval, and generation
+  latency are reported separately.
+
+### Milestone 7: Future ANN Research
 
 Deliverables:
 
@@ -2048,6 +2129,7 @@ Start with:
 
 ```text
 language: Rust core with native Swift, Python, TypeScript/Node, and Kotlin/JVM wrappers
+browser: capability-separated TypeScript API over Rust WASM in a dedicated Worker
 metric: cosine
 normalization: unit L2
 dimension: inferred from the first embedding, then fixed per index
@@ -2098,6 +2180,14 @@ Most RAG failures come from bad retrieval, not slow nearest-neighbor search. BM2
 
 The search path should be mostly pointer math, vector math, compact lookups, and ranking. Anything involving JSON, SQLite, networking, or loading files belongs outside the hot path.
 
+### The Browser Demo Must Run The Product
+
+The website may advertise representative answers before a visitor starts the
+demo, but an interactive answer is evidence only when the question runs through
+local embedding, the Rust WASM retrieval core, and the local grounded answer
+model. A JavaScript ranking clone, canned response, or hosted fallback does not
+demonstrate RetrievalKit.
+
 ### Swift API Must Stay Small
 
 Swift developers should not need to understand indexing internals. V1 exposes exact search directly:
@@ -2118,6 +2208,15 @@ Resolve these before implementing the Swift wrapper:
 - Is full text returned from Rust, or does Swift fetch text by chunk ID?
 - What is the minimum iOS version target?
 - Is macOS support required before iOS?
+
+Resolve these before publishing the website demo:
+
+- Which curated first-party documents best demonstrate retrieval quality?
+- Which browser SLM meets the measured license, download, memory, quality, and
+  latency budgets?
+- Which supported browser/device combinations can run the complete local
+  embedding, retrieval, and generation pipeline?
+- What are the maximum pinned asset bytes and peak-memory budget?
 
 ## Recommended First Build
 

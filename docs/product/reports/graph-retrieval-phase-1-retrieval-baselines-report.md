@@ -55,8 +55,9 @@ topic-derived graph lane and do not exclude them from whole-corpus A-C.
 
 ## Run identities and configurations
 
-All runs use collection `retrievalkit-v3-conformance` version `1.0.0`, corpus
-`retrievalkit-v3-synthetic-corpus`, cosine scoring, unit-L2 normalization, the
+All runs use the legacy frozen collection `vectorkit-v3-conformance` version
+`1.0.0`, corpus `vectorkit-v3-synthetic-corpus`, cosine scoring, unit-L2
+normalization, the
 frozen query filters, `top_k=10`, evaluation depth 10, no graph/seed/traversal
 hashes, and the R population above.
 

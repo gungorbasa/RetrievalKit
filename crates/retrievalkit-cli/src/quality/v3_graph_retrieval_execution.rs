@@ -1692,7 +1692,7 @@ fn read_jsonl(path: &Path) -> Result<Vec<Value>, String> {
 }
 
 fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    if validated.collection.collection_id != "retrievalkit-v3-conformance" {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
         return Ok(());
     }
     for (qualification_run_id, logical, lane) in SEMANTIC_RUNS {
@@ -1743,7 +1743,7 @@ fn validate_frozen_semantic_runs(validated: &ValidatedCollection) -> Result<(), 
 }
 
 fn validate_frozen_hybrid_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    if validated.collection.collection_id != "retrievalkit-v3-conformance" {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
         return Ok(());
     }
     for (_qualification_run_id, logical, lane) in HYBRID_RUNS {

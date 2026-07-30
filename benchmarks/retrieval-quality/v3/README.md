@@ -11,6 +11,9 @@ eight chunks, graph schema, embeddings, judgments, expected paths, exclusions,
 and manifests are immutable qualification inputs. Do not edit them to make an
 implementation pass. `collection.json` has frozen SHA-256
 `0452e0d1a3bd5d8aed8343fe6aedbcca7c70fab43c8c5edcbc051a930eb89a65`.
+Its `vectorkit-v3-*` collection, corpus, tool, and archive identifiers are
+legacy fixture identities covered by that digest; the RetrievalKit product
+rename does not rewrite frozen qualification inputs.
 
 The completed qualification slices are:
 

@@ -650,7 +650,7 @@ def build_collection_files() -> dict[str, bytes]:
             {"path": path, "sha256": sha256(files[path])} for path in sorted(paths)
         ]
 
-    tool = {"name": "retrievalkit-v3-synthetic-fixture", "version": "1.0.0"}
+    tool = {"name": "vectorkit-v3-synthetic-fixture", "version": "1.0.0"}
     preprocessing = {
         "inputs": inputs("upstream/corpus/synthetic-records-v1"),
         "outputs": [],
@@ -777,7 +777,7 @@ def build_collection_files() -> dict[str, bytes]:
         ),
         "parameters": {
             "archive_sha256": inventory["upstream/corpus/synthetic-records-v1"],
-            "archive_url": "synthetic://retrievalkit/v3-conformance-1",
+            "archive_url": "synthetic://vectorkit/v3-conformance-1",
             "collection_rule": test_lock_preimage["collection_rule"],
             "development_population_sha256": population_hash(populations["Q"]),
             "exclusion_counts": exclusion_counts,
@@ -914,9 +914,9 @@ def build_collection_files() -> dict[str, bytes]:
         "split_manifest": "manifests/split.json",
     }
     collection = {
-        "collection_id": "retrievalkit-v3-conformance",
+        "collection_id": "vectorkit-v3-conformance",
         "collection_version": "1.0.0",
-        "corpus_id": "retrievalkit-v3-synthetic-corpus",
+        "corpus_id": "vectorkit-v3-synthetic-corpus",
         "counts": {
             "chunks": len(model["corpus_embeddings"]),
             "evidence_rows": len(model["evidence"]),
@@ -1338,7 +1338,7 @@ def validate_artifacts(
             {"ids": sorted(ids), "name": name, "sha256": population_hash(ids)}
         )
     expected_population_object = {
-        "collection_id": "retrievalkit-v3-conformance",
+        "collection_id": "vectorkit-v3-conformance",
         "collection_version": "1.0.0",
         "foundation_only": True,
         "populations": sorted(expected_populations, key=lambda row: row["name"]),

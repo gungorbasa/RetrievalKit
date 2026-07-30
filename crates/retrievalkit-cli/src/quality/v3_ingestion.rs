@@ -359,7 +359,7 @@ fn validate_corpus_shape(
 }
 
 fn verify_frozen_contract(validated: &ValidatedCollection) -> Result<(), String> {
-    if validated.collection.collection_id != "retrievalkit-v3-conformance" {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
         return Ok(());
     }
     let collection_bytes = fs::read(validated.root.join("collection.json"))
@@ -681,10 +681,7 @@ mod tests {
         let validated = validate(&fixture_root()).unwrap();
         let inputs = V3ProductionInputs::from_validated(&validated).unwrap();
 
-        assert_eq!(
-            inputs.corpus_id.as_str(),
-            "retrievalkit-v3-synthetic-corpus"
-        );
+        assert_eq!(inputs.corpus_id.as_str(), "vectorkit-v3-synthetic-corpus");
         assert_eq!(inputs.dimension, 3);
         assert_eq!(inputs.records.len(), 7);
         assert_eq!(

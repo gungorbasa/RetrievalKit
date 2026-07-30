@@ -94,7 +94,7 @@ Exact G retrieval-state preimage:
 SHA-256:
 `03cfae1edb14adcd2a4904a85ec7a9fa70c7dc6a33f5afe34b0a5cea870d0d1e`.
 
-Each outer preimage contains corpus ID `retrievalkit-v3-synthetic-corpus`, corpus
+Each outer preimage contains legacy corpus ID `vectorkit-v3-synthetic-corpus`, corpus
 state `18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7`,
 graph state `ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e`,
 the corresponding retrieval-state hash, and schema version `1`.
@@ -102,9 +102,9 @@ the corresponding retrieval-state hash, and schema version `1`.
 Exact canonical outer preimages, in E/F/G order:
 
 ```json
-{"corpus_id":"retrievalkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"53f26299753298305f7a80ab581eea04f09cdd971e37b35d4ec742ca85cd3d4d","schema_version":1}
-{"corpus_id":"retrievalkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"e891c85b4a555e0995dcc28effab0a32217258ff75e02ec7238c0bedc441a547","schema_version":1}
-{"corpus_id":"retrievalkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"03cfae1edb14adcd2a4904a85ec7a9fa70c7dc6a33f5afe34b0a5cea870d0d1e","schema_version":1}
+{"corpus_id":"vectorkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"53f26299753298305f7a80ab581eea04f09cdd971e37b35d4ec742ca85cd3d4d","schema_version":1}
+{"corpus_id":"vectorkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"e891c85b4a555e0995dcc28effab0a32217258ff75e02ec7238c0bedc441a547","schema_version":1}
+{"corpus_id":"vectorkit-v3-synthetic-corpus","corpus_state_sha256":"18053f800d41297c493f62bbbf913c2960048f4a254663cb5a1a4b25d2da4ad7","graph_state_sha256":"ce9ca6f2a1c82c3e69b481dacd52c240d146dd060fb5be9c0477ddbca1bef32e","retrieval_state_sha256":"03cfae1edb14adcd2a4904a85ec7a9fa70c7dc6a33f5afe34b0a5cea870d0d1e","schema_version":1}
 ```
 
 ## Nine runs and populations

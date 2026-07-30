@@ -562,7 +562,7 @@ fn verify_persisted_database(
 }
 
 fn validate_frozen_runs(validated: &ValidatedCollection) -> Result<(), String> {
-    if validated.collection.collection_id != "retrievalkit-v3-conformance" {
+    if validated.collection.collection_id != "vectorkit-v3-conformance" {
         return Ok(());
     }
     for (lane, _qualification_run_id, logical, declared_hash, execution_hash, execution_count) in

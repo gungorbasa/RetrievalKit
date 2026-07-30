@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "retrievalkit-kotlin"
-include(":base", ":graph", ":android-base", ":android-graph")
+include(":base", ":graph", ":embedding", ":android-base", ":android-graph", ":android-embedding")
 include(":example-retrieval", ":example-graph")
 project(":example-retrieval").projectDir = file("examples/base")
 project(":example-graph").projectDir = file("examples/graph")

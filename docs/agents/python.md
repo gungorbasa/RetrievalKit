@@ -71,6 +71,17 @@ Python code.
 - Do not add a required network dependency for embeddings. Local embedding
   providers and remote embedding providers should both be possible.
 - Validate provider output dimensions before calling Rust search.
+- The first-party local provider is the separate optional
+  `wrappers/python-embedding` distribution (`retrievalkit-embedding`). Keep it
+  independent from the base and graph retrieval distributions and bind the
+  separate `retrievalkit-embedding` Rust crate, never `retrievalkit-core`.
+- The production Python provider exposes only pinned FP32 MiniLM inference:
+  fixed 256-token input and exactly 384 finite, L2-normalized F32 values.
+  Model acquisition is allowed only during explicit `load` or `prefetch`;
+  `local_only` must be network-free. Model precision remains independent from
+  RetrievalKit's default signed-I8 database encoding.
+- Keep registry metadata provisional and do not add the optional embedding
+  package to retrieval-package publication until separately authorized.
 
 ## FFI And Ownership
 

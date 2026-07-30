@@ -1,6 +1,7 @@
 mod builder;
 mod database_builder;
 mod error;
+#[cfg(not(target_arch = "wasm32"))]
 mod persistence;
 mod query;
 mod schema;
@@ -17,6 +18,7 @@ use retrievalkit_core::{
 pub use builder::GraphBuildStats;
 pub use database_builder::{GraphDatabaseBuilder, GraphRetrievalDatabaseBuilder};
 pub use error::{GraphError, Result};
+#[cfg(not(target_arch = "wasm32"))]
 pub use persistence::GraphDatabaseFileSizes;
 pub use query::{
     CancellationToken, GraphExecutionTimings, GraphMatch, GraphQuery, GraphQueryTrace, GraphResult,
@@ -48,6 +50,7 @@ pub struct GraphEngine {
 pub struct GraphIndex {
     core: ExactVectorIndex,
     graph: GraphEngine,
+    #[cfg(not(target_arch = "wasm32"))]
     _generation_lease: Option<persistence::GenerationLease>,
 }
 
@@ -56,6 +59,7 @@ pub struct GraphIndex {
 pub struct GraphDatabase {
     corpus: CorpusIndex,
     graph: GraphEngine,
+    #[cfg(not(target_arch = "wasm32"))]
     _generation_lease: Option<persistence::GenerationLease>,
 }
 
@@ -64,6 +68,7 @@ pub struct GraphDatabase {
 pub struct GraphRetrievalDatabase {
     retrieval: RetrievalDatabase,
     graph: GraphEngine,
+    #[cfg(not(target_arch = "wasm32"))]
     _generation_lease: Option<persistence::GenerationLease>,
 }
 
@@ -205,6 +210,7 @@ impl GraphIndex {
         Ok(Self {
             core,
             graph,
+            #[cfg(not(target_arch = "wasm32"))]
             _generation_lease: None,
         })
     }
@@ -227,11 +233,13 @@ impl GraphIndex {
         Ok(Self {
             core,
             graph,
+            #[cfg(not(target_arch = "wasm32"))]
             _generation_lease: None,
         })
     }
 
     /// Atomically publishes a composite core + graph snapshot directory.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir(
         &self,
         directory: impl AsRef<std::path::Path>,
@@ -240,11 +248,13 @@ impl GraphIndex {
     }
 
     /// Opens the active composite snapshot after validating all payloads.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
         persistence::load(directory.as_ref())
     }
 
     /// Runs the complete read-only validation path used by `load_from_dir`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
         persistence::validate(directory.as_ref())
     }
@@ -336,6 +346,7 @@ impl GraphDatabase {
         Ok(Self {
             corpus,
             graph,
+            #[cfg(not(target_arch = "wasm32"))]
             _generation_lease: None,
         })
     }
@@ -373,6 +384,7 @@ impl GraphDatabase {
         materialize_candidate_projection(&self.corpus, self.project_candidates(result)?, filter)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir(
         &self,
         directory: impl AsRef<std::path::Path>,
@@ -380,10 +392,12 @@ impl GraphDatabase {
         persistence::save_graph_database(self, directory.as_ref())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
         persistence::load_graph_database(directory.as_ref())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
         persistence::validate_graph_database(directory.as_ref())
     }
@@ -395,6 +409,7 @@ impl GraphRetrievalDatabase {
         Ok(Self {
             retrieval,
             graph,
+            #[cfg(not(target_arch = "wasm32"))]
             _generation_lease: None,
         })
     }
@@ -498,6 +513,7 @@ impl GraphRetrievalDatabase {
             .map_err(GraphError::from)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir(
         &self,
         directory: impl AsRef<std::path::Path>,
@@ -505,10 +521,12 @@ impl GraphRetrievalDatabase {
         persistence::save_graph_retrieval_database(self, directory.as_ref())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_dir(directory: impl AsRef<std::path::Path>) -> Result<Self> {
         persistence::load_graph_retrieval_database(directory.as_ref())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate_dir(directory: impl AsRef<std::path::Path>) -> Result<()> {
         persistence::validate_graph_retrieval_database(directory.as_ref())
     }

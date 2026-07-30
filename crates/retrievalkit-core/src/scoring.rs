@@ -1,3 +1,9 @@
+// Encoded-vector byte payload helpers currently serve native persistence.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
+#[cfg(target_arch = "wasm32")]
+use half::{bf16, f16};
+#[cfg(not(target_arch = "wasm32"))]
 use simsimd::{bf16, f16, SpatialSimilarity};
 
 use crate::error::{Result, RetrievalKitError};
@@ -43,10 +49,10 @@ impl EncodedVectorStore {
         match self {
             Self::F32(vectors) => vectors.extend_from_slice(embedding),
             Self::F16(vectors) => {
-                vectors.extend(embedding.iter().map(|&value| f16::from_f32(value)))
+                vectors.extend(embedding.iter().map(|&value| f16_from_f32(value)))
             }
             Self::BF16(vectors) => {
-                vectors.extend(embedding.iter().map(|&value| bf16::from_f32(value)));
+                vectors.extend(embedding.iter().map(|&value| bf16_from_f32(value)));
             }
             Self::I8ScalarQuantized { values, scales } => {
                 let encoded = encode_i8_scalar_quantized(embedding);
@@ -175,11 +181,11 @@ impl EncodedVectorStore {
                 .collect(),
             Self::F16(vectors) => vectors
                 .iter()
-                .flat_map(|value| value.0.to_le_bytes())
+                .flat_map(|value| f16_bits(*value).to_le_bytes())
                 .collect(),
             Self::BF16(vectors) => vectors
                 .iter()
-                .flat_map(|value| value.0.to_le_bytes())
+                .flat_map(|value| bf16_bits(*value).to_le_bytes())
                 .collect(),
             Self::I8ScalarQuantized { values, scales } => {
                 let mut bytes = Vec::with_capacity(
@@ -220,7 +226,9 @@ impl EncodedVectorStore {
                 Ok(Self::F16(
                     bytes
                         .chunks_exact(std::mem::size_of::<u16>())
-                        .map(|chunk| f16(u16::from_le_bytes(chunk.try_into().expect("chunk size"))))
+                        .map(|chunk| {
+                            f16_from_bits(u16::from_le_bytes(chunk.try_into().expect("chunk size")))
+                        })
                         .collect(),
                 ))
             }
@@ -230,7 +238,9 @@ impl EncodedVectorStore {
                     bytes
                         .chunks_exact(std::mem::size_of::<u16>())
                         .map(|chunk| {
-                            bf16(u16::from_le_bytes(chunk.try_into().expect("chunk size")))
+                            bf16_from_bits(u16::from_le_bytes(
+                                chunk.try_into().expect("chunk size"),
+                            ))
                         })
                         .collect(),
                 ))
@@ -332,6 +342,13 @@ fn score_f32(metric: VectorMetric, query: &[f32], chunk: &[f32]) -> f32 {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn score_f16(metric: VectorMetric, query: &[f16], chunk: &[f16]) -> f32 {
+    let _ = metric;
+    portable_dot_product_f16(query, chunk)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn score_f16(metric: VectorMetric, query: &[f16], chunk: &[f16]) -> f32 {
     match metric {
         VectorMetric::DotProduct => <f16 as SpatialSimilarity>::dot(query, chunk)
@@ -345,6 +362,13 @@ fn score_f16(metric: VectorMetric, query: &[f16], chunk: &[f16]) -> f32 {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn score_bf16(metric: VectorMetric, query: &[bf16], chunk: &[bf16]) -> f32 {
+    let _ = metric;
+    portable_dot_product_bf16(query, chunk)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn score_bf16(metric: VectorMetric, query: &[bf16], chunk: &[bf16]) -> f32 {
     match metric {
         VectorMetric::DotProduct => <bf16 as SpatialSimilarity>::dot(query, chunk)
@@ -375,6 +399,12 @@ pub(crate) fn scalar_score(metric: VectorMetric, query: &[f32], chunk: &[f32]) -
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn simd_dot_product(query: &[f32], chunk: &[f32]) -> f32 {
+    scalar_dot_product(query, chunk)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn simd_dot_product(query: &[f32], chunk: &[f32]) -> f32 {
     <f32 as SpatialSimilarity>::dot(query, chunk)
         .map(|distance| distance as f32)
@@ -399,10 +429,69 @@ pub fn dot_product_i8(left: &[i8], right: &[i8]) -> f32 {
         }
     }
 
-    <i8 as SpatialSimilarity>::dot(left, right)
-        .map(|distance| distance as f32)
-        .filter(|score| score.is_finite())
-        .unwrap_or_else(|| scalar_dot_product_i8(left, right))
+    #[cfg(all(target_arch = "wasm32", feature = "wasm-simd128"))]
+    {
+        // SAFETY: this code is emitted only in the separately built SIMD128
+        // browser artifact. Its Worker loader validates SIMD128 support before
+        // instantiating that artifact.
+        unsafe { wasm_simd128_dot_product_i8(left, right) }
+    }
+
+    #[cfg(all(target_arch = "wasm32", not(feature = "wasm-simd128")))]
+    {
+        scalar_dot_product_i8(left, right)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        <i8 as SpatialSimilarity>::dot(left, right)
+            .map(|distance| distance as f32)
+            .filter(|score| score.is_finite())
+            .unwrap_or_else(|| scalar_dot_product_i8(left, right))
+    }
+}
+
+/// Exact signed-I8 dot product for the separately distributed SIMD128 WASM
+/// artifact.
+///
+/// The main loop reads 16 valid I8 values per iteration, widens products to
+/// I16, then pairwise-widens accumulation into I32 lanes. The V1 384d/768d
+/// dimensions are far below I32 overflow. Any non-multiple-of-16 tail is
+/// accumulated scalarly, so inferred dimensions such as 396 remain correct.
+#[cfg(all(target_arch = "wasm32", feature = "wasm-simd128"))]
+#[target_feature(enable = "simd128")]
+unsafe fn wasm_simd128_dot_product_i8(left: &[i8], right: &[i8]) -> f32 {
+    use core::arch::wasm32::{
+        i16x8_extmul_high_i8x16, i16x8_extmul_low_i8x16, i32x4_add, i32x4_extadd_pairwise_i16x8,
+        i32x4_extract_lane, i32x4_splat, v128, v128_load,
+    };
+
+    let vectorized_len = left.len() / 16 * 16;
+    let mut sums = i32x4_splat(0);
+    let mut offset = 0usize;
+    while offset < vectorized_len {
+        // SAFETY: `offset + 16 <= vectorized_len <= left.len()` and the same
+        // length was established for `right` before this function was called.
+        let left_values = unsafe { v128_load(left.as_ptr().add(offset).cast::<v128>()) };
+        // SAFETY: see the left load above.
+        let right_values = unsafe { v128_load(right.as_ptr().add(offset).cast::<v128>()) };
+        let low_products = i16x8_extmul_low_i8x16(left_values, right_values);
+        let high_products = i16x8_extmul_high_i8x16(left_values, right_values);
+        sums = i32x4_add(sums, i32x4_extadd_pairwise_i16x8(low_products));
+        sums = i32x4_add(sums, i32x4_extadd_pairwise_i16x8(high_products));
+        offset += 16;
+    }
+
+    let vector_sum = i32x4_extract_lane::<0>(sums)
+        + i32x4_extract_lane::<1>(sums)
+        + i32x4_extract_lane::<2>(sums)
+        + i32x4_extract_lane::<3>(sums);
+    let tail_sum = left[vectorized_len..]
+        .iter()
+        .zip(&right[vectorized_len..])
+        .map(|(left, right)| i32::from(*left) * i32::from(*right))
+        .sum::<i32>();
+    (vector_sum + tail_sum) as f32
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -429,17 +518,125 @@ pub(crate) fn normalize(vector: &mut [f32]) {
 }
 
 fn encode_f16(embedding: &[f32]) -> Vec<f16> {
-    embedding
-        .iter()
-        .map(|&value| f16::from_f32(value))
-        .collect()
+    embedding.iter().map(|&value| f16_from_f32(value)).collect()
 }
 
 fn encode_bf16(embedding: &[f32]) -> Vec<bf16> {
     embedding
         .iter()
-        .map(|&value| bf16::from_f32(value))
+        .map(|&value| bf16_from_f32(value))
         .collect()
+}
+
+#[cfg(any(test, target_arch = "wasm32"))]
+fn portable_dot_product_f16(left: &[f16], right: &[f16]) -> f32 {
+    let score = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left.to_f32() * right.to_f32())
+        .sum::<f32>();
+    if score.is_finite() {
+        score
+    } else {
+        0.0
+    }
+}
+
+#[cfg(any(test, target_arch = "wasm32"))]
+fn portable_dot_product_bf16(left: &[bf16], right: &[bf16]) -> f32 {
+    let score = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left.to_f32() * right.to_f32())
+        .sum::<f32>();
+    if score.is_finite() {
+        score
+    } else {
+        0.0
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn f16_bits(value: f16) -> u16 {
+    value.0
+}
+
+#[cfg(target_arch = "wasm32")]
+fn f16_bits(value: f16) -> u16 {
+    value.to_bits()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn f16_from_f32(value: f32) -> f16 {
+    f16::from_f32(value)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn f16_from_f32(value: f32) -> f16 {
+    f16::from_bits(portable_f32_to_f16_bits(value))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn f16_from_bits(bits: u16) -> f16 {
+    f16(bits)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn f16_from_bits(bits: u16) -> f16 {
+    f16::from_bits(bits)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn bf16_bits(value: bf16) -> u16 {
+    value.0
+}
+
+#[cfg(target_arch = "wasm32")]
+fn bf16_bits(value: bf16) -> u16 {
+    value.to_bits()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn bf16_from_f32(value: f32) -> bf16 {
+    bf16::from_f32(value)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn bf16_from_f32(value: f32) -> bf16 {
+    bf16::from_bits(portable_f32_to_bf16_bits(value))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn bf16_from_bits(bits: u16) -> bf16 {
+    bf16(bits)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn bf16_from_bits(bits: u16) -> bf16 {
+    bf16::from_bits(bits)
+}
+
+#[cfg(any(test, target_arch = "wasm32"))]
+fn portable_f32_to_f16_bits(value: f32) -> u16 {
+    let bits = value.to_bits().wrapping_add(0x0000_1000);
+    let exponent = (bits & 0x7f80_0000) >> 23;
+    let mantissa = bits & 0x007f_ffff;
+    let mut result = (bits & 0x8000_0000) >> 16;
+    if exponent > 112 {
+        result |= ((exponent - 112) << 10 & 0x7c00) | (mantissa >> 13);
+    }
+    if exponent < 113 && exponent > 101 {
+        result |= (((0x007f_f000 + mantissa) >> (125 - exponent)) + 1) >> 1;
+    }
+    if exponent > 143 {
+        result |= 0x7fff;
+    }
+    result as u16
+}
+
+#[cfg(any(test, target_arch = "wasm32"))]
+fn portable_f32_to_bf16_bits(value: f32) -> u16 {
+    value.to_bits().wrapping_add(0x8000).wrapping_shr(16) as u16
 }
 
 fn encode_i8_scalar_quantized(embedding: &[f32]) -> ScalarQuantizedVector {
@@ -514,6 +711,46 @@ mod tests {
         assert_close(
             score(VectorMetric::DotProduct, &left, &right),
             scalar_score(VectorMetric::DotProduct, &left, &right),
+        );
+    }
+
+    #[test]
+    fn wasm_half_encodings_match_native_simsimd_encodings() {
+        let values = [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            0.333_251_95,
+            65_504.0,
+            f32::MIN_POSITIVE,
+            f32::MAX,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+        ];
+
+        for value in values {
+            assert_eq!(f16::from_f32(value).0, portable_f32_to_f16_bits(value));
+            assert_eq!(bf16::from_f32(value).0, portable_f32_to_bf16_bits(value));
+        }
+    }
+
+    #[test]
+    fn wasm_portable_half_scores_match_native_simsimd_scores() {
+        let left = [1.0, -2.25, 3.5, 0.125, 8.0];
+        let right = [-4.0, 5.5, 0.75, 2.0, -1.0];
+        let left_f16 = encode_f16(&left);
+        let right_f16 = encode_f16(&right);
+        let left_bf16 = encode_bf16(&left);
+        let right_bf16 = encode_bf16(&right);
+
+        assert_close(
+            portable_dot_product_f16(&left_f16, &right_f16),
+            <f16 as SpatialSimilarity>::dot(&left_f16, &right_f16).unwrap() as f32,
+        );
+        assert_close(
+            portable_dot_product_bf16(&left_bf16, &right_bf16),
+            <bf16 as SpatialSimilarity>::dot(&left_bf16, &right_bf16).unwrap() as f32,
         );
     }
 

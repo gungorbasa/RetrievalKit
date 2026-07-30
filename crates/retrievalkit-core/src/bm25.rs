@@ -1,3 +1,6 @@
+// Binary BM25 snapshot helpers are native-persistence implementation details.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 

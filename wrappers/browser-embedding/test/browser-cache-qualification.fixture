@@ -1,0 +1,224 @@
+const { acquireArtifacts } = await import(
+  new URL("../dist/acquire.js", globalThis.location.href)
+);
+const { BrowserCacheArtifactStore } = await import(
+  new URL("../dist/store.js", globalThis.location.href)
+);
+
+const prefix = "retrievalkit-browser-embedding-v1/";
+
+/**
+ * Runs against the browser's actual global CacheStorage implementation.
+ * Serve the package root over HTTP after `npm run build`, then open
+ * `test/browser-cache-qualification.html`.
+ */
+export async function runBrowserCacheQualification() {
+  if (globalThis.caches === undefined) {
+    throw new Error("This qualification requires the browser CacheStorage API.");
+  }
+  const fixture = await artifacts();
+  const runId = crypto.randomUUID();
+  const cacheNames = [];
+  const scenario = async (name, action) => {
+    const cacheName = `retrievalkit-browser-embedding-qualification-${runId}-${name}`;
+    cacheNames.push(cacheName);
+    return await action(new BrowserCacheArtifactStore(cacheName));
+  };
+
+  try {
+    const cold = await scenario("cold", async (store) => {
+      let fetches = 0;
+      await acquireArtifacts({
+        artifacts: fixture.specs,
+        store,
+        fetcher: async (url) => {
+          fetches += 1;
+          return required(fixture.byUrl, url);
+        },
+        localOnly: false
+      });
+      const keys = await store.keys(prefix);
+      let localFetches = 0;
+      await acquireArtifacts({
+        artifacts: fixture.specs,
+        store,
+        fetcher: async () => {
+          localFetches += 1;
+          throw new Error("localOnly attempted a fetch");
+        },
+        localOnly: true
+      });
+      assert(fetches === fixture.specs.length, "cold fetch count was not exact");
+      assert(localFetches === 0, "localOnly used the network");
+      assert(keys.length === fixture.specs.length + 1, "published inventory is incomplete");
+      assert(keys.at(-1)?.endsWith("/complete") === true, "completion marker was not last");
+      return { fetches, entries: keys.length, localFetches };
+    });
+
+    const corruption = await scenario("corruption", async (store) => {
+      await download(store, fixture);
+      const model = (await store.keys(prefix)).find((key) => key.endsWith("/onnx/model.onnx"));
+      assert(model !== undefined, "model entry was not published");
+      await store.write(model, new Uint8Array([1]));
+      await expectUnavailable(store, fixture);
+      const remaining = await store.keys(prefix);
+      assert(remaining.length === 0, "corrupt generation was not cleaned");
+      return { remaining: remaining.length };
+    });
+
+    const interruption = await scenario("interruption", async (store) => {
+      let fetches = 0;
+      try {
+        await acquireArtifacts({
+          artifacts: fixture.specs,
+          store,
+          fetcher: async (url) => {
+            fetches += 1;
+            if (fetches === 3) throw new Error("intentional interrupted acquisition");
+            return required(fixture.byUrl, url);
+          },
+          localOnly: false
+        });
+        throw new Error("interrupted acquisition unexpectedly succeeded");
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("intentional interrupted")) {
+          throw error;
+        }
+      }
+      const remaining = await store.keys(prefix);
+      assert(remaining.length === 0, "interrupted acquisition left partial state");
+      return { fetches, remaining: remaining.length };
+    });
+
+    const concurrency = await scenario("concurrency", async (store) => {
+      let fetches = 0;
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const fetcher = async (url) => {
+        fetches += 1;
+        await gate;
+        return required(fixture.byUrl, url);
+      };
+      const first = acquireArtifacts({
+        artifacts: fixture.specs,
+        store,
+        fetcher,
+        localOnly: false
+      });
+      const second = acquireArtifacts({
+        artifacts: fixture.specs,
+        store: new BrowserCacheArtifactStore(store.identity.slice("cache-api:".length)),
+        fetcher,
+        localOnly: false
+      });
+      release();
+      await Promise.all([first, second]);
+      assert(fetches === fixture.specs.length, "concurrent callers duplicated downloads");
+      return { callers: 2, fetches };
+    });
+
+    const eviction = await scenario("eviction", async (store) => {
+      await download(store, fixture);
+      const tokenizer = (await store.keys(prefix)).find((key) =>
+        key.endsWith("/tokenizer/tokenizer.json")
+      );
+      assert(tokenizer !== undefined, "tokenizer entry was not published");
+      await store.remove(tokenizer);
+      await expectUnavailable(store, fixture);
+      const remaining = await store.keys(prefix);
+      assert(remaining.length === 0, "evicted generation was not cleaned");
+      return { remaining: remaining.length };
+    });
+
+    return {
+      ok: true,
+      userAgent: navigator.userAgent,
+      cacheStorage: "globalThis.caches",
+      cold,
+      corruption,
+      interruption,
+      concurrency,
+      eviction,
+      quota: "Browser quota cannot be deterministically exhausted; adapter injection covers QuotaExceededError."
+    };
+  } finally {
+    await Promise.all(cacheNames.map(async (name) => await caches.delete(name)));
+  }
+}
+
+async function download(store, fixture) {
+  await acquireArtifacts({
+    artifacts: fixture.specs,
+    store,
+    fetcher: async (url) => required(fixture.byUrl, url),
+    localOnly: false
+  });
+}
+
+async function expectUnavailable(store, fixture) {
+  let unavailable = false;
+  try {
+    await acquireArtifacts({
+      artifacts: fixture.specs,
+      store,
+      fetcher: async () => {
+        throw new Error("localOnly attempted a fetch");
+      },
+      localOnly: true
+    });
+  } catch (error) {
+    unavailable =
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "RK_EMBEDDING_UNAVAILABLE";
+  }
+  assert(unavailable, "invalid local-only generation did not fail unavailable");
+}
+
+async function artifacts() {
+  const paths = [
+    "manifest-v1.json",
+    "onnx/model.onnx",
+    "tokenizer/tokenizer.json",
+    "tokenizer/tokenizer_config.json",
+    "tokenizer/special_tokens_map.json",
+    "tokenizer/vocab.txt"
+  ];
+  const files = paths.map((path, index) =>
+    new TextEncoder().encode(`browser-cache:${path}:${index}`)
+  );
+  const specs = await Promise.all(
+    paths.map(async (path, index) => {
+      const bytes = files[index];
+      return {
+        path,
+        bytes: bytes.byteLength,
+        sha256: await sha256(bytes),
+        url: `https://cache.invalid/${path}`
+      };
+    })
+  );
+  return {
+    specs,
+    byUrl: new Map(specs.map((spec, index) => [spec.url, files[index]]))
+  };
+}
+
+function required(files, key) {
+  const file = files.get(key);
+  if (file === undefined) throw new Error(`Missing fixture '${key}'.`);
+  return file.slice();
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function sha256(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}

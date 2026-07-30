@@ -1,0 +1,54 @@
+{
+  "name": "@gungorbasa/retrievalkit-embedding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional local ONNX text embeddings for RetrievalKit Node.js",
+  "keywords": [
+    "embeddings",
+    "onnx",
+    "retrieval",
+    "local-first"
+  ],
+  "homepage": "https://retrievalkit-docs.gungorbasa.chatgpt.site",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+    "directory": "wrappers/typescript/embedding"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "native/retrievalkit-embedding.node",
+    "runtime",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:native": "node ./scripts/build-native.mjs",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "test": "vitest run",
+    "test:live": "RETRIEVALKIT_EMBEDDING_LIVE_TEST=1 vitest run",
+    "qualify:live": "node ./scripts/live-qualify.mjs",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "license": "Apache-2.0"
+}

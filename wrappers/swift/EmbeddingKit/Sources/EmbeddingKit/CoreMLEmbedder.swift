@@ -100,6 +100,75 @@ public actor CoreMLEmbedder: TextEmbedder {
     private let tokenizer: any TextTokenizer
     private let backend: any CoreMLEmbeddingBackend
 
+    /// Loads the canonical verified FP32 Core ML model.
+    ///
+    /// Network access, when allowed, occurs only during this call. Embedding
+    /// inference and RetrievalKit database operations never download models.
+    public static func load(
+        access: CoreMLModelAccess = .downloadIfNeeded,
+        cacheDirectory: URL? = nil,
+        compute: EmbeddingCompute = .all,
+        backendPoolSize: Int = 1
+    ) async throws -> CoreMLEmbedder {
+        let artifact = CoreMLProductionModels.allMiniLML6V2FP32
+        let store = CoreMLModelStore.shared
+        let prepared = try await store.prepare(
+            artifact: artifact,
+            access: access,
+            cacheDirectory: cacheDirectory
+        )
+        let tokenizer = try BertWordPieceTokenizer(
+            tokenizerDirectory: prepared.tokenizerURL,
+            sequenceLength: 256
+        )
+        let configuration = CoreMLModelConfiguration(
+            modelURL: prepared.modelURL,
+            compute: compute,
+            backendPoolSize: backendPoolSize
+        )
+        do {
+            return try CoreMLEmbedder(
+                modelInfo: Self.productionModelInfo(artifact: artifact),
+                tokenizer: tokenizer,
+                configuration: configuration
+            )
+        } catch {
+            // A compiled cache can become incompatible after an OS/runtime
+            // transition. Remove it, compile once more, and surface the retry.
+            try await store.removeCompiledCache(
+                artifact: artifact,
+                cacheDirectory: cacheDirectory
+            )
+            let repaired = try await store.prepare(
+                artifact: artifact,
+                access: .localOnly,
+                cacheDirectory: cacheDirectory
+            )
+            return try CoreMLEmbedder(
+                modelInfo: Self.productionModelInfo(artifact: artifact),
+                tokenizer: tokenizer,
+                configuration: CoreMLModelConfiguration(
+                    modelURL: repaired.modelURL,
+                    compute: compute,
+                    backendPoolSize: backendPoolSize
+                )
+            )
+        }
+    }
+
+    /// Downloads, verifies, extracts, and compiles the canonical model without
+    /// constructing an embedder or performing inference.
+    public static func prefetch(
+        cacheDirectory: URL? = nil
+    ) async throws {
+        let artifact = CoreMLProductionModels.allMiniLML6V2FP32
+        _ = try await CoreMLModelStore.shared.prepare(
+            artifact: artifact,
+            access: .downloadIfNeeded,
+            cacheDirectory: cacheDirectory
+        )
+    }
+
     public init(
         modelInfo: EmbeddingModelInfo,
         tokenizer: any TextTokenizer,
@@ -132,8 +201,7 @@ public actor CoreMLEmbedder: TextEmbedder {
 
         let tokenized = try tokenizer.tokenize(text)
         let embedding = try await backend.predictEmbedding(for: tokenized)
-        try validateEmbedding(embedding)
-        return embedding
+        return try validateEmbedding(embedding)
     }
 
     public func embed(_ texts: [String]) async throws -> [[Float]] {
@@ -148,19 +216,51 @@ public actor CoreMLEmbedder: TextEmbedder {
                 "backend returned \(embeddings.count) embeddings for \(texts.count) inputs"
             )
         }
-        for embedding in embeddings {
-            try validateEmbedding(embedding)
-        }
-        return embeddings
+        return try embeddings.map(validateEmbedding)
     }
 
-    private func validateEmbedding(_ embedding: [Float]) throws {
+    private func validateEmbedding(_ embedding: [Float]) throws -> [Float] {
         guard embedding.count == modelInfo.dimension else {
             throw EmbeddingKitError.invalidDimension(
                 expected: modelInfo.dimension,
                 actual: embedding.count
             )
         }
+        guard embedding.allSatisfy(\.isFinite) else {
+            throw EmbeddingKitError.unsupportedModelInterface(
+                "embedding contains a non-finite value"
+            )
+        }
+        guard modelInfo.producesNormalizedEmbeddings else {
+            return embedding
+        }
+        let squaredNorm = embedding.reduce(Float(0)) { $0 + $1 * $1 }
+        guard squaredNorm.isFinite, squaredNorm > 0 else {
+            throw EmbeddingKitError.unsupportedModelInterface(
+                "embedding has no finite non-zero L2 norm"
+            )
+        }
+        let inverseNorm = 1 / sqrt(squaredNorm)
+        let normalized = embedding.map { $0 * inverseNorm }
+        guard normalized.allSatisfy(\.isFinite) else {
+            throw EmbeddingKitError.unsupportedModelInterface(
+                "embedding normalization produced a non-finite value"
+            )
+        }
+        return normalized
+    }
+
+    private static func productionModelInfo(
+        artifact: CoreMLModelArtifact
+    ) -> EmbeddingModelInfo {
+        try! EmbeddingModelInfo(
+            identifier: "sentence-transformers/all-MiniLM-L6-v2",
+            revision: "\(artifact.sourceModelRevision)+\(artifact.artifactRevision)",
+            dimension: 384,
+            maxInputTokens: 256,
+            producesNormalizedEmbeddings: true,
+            recommendedMetric: .cosine
+        )
     }
 }
 

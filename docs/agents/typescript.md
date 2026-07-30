@@ -1,8 +1,9 @@
 # TypeScript Agent Guidance
 
-TypeScript is a public V1 wrapper target for Node.js LTS, initially distributed
-as repository-local macOS arm64 packages. Read this file before creating or
-modifying TypeScript or Node native-addon code.
+TypeScript has two separate targets: the public V1 Node.js LTS wrapper,
+initially distributed as repository-local macOS arm64 packages, and the
+additive browser/WebAssembly package. Read this file before creating or
+modifying TypeScript, Node native-addon, or browser Worker code.
 
 ## Architecture
 
@@ -13,7 +14,23 @@ modifying TypeScript or Node native-addon code.
   not load both native aggregates in one process.
 - Keep registry names provisional until naming clearance. Do not claim npm
   publication or availability.
-- Do not support browsers or WebAssembly until separately authorized.
+- Keep the Node and browser packages separate. The browser package binds the
+  dedicated `wasm-bindgen` aggregate and must not import, emulate, or bundle the
+  N-API addon. Browser/WASM was separately authorized on 2026-07-26.
+- Keep the optional Node embedding package under
+  `wrappers/typescript/embedding` as an independently distributable N-API
+  package over the separate `retrievalkit-embedding` Rust crate. It must not
+  depend on the base or graph retrieval packages, and it is not the browser
+  embedding implementation.
+- Keep browser embedding in the independent
+  `wrappers/browser-embedding` package. It uses the browser-native tokenizer
+  and ONNX Runtime Web directly inside its own Worker; it must not import a
+  retrieval package, the Node N-API addon, or the Rust retrieval core.
+- Browser databases are Worker-owned. Public browser APIs are asynchronous and
+  must not run retrieval, graph traversal, or bulk ingestion on the UI thread.
+- Browser embedding model acquisition, tokenization, session creation,
+  warmup, and inference are likewise Worker-owned. Retrieval database
+  construction and operations never create or download an embedding model.
 
 ## Public API
 
@@ -29,6 +46,15 @@ modifying TypeScript or Node native-addon code.
   Operations after close must fail deterministically with a typed error.
 - Use optional properties instead of sentinels and preserve stable
   `(recordId, chunkKey)` identities only in candidate-projection results.
+- The production Node embedding surface is FP32-only, promise-based, fixed to
+  256 input tokens, and returns exactly 384 finite, normalized
+  `Float32Array` values. Acquisition occurs only in `load` or `prefetch`, and
+  `localOnly` must prohibit network access.
+- Browser embedding follows the same FP32/256-token/384-value contract.
+  `load`, `prefetch`, `embed`, `embedBatch`, model information, the selected
+  execution provider, and explicit close are the complete public boundary.
+  Keep model precision distinct from RetrievalKit's independent
+  `I8ScalarQuantized` database encoding.
 
 ## Boundary And Performance
 
@@ -39,6 +65,15 @@ modifying TypeScript or Node native-addon code.
   derivation, persistence, or fallback behavior in TypeScript.
 - Native operations that can block must run through napi-rs async tasks. State
   lifetime must remain valid until an in-flight task finishes.
+- Browser operations use a request-ID Worker protocol. Transfer contiguous
+  embedding buffers in bulk, avoid textual JSON on the query path, and keep
+  result conversion proportional to top-k rather than corpus size.
+- Browser embedding batches use one dynamic, batch-longest inference call and
+  one contiguous `Float32Array` transfer. The default attempts WebGPU with
+  same-model WASM operator fallback and then a separately initialized
+  WASM-only session; an explicit provider choice remains strict.
+- Browser close, cancellation, stale requests, Worker failure, and operations
+  after close must fail deterministically with typed errors.
 
 ## Errors And Lifecycle
 
@@ -52,6 +87,13 @@ modifying TypeScript or Node native-addon code.
 
 - Put the wrapper under `wrappers/typescript/` with separate base and graph
   packages and shared sources when practical.
+- Put the browser package under `wrappers/browser/`. Its registry name remains
+  provisional and it must not be added to Node package publication scripts.
+- Put optional browser embedding under `wrappers/browser-embedding/` with its
+  own lockfile, legal notices, runtime-asset verification, tests, and package
+  content audit. It is independently distributable and remains unpublished.
+- Keep `@gungorbasa/retrievalkit-embedding` private/provisional until package
+  naming and publication are separately authorized.
 - Declare Apache-2.0 and include `LICENSE` and `NOTICE` in every distributable.
 - Test lifecycle, Unicode, metadata, alpha endpoints, persistence, graph
   selection, candidate projection, conformance fixtures, and package contents.

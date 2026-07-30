@@ -11,12 +11,15 @@ const temporary = await mkdtemp(join(tmpdir(), "retrievalkit-node-install-"));
 const generatedTarballs = [];
 try {
   const basePack = await exec("npm", ["pack", "--json"], { cwd: resolve(here, "../base") });
+  const embeddingPack = await exec("npm", ["pack", "--json"], { cwd: resolve(here, "../embedding") });
   const graphPack = await exec("npm", ["pack", "--json"], { cwd: resolve(here, "../graph") });
   const baseName = JSON.parse(basePack.stdout)[0].filename;
+  const embeddingName = JSON.parse(embeddingPack.stdout)[0].filename;
   const graphName = JSON.parse(graphPack.stdout)[0].filename;
   const baseTar = resolve(here, "../base", baseName);
+  const embeddingTar = resolve(here, "../embedding", embeddingName);
   const graphTar = resolve(here, "../graph", graphName);
-  generatedTarballs.push(baseTar, graphTar);
+  generatedTarballs.push(baseTar, embeddingTar, graphTar);
   for (const [name, tar, source] of [
     [
       "base",
@@ -30,6 +33,26 @@ try {
   matched = (await db.search({ mode: "vector", embedding: new Float32Array([1, 0]) }))[0]?.documentId === "one";
 } finally {
   await db.close();
+}
+if (!matched) process.exit(2);`
+    ],
+    [
+      "embedding",
+      embeddingTar,
+      `import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { OnnxEmbedder } from "@gungorbasa/retrievalkit-embedding";
+const cacheDirectory = await mkdtemp(join(tmpdir(), "retrievalkit-embedding-smoke-"));
+let matched = false;
+try {
+  try {
+    await OnnxEmbedder.prefetch({ cacheDirectory, localOnly: true });
+  } catch (error) {
+    matched = error?.code === "RK_EMBEDDING_UNAVAILABLE";
+  }
+} finally {
+  await rm(cacheDirectory, { recursive: true, force: true });
 }
 if (!matched) process.exit(2);`
     ],

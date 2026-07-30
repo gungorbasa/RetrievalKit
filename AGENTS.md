@@ -18,9 +18,12 @@ When changing repository guidance, update this file first. Keep tool-specific fi
 
 ## Product Direction
 
-RetrievalKit is a local-first retrieval SDK for mobile and desktop apps. Its V1
-wrappers are Swift for iOS/macOS, Python and TypeScript for macOS arm64, and
-Kotlin/JVM with Android arm64-v8a packaging, all backed by the same Rust core.
+RetrievalKit is a local-first retrieval SDK for mobile, desktop, and browser
+apps. Its V1 native wrappers are Swift for iOS/macOS, Python and TypeScript for
+macOS arm64, and Kotlin/JVM with Android arm64-v8a packaging, all backed by the
+same Rust core. Browser/WebAssembly is a separate additive compile target with
+its own `wasm-bindgen` and Worker-owned TypeScript boundary; it must not replace
+or alter the Node N-API wrapper or any other native implementation.
 
 The current V1 direction is:
 
@@ -108,6 +111,7 @@ wrappers/
   python/                    # Python base wrapper
   python-graph/              # Python graph aggregate
   typescript/                # Node.js base and graph packages
+  browser/                   # Browser/WASM Worker package
   kotlin/                    # Kotlin/JVM and Android modules
 docs/
   product/               # Active product decisions
@@ -138,6 +142,13 @@ For every language wrapper, define:
 - Compatibility guarantees with the Rust core.
 
 Wrappers should not reimplement retrieval logic. They should call the Rust core and provide idiomatic language bindings.
+
+The browser wrapper follows the same rule. Retrieval, BM25, hybrid ranking,
+filtering, graph traversal, projection, and generation validation stay in Rust.
+Browser databases are in-memory and Worker-owned initially; filesystem
+persistence is excluded from the WASM target only. Native Cargo defaults,
+dependencies, persistence, packaging, and performance paths must remain
+unchanged by browser work.
 
 ## Licensing
 

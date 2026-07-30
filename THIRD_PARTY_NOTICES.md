@@ -19,6 +19,7 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | bitflags | 2.13.1 | MIT OR Apache-2.0 | https://github.com/bitflags/bitflags |
 | blake3 | 1.8.5 | CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception | https://github.com/BLAKE3-team/BLAKE3 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
+| bumpalo | 3.20.3 | MIT OR Apache-2.0 | https://github.com/fitzgen/bumpalo |
 | bytes | 1.12.1 | MIT | https://github.com/tokio-rs/bytes |
 | cc | 1.2.64 | MIT OR Apache-2.0 | https://github.com/rust-lang/cc-rs |
 | cesu8 | 1.1.0 | Apache-2.0/MIT | https://github.com/emk/cesu8-rs |
@@ -28,6 +29,7 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | convert_case | 0.11.0 | MIT | https://github.com/rutrum/convert-case |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | cpufeatures | 0.3.0 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
+| crunchy | 0.2.4 | MIT | https://github.com/eira-fransham/crunchy |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
 | ctor | 1.0.10 | Apache-2.0 OR MIT | https://github.com/mmastrac/linktime |
 | digest | 0.10.7 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
@@ -45,6 +47,7 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | futures-util | 0.3.33 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
 | generic-array | 0.14.7 | MIT | https://github.com/fizyk20/generic-array.git |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
+| half | 2.7.1 | MIT OR Apache-2.0 | https://github.com/VoidStarKat/half-rs |
 | heck | 0.5.0 | MIT OR Apache-2.0 | https://github.com/withoutboats/heck |
 | icu_casemap | 1.4.0 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | icu_casemap_data | 1.4.0 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
@@ -65,6 +68,7 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | jni-sys | 0.4.1 | MIT OR Apache-2.0 | https://github.com/jni-rs/jni-sys |
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 | https://github.com/jni-rs/jni-sys |
 | jobserver | 0.1.34 | MIT OR Apache-2.0 | https://github.com/rust-lang/jobserver-rs |
+| js-sys | 0.3.103 | MIT OR Apache-2.0 | https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys |
 | libc | 0.2.186 | MIT OR Apache-2.0 | https://github.com/rust-lang/libc |
 | libloading | 0.9.0 | ISC | https://github.com/nagisa/rust_libloading/ |
 | litemap | 0.7.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
@@ -94,6 +98,7 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | same-file | 1.0.6 | Unlicense/MIT | https://github.com/BurntSushi/same-file |
 | semver | 1.0.28 | MIT OR Apache-2.0 | https://github.com/dtolnay/semver |
 | serde | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
+| serde-wasm-bindgen | 0.6.5 | MIT | https://github.com/RReverser/serde-wasm-bindgen |
 | serde_core | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
 | serde_derive | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
 | serde_json | 1.0.150 | MIT OR Apache-2.0 | https://github.com/serde-rs/json |
@@ -119,6 +124,11 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | version_check | 0.9.5 | MIT/Apache-2.0 | https://github.com/SergioBenitez/version_check |
 | walkdir | 2.5.0 | Unlicense/MIT | https://github.com/BurntSushi/walkdir |
 | wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/bytecodealliance/wasi-rs |
+| wasm-bindgen | 0.2.126 | MIT OR Apache-2.0 | https://github.com/wasm-bindgen/wasm-bindgen |
+| wasm-bindgen-macro | 0.2.126 | MIT OR Apache-2.0 | https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro |
+| wasm-bindgen-macro-support | 0.2.126 | MIT OR Apache-2.0 | https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support |
+| wasm-bindgen-shared | 0.2.126 | MIT OR Apache-2.0 | https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared |
+| web-time | 1.1.0 | MIT OR Apache-2.0 | https://github.com/daxpedda/web-time |
 | winapi | 0.3.9 | MIT/Apache-2.0 | https://github.com/retep998/winapi-rs |
 | winapi-i686-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | https://github.com/retep998/winapi-rs |
 | winapi-util | 0.1.11 | Unlicense OR MIT | https://github.com/BurntSushi/winapi-util |
@@ -139,6 +149,8 @@ from the checked-in `Cargo.lock`; regenerate it whenever dependencies change.
 | writeable | 0.5.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | yoke | 0.7.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | yoke-derive | 0.7.5 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
+| zerocopy | 0.8.55 | BSD-2-Clause OR Apache-2.0 OR MIT | https://github.com/google/zerocopy |
+| zerocopy-derive | 0.8.55 | BSD-2-Clause OR Apache-2.0 OR MIT | https://github.com/google/zerocopy |
 | zerofrom | 0.1.8 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | zerofrom-derive | 0.1.7 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | zerovec | 0.10.4 | Unicode-3.0 | https://github.com/unicode-org/icu4x |

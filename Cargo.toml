@@ -9,6 +9,7 @@ members = [
     "crates/retrievalkit-python",
     "crates/retrievalkit-node",
     "crates/retrievalkit-jni",
+    "crates/retrievalkit-wasm",
 ]
 resolver = "2"
 

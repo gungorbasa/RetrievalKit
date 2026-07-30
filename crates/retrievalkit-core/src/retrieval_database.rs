@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use crate::candidate_scope::CandidateScope;
@@ -7,9 +8,11 @@ use crate::index::ExactVectorIndex;
 use crate::metadata::Metadata;
 use crate::record_store::{ChunkIdentity, CorpusId, Record, RecordId};
 use crate::retrieval_index::{RetrievalConfiguration, RetrievalIndex, RetrievalMode};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::types::IndexFileSizeReport;
 use crate::types::{
-    CompactionReport, HybridHit, HybridQuery, IndexFileSizeReport, KeywordHit, KeywordQuery,
-    RecordChunkInput, SearchHit, SearchQuery, StoredChunk,
+    CompactionReport, HybridHit, HybridQuery, KeywordHit, KeywordQuery, RecordChunkInput,
+    SearchHit, SearchQuery, StoredChunk,
 };
 
 /// A graph-neutral database with semantic and hybrid retrieval enabled.
@@ -115,16 +118,19 @@ impl RetrievalDatabase {
         self.index.chunk(chunk_id)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir(&self, directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
         self.index.save_to_dir(directory)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_dir(directory: impl AsRef<Path>) -> Result<Self> {
         Ok(Self {
             index: ExactVectorIndex::load_from_dir(directory)?,
         })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate_dir(directory: impl AsRef<Path>) -> Result<()> {
         ExactVectorIndex::validate_dir(directory)
     }

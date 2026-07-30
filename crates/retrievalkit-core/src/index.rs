@@ -1,3 +1,6 @@
+// Directory persistence is deliberately absent from the browser artifact.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
 use std::fs::{self, OpenOptions};
@@ -6,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(not(target_arch = "wasm32"))]
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -70,10 +74,12 @@ enum SaveCheckpoint {
     ManifestWritten,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct SaveLock {
     file: fs::File,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl SaveLock {
     fn acquire(directory: &Path) -> Result<Self> {
         let path = directory.join(SAVE_LOCK_FILE);
@@ -95,6 +101,7 @@ impl SaveLock {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for SaveLock {
     fn drop(&mut self) {
         let _ = FileExt::unlock(&self.file);
@@ -323,11 +330,13 @@ impl ExactVectorIndex {
     }
 
     /// Saves the loaded index to a local directory and returns actual file sizes.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir(&self, directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
         self.save_to_dir_with_options(directory, IndexPersistenceOptions::default())
     }
 
     /// Saves the loaded index with explicit persistence options.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_dir_with_options(
         &self,
         directory: impl AsRef<Path>,
@@ -336,6 +345,7 @@ impl ExactVectorIndex {
         self.save_to_dir_with_checkpoints(directory, options, |_| Ok(()))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn save_to_dir_with_checkpoints(
         &self,
         directory: impl AsRef<Path>,
@@ -496,6 +506,7 @@ impl ExactVectorIndex {
     }
 
     /// Loads a previously saved local index directory.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_dir(directory: impl AsRef<Path>) -> Result<Self> {
         let directory = directory.as_ref();
         let manifest_path = directory.join(MANIFEST_FILE);
@@ -667,11 +678,13 @@ impl ExactVectorIndex {
     ///
     /// Validation covers the manifest, file sizes, checksums when present, all
     /// persisted payloads, tombstone values, and cross-file consistency.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate_dir(directory: impl AsRef<Path>) -> Result<()> {
         Self::load_from_dir(directory).map(|_| ())
     }
 
     /// Returns actual file sizes for a saved index directory.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn persisted_file_sizes(directory: impl AsRef<Path>) -> Result<IndexFileSizeReport> {
         let directory = directory.as_ref();
         let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE))?;
@@ -2097,6 +2110,7 @@ fn read_file(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|error| persistence_error("read", path, &error))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn compress_payload(path: &Path, bytes: &[u8], compression: FileCompression) -> Result<Vec<u8>> {
     match compression {
         FileCompression::None => Ok(bytes.to_vec()),
@@ -2110,6 +2124,7 @@ fn compress_payload(path: &Path, bytes: &[u8], compression: FileCompression) -> 
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn read_payload_file(
     path: &Path,
     compression: FileCompression,
@@ -3249,6 +3264,41 @@ mod tests {
             estimate.total_bytes(),
             estimate.vector_bytes + estimate.auxiliary_bytes()
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn persisted_i8_vectors_contain_one_byte_per_dimension_and_one_scale_per_row() {
+        let directory = temp_index_dir("i8-vector-payload-size");
+        let dimension = 384;
+        let vector_count = 3;
+        let mut index = ExactVectorIndex::new(dimension, VectorMetric::DotProduct);
+
+        for row in 0..vector_count {
+            let mut embedding = vec![0.0; dimension];
+            embedding[row] = 1.0;
+            index
+                .add_chunk(chunk(row as u64, &format!("doc-{row}"), embedding))
+                .unwrap();
+        }
+
+        let expected_vector_bytes =
+            vector_count * (dimension * std::mem::size_of::<i8>() + std::mem::size_of::<f32>());
+        assert_eq!(index.size_estimate().vector_bytes, expected_vector_bytes);
+
+        let file_sizes = index
+            .save_to_dir_with_options(&directory, IndexPersistenceOptions::vector_only())
+            .unwrap();
+        assert_eq!(
+            file_sizes.vectors_bytes,
+            u64::try_from(expected_vector_bytes).unwrap()
+        );
+
+        let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+        assert_eq!(manifest.vector_encoding, VectorEncoding::I8ScalarQuantized);
+        assert_eq!(manifest.vector_bytes, expected_vector_bytes);
+
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]

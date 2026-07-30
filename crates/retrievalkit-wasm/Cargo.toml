@@ -1,0 +1,23 @@
+[package]
+name = "retrievalkit-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "In-memory WebAssembly bindings for RetrievalKit browser workers"
+
+[features]
+default = []
+wasm-simd128 = ["retrievalkit-core/wasm-simd128"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+js-sys = "0.3.77"
+retrievalkit-core = { path = "../retrievalkit-core", default-features = false }
+retrievalkit-graph = { path = "../retrievalkit-graph", default-features = false }
+serde = { version = "1.0.228", features = ["derive"] }
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen = "0.2.100"

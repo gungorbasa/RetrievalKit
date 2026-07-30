@@ -5,14 +5,25 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+# Browser-only acceleration. Native targets keep their existing SimSIMD/NEON
+# paths even when workspace checks enable every feature.
+wasm-simd128 = []
+
 [dependencies]
-fs2 = "0.4.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-simsimd = "6.5.16"
 unicode-segmentation = "1.13.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fs2 = "0.4.3"
+simsimd = "6.5.16"
 zstd = "0.13.3"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+half = { version = "2.7.1", default-features = false }
 
 [build-dependencies]
 cc = "1.2.63"

@@ -2,12 +2,13 @@
 
 ## Product Summary
 
-Build a local-first retrieval SDK for mobile and desktop apps. The first public
-targets are iOS/macOS through Swift, macOS arm64 through Python, Node.js LTS
-initially on macOS arm64 through TypeScript, and Kotlin/JVM with Android
-arm64-v8a native packaging, backed by one Rust core. The initial TypeScript
-target does not include browsers or WebAssembly. The initial Kotlin target does
-not include Kotlin Multiplatform.
+Build a local-first retrieval SDK for mobile, desktop, and browser apps. The
+first native public targets are iOS/macOS through Swift, macOS arm64 through
+Python, Node.js LTS initially on macOS arm64 through TypeScript, and Kotlin/JVM
+with Android arm64-v8a native packaging, backed by one Rust core. The Node.js
+wrapper remains a native N-API target. Browser/WebAssembly is an additive,
+separately packaged compile target and does not replace or alter any native
+wrapper. The initial Kotlin target does not include Kotlin Multiplatform.
 
 The SDK must provide fast, correct local retrieval over app-owned documents without requiring a vector database server.
 
@@ -100,6 +101,366 @@ V1 does not include:
 - Dashboard UI.
 - Built-in embedding model training.
 - General SQL query engine.
+
+## Authorized Optional Embedding Providers
+
+Embedding model execution is authorized as an additive, optional integration
+layer. It does not move into `retrievalkit-core`, and no retrieval-capable
+database constructs, downloads, selects, or invokes an embedding model.
+Existing caller-produced embedding APIs and every existing language wrapper
+remain unchanged.
+
+The first shared provider experiment is frozen to
+`sentence-transformers/all-MiniLM-L6-v2` revision
+`c9745ed1d9f207416be6d2e6f8de32d1f16199bf`. Its cross-runtime contract is:
+
+```text
+maximum input: 256 WordPiece tokens
+pooling: masked mean
+normalization: L2
+output: 384 finite F32 values
+recommended metric: cosine
+profiles: FP32, FP16, Q8
+```
+
+Native Rust exposes the cross-platform ONNX provider from the separate
+`retrievalkit-embedding` crate. It remains optional and unchanged. Production
+Swift embedding is direct Core ML through the provider-neutral
+`wrappers/swift/EmbeddingKit` package; the completed Swift ONNX comparison and
+its Apple ONNX Runtime build material are retired from active source,
+packaging, and CI.
+
+Production Python and Node embedding integrations live in this monorepo but
+ship as separate optional distributions:
+
+```text
+wrappers/python-embedding       retrievalkit-embedding
+wrappers/typescript/embedding   @gungorbasa/retrievalkit-embedding
+```
+
+Both are thin language-native bindings over the separate
+`retrievalkit-embedding` Rust crate. They expose only the canonical FP32
+profile, preserve the fixed 256-token behavior, validate exactly 384 finite
+L2-normalized F32 output values, and do not depend on a retrieval package.
+Python exposes synchronous `load`, `prefetch`, `embed`, and `embed_batch`
+operations while releasing the GIL around native model work. Node exposes
+promise-based `load`, `prefetch`, `embed`, and `embedBatch`, performs blocking
+native work away from the JavaScript event loop, and provides explicit
+lifecycle cleanup. Registry identities remain provisional and neither package
+is published.
+
+Production Kotlin embedding is another independently distributable optional
+integration:
+
+```text
+wrappers/kotlin/embedding          retrievalkit-embedding
+wrappers/kotlin/android-embedding  retrievalkit-embedding-android
+```
+
+Both modules bind the separate Rust ONNX provider through the private
+`retrievalkit-jni-embedding` aggregate and have no retrieval or graph
+dependency. The blocking `OnnxEmbedder` surface is limited to FP32 `load`,
+`prefetch`, `embed`, `embedBatch`, immutable model information, and
+deterministic `close`. Empty or blank inputs and empty batches fail with typed
+embedding errors. Output must contain exactly 384 finite, L2-normalized F32
+values with the qualified 256-token limit. Kotlin adds no coroutine dependency;
+callers select their own dispatcher. `AndroidOnnxEmbedder` places verified
+artifacts under the application cache and returns the same `OnnxEmbedder`.
+Coordinates remain provisional and neither module is published.
+
+Kotlin model acquisition is limited to `load` or explicit `prefetch`.
+`localOnly` is network-free. The implementation reuses the Rust provider's
+immutable HTTPS pins, OS/application cache, cross-process acquisition lock,
+temporary files, exact size/SHA-256 verification, corrupt/partial cleanup, and
+atomic publication. Kotlin/JVM bundles the verified official macOS arm64 ONNX
+Runtime 1.24.3 library identified below. Android bundles only arm64-v8a from
+the official `onnxruntime-android:1.24.3` AAR: the AAR is `40,948,335` bytes
+with SHA-256
+`67397e4a970e75617f765d2015ceaf911917e1d822276cfb5792744e8085cbce`,
+and its selected `libonnxruntime.so` is `25,831,632` bytes with SHA-256
+`4d2318b3849abb8862133d3068fc7e807ed8b2671cc6d83657fff2fcb9e1caad`.
+Package builds fail closed on runtime or legal-file drift; generated native
+binaries are not source files.
+
+Browser embedding is a separate, independently distributable integration at
+`wrappers/browser-embedding`. It does not bind Rust and does not import the
+browser retrieval package or a Node package. A dedicated module Worker owns
+verified model acquisition, tokenization, ONNX session creation, warmup, and
+inference through the exact dependencies `@huggingface/tokenizers` 0.1.3 and
+`onnxruntime-web` 1.27.0. The public promise-based surface is limited to
+`load`, `prefetch`, `embed`, `embedBatch`, immutable model information, the
+selected execution provider, and explicit close. It exposes only FP32, applies
+the qualified 256-token behavior, and returns exactly 384 finite,
+L2-normalized `Float32Array` values.
+
+Browser model acquisition occurs only in `load` or explicit `prefetch`.
+`localOnly` makes no model-artifact request and requires a fully verified
+cache. The cache inventory is closed to the immutable manifest, FP32 ONNX
+model, and four tokenizer files pinned below. Every response and every cache
+hit is checked for exact size and SHA-256; a completion marker is written
+last, corrupt or partial state is removed, concurrent module callers share one
+acquisition, and the Web Locks API coordinates Workers where available. The
+Worker entry, package JavaScript, and ONNX Runtime Web loader/WASM files are
+application assets rather than model artifacts; a fully offline application
+must serve or precache those assets separately.
+
+Browser `execution: "auto"` first creates and warms WebGPU with same-model
+WASM operator fallback, then creates a fresh WASM-only session if that attempt
+fails. Explicit `"webgpu"` and `"wasm"` choices are strict. The package
+verifies and ships the provider-specific ONNX Runtime Web 1.27.0 loaders and
+WASM binaries at build time:
+
+```text
+ort-wasm-simd-threaded.mjs
+  24,180 bytes
+  0a1e718d99c41b22c21f2520ff4f9e883a6b5533856e398d21816ee8eb8185d3
+ort-wasm-simd-threaded.wasm
+  13,479,978 bytes
+  d1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6
+ort-wasm-simd-threaded.asyncify.mjs
+  47,507 bytes
+  7236653b8565da4046e459cd0e274123419a1d9f1f8f18fd36c28058346ca655
+ort-wasm-simd-threaded.asyncify.wasm
+  24,254,953 bytes
+  7e83cd6cee77e478bc96a7e91b198144fb5e4126287daf1f9b54bb195ebcd55a
+```
+
+The browser embedding registry identity remains provisional. No browser
+embedding package has been published.
+
+On the Apple M1 Max reference host, a real Chrome 150 dedicated-Worker WebGPU
+run with 50 warm-ups and 750 measured 32-token queries produced warm p95
+`7.500 ms`. The matching 50K×384d I8 SIMD128 retrieval rerun produced vector
+p95 `1.887 ms` and hybrid p95 `2.250 ms`. A later production same-page run
+through the separate embedding and retrieval Workers measured Chrome WebGPU
+embedding p95 `10.560 ms`, retrieval p95 `1.905 ms`, and end-to-end p95
+`12.405 ms`; therefore the earlier separately summed sub-10-ms estimate is not
+an end-to-end pass. Actual ONNX Runtime Web WASM produced all 94 frozen
+vectors with median cosine `0.9999999999996866` and 100% mean/exact/minimum
+Top-10 agreement versus Rust FP32. Its warm p95 was `19.804 ms`, so WASM is a
+correct compatibility fallback but not a sub-10-ms tier. Chrome qualification
+now includes real CacheStorage and the full 50K same-page path. Firefox 150
+passes the same correctness/cache/retrieval matrix through the WASM embedding
+fallback with `21.660 ms` end-to-end p95. Safari, mobile GPUs, private-mode
+cache behavior, and naturally occurring CacheStorage quota/eviction behavior
+remain release gates.
+
+A 2026-07-28 Chrome phase profile localized the 50K regression inside ONNX
+Runtime Web inference rather than Worker RPC: the 256-chunk runtime/public
+embedding p95 values were `7.005/7.090 ms`, while the 50K values were
+`10.515/10.685 ms`. Removing two redundant post-inference F32 copies preserved
+all validation but did not materially change the production result; the final
+uninstrumented 50K embedding/retrieval/end-to-end p95 values were
+`10.610/1.995/12.460 ms`. Precision, the 32-token benchmark input, corpus size,
+provider, retrieval semantics, and separate Worker ownership must not be
+weakened to manufacture a pass.
+
+The owner accepted provider-tiered browser qualification budgets on
+2026-07-28. On the fixed Apple M1 Max reference contract above, WebGPU
+embedding plus SIMD128 retrieval must have end-to-end p95 at or below `15 ms`;
+the deterministic WASM embedding compatibility tier plus SIMD128 retrieval
+must have end-to-end p95 at or below `25 ms`; retrieval-only p95 remains at or
+below `8 ms`. These are qualification budgets for the named reference
+contract, not universal device latency guarantees. Chrome passes the
+accelerated tier at `12.460 ms`, and Firefox passes the compatibility tier at
+`21.660 ms`. Browser performance is therefore accepted for the qualified
+Chrome and Firefox providers. Safari 26.5.2 is now functionally qualified:
+it selected WebGPU, passed all correctness/cache gates, and measured retrieval
+p95 `1.940 ms` and end-to-end p95 `18.380 ms`. On 2026-07-28 the owner
+accepted a Safari-specific WebGPU reference budget of `20 ms`, so Safari
+passes. This platform-specific budget does not change the general `15 ms`
+WebGPU budget used for Chrome. Safari performance optimization is deferred;
+mobile-device measurements remain open.
+
+The Rust provider uses the official ONNX Runtime 1.24.3 binary through
+`ort` 2.0.0-rc.12's API-24 dynamic-loading boundary and requires the
+application to supply the packaged runtime library path. It must not silently
+substitute the crate's older prebuilt runtime. `retrievalkit-core` does not
+depend on ONNX Runtime, Core ML, an embedding library, HTTP, or model download
+code.
+
+Python, Node, and Kotlin acquire model files only while loading an embedder or
+through explicit prefetch. `local_only`/`localOnly` prohibits network access.
+All three use
+the Rust provider's OS cache, immutable HTTPS artifact URLs, exact size and
+SHA-256 verification, cross-process file lock, temporary download files,
+atomic publication, and corrupt/partial cleanup. Their independently built
+macOS arm64 packages may bundle the official ONNX Runtime 1.24.3 library only
+after verifying its exact size (`27,724,968` bytes) and SHA-256
+`b65e22247d3ce2976931cfc6be3929e6fb81cd55e2f202e95e0ab8c9de5fa729`
+and including its license and third-party notices. The runtime binary is not
+stored in this repository. Retrieval database construction, indexing, search,
+graph operations, and persistence remain network-free and embedding-neutral.
+
+On the Apple M1 Max reference host, Kotlin/JVM produced all 94 frozen FP32
+vectors with median cosine `1.0`, minimum cosine
+`0.9999999999998386`, and 100% mean/exact/minimum Top-10 agreement against the
+Rust FP32 reference. A release run with 50 warm-ups and 750 measured 32-token
+queries produced warm embedding p95 `8.175 ms` through the final packaged
+JAR. The frozen native I8 retrieval p95 is `0.218 ms`, so the separately
+measured sum is `8.393 ms`, below the 10 ms combined gate; retrieval-only
+remains below 8 ms. Both Kotlin/Rust directions also pass the actual
+RetrievalKit vector, hybrid, graph-scoped vector, and graph-scoped hybrid I8
+gates, while BM25, graph-scoped BM25, and graph-only selection remain exactly
+identical. Android qualification currently covers cross-compilation and closed
+arm64-v8a AAR inspection; live device inference remains a release gate.
+
+The Rust ONNX artifacts remain pinned in public repository
+`gungorbasa/retrievalkit-minilm` at immutable commit
+`617ce926c1f9e0289365d3e999474cc28b1645d4`; the SHA-256 of their
+`manifest-v1.json` is
+`b81e0e9393a25630eda184cfa373f2f28eed08c2ed92ae3d4097504e5f7ab4b2`.
+
+Production Swift pins the deterministic uncompressed POSIX-ustar archive
+`all-MiniLM-L6-v2-coreml-fp32-v1.tar` from the same repository at immutable
+commit `405818d6afef1aaf2fc8da67da6caf20b55f0a28`. The archive is
+`90,664,960` bytes with SHA-256
+`e54611cc957f38fe82f5d82715a8043fff308a022c55b5471d4602c723540b6f`;
+its `archive-manifest-v1.json` is `2,029` bytes with SHA-256
+`085ebd344abdbc944568636d12ea10309e7b7457730b8be65a92c5da53091b60`,
+and its canonical payload-tree SHA-256 is
+`29f56defb74316d8491e7fba4eeba98cf24dc10b0e2b5b1df4a2d4e352f5fe5c`.
+Production code never resolves `main`.
+
+`CoreMLEmbedder.load(...)` downloads only while constructing the embedder, and
+`CoreMLEmbedder.prefetch(...)` makes acquisition explicit. Both use HTTPS,
+verify the archive's exact size and SHA-256, safely extract only the closed
+manifest inventory, verify every payload size and SHA-256, publish cache state
+atomically, and deduplicate concurrent in-process acquisition. `localOnly`
+performs no network request. The package compiles the `.mlpackage` locally with
+official Core ML APIs and keys compiled cache state by immutable artifact
+identity plus OS/Core ML compatibility; a failed compiled-model load removes
+that cache and recompiles once. Retrieval database initialization and every
+indexing, retrieval, graph, and persistence method remain network-free.
+
+Embedding-model precision and database-vector encoding are independent.
+FP32 is the canonical ONNX/Core ML inference profile because direct provider
+rankings had 100% Top-10 agreement. Production Swift uses only the fixed
+256-token FP32 Core ML package, defaults to Core ML compute units `.all`, and
+returns exactly 384 finite, L2-normalized F32 values. RetrievalKit accepts those
+F32 values publicly and applies its existing `I8ScalarQuantized` database
+encoding by default: one signed byte per dimension plus one F32 scale per
+vector. After I8 encoding, both cross-provider database/query directions
+measured 99.76% mean Top-10 overlap and 97.62% exact Top-10 sets. Selecting a
+Q8 embedding model does not make a RetrievalKit database smaller than storing
+FP32-model output with `I8ScalarQuantized`, and Q8/FP16 are not production
+Swift runtime choices.
+
+The Q8 profile is runtime-specific while preserving the shared output
+contract: ONNX uses dynamic signed-INT8 transformer quantization while retaining
+seven quality-sensitive MatMul nodes in full precision, and the Core ML
+comparison uses broadly compatible weight-only INT8. A profile is called faster
+or suitable as a default only after measured quality and latency qualification.
+Index and query embeddings should use the same artifact profile unless a
+cross-profile combination has separately passed conformance.
+
+Provider qualification is separate from artifact qualification. Historical
+Q8 and FP16 comparisons remain in the dated experiment report, but they do not
+form a production Swift fallback. Direct Core ML Q8 did not improve latency,
+and ONNX CPU Q8 plus the ONNX Core ML execution-provider Q8 missed their
+quality gate through actual SDK boundaries.
+
+Cross-provider FP32 qualification requires median cosine at least 0.9999, mean
+Top-10 overlap at least 99%, exact Top-10 sets on at least 90% of queries, and
+no query below 90% overlap. The same ranking gates apply after per-vector
+signed-I8 database encoding when either provider builds the database and the
+other produces the query.
+
+The Rust ONNX CPU provider uses bounded intra-operation parallelism selected at
+construction (up to four threads by default) and keeps inter-operation
+parallelism at one. Applications may override both values. This setting belongs
+only to the optional embedding provider and does not alter retrieval scoring,
+database behavior, or an existing language wrapper.
+
+## Authorized Browser/WebAssembly Target
+
+Browser/WebAssembly is an additive target authorized on 2026-07-26. It must
+reuse the Rust retrieval and graph implementations without changing the code
+paths, dependencies, packaging, or measured performance of native Swift,
+Python, Node.js, Kotlin/JVM, or Android builds.
+
+The browser package exposes the same capability-separated products:
+
+```text
+RetrievalDatabase      = CorpusIndex + RetrievalIndex
+GraphDatabase          = CorpusIndex + GraphEngine
+GraphRetrievalDatabase = CorpusIndex + GraphEngine + RetrievalIndex
+```
+
+`RetrievalDatabase` and `GraphRetrievalDatabase` support embedding-only exact
+vector search, text-only BM25 search, and text-plus-embedding hybrid search
+with query-time `alpha`. `GraphDatabase` performs graph traversal and
+projection without accepting embeddings. `GraphRetrievalDatabase` additionally
+supports graph-scoped vector, BM25, and hybrid retrieval through
+generation-bound selections.
+
+The browser architecture is fixed for its first implementation:
+
+- A separate `wasm-bindgen` Rust boundary and browser TypeScript package are
+  used. The existing N-API/Tokio Node.js wrapper is unchanged and is never
+  bundled into a browser.
+- Every database is owned by a dedicated Web Worker. Indexing, graph building,
+  traversal, filtering, scoring, and ranking do not execute on the UI thread.
+- The initial database is in-memory. Filesystem directory persistence,
+  cross-process locks, mmap, and native compressed snapshots are excluded from
+  the WASM build rather than emulated.
+- Browser persistence, when added, uses versioned
+  `save_to_bytes`/`load_from_bytes` snapshots stored by the TypeScript layer in
+  IndexedDB or OPFS. Query execution continues against restored WASM memory.
+- Embeddings remain caller-produced at every retrieval API. Applications may
+  use the independent `wrappers/browser-embedding` provider to produce them,
+  but the retrieval package does not import, construct, download, or invoke
+  that provider. Embedding inference is not part of the Rust retrieval core
+  and retrieval does not require WebGPU.
+- Structured values use typed JavaScript/WASM conversion. Query paths must not
+  serialize or parse textual JSON.
+- Embeddings cross the boundary in contiguous `Float32Array` batches.
+  JavaScript must not invoke WASM once per vector, chunk, or result.
+- The default browser execution tier is one Worker with single-threaded exact
+  scoring. WASM SIMD128 and threaded WASM are separate benchmark-gated
+  optimizations. Threaded execution must remain optional because it adds
+  cross-origin-isolation deployment requirements.
+- The canonical compact browser profile matches the native product:
+  384-dimensional caller-provided F32 embeddings stored and scored as
+  per-vector symmetric `I8ScalarQuantized` values with zero-point 0 and one
+  F32 scale per vector. The browser must not substitute a lower-dimensional
+  embedding profile merely to satisfy latency. Dimension remains inferred and
+  fixed per database, but any profile other than the qualified 384d profile
+  requires its own quality evidence.
+
+Native SimSIMD remains unchanged. The first WASM slice tested SimSIMD 6.5.16:
+Rust compilation succeeds, but its build script can fail to emit the C archive
+for `wasm32-unknown-unknown` and still request `-lsimsimd`, so a release artifact
+does not link. The initial browser tier therefore uses an explicitly
+WASM-only portable Rust scoring and half-conversion fallback. Native targets
+continue to use SimSIMD's existing dynamic dispatch without source or feature
+changes. WASM SIMD128 was added only after the portable Rust path missed the
+frozen browser performance gates. `zstd` remains available to native builds;
+it is omitted from the initial in-memory browser artifact and may be enabled
+later for byte snapshots only after startup, size, and decompression
+measurements justify it.
+
+The portable WASM I8 scorer does not meet the 50K latency gate. The browser
+therefore requires an optional SIMD128 artifact with explicit signed-I8 dot
+product acceleration and a portable fallback. This is a browser-target
+implementation detail; it must not change native SimSIMD, NEON/dot-product,
+Python, Node, Swift, Kotlin, Android, persistence, or package behavior.
+
+The browser target retains the V1 fewer-than-50K-chunk exact-search envelope.
+It does not authorize HNSW, ANN, WebGPU retrieval, server mode, synchronization,
+or a different ranking implementation. Browser and native results must match
+on checked-in conformance fixtures, including filtering, lifecycle,
+deterministic tie-breaking, traces, graph projection, and stale-selection
+rejection.
+
+Browser performance qualification reports cold startup, warm startup, batch
+ingestion, retrieval-only latency, embedding latency, end-to-end latency,
+Worker transfer time, and peak memory separately. It covers 10K, 25K, and 50K
+corpora at 384 and 768 dimensions, top-k 5 and 10, dense and sparse filters,
+vector/BM25/hybrid queries, graph traversal, and graph-scoped retrieval. Every
+reported latency includes p50 and p95. No browser speed claim is permitted
+until Chrome, Firefox, and Safari results are recorded on named desktop and
+mobile device classes.
 
 ## Optional Local Graph Roadmap
 
@@ -260,8 +621,9 @@ references, reference collections, document/chunk structure, bounded typed
 traversal, and only the retrieval composition mode proven by the customer
 fixture. Arbitrary Cypher, automatic model extraction, PageRank and broad graph
 analytics, SQL metadata storage, ANN/HNSW, incremental graph mutation,
-browser/WASM TypeScript, and Kotlin Multiplatform remain out of scope until
-separately authorized.
+and Kotlin Multiplatform remain out of scope until separately authorized.
+Browser/WASM is governed by the separate authorized target above and does not
+expand the first native graph release.
 
 ## Small-Index MVP Strategy
 

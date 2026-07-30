@@ -352,25 +352,41 @@ Any future ANN implementation must:
 ANN does not ship merely because the dataset exceeds 50K. It ships only when it
 improves measured latency without violating the agreed recall target.
 
-## Phase 7: Public Website and In-Browser Demo
+## Phase 7: Browser/WebAssembly SDK and Public Demo
 
-Status: proposed 2026-07-23. Requires a product-spec amendment before
-implementation because the current V1 direction does not include a web target.
+Status: authorized and in progress 2026-07-26. The product-spec amendment is
+recorded in `retrievalkit-product-spec.md`. No package publication, website
+deployment, release tag, or public browser performance claim is authorized by
+this implementation phase.
 
 Goal: publish a public website whose demo proves the local-first claim by
 running RetrievalKit retrieval entirely in the visitor's browser, with an
 optional on-device LLM answering over the retrieved results.
 
-Work:
+Implementation work:
 
 - Publish a static site (GitHub Pages first; custom domain optional) that
   reuses the README visual identity and follows the claim policy: permitted
   Phase 6 claims only, with their frozen-revision qualifiers.
-- Build a demo-only wasm artifact of `retrievalkit-core` plus
-  `retrievalkit-graph`: persistence (`fs2`), `zstd`, and the native SIMD/C
-  kernels feature-gated off; in-memory corpus only; portable scoring fallback.
-  This is not a supported wrapper and creates no cross-language parity
-  obligations.
+- Add a separate `wasm-bindgen` aggregate of `retrievalkit-core` plus
+  `retrievalkit-graph`. Native-default persistence (`fs2`, filesystem paths,
+  mmap, and `zstd`) is excluded from this target only. Native aggregates and
+  their performance paths remain unchanged.
+- Add a typed browser TypeScript package exposing `RetrievalDatabase`,
+  `GraphDatabase`, and `GraphRetrievalDatabase`, including vector, BM25,
+  hybrid, graph-only, and graph-scoped retrieval paths.
+- Own every database inside a dedicated Web Worker. Use batched contiguous
+  embedding transfers and one request/response boundary per operation.
+- Establish native/WASM result conformance and a browser benchmark harness
+  before choosing scoring optimizations.
+- Preserve native SimSIMD unchanged. The 6.5.16 portable C path was tested but
+  does not produce a linkable `wasm32-unknown-unknown` release archive, so use a
+  WASM-only portable Rust scorer as the baseline. Add a separately detected
+  WASM SIMD128 tier only if required. Add optional threaded WASM only when
+  measurements justify its deployment cost.
+- Keep the first browser database in memory. Add versioned byte-snapshot
+  persistence through IndexedDB or OPFS only after the in-memory API and
+  performance gates pass.
 - Run query embedding in the browser with a small local model (for example
   MiniLM 384d via transformers.js) so the full query flow stays on-device.
 - Ship 2–3 small curated scenarios with prebuilt graph edges (for example
@@ -385,6 +401,14 @@ Work:
 
 Exit criteria:
 
+- Existing native Rust, Swift, Python, Node.js, Kotlin/JVM, and Android checks
+  remain unchanged and pass.
+- The portable WASM aggregate compiles and all three database products pass
+  browser lifecycle and conformance tests.
+- Retrieval stays off the UI thread and large embedding buffers use
+  transferable ownership or bounded bulk copies.
+- Benchmark reports separate WASM startup, transfer, embedding, retrieval, and
+  end-to-end time at 10K, 25K, and 50K supported-product sizes.
 - The published demo performs indexing-free query retrieval with no network
   request on the query path after initial asset download.
 - Wasm retrieval results match native results on a checked-in fixture.
@@ -404,8 +428,46 @@ Implement one independently releasable slice at a time:
 6. CI and public Apple package distribution.
 7. Add TREC-compatible external and production-derived quality evaluation.
 8. Reassess parallel exact search and ANN using the collected evidence.
-9. Amend the product spec for the web target, then publish the website and
-   wasm-based in-browser demo.
+9. Complete the browser/WASM SDK qualification, then separately authorize and
+   publish the website and browser demo.
+10. Maintain the qualified MiniLM provider boundaries: the optional Rust ONNX
+    provider remains separate; production Swift uses the pinned FP32 direct
+    Core ML archive through `EmbeddingKit`; and production Python/Node expose
+    independently distributable FP32-only wrappers over the Rust provider.
+    Browser exposes a separate Worker-owned FP32-only package over direct
+    ONNX Runtime Web and the browser tokenizer; retrieval packages remain
+    embedding-neutral.
+    The completed Swift ONNX comparison remains historical evidence and its
+    Apple runtime packaging is retired. Kotlin/JVM and Android arm64-v8a now
+    expose a separate FP32-only optional package through the shared Rust ONNX
+    provider and an isolated JNI aggregate.
+
+The browser embedding slice is implemented. Chrome WebGPU and Firefox WASM now
+pass the production desktop correctness, real CacheStorage, lifecycle, and 50K
+SIMD128 retrieval matrix on the 2026-07-27 reference host. The actual Chrome
+same-page embedding-plus-retrieval p95 is `12.460 ms` after the 2026-07-28
+copy cleanup. The owner accepted provider-tiered reference budgets of `15 ms`
+for WebGPU embedding plus SIMD128 retrieval, `25 ms` for WASM compatibility
+embedding plus SIMD128 retrieval, and `8 ms` for retrieval-only. Chrome and
+Firefox pass their respective tiers. Safari 26.5.2 now passes the full
+correctness/cache/50K matrix after WebDriver was enabled, but its WebGPU
+end-to-end p95 is `18.380 ms`. The owner accepted a Safari-specific `20 ms`
+reference budget, so Safari passes and further WebGPU optimization is deferred.
+Mobile browsers, private-mode/cache-pressure behavior, and publication remain
+open as recorded in the dated reports.
+
+The 2026-07-28 hot-path investigation removed two redundant single-embedding
+F32 copies; the final uninstrumented 50K Chrome p95 was `12.460 ms`. Phase
+instrumentation showed that the difference from isolated embedding is inside
+WebGPU inference under the sustained 50K workload, not the Worker/client
+boundary. Browser/GPU tracing is optional future optimization work, not a
+release gate. Do not change FP32, the 32-token query, 50K corpus, or separate
+package/Worker boundaries to improve the number.
+
+The Kotlin embedding slice is implemented and JVM-qualified on the 2026-07-27
+reference host. Android arm64-v8a cross-compilation and closed AAR inspection
+pass; live-device inference remains a release gate. No Kotlin embedding
+artifact has been published.
 
 Each slice should update tests, wrapper docs, the changelog, and working memory,
 then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
@@ -417,5 +479,7 @@ then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
 - Automatic compaction policies before device memory and latency data exists.
 - New retrieval abstractions without two concrete implementations.
 - Embedding-model execution inside the Rust retrieval core.
+- Reintroducing Swift ONNX or making Q8 the production Swift embedding default;
+  direct Core ML FP32 is the qualified production path.
 - NIST TREC participation before release distribution is working; retain it as
   a committed post-release evaluation milestone.

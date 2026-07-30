@@ -130,7 +130,7 @@ jobs:
           python "${{ matrix.package.example }}"
 
   node:
-    name: Node.js wrapper (macOS arm64)
+    name: Node.js and native embedding wrappers (macOS arm64)
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -143,6 +143,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
 
+      - name: Install Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
       - name: Install Node.js LTS
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -150,11 +155,28 @@ jobs:
           cache: npm
           cache-dependency-path: wrappers/typescript/package-lock.json
 
+      - name: Prepare the qualified ONNX Runtime 1.24.3
+        run: |
+          python -m pip install --disable-pip-version-check "onnxruntime==1.24.3"
+          runtime_path="$(
+            python -c 'import pathlib, onnxruntime; print(next((pathlib.Path(onnxruntime.__file__).parent / "capi").glob("libonnxruntime.1.24.3.dylib")))'
+          )"
+          {
+            echo "RETRIEVALKIT_ONNX_RUNTIME_LIBRARY=$runtime_path"
+            echo "RETRIEVALKIT_BUNDLE_ONNX_RUNTIME=1"
+            echo "RETRIEVALKIT_REQUIRE_BUNDLED_ONNX_RUNTIME=1"
+          } >> "$GITHUB_ENV"
+
+      - name: Build and verify the Python embedding package
+        env:
+          PYTHON_BIN: python
+        run: scripts/check-python-embedding-wrapper.sh
+
       - name: Install dependencies
         working-directory: wrappers/typescript
         run: npm ci
 
-      - name: Build and verify base and graph packages
+      - name: Build and verify base, embedding, and graph packages
         working-directory: wrappers/typescript
         run: |
           npm run build
@@ -163,6 +185,71 @@ jobs:
           npm test
           npm run verify:contents
           npm run smoke:install
+
+  browser-wasm:
+    name: Browser/WebAssembly (portable + SIMD128 Worker tiers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust and WebAssembly target
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - name: Compile and lint both WASM tiers
+        run: |
+          cargo check --locked -p retrievalkit-wasm --target wasm32-unknown-unknown
+          cargo clippy --locked -p retrievalkit-core -p retrievalkit-graph -p retrievalkit-wasm \
+            --target wasm32-unknown-unknown -- -D warnings
+          cargo clippy --locked -p retrievalkit-core -p retrievalkit-graph -p retrievalkit-wasm \
+            --target wasm32-unknown-unknown \
+            --features retrievalkit-wasm/wasm-simd128 -- -D warnings
+          cargo test --locked -p retrievalkit-wasm
+
+      - name: Install Node.js LTS
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            wrappers/browser/package-lock.json
+            wrappers/browser-embedding/package-lock.json
+
+      - name: Run the generated-WASM runtime smoke
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.126 --locked
+          scripts/check-browser-wasm.sh
+
+      - name: Check the Worker-owned browser package
+        working-directory: wrappers/browser
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          npm pack --dry-run
+          cmp ../../LICENSE LICENSE
+          cmp ../../NOTICE NOTICE
+
+      - name: Check the independent browser embedding package
+        working-directory: wrappers/browser-embedding
+        run: |
+          npm ci
+          npm run check
+          npm run check:package
+          npm audit --omit=dev
+          cmp ../../LICENSE LICENSE
+          cmp ../../NOTICE NOTICE
+
+      - name: Check browser embedding qualification harnesses
+        run: |
+          node --test \
+            scripts/embedding/test_qualify_browser_embedding.mjs \
+            scripts/embedding/test_qualify_browser_embedding_webgpu.mjs \
+            scripts/embedding/test_qualify_browser_desktop_matrix.mjs
 
   kotlin-jvm:
     name: Kotlin/JVM wrapper (macOS arm64, JDK 17)
@@ -188,14 +275,51 @@ jobs:
             wrappers/kotlin/*.gradle.kts
             wrappers/kotlin/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Build JVM native aggregates
+      - name: Install Python for runtime verification
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Prepare the qualified macOS ONNX Runtime 1.24.3
+        run: |
+          python -m pip install --disable-pip-version-check "onnxruntime==1.24.3"
+          runtime_path="$(
+            python -c 'import pathlib, onnxruntime; print(next((pathlib.Path(onnxruntime.__file__).parent / "capi").glob("libonnxruntime.1.24.3.dylib")))'
+          )"
+          legal_dir="$RUNNER_TEMP/onnxruntime-1.24.3-legal"
+          mkdir -p "$legal_dir"
+          curl --fail --location --silent --show-error \
+            --output "$legal_dir/LICENSE" \
+            https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/LICENSE
+          curl --fail --location --silent --show-error \
+            --output "$legal_dir/ThirdPartyNotices.txt" \
+            https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/ThirdPartyNotices.txt
+          {
+            echo "RETRIEVALKIT_ONNX_RUNTIME_LIBRARY=$runtime_path"
+            echo "RETRIEVALKIT_ONNX_RUNTIME_LICENSE=$legal_dir/LICENSE"
+            echo "RETRIEVALKIT_ONNX_RUNTIME_NOTICES=$legal_dir/ThirdPartyNotices.txt"
+          } >> "$GITHUB_ENV"
+
+      - name: Build JVM native aggregates and optional embedding provider
         working-directory: wrappers/kotlin
-        run: ./scripts/build-native.sh jvm
+        run: |
+          ./scripts/build-native.sh jvm
+          ./scripts/build-embedding-native.sh jvm
 
       - name: Test and inspect JVM artifacts
         working-directory: wrappers/kotlin
         run: |
-          ./gradlew :base:test :graph:test :base:inspectBaseArtifact --no-daemon
+          ./gradlew \
+            :base:test \
+            :graph:test \
+            :embedding:test \
+            :base:inspectBaseArtifact \
+            :embedding:inspectEmbeddingArtifact \
+            --no-daemon
+          python3 scripts/verify-embedding-package.py jvm \
+            --archive embedding/build/libs/embedding-0.1.0.jar \
+            --project-license LICENSE \
+            --project-notice NOTICE
           ./gradlew :example-retrieval:run :example-graph:run :example-graph:runCombined --no-daemon
 
   kotlin-android:
@@ -229,13 +353,44 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
-      - name: Build Android arm64-v8a native aggregates
+      - name: Prepare the qualified Android ONNX Runtime 1.24.3
         working-directory: wrappers/kotlin
-        run: ./scripts/build-native.sh android
+        run: |
+          runtime_aar="$RUNNER_TEMP/onnxruntime-android-1.24.3.aar"
+          legal_dir="$RUNNER_TEMP/onnxruntime-1.24.3-legal"
+          mkdir -p "$legal_dir"
+          python3 scripts/prepare-embedding-runtime.py download-android-aar \
+            --output "$runtime_aar"
+          curl --fail --location --silent --show-error \
+            --output "$legal_dir/LICENSE" \
+            https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/LICENSE
+          curl --fail --location --silent --show-error \
+            --output "$legal_dir/ThirdPartyNotices.txt" \
+            https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/ThirdPartyNotices.txt
+          {
+            echo "RETRIEVALKIT_ONNX_RUNTIME_ANDROID_AAR=$runtime_aar"
+            echo "RETRIEVALKIT_ONNX_RUNTIME_LICENSE=$legal_dir/LICENSE"
+            echo "RETRIEVALKIT_ONNX_RUNTIME_NOTICES=$legal_dir/ThirdPartyNotices.txt"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Android arm64-v8a native aggregates and optional embedding provider
+        working-directory: wrappers/kotlin
+        run: |
+          ./scripts/build-native.sh android
+          ./scripts/build-embedding-native.sh android
 
       - name: Assemble and inspect Android AARs
         working-directory: wrappers/kotlin
-        run: ./gradlew :android-base:inspectBaseAar :android-graph:inspectGraphAar --no-daemon
+        run: |
+          ./gradlew \
+            :android-base:inspectBaseAar \
+            :android-graph:inspectGraphAar \
+            :android-embedding:inspectEmbeddingAar \
+            --no-daemon
+          python3 scripts/verify-embedding-package.py android \
+            --archive android-embedding/build/outputs/aar/android-embedding-release.aar \
+            --project-license LICENSE \
+            --project-notice NOTICE
 
   apple:
     name: Apple XCFramework and Swift

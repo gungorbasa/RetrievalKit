@@ -9,6 +9,11 @@ JNI, Gradle, or Android packaging code.
 - Bind directly to the Rust core through a thin, typed JNI layer. Kotlin owns
   API shape, marshaling, error presentation, and deterministic native lifetime
   only.
+- Keep the optional embedding provider separate from every retrieval module.
+  `:embedding` and `:android-embedding` bind only
+  `retrievalkit-jni-embedding`, which in turn binds the optional
+  `retrievalkit-embedding` ONNX provider. They must not depend on
+  `retrievalkit-core`, `retrievalkit-graph`, or a database wrapper.
 - Keep base and graph-capable Gradle modules and native aggregates separate.
   The base artifact must exclude graph code, and an application must not load
   both native aggregates in one process.
@@ -30,6 +35,13 @@ JNI, Gradle, or Android packaging code.
   deterministically with a typed exception.
 - Support bulk ingestion. Keep JNI symbols, native handles, C structs, internal
   chunk IDs, and candidate-scope internals out of the public API.
+- The optional embedding API is blocking and FP32-only:
+  `OnnxEmbedder.load`, `prefetch`, `embed`, `embedBatch`, immutable model
+  information, and deterministic `close`. It returns exactly 384 finite,
+  L2-normalized `FloatArray` values and keeps model precision distinct from
+  RetrievalKit's signed-I8 database encoding.
+- Android callers should use `AndroidOnnxEmbedder` so the verified model cache
+  is rooted in the application cache directory.
 
 ## Boundary And Performance
 
@@ -55,6 +67,11 @@ JNI, Gradle, or Android packaging code.
   modules plus shared API sources when practical.
 - Package Android arm64-v8a libraries in their respective AAR/JAR resources.
   Declare Apache-2.0 and include `LICENSE` and `NOTICE`.
+- The optional JVM embedding JAR packages the verified official macOS arm64
+  ONNX Runtime 1.24.3 library; the Android embedding AAR packages only its
+  official arm64-v8a runtime. Verify exact runtime size/SHA-256 and include the
+  ONNX Runtime license and third-party notices. Do not commit generated native
+  binaries.
 - Test lifecycle, errors, Unicode, metadata, alpha endpoints, persistence,
   graph selection, candidate projection, conformance fixtures, JNI loading,
   and artifact contents.

@@ -1,0 +1,12 @@
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+wheel-data/*
+!wheel-data/platlib/
+wheel-data/platlib/*
+!wheel-data/platlib/.gitignore
+python/retrievalkit_embedding/_native*.so
+python/retrievalkit_embedding/_native*.pyd
+python/retrievalkit_embedding/_native*.dylib
+python/retrievalkit_embedding/runtime/*
+!python/retrievalkit_embedding/runtime/.gitignore

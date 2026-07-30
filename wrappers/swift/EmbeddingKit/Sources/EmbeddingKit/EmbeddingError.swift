@@ -14,6 +14,12 @@ public enum EmbeddingKitError: Error, Equatable, CustomStringConvertible, Sendab
     case unsupportedModelInterface(String)
     /// Provider-specific backend failure.
     case backend(String)
+    /// A verified model artifact is not present and network access is disabled.
+    case modelUnavailable(String)
+    /// A downloaded or cached artifact did not match its immutable identity.
+    case artifactVerificationFailed(String)
+    /// A model archive contains an entry that cannot be extracted safely.
+    case unsafeArchive(String)
 
     public var description: String {
         switch self {
@@ -29,6 +35,12 @@ public enum EmbeddingKitError: Error, Equatable, CustomStringConvertible, Sendab
             "unsupported model interface: \(message)"
         case .backend(let message):
             "embedding backend error: \(message)"
+        case .modelUnavailable(let message):
+            "embedding model unavailable: \(message)"
+        case .artifactVerificationFailed(let message):
+            "embedding artifact verification failed: \(message)"
+        case .unsafeArchive(let message):
+            "unsafe embedding artifact archive: \(message)"
         }
     }
 }

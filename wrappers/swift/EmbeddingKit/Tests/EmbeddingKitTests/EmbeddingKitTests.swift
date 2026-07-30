@@ -296,7 +296,7 @@ private func makeWordPieceTokenizerFixture() throws -> URL {
           "private": 2797,
           "notes": 3964,
           "search": 3945,
-          "vector": 9207,
+          "retrieval": 9207,
           "##kit": 23615
         }
       }

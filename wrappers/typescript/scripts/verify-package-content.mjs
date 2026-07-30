@@ -17,10 +17,27 @@ async function packFiles(packageDirectory) {
 }
 
 const baseFiles = await packFiles("base");
+const embeddingFiles = await packFiles("embedding");
 const graphFiles = await packFiles("graph");
 for (const required of ["LICENSE", "NOTICE", "README.md", "dist/index.js", "dist/index.d.ts", "native/retrievalkit.node"]) {
   if (!baseFiles.includes(required)) throw new Error(`base package is missing ${required}`);
   if (!graphFiles.includes(required)) throw new Error(`graph package is missing ${required}`);
+}
+for (const required of ["LICENSE", "NOTICE", "README.md", "dist/index.js", "dist/index.d.ts", "native/retrievalkit-embedding.node"]) {
+  if (!embeddingFiles.includes(required)) {
+    throw new Error(`embedding package is missing ${required}`);
+  }
+}
+if (process.env.RETRIEVALKIT_REQUIRE_BUNDLED_ONNX_RUNTIME === "1") {
+  for (const required of [
+    "runtime/libonnxruntime.1.24.3.dylib",
+    "runtime/ONNX-Runtime-LICENSE",
+    "runtime/ONNX-Runtime-ThirdPartyNotices.txt"
+  ]) {
+    if (!embeddingFiles.includes(required)) {
+      throw new Error(`production embedding package is missing ${required}`);
+    }
+  }
 }
 if (baseFiles.some((file) => /graph/i.test(file))) {
   throw new Error(`base package unexpectedly contains a graph-named file: ${baseFiles.join(", ")}`);
@@ -46,4 +63,27 @@ const basePackage = JSON.parse(
 if (JSON.stringify(basePackage).includes("@gungorbasa/retrievalkit-graph")) {
   throw new Error("base package metadata depends on the graph package");
 }
-console.log("Package contents and graph-free base dependency tree verified.");
+const { stdout: embeddingTree } = await exec(
+  "cargo",
+  ["tree", "-p", "retrievalkit-node-embedding"],
+  { cwd: workspace }
+);
+for (const forbidden of ["retrievalkit-core", "retrievalkit-graph"]) {
+  if (embeddingTree.includes(forbidden)) {
+    throw new Error(`embedding native dependency tree includes ${forbidden}`);
+  }
+}
+const embeddingPackage = JSON.parse(
+  await readFile(resolve(here, "../embedding/package.json"), "utf8")
+);
+for (const forbidden of [
+  "@gungorbasa/retrievalkit",
+  "@gungorbasa/retrievalkit-graph"
+]) {
+  if (JSON.stringify(embeddingPackage).includes(`"${forbidden}"`)) {
+    throw new Error(`embedding package metadata depends on ${forbidden}`);
+  }
+}
+console.log(
+  "Package contents plus graph-free base and retrieval-free embedding dependency trees verified."
+);

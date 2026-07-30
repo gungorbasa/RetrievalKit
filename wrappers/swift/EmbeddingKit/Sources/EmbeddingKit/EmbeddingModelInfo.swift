@@ -99,8 +99,10 @@ public enum KnownEmbeddingModels {
 
     public static let allMiniLML6V2 = try! EmbeddingModelInfo(
         identifier: "sentence-transformers/all-MiniLM-L6-v2",
+        revision: "c9745ed1d9f207416be6d2e6f8de32d1f16199bf",
         dimension: 384,
         maxInputTokens: 256,
+        producesNormalizedEmbeddings: true,
         recommendedMetric: .cosine
     )
 

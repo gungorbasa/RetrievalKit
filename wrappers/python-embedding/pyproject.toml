@@ -1,0 +1,42 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "retrievalkit-embedding"
+version = "0.1.0"
+description = "Optional local ONNX text embeddings for RetrievalKit"
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "RetrievalKit" }
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Libraries",
+]
+
+[tool.maturin]
+manifest-path = "../../crates/retrievalkit-python-embedding/Cargo.toml"
+module-name = "retrievalkit_embedding._native"
+python-source = "python"
+exclude = ["python/**/__pycache__/**", "python/**/*.pyc"]
+data = "wheel-data"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = [
+  "python/retrievalkit_embedding",
+  "tests/typing_smoke.py",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["python", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

@@ -1,0 +1,11 @@
+# Conversion inputs are pinned because exporter-version changes can alter graphs
+# and artifact hashes even when the Hugging Face model revision is unchanged.
+coremltools==8.3.0
+huggingface-hub==0.33.4
+numpy==2.0.2
+onnx==1.18.0
+onnxruntime==1.22.1
+onnxscript==0.3.2
+safetensors==0.5.3
+torch==2.7.1
+transformers==4.53.3

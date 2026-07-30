@@ -1,14 +1,18 @@
 [workspace]
 members = [
     "crates/retrievalkit-core",
+    "crates/retrievalkit-embedding",
     "crates/retrievalkit-graph",
     "crates/retrievalkit-ingest",
     "crates/retrievalkit-phase4-bench",
     "crates/retrievalkit-cli",
     "crates/retrievalkit-ffi",
     "crates/retrievalkit-python",
+    "crates/retrievalkit-python-embedding",
     "crates/retrievalkit-node",
+    "crates/retrievalkit-node-embedding",
     "crates/retrievalkit-jni",
+    "crates/retrievalkit-jni-embedding",
     "crates/retrievalkit-wasm",
 ]
 resolver = "2"

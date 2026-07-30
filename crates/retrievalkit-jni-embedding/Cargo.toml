@@ -1,0 +1,16 @@
+[package]
+name = "retrievalkit-jni-embedding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Private JNI boundary for RetrievalKit's optional Kotlin ONNX embedding provider"
+publish = false
+
+[lib]
+name = "retrievalkit_embedding_jni"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.21.1"
+retrievalkit-embedding = { path = "../retrievalkit-embedding" }

@@ -410,9 +410,11 @@ The browser architecture is fixed for its first implementation:
 - The initial database is in-memory. Filesystem directory persistence,
   cross-process locks, mmap, and native compressed snapshots are excluded from
   the WASM build rather than emulated.
-- Browser persistence, when added, uses versioned
-  `save_to_bytes`/`load_from_bytes` snapshots stored by the TypeScript layer in
-  IndexedDB or OPFS. Query execution continues against restored WASM memory.
+- Browser persistence remains deferred. A future versioned
+  `save_to_bytes`/`load_from_bytes` design may store snapshots through the
+  TypeScript layer in IndexedDB or OPFS, but it must not be treated as a
+  committed cross-platform format until portability, compatibility, security,
+  size, startup, and migration requirements are specified and qualified.
 - Embeddings remain caller-produced at every retrieval API. Applications may
   use the independent `wrappers/browser-embedding` provider to produce them,
   but the retrieval package does not import, construct, download, or invoke
@@ -478,8 +480,9 @@ The complete demo pipeline is:
 
 ```text
 curated first-party documents
-  -> deterministic chunks with source offsets
-  -> local browser document embeddings
+  -> deterministic Python/CLI corpus-pack build
+  -> chunks, source offsets, document embeddings, metadata, and graph records
+  -> validated versioned corpus pack
   -> in-memory RetrievalKit WASM database build
   -> arbitrary visitor question
   -> local browser query embedding
@@ -493,9 +496,11 @@ Demo requirements:
 
 - Visitors do not upload documents. The site ships one or more curated,
   redistribution-safe first-party documents with stable source identities.
-- A clean browser session chunks and embeds the bundled documents and builds
-  the database through the real WASM core. The UI exposes honest model,
-  embedding, and indexing progress.
+- Python or the RetrievalKit CLI prepares the bundled corpus pack before
+  deployment. The browser validates its version and integrity, then builds the
+  database through the real WASM core. Query embeddings remain local in the
+  browser. The UI exposes honest asset, validation, indexing, and model
+  progress.
 - Model assets and deterministic document inputs may be cached only with
   version and integrity checks. The current WASM database is in-memory;
   persistent database snapshots must not be claimed until the versioned
@@ -519,10 +524,54 @@ Demo requirements:
 - The UI reports embedding, retrieval, time-to-first-token, and total answer
   latency separately and exposes the live RetrievalKit trace.
 
+### Portable Corpus Packs And Deferred Cross-Platform Snapshots
+
+The first website demo uses data-model interchange, not storage-level
+interchange. Python or the RetrievalKit CLI emits a versioned, checksummed
+portable corpus pack containing canonical chunks, retained source offsets,
+precomputed document embeddings, metadata, graph schema and records, aliases,
+and evaluation inputs. The browser validates that pack and constructs its
+Worker-owned in-memory WASM database through the public builders.
+
+This corpus-pack contract is intentionally independent from RetrievalKit's
+native transactional persistence layout. It avoids requiring Swift, Python,
+Node, Kotlin, Android, and WebAssembly to load one permanent binary database
+format before cross-platform compatibility requirements are understood.
+Precomputed document embeddings provide most of the initialization benefit;
+each target may still build inexpensive exact, BM25, metadata, and graph
+structures locally.
+
+A portable byte snapshot that can be built on one target and loaded on another
+is deferred future work. Its design discussion must cover:
+
+- distribution snapshots versus platform-native runtime persistence;
+- schema versioning, compatibility windows, migrations, and rollback;
+- canonical numeric representation, endianness, alignment, and optional
+  derived-index sections;
+- integrity, signing, hostile-input validation, and allocation limits;
+- compression, download and app-bundle size, peak memory, copying, and startup;
+- query-embedding model identity and document-vector compatibility;
+- import into native transactional layouts on iOS, macOS, Android, Python,
+  Node, and Kotlin, and direct in-memory restoration plus IndexedDB or OPFS
+  caching in browsers; and
+- qualification proving identical corpus identities, graph behavior,
+  retrieval results, and lifecycle guarantees across targets.
+
+Do not claim portable database snapshots until that contract is specified,
+implemented, benchmarked, and cross-platform qualified. Revisit implementation
+after corpus-pack import measurements show that rebuilding derived structures
+is a material startup cost, or when signed prebuilt databases are required as
+cross-platform distribution artifacts.
+
 The browser retrieval and embedding packages are implemented and
-desktop-qualified but unpublished. Website integration, browser SLM selection,
-and the complete grounded-answer interaction remain implementation work in the
-website repository.
+desktop-qualified but unpublished. The private website repository now ships a
+versioned Apollo 11 corpus pack, local vector evidence retrieval, and Graph
+Text question-answering with Qwen3 0.6B q4f16 through WebLLM/WebGPU. Graph
+plans are validated and executed by RetrievalKit WASM, then the model answers
+from graph-selected source paragraphs. Vector answer generation,
+graph-scoped vector retrieval, production deployment, and the complete
+browser/device qualification matrix remain implementation work in the website
+repository.
 
 ## Optional Local Graph Roadmap
 
@@ -2095,8 +2144,11 @@ borrows, so conflicting calls fail safely with `RuntimeError` instead of racing.
 
 Deliverables:
 
-- Curated first-party documents with stable chunks and source offsets.
-- Local browser embedding and an in-memory RetrievalKit WASM database build.
+- Curated first-party documents compiled by Python or the RetrievalKit CLI into
+  a versioned, checksummed corpus pack with stable chunks, source offsets,
+  precomputed document embeddings, metadata, and graph records.
+- Local browser query embedding and an in-memory RetrievalKit WASM database
+  built from the validated corpus pack.
 - Free-form questions and suggested questions through one live pipeline.
 - Grounded browser-SLM answers with validated source highlighting.
 - Capability detection, asset progress, privacy-safe telemetry, and honest
@@ -2209,14 +2261,22 @@ Resolve these before implementing the Swift wrapper:
 - What is the minimum iOS version target?
 - Is macOS support required before iOS?
 
-Resolve these before publishing the website demo:
+Resolved for the first website demo:
 
-- Which curated first-party documents best demonstrate retrieval quality?
-- Which browser SLM meets the measured license, download, memory, quality, and
-  latency budgets?
+- The first curated document is NASA's text-only “Apollo 11 Mission Overview.”
+- The website-owned V1 corpus pack uses checksummed JSON metadata and graph
+  records plus a row-major little-endian FP32 embedding binary. It is an
+  application interchange format, not a public cross-platform database
+  snapshot contract.
+- The initial browser SLM is `Qwen3-0.6B-q4f16_1-MLC` through WebLLM/WebGPU.
+
+Remaining website release gates:
+
 - Which supported browser/device combinations can run the complete local
   embedding, retrieval, and generation pipeline?
 - What are the maximum pinned asset bytes and peak-memory budget?
+- Complete vector answer generation and graph-scoped vector retrieval using
+  the same source-grounded answer contract as Graph Text.
 
 ## Recommended First Build
 

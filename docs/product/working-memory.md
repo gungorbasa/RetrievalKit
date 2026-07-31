@@ -12,13 +12,35 @@ implemented, or superseded by the product spec.
   accepts arbitrary visitor questions, and runs local browser embedding,
   RetrievalKit WASM search, and a grounded browser SLM. Suggested questions and
   pre-rendered marketing answers may advertise the experience, but interactive
-  results must use the same live local pipeline. The initial WASM database is
-  in-memory, so a clean session builds it locally from bundled documents;
-  versioned byte-snapshot persistence remains future work and must not be
-  claimed. Exact source highlighting requires a verbatim citation validated
-  against a retrieved chunk and mapped through retained source offsets. The
-  website orchestration and SLM integration belong in the private website
-  repository and remain to be implemented.
+  results must use the same live local pipeline. Python or the RetrievalKit CLI
+  prepares a versioned, checksummed corpus pack containing canonical chunks,
+  source offsets, precomputed document embeddings, metadata, graph schema and
+  records, aliases, and evaluation inputs. A clean browser session validates
+  that pack, builds the real in-memory WASM database through public builders,
+  and creates query embeddings locally. Cross-platform portable byte snapshots
+  are explicitly deferred: future design must distinguish distribution
+  snapshots from native transactional persistence and cover versioning,
+  migrations, integrity/signing, hostile-input limits, compression, size,
+  memory, startup, model compatibility, platform import, browser caching, and
+  cross-target qualification. Do not claim portable database snapshots until
+  that work is specified, implemented, benchmarked, and qualified. Exact
+  source highlighting requires a verbatim citation validated against a
+  retrieved chunk and mapped through retained source offsets. The website
+  orchestration now exists in the private website repository. Its first
+  version ships the NASA Apollo 11 corpus pack, local vector evidence retrieval,
+  and Graph Text answers through Qwen3 0.6B q4f16 on WebLLM/WebGPU. Graph plans
+  are validated and executed by RetrievalKit WASM, then Qwen answers from
+  graph-selected source paragraphs. Vector answer generation, graph-scoped
+  vector retrieval, deployment, and the complete browser/device qualification
+  matrix remain to be completed there.
+- 2026-07-30 website demo integration exposed and fixed two browser-boundary
+  defects. Internally tagged WASM graph seed variants now deserialize their
+  fields from camelCase (`nodeType`) through `rename_all_fields`, with a
+  regression test. The browser embedding package now gives ONNX Runtime
+  explicit provider-specific `.mjs` and `.wasm` asset URLs so bundlers such as
+  Vite rewrite the hashed runtime assets correctly. Live validation loaded
+  MiniLM on WebGPU, ran exact RetrievalKit WASM vector search, and executed a
+  `NEXT_EVENT` graph traversal with exact source highlighting.
 - 2026-07-28 website repository boundary: the OpenAI Sites-hosted public docs
   source moved out of this public SDK monorepo into the private
   `gungorbasa/RetrievalKit-Website` repository with its subtree history. The

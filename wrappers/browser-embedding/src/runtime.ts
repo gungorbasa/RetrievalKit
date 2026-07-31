@@ -38,7 +38,7 @@ export const onnxRuntimeFactory: EmbeddingRuntimeFactory = {
           provider === "webgpu"
             ? await import("onnxruntime-web/webgpu")
             : await import("onnxruntime-web/wasm");
-        configureOrt(ort);
+        configureOrt(ort, provider);
         const session = await ort.InferenceSession.create(model.slice(), {
           executionProviders:
             execution === "auto" && provider === "webgpu"
@@ -180,10 +180,31 @@ async function hasUsableWebGpu(): Promise<boolean> {
 
 const configuredOrtEnvironments = new WeakSet<object>();
 
-function configureOrt(ort: typeof Ort): void {
+function configureOrt(ort: typeof Ort, provider: ExecutionProvider): void {
   if (configuredOrtEnvironments.has(ort.env)) return;
   configuredOrtEnvironments.add(ort.env);
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.proxy = false;
-  ort.env.wasm.wasmPaths = new URL("./runtime/", import.meta.url).href;
+  ort.env.wasm.wasmPaths =
+    provider === "webgpu"
+      ? {
+          wasm: new URL(
+            "./runtime/ort-wasm-simd-threaded.asyncify.wasm",
+            import.meta.url
+          ).href,
+          mjs: new URL(
+            "./runtime/ort-wasm-simd-threaded.asyncify.mjs",
+            import.meta.url
+          ).href
+        }
+      : {
+          wasm: new URL(
+            "./runtime/ort-wasm-simd-threaded.wasm",
+            import.meta.url
+          ).href,
+          mjs: new URL(
+            "./runtime/ort-wasm-simd-threaded.mjs",
+            import.meta.url
+          ).href
+        };
 }

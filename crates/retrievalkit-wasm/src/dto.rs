@@ -233,7 +233,11 @@ pub(crate) struct GraphQueryDto {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub(crate) enum GraphSeedDto {
     NodeIds {
         nodes: Vec<NodeIdDto>,
@@ -943,5 +947,31 @@ mod tests {
             truncation_reason(TruncationReason::MaxWorkingBytes),
             "maxWorkingBytes"
         );
+    }
+
+    #[test]
+    fn graph_equals_seed_accepts_camel_case_boundary_fields() {
+        let query: GraphQueryDto = serde_json::from_value(serde_json::json!({
+            "seed": {
+                "kind": "equals",
+                "nodeType": "Event",
+                "field": ["name"],
+                "values": [{ "kind": "string", "value": "Landing" }]
+            }
+        }))
+        .unwrap();
+
+        match query.seed {
+            GraphSeedDto::Equals {
+                node_type,
+                field,
+                values,
+            } => {
+                assert_eq!(node_type, "Event");
+                assert_eq!(field, vec!["name"]);
+                assert_eq!(values.len(), 1);
+            }
+            GraphSeedDto::NodeIds { .. } => panic!("expected equals seed"),
+        }
     }
 }

@@ -564,14 +564,27 @@ is a material startup cost, or when signed prebuilt databases are required as
 cross-platform distribution artifacts.
 
 The browser retrieval and embedding packages are implemented and
-desktop-qualified but unpublished. The private website repository now ships a
-versioned Apollo 11 corpus pack, local vector evidence retrieval, and Graph
-Text question-answering with Qwen3 0.6B q4f16 through WebLLM/WebGPU. Graph
-plans are validated and executed by RetrievalKit WASM, then the model answers
-from graph-selected source paragraphs. Vector answer generation,
-graph-scoped vector retrieval, production deployment, and the complete
-browser/device qualification matrix remain implementation work in the website
-repository.
+desktop-qualified but unpublished. The private website repository ships a
+versioned Apollo 11 corpus pack and builds one combined
+`GraphRetrievalDatabase` in RetrievalKit WASM. Vector mode uses local MiniLM
+ranking followed by a Qwen3 0.6B answer. Graph Text validates and executes
+Qwen-selected graph plans before Qwen answers from graph-selected source
+paragraphs. Combined mode validates a Qwen-selected path ending at `Passage`,
+projects the resulting graph selection, applies it as the `within` boundary for
+MiniLM vector search, and asks Qwen to select exact source facts. The
+application renders the selected NASA sentences and citations rather than
+accepting generated combined-answer prose.
+
+The production demo is deployed at
+`https://retrievalkit-docs.gungorbasa.chatgpt.site/demo/`. Its full pipeline is
+release-qualified on the tested Apple-silicon, Chromium-based desktop WebGPU
+environment. The website build enforces a 64 MiB uncompressed client-artifact
+limit, a 1 MiB corpus-pack limit, and a 460 MiB combined remote-model limit;
+current observations are approximately 46 MiB, less than 0.1 MiB, and 443 MiB.
+WebLLM reports approximately 1.4 GB of required GPU memory for the selected
+Qwen build. Safari, Firefox, Android, iPhone, and iPad remain unqualified until
+the complete model, Worker, and WASM pipeline is run on physical target
+hardware.
 
 ## Optional Local Graph Roadmap
 
@@ -2270,13 +2283,20 @@ Resolved for the first website demo:
   snapshot contract.
 - The initial browser SLM is `Qwen3-0.6B-q4f16_1-MLC` through WebLLM/WebGPU.
 
-Remaining website release gates:
+Resolved website demo release gates:
 
-- Which supported browser/device combinations can run the complete local
-  embedding, retrieval, and generation pipeline?
-- What are the maximum pinned asset bytes and peak-memory budget?
-- Complete vector answer generation and graph-scoped vector retrieval using
-  the same source-grounded answer contract as Graph Text.
+- Vector answer generation and graph-scoped vector retrieval use the same live
+  local pipeline as free-form questions; suggested questions do not select
+  canned results.
+- Combined answers are source-locked: Qwen selects validated graph facts from
+  graph-scoped, vector-ranked passages, and the application renders their exact
+  source sentences.
+- Maximum client, corpus, and pinned-model bytes are 64 MiB, 1 MiB, and
+  460 MiB respectively. The selected Qwen build reports approximately 1.4 GB
+  of required GPU memory.
+- The production URL and the Apple-silicon Chromium/WebGPU configuration are
+  qualified. Cross-browser and physical mobile expansion remains separate
+  follow-up work and must not be advertised before testing.
 
 ## Recommended First Build
 

@@ -26,13 +26,19 @@ implemented, or superseded by the product spec.
   that work is specified, implemented, benchmarked, and qualified. Exact
   source highlighting requires a verbatim citation validated against a
   retrieved chunk and mapped through retained source offsets. The website
-  orchestration now exists in the private website repository. Its first
-  version ships the NASA Apollo 11 corpus pack, local vector evidence retrieval,
-  and Graph Text answers through Qwen3 0.6B q4f16 on WebLLM/WebGPU. Graph plans
-  are validated and executed by RetrievalKit WASM, then Qwen answers from
-  graph-selected source paragraphs. Vector answer generation, graph-scoped
-  vector retrieval, deployment, and the complete browser/device qualification
-  matrix remain to be completed there.
+  orchestration now exists in the private website repository. The production
+  demo at `https://retrievalkit-docs.gungorbasa.chatgpt.site/demo/` ships the
+  NASA Apollo 11 corpus pack and builds one combined graph-retrieval database
+  through RetrievalKit WASM. Vector mode uses MiniLM retrieval plus a grounded
+  Qwen answer. Graph plans are validated and executed by RetrievalKit WASM,
+  then Qwen answers from graph-selected source paragraphs. Combined mode uses a
+  validated Qwen path ending at `Passage`, graph projection, MiniLM ranking
+  within that selection, and Qwen fact selection; the app renders exact NASA
+  source sentences rather than generated combined-answer prose. The full
+  production pipeline is qualified on the tested Apple-silicon Chromium/WebGPU
+  environment. The website enforces 64 MiB client, 1 MiB corpus, and 460 MiB
+  combined-model limits; Qwen reports approximately 1.4 GB required GPU
+  memory. Safari, Firefox, and physical mobile devices remain unqualified.
 - 2026-07-30 website demo integration exposed and fixed two browser-boundary
   defects. Internally tagged WASM graph seed variants now deserialize their
   fields from camelCase (`nodeType`) through `rename_all_fields`, with a

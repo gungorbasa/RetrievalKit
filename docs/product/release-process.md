@@ -307,6 +307,12 @@ passphrase is retained in macOS Keychain under
 `RetrievalKit-Maven-GPG`, and CI receives the key only through protected
 environment secrets.
 
+Before `git verify-tag`, the publication workflow reads the checked-in public
+key through a fresh temporary GnuPG home, requires its full fingerprint to
+match the release truth above, and imports only that key. This makes tag
+verification deterministic on a clean GitHub-hosted runner instead of relying
+on a pre-populated user keyring.
+
 ## Required external GitHub configuration
 
 Before dispatching publication, complete the remaining items and re-verify the

@@ -643,10 +643,15 @@ def validate_workflows(repo: Path) -> None:
     require("environment: release" in publication and "environment: pypi" in publication, "publication jobs lack protected environments")
     require(
         "git verify-tag" in publication
+        and "release/retrievalkit-release-signing-key.asc" in publication
+        and "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED" in publication
+        and 'GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"'
+        in publication
+        and 'GNUPGHOME="$verification_home" git verify-tag' in publication
         and "publication_authorization.py candidate" in publication
         and "publication_authorization.py authorize" in publication
         and "--authorization-record" in publication,
-        "publication workflow bypasses signed-tag, candidate, or runtime authority validation",
+        "publication workflow bypasses clean-keyring signed-tag, candidate, or runtime authority validation",
     )
     require(
         "All five approved npm packages" in publication

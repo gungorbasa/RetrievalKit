@@ -47,6 +47,26 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn(REPO / "release/publication-authorization-v1.json", REPO.glob("release/*"))
         self.assertNotIn("publication_ready", result)
 
+    def test_publication_workflow_imports_the_pinned_tag_verification_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            shutil.copytree(REPO / ".github", fake / ".github")
+            validator.validate_workflows(fake)
+            publication = fake / ".github/workflows/publish-release.yml"
+            publication.write_text(
+                publication.read_text(encoding="utf-8").replace(
+                    'GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"',
+                    'GNUPGHOME="$verification_home" gpg --batch --list-keys "$RELEASE_SIGNING_KEY"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "clean-keyring signed-tag",
+            ):
+                validator.validate_workflows(fake)
+
     def test_swift_package_exposes_base_and_graph_through_one_aggregate(self) -> None:
         package = (REPO / "Package.swift").read_text()
         self.assertIn('.library(name: "RetrievalKit"', package)

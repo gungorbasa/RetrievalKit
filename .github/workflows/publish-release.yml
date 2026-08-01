@@ -56,9 +56,19 @@ jobs:
       - name: Require exact version and verified signed tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SIGNING_FINGERPRINT: 0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED
+          RELEASE_SIGNING_KEY: release/retrievalkit-release-signing-key.asc
         run: |
           test "$RELEASE_TAG" = "v$(tr -d '[:space:]' < VERSION)"
-          git verify-tag "$RELEASE_TAG"
+          verification_home="$RUNNER_TEMP/retrievalkit-release-verification"
+          install -d -m 700 "$verification_home"
+          actual_fingerprint="$(
+            gpg --batch --with-colons --show-keys --fingerprint "$RELEASE_SIGNING_KEY" \
+              | awk -F: '$1 == "fpr" { print $10; exit }'
+          )"
+          test "$actual_fingerprint" = "$RELEASE_SIGNING_FINGERPRINT"
+          GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"
+          GNUPGHOME="$verification_home" git verify-tag "$RELEASE_TAG"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
           test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
       - name: Download candidate, gate, and workflow-run evidence

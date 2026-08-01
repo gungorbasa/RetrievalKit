@@ -6,6 +6,17 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-01 signed-tag verification correction: the first local `v0.1.0`
+  signature was cryptographically valid but GitHub rejected the tagger's
+  `gungorbasa@gmail.com` identity because the registered release key verifies
+  only `gungorbasa@users.noreply.github.com`. The unpublished tag was removed
+  locally and remotely. Clean GitHub-hosted runners also have no implicit copy
+  of the release public key, so `publish-release.yml` now verifies the
+  checked-in key's exact fingerprint, imports it into a fresh temporary GnuPG
+  home, and runs `git verify-tag` there. Recreate the tag only with the verified
+  noreply tagger identity after the resulting freeze revision passes candidate
+  and onboarding qualification. No GitHub Release or registry publication was
+  attempted.
 - 2026-08-01 v0.1.0 release freeze: the owner authorized Step 3 only. Version,
   package identities, release contents, compatibility claims, Android preview
   status, browser retrieval inclusion, and publication boundaries are frozen.

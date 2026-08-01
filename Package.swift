@@ -15,7 +15,7 @@ let nativeBinary: Target = useLocalArtifacts
   : .binaryTarget(
     name: "RetrievalKitGraphFFI",
     url: "\(releaseBase)/RetrievalKitGraphFFI.xcframework.zip",
-    checksum: "5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468"
+    checksum: "5cac49a81d352eb5a50e588bfed108b7c0ab356e2284ff079e41f58685fd288a"
   )
 
 let package = Package(

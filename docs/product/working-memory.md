@@ -282,7 +282,7 @@ implemented, or superseded by the product spec.
   duplicate native symbols remain an explicit mutual-exclusion guard even when
   the linker would otherwise dead-strip unreferenced archive members.
 - 2026-07-23: the Xcode 26.3 two-root release build produced byte-identical
-  canonical Apple archives. Current SwiftPM checksums are
+  canonical Apple archives. The checksums recorded by that build were
   `fcc3c94144ce26104c92abb9227a1e95a45395e1db44265e70e585ead915266f`
   for `RetrievalKitFFI.xcframework.zip` and
   `5cac89628b3296aaedda0006049283d87261d157c09d7f537b05a93e8b1f4468`
@@ -1106,10 +1106,16 @@ Verification completed without benchmark workloads:
   `LICENSE`/`NOTICE` and the complete ONNX legal/runtime resource set together.
   Candidate run `30709218517` at revision `9384bff` confirmed that a clean root
   also requires those project legal files to be installed by native
-  preparation rather than inherited from a prior Gradle output. The commit
-  containing all fixes and this record is the new freeze revision; candidate
-  assembly must be repeated from that exact commit. No device command, tag,
-  GitHub Release, or publication is authorized by this decision.
+  preparation rather than inherited from a prior Gradle output. Candidate run
+  `30709601819` at revision `a926747` then passed every independent package job,
+  including both Kotlin roots, but the final bundle gate found that both
+  byte-identical Apple roots now produce the graph XCFramework SwiftPM checksum
+  `5cac49a81d352eb5a50e588bfed108b7c0ab356e2284ff079e41f58685fd288a`.
+  `Package.swift` and machine-readable release truth are updated together to
+  that independently reproduced checksum. The commit containing all fixes and
+  this record is the new freeze revision; candidate assembly must be repeated
+  from that exact commit. No device command, tag, GitHub Release, or
+  publication is authorized by this decision.
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing

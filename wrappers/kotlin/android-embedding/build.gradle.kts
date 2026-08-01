@@ -49,16 +49,6 @@ kotlin {
     }
 }
 
-val prepareLegalResources by tasks.registering(Copy::class) {
-    from(project.file("../LICENSE"))
-    from(project.file("../NOTICE"))
-    into(layout.buildDirectory.dir("generated/resources"))
-}
-
-tasks.named("preBuild") {
-    dependsOn(prepareLegalResources)
-}
-
 tasks.register("inspectEmbeddingAar") {
     dependsOn("assembleRelease")
     doLast {

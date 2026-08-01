@@ -1097,9 +1097,16 @@ Verification completed without benchmark workloads:
   `sdkmanager`. The owner authorized a fix-forward cycle. The Node assembler
   now normalizes its output path before staged packing, and the candidate
   workflow invokes the SDK manager through `$ANDROID_HOME`, matching CI. The
-  commit containing these fixes and this record is the new freeze revision;
-  candidate assembly must be repeated from that exact commit. No device
-  command, tag, GitHub Release, or publication is authorized by this decision.
+  first fix-forward candidate run `30708545960` at revision `424dee1` proved
+  both corrections, then exposed a second Kotlin packaging defect: the
+  Android embedding module's `prepareLegalResources` Copy task replaced the
+  generated resource directory after native preparation and removed the ONNX
+  license, notices, and runtime identity from the AAR. The redundant task is
+  removed because `build-embedding-native.sh` installs the complete legal and
+  runtime resource set together. The commit containing all fixes and this
+  record is the new freeze revision; candidate assembly must be repeated from
+  that exact commit. No device command, tag, GitHub Release, or publication is
+  authorized by this decision.
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing

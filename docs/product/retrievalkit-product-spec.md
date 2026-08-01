@@ -402,7 +402,9 @@ retrieval registry identity on 2026-08-01. Its independent npm tarball contains
 the Worker wrapper and both portable and SIMD128 `wasm-bindgen` tiers. It stays
 separate from the Node N-API packages and from
 `@gungorbasa/retrievalkit-browser-embedding`. Publication remains blocked until
-the registry record, trusted publisher, exact candidate, and release gates pass.
+the exact candidate and release gates pass. Its registry record and exact
+trusted publisher were configured with a non-SDK placeholder on 2026-08-01;
+v0.1.0 remains unpublished.
 
 The browser package exposes the same capability-separated products:
 

@@ -283,7 +283,6 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
             for claim in (
                 "public docs and source preview",
                 "retrievalkit-embedding PyPI project bootstrapped",
-                "retrievalkit-browser npm package bootstrapped",
                 "fresh complete release candidate",
                 "wrapper onboarding qualification",
                 "Phase 7 scheduled and release gates",

@@ -86,7 +86,7 @@ def validate_status_labels(readme: str) -> None:
         re.search(
             r"\| Browser `@gungorbasa/retrievalkit-browser` \|.*\| "
             r"\*\*Available from source; v0\.1\.0 candidate; "
-            r"registry bootstrap pending\*\* \|",
+            r"bootstrap placeholder only\*\* \|",
             readme,
         ),
         "incorrect browser retrieval release status",

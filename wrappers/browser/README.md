@@ -6,9 +6,10 @@ dedicated Web Worker; the UI thread only performs typed marshaling and receives
 results.
 
 The approved v0.1.0 identity is `@gungorbasa/retrievalkit-browser`. The package
-is in the release inventory but is not published to npm yet; its registry
-bootstrap and trusted publisher remain pending. It does not import, modify, or
-bundle the existing Node.js/N-API wrapper.
+is in the release inventory, and npm contains only its non-SDK bootstrap
+placeholder with the exact trusted publisher configured. v0.1.0 remains
+unpublished. It does not import, modify, or bundle the existing Node.js/N-API
+wrapper.
 
 Applications that need local MiniLM embeddings may use the independent
 `wrappers/browser-embedding` package. The two packages are deliberately not

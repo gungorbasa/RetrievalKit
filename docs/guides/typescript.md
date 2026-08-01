@@ -14,10 +14,9 @@ The selected npm identities are:
 
 The equivalent unscoped base name was rejected by npm as too similar to an
 existing package, so every Node package uses the release owner's public scope.
-The four previously approved npm names have bootstrap-only placeholder versions
-and GitHub trusted publishers configured. The newly added
-`@gungorbasa/retrievalkit-browser` registry record and publisher remain
-pending. Those placeholders are not SDK releases; v0.1.0 remains unpublished.
+All five approved npm names have bootstrap-only placeholder versions and GitHub
+trusted publishers configured. Those placeholders are not SDK releases;
+v0.1.0 remains unpublished.
 From source or after the real release, install or load exactly one
 retrieval package in a process. The independent embedding package may accompany
 it. The graph package already contains retrieval capability, and its loader

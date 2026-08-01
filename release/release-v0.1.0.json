@@ -105,7 +105,6 @@
   },
   "publication_blockers": [
     "retrievalkit-embedding PyPI project bootstrapped and trusted publisher configured",
-    "retrievalkit-browser npm package bootstrapped and trusted publisher configured",
     "public docs and source preview rebuilt from the exact release revision",
     "fresh complete release candidate assembled from the exact release revision",
     "wrapper onboarding qualification passing for the release revision",

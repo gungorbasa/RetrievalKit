@@ -13,10 +13,12 @@ implemented, or superseded by the product spec.
   pass fresh local-install resolution, participate in two-root byte comparison,
   and flow through the same protected authorization, provenance, attestation,
   and npm publication gates. The source package remains private to prevent
-  accidental publication. The npm registry record and trusted publisher are
-  not configured yet and remain explicit blockers; the owner decision does not
-  authorize bootstrap publication, candidate/release workflows, tagging, or
-  v0.1.0 publication.
+  accidental publication. The owner subsequently authorized its one-time npm
+  bootstrap: the reviewed non-SDK `0.0.0-bootstrap.0` placeholder now resolves
+  anonymously and the package trusts only `gungorbasa/RetrievalKit`,
+  `publish-release.yml`, and the protected `npm` environment with publish
+  permission. The temporary local npm credential was revoked. This setup does
+  not authorize candidate/release workflows, tagging, or v0.1.0 publication.
 - 2026-08-01 Android v0.1.0 release decision: no physical Android device is
   currently available, so Android API 24+ arm64-v8a ships as an explicit
   preview. Retain cross-compilation, base/graph/embedding AAR packaging, closed
@@ -109,14 +111,16 @@ implemented, or superseded by the product spec.
   environment. On 2026-08-01, `@gungorbasa/retrievalkit-embedding` and
   `@gungorbasa/retrievalkit-browser-embedding` received the same reviewed
   placeholder and exact production publisher with publish-only permission.
-  All four public records resolve anonymously, and v0.1.0 remains unused. The
+  The fifth approved identity, `@gungorbasa/retrievalkit-browser`, received the
+  same reviewed placeholder and exact publisher on 2026-08-01. Its placeholder
+  integrity is
+  `sha512-0LFxyM0tF99zVA9sVhUpt6F6KzkSdMd2Djj4FtdvxJIG1A2JwUH/pEIoT3/7hYBLkD6O3ZkHj3Y4S5RKAgg/Ig==`.
+  All five public records resolve anonymously, and v0.1.0 remains unused. The
   local npm bootstrap credential was removed afterward. These placeholders are
   ownership and publisher setup records, not v0.1.0 SDK releases. Creating a
   new npm trusted publisher now requires npm CLI 11.15.0 or later plus an
   explicit publish permission; npm 11.12.1 returns an empty HTTP 400 because it
   predates that required field.
-  `@gungorbasa/retrievalkit-browser` is a fifth approved v0.1.0 npm identity,
-  but its registry placeholder and trusted publisher are still pending.
 - 2026-08-01 PyPI owner setup: `retrievalkit`, `retrievalkit-graph`, and
   `retrievalkit-embedding` each received a reviewed non-SDK `0.0.0a0`
   placeholder. All three projects now trust
@@ -1077,10 +1081,7 @@ Verification completed without benchmark workloads:
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing
 identity, Central namespace, and Portal token are configured. Registry-owner
-setup for all three PyPI identities and the four previously approved npm
-identities is complete; the newly included
-`@gungorbasa/retrievalkit-browser` identity still needs bootstrap and trusted-
-publisher setup:
+setup for all three PyPI identities and all five npm identities is complete:
 
 1. re-verify all registry records and exact protected publisher settings
    immediately before publication dispatch;

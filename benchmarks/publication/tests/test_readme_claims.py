@@ -64,7 +64,7 @@ class ReadmeClaimMutationTests(unittest.TestCase):
     def test_browser_retrieval_candidate_status_is_required(self) -> None:
         VALIDATOR.validate_status_labels(README)
         stale = README.replace(
-            "**Available from source; v0.1.0 candidate; registry bootstrap pending**",
+            "**Available from source; v0.1.0 candidate; bootstrap placeholder only**",
             "**Available from source**",
             1,
         )

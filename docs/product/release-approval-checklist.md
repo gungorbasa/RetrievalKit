@@ -81,9 +81,10 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] All three PyPI projects trust the public repository,
   `publish-release.yml`, and protected `pypi` environment; the
   `pypi_trusted_publishers_ready` dispatch gate is confirmed.
-- [ ] All five npm names were bootstrapped with a non-release version; the public
-  repository, `publish-release.yml`, and protected `npm` environment are
-  configured as trusted publishers; the bootstrap credential is revoked.
+- [ ] Re-verify that all five npm names contain only the non-release bootstrap
+  version; the public repository, `publish-release.yml`, and protected `npm`
+  environment are their exact trusted publishers; no bootstrap credential
+  remains.
 - [ ] npm publication uses no registry token, uploads only the five authorized
   tarballs with provenance, and the observed `dist.integrity` values equal the
   authorized inventory.

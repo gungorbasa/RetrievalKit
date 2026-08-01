@@ -358,8 +358,10 @@ Status: authorized and in progress 2026-07-26. The product-spec amendment is
 recorded in `retrievalkit-product-spec.md`. No package publication, website
 deployment, release tag, or public browser performance claim is authorized by
 this implementation phase. A separate 2026-08-01 owner decision later added
-`@gungorbasa/retrievalkit-browser` to the v0.1.0 release inventory without
-authorizing a workflow run, tag, or publication.
+`@gungorbasa/retrievalkit-browser` to the v0.1.0 release inventory. A subsequent
+owner instruction authorized only its non-SDK registry bootstrap and trusted
+publisher setup; no candidate/release workflow, tag, or v0.1.0 publication was
+authorized.
 
 Goal: publish a public website whose demo proves the local-first claim by
 running RetrievalKit retrieval entirely in the visitor's browser, with an

@@ -78,7 +78,7 @@ class ReleaseTests(unittest.TestCase):
             "retrievalkit-embedding PyPI project bootstrapped",
             " ".join(config["publication_blockers"]),
         )
-        self.assertIn(
+        self.assertNotIn(
             "retrievalkit-browser npm package bootstrapped",
             " ".join(config["publication_blockers"]),
         )

@@ -2,11 +2,9 @@
 
 Status: release-candidate and runtime authorization implementation complete.
 The public repository, protected GitHub environments, all three PyPI projects,
-the four previously approved npm packages, their trusted publishers, and Maven
-signing identity are configured. The newly approved
-`@gungorbasa/retrievalkit-browser` registry record and trusted publisher remain
-pending. The Maven Central namespace and protected user token are configured.
-v0.1.0 publication remains blocked on that npm setup, final registry
+all five npm packages, their trusted publishers, and Maven signing identity are
+configured. The Maven Central namespace and protected user token are
+configured. v0.1.0 publication remains blocked on final registry
 re-verification, the signed tag, and the release evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, browser, and
@@ -21,9 +19,9 @@ The approved npm package names are `@gungorbasa/retrievalkit`,
 `@gungorbasa/retrievalkit-browser-embedding`. npm rejected the equivalent
 unscoped base name as too similar to an existing package, so every npm package
 uses one consistent owner scope. The approved Maven group is
-`io.github.gungorbasa`. The first four npm names and all three PyPI names were
+`io.github.gungorbasa`. All five npm names and all three PyPI names were
 bootstrapped and connected to the protected GitHub publication workflow by
-2026-08-01. The browser retrieval name is approved but not yet bootstrapped.
+2026-08-01.
 The `io.github.gungorbasa` Central namespace was verified and its
 protected
 credentials were installed on 2026-07-26. The signed tag and provisioned
@@ -242,20 +240,19 @@ value with the authorized inventory, attests the tarballs/evidence, and retains
 the publication record for 180 days.
 
 npm trusted publishing cannot establish a package name that does not exist.
-The owner completed the first four packages' one-time bootstrap setup by
-2026-08-01:
+The owner completed all five packages' one-time bootstrap setup by 2026-08-01:
 
-1. those four names received the non-release `0.0.0-bootstrap.0` placeholder;
+1. all five names received the non-release `0.0.0-bootstrap.0` placeholder;
 2. each package trusts the public
    `gungorbasa/RetrievalKit` repository, `publish-release.yml` workflow, and
    `npm` environment;
 3. the local bootstrap credential was removed; and
 4. none of the packages contains v0.1.0 SDK artifacts.
 
-Those four public records resolved anonymously by 2026-08-01. The fifth name,
-`@gungorbasa/retrievalkit-browser`, must receive the same reviewed non-release
-placeholder and exact trusted publisher before publication. Re-verify all five
-records and exact trusted-publisher settings before setting the required
+All five public records resolved anonymously by 2026-08-01, including
+`@gungorbasa/retrievalkit-browser` with the reviewed four-file placeholder and
+exact trusted publisher. Re-verify all five records and exact trusted-publisher
+settings before setting the required
 `npm_trusted_publishers_ready` dispatch input to true. The pre-approval job then
 verifies that all five public package records exist, and the npm job verifies
 that `0.1.0` is unused. Missing bootstrap, missing OIDC trust, an existing
@@ -313,9 +310,7 @@ already configured controls:
   restriction;
 - re-verify the protected `pypi` environment and all three projects' trusted
   publisher for this repository and workflow;
-- bootstrap `@gungorbasa/retrievalkit-browser`, configure its exact protected
-  trusted publisher, and then re-verify the protected `npm` environment and all
-  five packages'
+- re-verify the protected `npm` environment and all five packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - re-verify `io.github.gungorbasa` in Central Portal, the published PGP public
   key, and all five secrets in the protected `maven` environment using the

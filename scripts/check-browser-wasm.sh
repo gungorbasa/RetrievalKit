@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+release_output="${1:-}"
 wasm_target="wasm32-unknown-unknown"
 wasm_binary="$repository_root/target/$wasm_target/release/retrievalkit_wasm.wasm"
 smoke_test="$repository_root/crates/retrievalkit-wasm/tests/node-smoke.cjs"
@@ -84,3 +85,13 @@ node \
   "$simd_conformance_test" \
   "$portable_node_directory/retrievalkit_wasm.js" \
   "$simd_node_directory/retrievalkit_wasm.js"
+
+if [ -n "$release_output" ]; then
+  if [ -e "$release_output" ]; then
+    echo "browser WASM output already exists: $release_output" >&2
+    exit 1
+  fi
+  mkdir -p "$release_output"
+  cp -R "$portable_web_directory" "$release_output/portable"
+  cp -R "$simd_web_directory" "$release_output/simd128"
+fi

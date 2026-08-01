@@ -1,7 +1,9 @@
 # Browser/WebAssembly Implementation Plan
 
 Status: initial additive implementation and SIMD128 acceleration complete
-2026-07-26; cross-browser qualification remains in progress.
+2026-07-26; the owner separately approved the browser retrieval package for
+the v0.1.0 release inventory on 2026-08-01. Cross-browser qualification remains
+bounded by the active product spec and compatibility policy.
 
 This plan is additive. It does not replace, refactor, or relax qualification
 for the existing native Swift, Python, Node.js, Kotlin/JVM, Android, Rust, C,
@@ -197,5 +199,7 @@ publication remain separate gates.
 - Filesystem emulation in the first browser artifact.
 - ANN/HNSW, WebGPU retrieval, server mode, synchronization, or automatic graph
   construction.
-- Publishing a browser package, deploying a site, tagging a release, or
-  claiming browser performance before qualification.
+- Publishing a browser package directly from implementation work, deploying a
+  site, tagging a release, or claiming browser performance before
+  qualification. The later v0.1.0 package decision still requires the protected
+  candidate, authorization, and publication gates.

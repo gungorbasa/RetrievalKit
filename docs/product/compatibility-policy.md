@@ -13,8 +13,10 @@ and accompanied by migration guidance.
 - TypeScript: Node.js LTS on macOS arm64 for the first preview. The separate
   `@gungorbasa/retrievalkit-embedding` native package and
   `@gungorbasa/retrievalkit-browser-embedding` Worker package are included.
-  The browser retrieval package remains unpublished and outside this release
-  compatibility surface.
+  The independent `@gungorbasa/retrievalkit-browser` package is also included
+  with Worker-owned in-memory base, graph, and graph-scoped retrieval plus
+  portable and SIMD128 WASM tiers. Browser persistence, threaded WASM, Safari,
+  Firefox, and physical mobile browsers are not claimed.
 - Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
   preview, including the optional `retrievalkit-embedding` JVM and
   `retrievalkit-embedding-android` artifacts. Kotlin Multiplatform is not
@@ -60,7 +62,7 @@ Python APIs are unaffected by this internal boundary rename.
 The TypeScript npm names are fixed under the owner's `@gungorbasa` scope, and
 Kotlin Maven coordinates are fixed under `io.github.gungorbasa`. Registry
 publication is not claimed until the release gates pass. x86_64 Apple, Linux
-desktop/server, Windows, the unpublished browser/WASM target, and Kotlin
+desktop/server, Windows, unqualified browser environments, and Kotlin
 Multiplatform have no compatibility commitment until a release manifest lists
 them. The Android preview makes no production, performance, or device-
 compatibility commitment beyond the host-verifiable evidence listed above.

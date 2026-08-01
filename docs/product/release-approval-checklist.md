@@ -44,7 +44,10 @@ Every item is required unless explicitly marked candidate-only.
   `@gungorbasa/retrievalkit@0.1.0` and
   `@gungorbasa/retrievalkit-graph@0.1.0` and
   `@gungorbasa/retrievalkit-embedding@0.1.0` macOS arm64 tarballs, plus
+  `@gungorbasa/retrievalkit-browser@0.1.0` with portable and SIMD128 WASM and
   `@gungorbasa/retrievalkit-browser-embedding@0.1.0`.
+- [ ] The browser retrieval tarball contains no N-API binary, exposes both
+  packaged WASM tiers, and passes fresh local-install and import resolution.
 - [ ] The authorized Maven inventory contains exactly six
   `io.github.gungorbasa` JVM/Android base/graph/embedding publications and 24 primary
   POM/JAR/AAR files.
@@ -78,10 +81,10 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] All three PyPI projects trust the public repository,
   `publish-release.yml`, and protected `pypi` environment; the
   `pypi_trusted_publishers_ready` dispatch gate is confirmed.
-- [ ] All four npm names were bootstrapped with a non-release version; the public
+- [ ] All five npm names were bootstrapped with a non-release version; the public
   repository, `publish-release.yml`, and protected `npm` environment are
   configured as trusted publishers; the bootstrap credential is revoked.
-- [ ] npm publication uses no registry token, uploads only the four authorized
+- [ ] npm publication uses no registry token, uploads only the five authorized
   tarballs with provenance, and the observed `dist.integrity` values equal the
   authorized inventory.
 - [ ] Central Portal verifies `io.github.gungorbasa`; the protected `maven`

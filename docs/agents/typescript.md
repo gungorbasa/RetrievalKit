@@ -17,7 +17,9 @@ modifying TypeScript, Node native-addon, or browser Worker code.
   npm publication or availability until the release gates pass.
 - Keep the Node and browser packages separate. The browser package binds the
   dedicated `wasm-bindgen` aggregate and must not import, emulate, or bundle the
-  N-API addon. Browser/WASM was separately authorized on 2026-07-26.
+  N-API addon. Browser/WASM was separately authorized on 2026-07-26, and the
+  owner approved `@gungorbasa/retrievalkit-browser` for the v0.1.0 release on
+  2026-08-01.
 - Keep the optional Node embedding package under
   `wrappers/typescript/embedding` as an independently distributable N-API
   package over the separate `retrievalkit-embedding` Rust crate. It must not
@@ -109,8 +111,11 @@ modifying TypeScript, Node native-addon, or browser Worker code.
 
 - Put the wrapper under `wrappers/typescript/` with separate base and graph
   packages and shared sources when practical.
-- Put the browser package under `wrappers/browser/`. Its registry name remains
-  provisional and it must not be added to Node package publication scripts.
+- Put the browser package under `wrappers/browser/`. Its approved v0.1.0 name
+  is `@gungorbasa/retrievalkit-browser`. Keep its assembler, generated portable
+  and SIMD128 WASM tiers, inventory, and validation separate from the Node
+  N-API publication assembler, then combine only the authorized tarballs in
+  the protected npm publication job.
 - Put optional browser embedding under `wrappers/browser-embedding/` with its
   own lockfile, legal notices, runtime-asset verification, tests, and package
   content audit. Its approved v0.1.0 identity is

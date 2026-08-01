@@ -6,6 +6,17 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-01 browser retrieval release decision: include
+  `@gungorbasa/retrievalkit-browser` in the v0.1.0 npm inventory alongside the
+  independent browser embedding package. Its closed tarball must contain the
+  Worker wrapper plus qualified portable and SIMD128 `wasm-bindgen` tiers,
+  pass fresh local-install resolution, participate in two-root byte comparison,
+  and flow through the same protected authorization, provenance, attestation,
+  and npm publication gates. The source package remains private to prevent
+  accidental publication. The npm registry record and trusted publisher are
+  not configured yet and remain explicit blockers; the owner decision does not
+  authorize bootstrap publication, candidate/release workflows, tagging, or
+  v0.1.0 publication.
 - 2026-08-01 Android v0.1.0 release decision: no physical Android device is
   currently available, so Android API 24+ arm64-v8a ships as an explicit
   preview. Retain cross-compilation, base/graph/embedding AAR packaging, closed
@@ -18,8 +29,9 @@ implemented, or superseded by the product spec.
   production, performance, or device-compatibility claims beyond existing
   evidence.
 - 2026-07-30 website demo direction: the browser/WASM retrieval package and
-  independent browser embedding Worker are implemented and desktop-qualified
-  but unpublished. The public website demo uses curated first-party documents,
+  independent browser embedding Worker are implemented, desktop-qualified,
+  included in the v0.1.0 inventory under the later 2026-08-01 decision, and
+  still unpublished. The public website demo uses curated first-party documents,
   accepts arbitrary visitor questions, and runs local browser embedding,
   RetrievalKit WASM search, and a grounded browser SLM. Suggested questions and
   pre-rendered marketing answers may advertise the experience, but interactive
@@ -103,6 +115,8 @@ implemented, or superseded by the product spec.
   new npm trusted publisher now requires npm CLI 11.15.0 or later plus an
   explicit publish permission; npm 11.12.1 returns an empty HTTP 400 because it
   predates that required field.
+  `@gungorbasa/retrievalkit-browser` is a fifth approved v0.1.0 npm identity,
+  but its registry placeholder and trusted publisher are still pending.
 - 2026-08-01 PyPI owner setup: `retrievalkit`, `retrievalkit-graph`, and
   `retrievalkit-embedding` each received a reviewed non-SDK `0.0.0a0`
   placeholder. All three projects now trust
@@ -1063,7 +1077,10 @@ Verification completed without benchmark workloads:
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing
 identity, Central namespace, and Portal token are configured. Registry-owner
-setup for all three PyPI identities and all four npm identities is complete:
+setup for all three PyPI identities and the four previously approved npm
+identities is complete; the newly included
+`@gungorbasa/retrievalkit-browser` identity still needs bootstrap and trusted-
+publisher setup:
 
 1. re-verify all registry records and exact protected publisher settings
    immediately before publication dispatch;

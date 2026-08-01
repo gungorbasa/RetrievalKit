@@ -2,25 +2,29 @@
 
 Status: release-candidate and runtime authorization implementation complete.
 The public repository, protected GitHub environments, all three PyPI projects,
-all four npm packages, their trusted publishers, and Maven signing identity are
-configured. The Maven Central namespace and protected user token are also
-configured. v0.1.0 publication remains blocked on final registry
+the four previously approved npm packages, their trusted publishers, and Maven
+signing identity are configured. The newly approved
+`@gungorbasa/retrievalkit-browser` registry record and trusted publisher remain
+pending. The Maven Central namespace and protected user token are configured.
+v0.1.0 publication remains blocked on that npm setup, final registry
 re-verification, the signed tag, and the release evidence gates below.
 
-The automated release candidate ships the Swift, Python, Node.js, and Kotlin
-previews from one signed source revision. Python, Node, and Kotlin retain
+The automated release candidate ships the Swift, Python, Node.js, browser, and
+Kotlin previews from one signed source revision. Python, Node, and Kotlin retain
 separate base and graph native aggregates because loading both into one process
 is unsupported. Swift publishes one graph-capable aggregate containing both
 native capability surfaces.
 
 The approved npm package names are `@gungorbasa/retrievalkit`,
-`@gungorbasa/retrievalkit-graph`, `@gungorbasa/retrievalkit-embedding`, and
+`@gungorbasa/retrievalkit-graph`, `@gungorbasa/retrievalkit-embedding`,
+`@gungorbasa/retrievalkit-browser`, and
 `@gungorbasa/retrievalkit-browser-embedding`. npm rejected the equivalent
 unscoped base name as too similar to an existing package, so every npm package
 uses one consistent owner scope. The approved Maven group is
-`io.github.gungorbasa`. All four npm names and all three PyPI names were
+`io.github.gungorbasa`. The first four npm names and all three PyPI names were
 bootstrapped and connected to the protected GitHub publication workflow by
-2026-08-01. The `io.github.gungorbasa` Central namespace was verified and its
+2026-08-01. The browser retrieval name is approved but not yet bootstrapped.
+The `io.github.gungorbasa` Central namespace was verified and its
 protected
 credentials were installed on 2026-07-26. The signed tag and provisioned
 release evidence remain fail-closed external prerequisites.
@@ -31,7 +35,8 @@ naming as a release blocker; it is not a claim that outside legal counsel
 performed trademark clearance. The approved registry identities remain PyPI
 `retrievalkit`, `retrievalkit-graph`, and `retrievalkit-embedding`; npm
 `@gungorbasa/retrievalkit`, `@gungorbasa/retrievalkit-graph`,
-`@gungorbasa/retrievalkit-embedding`, and
+`@gungorbasa/retrievalkit-embedding`,
+`@gungorbasa/retrievalkit-browser`, and
 `@gungorbasa/retrievalkit-browser-embedding`; and Maven
 `io.github.gungorbasa`. Rust crates remain source-only.
 
@@ -43,6 +48,7 @@ performed trademark clearance. The approved registry identities remain PyPI
 - macOS arm64 npm tarballs for `@gungorbasa/retrievalkit`,
   `@gungorbasa/retrievalkit-graph`, and
   `@gungorbasa/retrievalkit-embedding`, plus the platform-independent
+  `@gungorbasa/retrievalkit-browser` Worker/WASM retrieval package and
   `@gungorbasa/retrievalkit-browser-embedding` Worker package.
 - Maven publications under `io.github.gungorbasa` for JVM/Android base, graph,
   and embedding packages, limited to the targets declared in their metadata.
@@ -68,7 +74,7 @@ part of the public Swift release.
 3. Build the three-slice arm64 graph-capable XCFramework and canonical zip
    archive; separately run the internal graph-neutrality qualification.
 4. Build all three wheel distributions for each CPython 3.10–3.14 interpreter.
-5. Build and inspect the four approved npm tarballs and the six unsigned Maven
+5. Build and inspect the five approved npm tarballs and the six unsigned Maven
    publications.
 6. Smoke-test every Swift product and a combined base-plus-graph consumer,
    every Python artifact, all npm tarballs, and all JVM publications in fresh
@@ -93,7 +99,7 @@ not a v0.1.0 publication blocker, and release material must not imply that
 Android device inference passed or make production, performance, or device-
 compatibility claims beyond the retained evidence.
 
-## Node and Kotlin candidate construction
+## Node, browser, and Kotlin candidate construction
 
 The Node assembler requires the approved npm names and an explicit
 `--names-approved` assertion. It builds and inspects separate macOS arm64 base,
@@ -120,6 +126,21 @@ python3 scripts/release/assemble_browser_embedding_package.py \
   --name-approved \
   --version 0.1.0 \
   --output dist/release/browser-embedding
+```
+
+The browser retrieval build first produces and qualifies separate portable and
+SIMD128 `wasm-bindgen` web artifacts. Its dedicated assembler then packages
+those artifacts with the Worker wrapper and performs a fresh local-install
+resolution smoke test:
+
+```bash
+scripts/check-browser-wasm.sh target/release-browser-wasm
+python3 scripts/release/assemble_browser_package.py \
+  --name @gungorbasa/retrievalkit-browser \
+  --name-approved \
+  --version 0.1.0 \
+  --generated-root target/release-browser-wasm \
+  --output dist/release/browser-retrieval
 ```
 
 The Kotlin assembler uses the approved Maven group. It produces six isolated
@@ -214,25 +235,29 @@ described as usable SDK releases.
 The npm job runs in the protected `npm` environment with `id-token: write` and
 no npm token. It installs the pinned OIDC-capable npm CLI, verifies the complete
 authorized bundle checksum set, stages exactly the three native Node tarballs
-and the browser embedding tarball, and publishes those four artifacts with
+and the browser retrieval and browser embedding tarballs, and publishes those
+five artifacts with
 `--provenance`. It then compares each registry `dist.integrity`
 value with the authorized inventory, attests the tarballs/evidence, and retains
 the publication record for 180 days.
 
 npm trusted publishing cannot establish a package name that does not exist.
-The owner completed the one-time bootstrap setup by 2026-08-01:
+The owner completed the first four packages' one-time bootstrap setup by
+2026-08-01:
 
-1. all four names received the non-release `0.0.0-bootstrap.0` placeholder;
+1. those four names received the non-release `0.0.0-bootstrap.0` placeholder;
 2. each package trusts the public
    `gungorbasa/RetrievalKit` repository, `publish-release.yml` workflow, and
    `npm` environment;
 3. the local bootstrap credential was removed; and
 4. none of the packages contains v0.1.0 SDK artifacts.
 
-All four public records resolved anonymously by 2026-08-01. Re-verify the records
-and exact trusted-publisher settings before setting the required
+Those four public records resolved anonymously by 2026-08-01. The fifth name,
+`@gungorbasa/retrievalkit-browser`, must receive the same reviewed non-release
+placeholder and exact trusted publisher before publication. Re-verify all five
+records and exact trusted-publisher settings before setting the required
 `npm_trusted_publishers_ready` dispatch input to true. The pre-approval job then
-verifies that all four public package records exist, and the npm job verifies
+verifies that all five public package records exist, and the npm job verifies
 that `0.1.0` is unused. Missing bootstrap, missing OIDC trust, an existing
 version, a changed tarball, or a registry integrity mismatch fails closed.
 Because multiple npm uploads cannot be transactional, a failure after the
@@ -288,7 +313,9 @@ already configured controls:
   restriction;
 - re-verify the protected `pypi` environment and all three projects' trusted
   publisher for this repository and workflow;
-- re-verify the protected `npm` environment and all four packages'
+- bootstrap `@gungorbasa/retrievalkit-browser`, configure its exact protected
+  trusted publisher, and then re-verify the protected `npm` environment and all
+  five packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - re-verify `io.github.gungorbasa` in Central Portal, the published PGP public
   key, and all five secrets in the protected `maven` environment using the

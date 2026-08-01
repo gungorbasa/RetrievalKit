@@ -79,7 +79,7 @@ class ReleaseTests(unittest.TestCase):
             " ".join(config["publication_blockers"]),
         )
         self.assertIn(
-            "approved embedding npm packages bootstrapped",
+            "retrievalkit-browser npm package bootstrapped",
             " ".join(config["publication_blockers"]),
         )
         self.assertEqual(
@@ -96,6 +96,18 @@ class ReleaseTests(unittest.TestCase):
                 "embedding": {
                     "name": "@gungorbasa/retrievalkit-embedding",
                     "artifact": "gungorbasa-retrievalkit-embedding-0.1.0.tgz",
+                },
+            },
+        )
+        self.assertEqual(
+            config["browser_retrieval"],
+            {
+                "engines": "^22.13.0 || ^24.0.0",
+                "runtime": "dedicated-worker-wasm",
+                "wasm_tiers": ["portable", "simd128"],
+                "package": {
+                    "name": "@gungorbasa/retrievalkit-browser",
+                    "artifact": "gungorbasa-retrievalkit-browser-0.1.0.tgz",
                 },
             },
         )
@@ -496,6 +508,14 @@ class ReleaseTests(unittest.TestCase):
                 b"node-base"
             )
             (staging / "node/inventory.json").write_text("{}", encoding="utf-8")
+            (staging / "browser-retrieval").mkdir()
+            (
+                staging
+                / "browser-retrieval/gungorbasa-retrievalkit-browser-0.1.0.tgz"
+            ).write_bytes(b"browser-retrieval")
+            (staging / "browser-retrieval/inventory.json").write_text(
+                "{}", encoding="utf-8"
+            )
             kotlin_coordinate = (
                 staging
                 / "kotlin/maven/io/github/gungorbasa/retrievalkit/0.1.0"
@@ -519,19 +539,26 @@ class ReleaseTests(unittest.TestCase):
                 mock.patch.object(validator, "validate_wheels"),
                 mock.patch.object(validator, "validate_node_packages") as node_validation,
                 mock.patch.object(
+                    validator, "validate_browser_retrieval_package"
+                ) as browser_retrieval_validation,
+                mock.patch.object(
                     validator, "validate_browser_embedding_package"
                 ) as browser_embedding_validation,
                 mock.patch.object(validator, "validate_kotlin_packages") as kotlin_validation,
             ):
                 result = validator.bundle_validation(REPO, output)
 
-            self.assertEqual(result["artifact_count"], 5)
+            self.assertEqual(result["artifact_count"], 7)
             node_validation.assert_called_once_with(
                 output / "artifacts/node",
                 validator.load_json(REPO / "release/release-v0.1.0.json"),
             )
             browser_embedding_validation.assert_called_once_with(
                 output / "artifacts/browser-embedding",
+                validator.load_json(REPO / "release/release-v0.1.0.json"),
+            )
+            browser_retrieval_validation.assert_called_once_with(
+                output / "artifacts/browser-retrieval",
                 validator.load_json(REPO / "release/release-v0.1.0.json"),
             )
             kotlin_validation.assert_called_once_with(
@@ -548,6 +575,11 @@ class ReleaseTests(unittest.TestCase):
                     "RetrievalKitGraphFFI.xcframework.zip",
                     "node/inventory.json",
                     "node/gungorbasa-retrievalkit-0.1.0.tgz",
+                    "browser-retrieval/inventory.json",
+                    (
+                        "browser-retrieval/"
+                        "gungorbasa-retrievalkit-browser-0.1.0.tgz"
+                    ),
                     "kotlin/inventory.json",
                     (
                         "kotlin/maven/io/github/gungorbasa/retrievalkit/0.1.0/"

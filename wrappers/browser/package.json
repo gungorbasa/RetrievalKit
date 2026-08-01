@@ -1,6 +1,7 @@
 {
   "name": "@gungorbasa/retrievalkit-browser",
   "version": "0.1.0",
+  "private": true,
   "description": "Browser and Web Worker bindings for RetrievalKit",
   "type": "module",
   "license": "Apache-2.0",

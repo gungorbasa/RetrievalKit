@@ -222,7 +222,7 @@ jobs:
       - name: Run the generated-WASM runtime smoke
         run: |
           cargo install wasm-bindgen-cli --version 0.2.126 --locked
-          scripts/check-browser-wasm.sh
+          scripts/check-browser-wasm.sh target/ci-browser-wasm
 
       - name: Check the Worker-owned browser package
         working-directory: wrappers/browser
@@ -233,6 +233,16 @@ jobs:
           npm pack --dry-run
           cmp ../../LICENSE LICENSE
           cmp ../../NOTICE NOTICE
+
+      - name: Assemble and test the closed browser retrieval package
+        run: |
+          python3 scripts/release/assemble_browser_package.py \
+            --name @gungorbasa/retrievalkit-browser \
+            --name-approved \
+            --version 0.1.0 \
+            --generated-root target/ci-browser-wasm \
+            --output target/ci-browser-retrieval-package
+          python3 -m unittest scripts.release.test_assemble_browser_package
 
       - name: Check the independent browser embedding package
         working-directory: wrappers/browser-embedding

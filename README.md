@@ -4,11 +4,10 @@ RetrievalKit is one local retrieval engine for Swift, Python, TypeScript/Node,
 and Kotlin apps. Use it for exact vector and BM25 hybrid retrieval, graph-only
 search with no embeddings, or graph-scoped retrieval that ranks only the
 records related to the user's context. One Rust core, native APIs, and no
-retrieval server. The checked-in browser/WebAssembly runtime and browser
-embedding provider run in dedicated Workers; browser embedding joins the
-v0.1.0 release inventory while browser retrieval remains unpublished. The live
-local website Q&A orchestration and browser SLM integration are the next demo
-layer.
+retrieval server. The browser/WebAssembly retrieval and independent embedding
+packages run in dedicated Workers and both join the v0.1.0 release inventory.
+The live local website Q&A orchestration and browser SLM remain application
+layers rather than SDK packages.
 
 <div align="center">
 
@@ -29,21 +28,23 @@ layer.
 RetrievalKit is still a source preview. **No v0.1.0 registry release is
 available yet.** The commands below show the intended shortest install
 experience after the publication gates pass; use the linked source quickstarts
-today. The npm and PyPI names currently contain bootstrap-only placeholders,
-not usable SDK releases.
+today. Existing npm and PyPI records contain bootstrap-only placeholders, not
+usable SDK releases; the browser retrieval npm record is still pending.
 
 | SDK | Intended public install | Publication status | Qualified initial target |
 | --- | --- | --- | --- |
 | Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
 | Python | `python -m pip install retrievalkit-graph` | Names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; CPython 3.10–3.14 |
 | Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Browser | `npm install @gungorbasa/retrievalkit-browser` | Approved v0.1.0 package; registry bootstrap and trusted publisher pending | Dedicated Worker; portable and SIMD128 WASM tiers |
 | Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
 | Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | **Preview**; Central namespace and protected credentials configured; v0.1.0 unpublished | Packaging qualified for Android API 24+ arm64-v8a; live-device inference and performance unqualified |
 
-The public identities have been selected. npm and PyPI ownership and
-trusted-publisher setup and Maven Central owner setup are complete. Every
-v0.1.0 publication is still pending, so the install commands do not yet provide
-an SDK release. For Swift, add one package and select `RetrievalKit` for a flat
+The public identities have been selected. Existing npm and PyPI ownership and
+trusted-publisher setup and Maven Central owner setup are complete; the newly
+approved browser retrieval npm record and trusted publisher remain pending.
+Every v0.1.0 publication is still pending, so the install commands do not yet
+provide an SDK release. For Swift, add one package and select `RetrievalKit` for a flat
 corpus, `RetrievalKitGraph` for relationships plus retrieval, or both. For
 Python, Node, and Kotlin, choose exactly one native distribution in a process:
 graph-enabled packages already include base retrieval.
@@ -160,6 +161,7 @@ the base distribution for flat corpora that do not need traversal.
 | TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
 | TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
 | TypeScript `@gungorbasa/retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
+| Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and graph-scoped WASM retrieval | **Available from source; v0.1.0 candidate; registry bootstrap pending** |
 | Browser `@gungorbasa/retrievalkit-browser-embedding` | Worker-owned local FP32 MiniLM embedding | **Available from source; v0.1.0 candidate** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
@@ -379,10 +381,11 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
   iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
   arm64; Android API 24+ arm64-v8a ships as an explicit preview with live-device
   inference, compatibility, and performance unqualified.
-- Browser/WebAssembly retrieval and browser embedding are implemented and
-  desktop-qualified in source. Browser embedding is in the v0.1.0 release
-  inventory; browser retrieval remains unpublished and outside the current
-  release compatibility surface.
+- Browser/WebAssembly retrieval and browser embedding are implemented,
+  desktop-qualified in source, and included as separate v0.1.0 npm packages.
+  The retrieval tarball carries portable and SIMD128 WASM tiers; persistence,
+  threaded WASM, Safari, Firefox, and physical mobile browsers remain outside
+  the qualified release surface.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
 - Installation remains source-first until the remaining release gates are

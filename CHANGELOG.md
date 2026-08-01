@@ -20,6 +20,11 @@ All notable user-facing changes and persistence migrations are recorded here.
   Promise-based N-API operations use typed values, `Float32Array`, exact
   `bigint` transport, Rust-owned search and graph semantics, deterministic
   async disposal, package-content checks, and local-install smoke tests.
+- Browser retrieval and graph support as the independent
+  `@gungorbasa/retrievalkit-browser` npm package. Its dedicated Worker owns the
+  in-memory database, and its release tarball includes separately qualified
+  portable and SIMD128 WebAssembly tiers; browser embedding remains a separate
+  optional package.
 - Kotlin/JVM and Android base and graph aggregates under the selected
   `io.github.gungorbasa` Maven group, with typed JNI transport, `FloatArray`
   embeddings, `AutoCloseable` lifecycle, opaque synchronized handles, and

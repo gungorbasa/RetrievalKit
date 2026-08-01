@@ -62,6 +62,11 @@ def artifact_files(staging: Path) -> list[Path]:
             *(path for path in (staging / "node").rglob("*") if path.is_file()),
             *(
                 path
+                for path in (staging / "browser-retrieval").rglob("*")
+                if path.is_file()
+            ),
+            *(
+                path
                 for path in (staging / "browser-embedding").rglob("*")
                 if path.is_file()
             ),
@@ -117,6 +122,7 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
                         "apple-arm64",
                         "python-macos-arm64",
                         "node-macos-arm64",
+                        "browser-retrieval-worker-wasm",
                         "browser-embedding-worker",
                         "kotlin-jvm-macos-arm64",
                         "kotlin-android-arm64-v8a",

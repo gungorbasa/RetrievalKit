@@ -82,6 +82,15 @@ def validate_status_labels(readme: str) -> None:
             ),
             f"incorrect Maven source status for {sdk}",
         )
+    require(
+        re.search(
+            r"\| Browser `@gungorbasa/retrievalkit-browser` \|.*\| "
+            r"\*\*Available from source; v0\.1\.0 candidate; "
+            r"registry bootstrap pending\*\* \|",
+            readme,
+        ),
+        "incorrect browser retrieval release status",
+    )
     for sdk in (
         "Android `io.github.gungorbasa:retrievalkit-android`",
         "Android `io.github.gungorbasa:retrievalkit-graph-android`",

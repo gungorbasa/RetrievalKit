@@ -397,6 +397,13 @@ reuse the Rust retrieval and graph implementations without changing the code
 paths, dependencies, packaging, or measured performance of native Swift,
 Python, Node.js, Kotlin/JVM, or Android builds.
 
+The owner approved `@gungorbasa/retrievalkit-browser` as the v0.1.0 browser
+retrieval registry identity on 2026-08-01. Its independent npm tarball contains
+the Worker wrapper and both portable and SIMD128 `wasm-bindgen` tiers. It stays
+separate from the Node N-API packages and from
+`@gungorbasa/retrievalkit-browser-embedding`. Publication remains blocked until
+the registry record, trusted publisher, exact candidate, and release gates pass.
+
 The browser package exposes the same capability-separated products:
 
 ```text
@@ -575,9 +582,9 @@ after corpus-pack import measurements show that rebuilding derived structures
 is a material startup cost, or when signed prebuilt databases are required as
 cross-platform distribution artifacts.
 
-The browser retrieval package is implemented and desktop-qualified but remains
-unpublished. The browser embedding package is included in the v0.1.0 release
-inventory. The private website repository ships a
+The browser retrieval and embedding packages are implemented,
+desktop-qualified, and included as separate v0.1.0 npm release artifacts. Both
+remain unpublished until the protected release gates pass. The private website repository ships a
 versioned Apollo 11 corpus pack and builds one combined
 `GraphRetrievalDatabase` in RetrievalKit WASM. Vector mode uses local MiniLM
 ranking followed by a Qwen3 0.6B answer. Graph Text validates and executes

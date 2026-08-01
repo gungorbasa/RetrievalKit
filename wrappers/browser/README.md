@@ -5,8 +5,10 @@ graph traversal, and generation validation run in Rust/WebAssembly inside a
 dedicated Web Worker; the UI thread only performs typed marshaling and receives
 results.
 
-This package is repository-local and not published to npm yet. It does not
-import, modify, or bundle the existing Node.js/N-API wrapper.
+The approved v0.1.0 identity is `@gungorbasa/retrievalkit-browser`. The package
+is in the release inventory but is not published to npm yet; its registry
+bootstrap and trusted publisher remain pending. It does not import, modify, or
+bundle the existing Node.js/N-API wrapper.
 
 Applications that need local MiniLM embeddings may use the independent
 `wrappers/browser-embedding` package. The two packages are deliberately not
@@ -36,8 +38,9 @@ loaded by the Worker. `performanceTier` is either `"portable"` or
 
 ## Worker setup
 
-The application owns a small Worker entry so the generated `wasm-bindgen`
-package can be wired in without coupling this package to generated filenames:
+The release tarball includes qualified portable and SIMD128 `wasm-bindgen`
+artifacts. The application owns a small Worker entry and wires those package
+exports into the adapter:
 
 ```ts
 // retrievalkit.worker.ts
@@ -47,12 +50,12 @@ import { createAdaptiveGeneratedWasmAdapter } from "@gungorbasa/retrievalkit-bro
 installRetrievalKitWorker(
   createAdaptiveGeneratedWasmAdapter({
     portable: async () => {
-      const generated = await import("./generated/portable/retrievalkit_wasm.js");
+      const generated = await import("@gungorbasa/retrievalkit-browser/wasm/portable");
       await generated.default();
       return generated;
     },
     simd128: async () => {
-      const generated = await import("./generated/simd128/retrievalkit_wasm.js");
+      const generated = await import("@gungorbasa/retrievalkit-browser/wasm/simd128");
       await generated.default();
       return generated;
     }
@@ -187,4 +190,7 @@ npm run build
 ```
 
 The package has its own scripts and dependency lockfile. It is deliberately not
-added to the existing Node wrapper workspaces.
+added to the existing Node wrapper workspaces. Release construction first runs
+`scripts/check-browser-wasm.sh` with an output directory, then passes those
+portable and SIMD128 artifacts to
+`scripts/release/assemble_browser_package.py`; neither command publishes.

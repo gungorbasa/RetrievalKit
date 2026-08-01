@@ -154,6 +154,7 @@ def assemble(
     if not skip_build:
         run(["npm", "run", "check:package"], cwd=PACKAGE_ROOT)
 
+    output = output.resolve()
     clean_output(output)
     with tempfile.TemporaryDirectory(prefix="retrievalkit-browser-embedding-release-") as temporary:
         staging = Path(temporary)

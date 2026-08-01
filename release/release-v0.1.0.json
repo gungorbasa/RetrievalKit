@@ -40,6 +40,15 @@
     },
     "co_installation": "base and graph are mutually exclusive; embedding is independent and may accompany either retrieval package"
   },
+  "browser_retrieval": {
+    "engines": "^22.13.0 || ^24.0.0",
+    "runtime": "dedicated-worker-wasm",
+    "wasm_tiers": ["portable", "simd128"],
+    "package": {
+      "name": "@gungorbasa/retrievalkit-browser",
+      "artifact": "gungorbasa-retrievalkit-browser-0.1.0.tgz"
+    }
+  },
   "browser_embedding": {
     "engines": "^22.13.0 || ^24.0.0",
     "package": {
@@ -96,7 +105,7 @@
   },
   "publication_blockers": [
     "retrievalkit-embedding PyPI project bootstrapped and trusted publisher configured",
-    "approved embedding npm packages bootstrapped and trusted publishers configured",
+    "retrievalkit-browser npm package bootstrapped and trusted publisher configured",
     "public docs and source preview rebuilt from the exact release revision",
     "fresh complete release candidate assembled from the exact release revision",
     "wrapper onboarding qualification passing for the release revision",

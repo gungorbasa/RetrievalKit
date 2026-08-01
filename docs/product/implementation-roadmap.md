@@ -357,7 +357,9 @@ improves measured latency without violating the agreed recall target.
 Status: authorized and in progress 2026-07-26. The product-spec amendment is
 recorded in `retrievalkit-product-spec.md`. No package publication, website
 deployment, release tag, or public browser performance claim is authorized by
-this implementation phase.
+this implementation phase. A separate 2026-08-01 owner decision later added
+`@gungorbasa/retrievalkit-browser` to the v0.1.0 release inventory without
+authorizing a workflow run, tag, or publication.
 
 Goal: publish a public website whose demo proves the local-first claim by
 running RetrievalKit retrieval entirely in the visitor's browser, with an
@@ -453,8 +455,9 @@ Firefox pass their respective tiers. Safari 26.5.2 now passes the full
 correctness/cache/50K matrix after WebDriver was enabled, but its WebGPU
 end-to-end p95 is `18.380 ms`. The owner accepted a Safari-specific `20 ms`
 reference budget, so Safari passes and further WebGPU optimization is deferred.
-Mobile browsers, private-mode/cache-pressure behavior, and publication remain
-open as recorded in the dated reports.
+Mobile browsers and private-mode/cache-pressure behavior remain open as
+recorded in the dated reports. Package publication is now authorized only
+through the v0.1.0 protected release gates.
 
 The 2026-07-28 hot-path investigation removed two redundant single-embedding
 F32 copies; the final uninstrumented 50K Chrome p95 was `12.460 ms`. Phase

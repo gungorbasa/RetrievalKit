@@ -7,21 +7,24 @@ The selected npm identities are:
   applications.
 - `@gungorbasa/retrievalkit-embedding` for the independent Node local
   embedding provider.
+- `@gungorbasa/retrievalkit-browser` for Worker-owned browser retrieval, graph,
+  and graph-scoped retrieval with packaged portable and SIMD128 WASM tiers.
+- `@gungorbasa/retrievalkit-browser-embedding` for the independent browser
+  embedding Worker.
 
 The equivalent unscoped base name was rejected by npm as too similar to an
 existing package, so every Node package uses the release owner's public scope.
-All four approved npm names have bootstrap-only placeholder versions and
-GitHub trusted publishers configured. Those placeholders are not SDK releases;
-v0.1.0 remains unpublished. From source or after the real release, install or
-load exactly one
+The four previously approved npm names have bootstrap-only placeholder versions
+and GitHub trusted publishers configured. The newly added
+`@gungorbasa/retrievalkit-browser` registry record and publisher remain
+pending. Those placeholders are not SDK releases; v0.1.0 remains unpublished.
+From source or after the real release, install or load exactly one
 retrieval package in a process. The independent embedding package may accompany
 it. The graph package already contains retrieval capability, and its loader
 rejects mixing retrieval native aggregates. A separate
 capability-separated browser/WebAssembly runtime is implemented under
 `wrappers/browser`, with an independent embedding provider under
-`wrappers/browser-embedding`. The embedding provider's approved identity is
-`@gungorbasa/retrievalkit-browser-embedding`; neither browser package is a
-Node.js fallback, and browser retrieval remains outside this Node.js guide.
+`wrappers/browser-embedding`. Neither browser package is a Node.js fallback.
 
 ## Installation status
 
@@ -32,12 +35,21 @@ The eventual shortest install will be:
 npm install @gungorbasa/retrievalkit-graph
 # Optional independent local embedding provider:
 npm install @gungorbasa/retrievalkit-embedding
+
+# Browser applications use two independent Worker packages:
+npm install @gungorbasa/retrievalkit-browser
+npm install @gungorbasa/retrievalkit-browser-embedding
 ```
 
 Choose `@gungorbasa/retrievalkit-graph` when relationships matter; it already
 includes retrieval. Choose `@gungorbasa/retrievalkit` for a flat corpus.
 Install exactly one retrieval native aggregate in a process; the independent
 embedding aggregate may accompany it.
+
+Browser retrieval combines base, graph-only, and graph-scoped retrieval in one
+Worker/WASM package rather than separate base and graph npm packages. See the
+[`wrappers/browser` guide](../../wrappers/browser/README.md) for the packaged
+WASM tier imports and Worker entrypoint.
 
 The available route is the repository source build:
 
@@ -49,11 +61,11 @@ npm run build
 node graph/examples/graph-retrieval.mjs
 ```
 
-The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
-24 LTS. Browser embedding qualification is recorded separately and joins the
-v0.1.0 release inventory; browser retrieval remains unpublished. Windows,
-Linux, and other native architectures are also not claimed. The reserved
-package names and bootstrap placeholders are not SDK availability claims.
+The initial native target is macOS arm64 with Node.js 22.13+ LTS or Node.js 24
+LTS. Browser retrieval and embedding are separate v0.1.0 packages with their
+own Worker/runtime qualification. Windows, Linux, and other native
+architectures are not claimed. Registry names and bootstrap placeholders are
+not SDK availability claims.
 
 ## Retrieval-only quickstart
 

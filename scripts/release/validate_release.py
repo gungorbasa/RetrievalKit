@@ -261,6 +261,11 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
         "active product spec lacks fixed embedding release identities",
     )
     require(
+        config["browser_retrieval"]["package"]["name"] in complete_spec
+        and "portable and SIMD128" in complete_spec,
+        "active product spec lacks browser retrieval release identity or tiers",
+    )
+    require(
         "retrievalkit-node-local" not in spec
         and "retrievalkit-node-graph-local" not in spec
         and "npm names and Maven coordinates remain provisional" not in spec,
@@ -278,7 +283,7 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
             for claim in (
                 "public docs and source preview",
                 "retrievalkit-embedding PyPI project bootstrapped",
-                "approved embedding npm packages bootstrapped",
+                "retrievalkit-browser npm package bootstrapped",
                 "fresh complete release candidate",
                 "wrapper onboarding qualification",
                 "Phase 7 scheduled and release gates",
@@ -415,6 +420,30 @@ def static_validation(repo: Path) -> dict[str, Any]:
         require(package["name"] == expected_name, f"Node {capability} package identity mismatch")
         require(package.get("private") is True, f"Node {capability} source package must remain private")
         require(package["version"] == version, f"Node {capability} version mismatch")
+    browser_retrieval = load_json(repo / "wrappers/browser/package.json")
+    require(
+        config["browser_retrieval"]
+        == {
+            "engines": "^22.13.0 || ^24.0.0",
+            "runtime": "dedicated-worker-wasm",
+            "wasm_tiers": ["portable", "simd128"],
+            "package": {
+                "name": "@gungorbasa/retrievalkit-browser",
+                "artifact": "gungorbasa-retrievalkit-browser-0.1.0.tgz",
+            },
+        },
+        "browser retrieval release identity changed",
+    )
+    require(
+        browser_retrieval["name"]
+        == config["browser_retrieval"]["package"]["name"],
+        "browser retrieval package identity mismatch",
+    )
+    require(
+        browser_retrieval.get("private") is True
+        and browser_retrieval["version"] == version,
+        "browser retrieval source package must remain private at the release version",
+    )
     browser_embedding = load_json(repo / "wrappers/browser-embedding/package.json")
     require(
         config["browser_embedding"]
@@ -583,6 +612,11 @@ def validate_workflows(repo: Path) -> None:
         "candidate workflow lacks the approved Node release identities",
     )
     require(
+        "assemble_browser_package.py" in candidate
+        and "--name @gungorbasa/retrievalkit-browser" in candidate,
+        "candidate workflow lacks the approved browser retrieval identity",
+    )
+    require(
         "assemble_browser_embedding_package.py" in candidate
         and "--name @gungorbasa/retrievalkit-browser-embedding" in candidate,
         "candidate workflow lacks the approved browser embedding identity",
@@ -600,6 +634,12 @@ def validate_workflows(repo: Path) -> None:
         and "publication_authorization.py authorize" in publication
         and "--authorization-record" in publication,
         "publication workflow bypasses signed-tag, candidate, or runtime authority validation",
+    )
+    require(
+        "All five approved npm packages" in publication
+        and "@gungorbasa%2fretrievalkit-browser" in publication
+        and "gungorbasa-retrievalkit-browser-$VERSION.tgz" in publication,
+        "publication workflow lacks the approved browser retrieval package",
     )
     release_workflows = candidate + publication.lower()
     forbidden_device_commands = (
@@ -1018,6 +1058,130 @@ def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
     validate_checksum_manifest(root / "SHA512SUMS", package_files, "sha512")
 
 
+def validate_browser_retrieval_package(root: Path, config: dict[str, Any]) -> None:
+    package_config = config["browser_retrieval"]["package"]
+    tarballs = list(root.glob("*.tgz"))
+    require(
+        [path.name for path in tarballs] == [package_config["artifact"]],
+        "browser retrieval tarball inventory mismatch",
+    )
+    tarball = tarballs[0]
+    inventory = load_json(root / "inventory.json")
+    require(
+        inventory["kind"] == "retrievalkit-browser-release"
+        and inventory["artifactReady"] is True
+        and inventory["publicationReady"] is False,
+        "browser retrieval inventory readiness mismatch",
+    )
+    require(len(inventory["artifacts"]) == 1, "browser retrieval inventory mismatch")
+    row = inventory["artifacts"][0]
+    require(
+        row["capability"] == "browser-retrieval-graph"
+        and row["npmName"] == package_config["name"]
+        and row["file"] == package_config["artifact"]
+        and row["version"] == config["version"]
+        and row["runtime"] == "browser-worker-wasm"
+        and row["wasmTiers"] == config["browser_retrieval"]["wasm_tiers"]
+        and row["sha256"] == digest(tarball),
+        "browser retrieval artifact identity mismatch",
+    )
+    with tarfile.open(tarball, "r:gz") as archive:
+        members = archive.getmembers()
+        require(
+            all(
+                member.name.startswith("package/")
+                and ".." not in Path(member.name).parts
+                and not member.issym()
+                and not member.islnk()
+                for member in members
+            ),
+            "unsafe browser retrieval archive inventory",
+        )
+        names = {
+            member.name.removeprefix("package/")
+            for member in members
+            if member.isfile()
+        }
+        expected = {
+            "LICENSE",
+            "NOTICE",
+            "README.md",
+            "THIRD_PARTY_NOTICES.md",
+            "package.json",
+            *(
+                f"dist/{module}{suffix}"
+                for module in (
+                    "adapter",
+                    "databases",
+                    "errors",
+                    "generated-adapter",
+                    "index",
+                    "protocol",
+                    "rpc-client",
+                    "types",
+                    "worker",
+                )
+                for suffix in (".js", ".js.map", ".d.ts", ".d.ts.map")
+            ),
+        }
+        for tier in config["browser_retrieval"]["wasm_tiers"]:
+            expected |= {
+                f"dist/wasm/{tier}/retrievalkit_wasm.js",
+                f"dist/wasm/{tier}/retrievalkit_wasm.d.ts",
+                f"dist/wasm/{tier}/retrievalkit_wasm_bg.wasm",
+                f"dist/wasm/{tier}/retrievalkit_wasm_bg.wasm.d.ts",
+            }
+        require(names == expected, "browser retrieval package contents are not closed")
+        require(not any(name.endswith(".node") for name in names), "browser retrieval package contains native Node code")
+        package_file = archive.extractfile("package/package.json")
+        require(package_file is not None, "browser retrieval package metadata is unreadable")
+        package = json.load(package_file)
+        wasm_payloads: dict[str, bytes] = {}
+        for tier in config["browser_retrieval"]["wasm_tiers"]:
+            wasm_file = archive.extractfile(
+                f"package/dist/wasm/{tier}/retrievalkit_wasm_bg.wasm"
+            )
+            require(wasm_file is not None, f"browser retrieval {tier} WASM is unreadable")
+            wasm_payloads[tier] = wasm_file.read()
+    require(set(row["files"]) == names, "browser retrieval file inventory mismatch")
+    require(
+        row["sha512"] == hashlib.sha512(tarball.read_bytes()).hexdigest(),
+        "browser retrieval SHA-512 inventory mismatch",
+    )
+    require(
+        package["name"] == package_config["name"]
+        and package["version"] == config["version"]
+        and "private" not in package
+        and package["license"] == "Apache-2.0",
+        "browser retrieval package metadata mismatch",
+    )
+    require(
+        package.get("publishConfig")
+        == {"access": "public", "registry": "https://registry.npmjs.org/"},
+        "browser retrieval package publication metadata mismatch",
+    )
+    for tier, wasm in wasm_payloads.items():
+        require(
+            wasm.startswith(b"\x00asm\x01\x00\x00\x00"),
+            f"browser retrieval {tier} WASM header mismatch",
+        )
+        require(
+            package["exports"].get(f"./wasm/{tier}")
+            == {
+                "types": f"./dist/wasm/{tier}/retrievalkit_wasm.d.ts",
+                "import": f"./dist/wasm/{tier}/retrievalkit_wasm.js",
+            },
+            f"browser retrieval {tier} export mismatch",
+        )
+    require(
+        wasm_payloads["portable"] != wasm_payloads["simd128"],
+        "browser retrieval WASM tiers are identical",
+    )
+    package_files = {tarball.name: tarball}
+    validate_checksum_manifest(root / "SHA256SUMS", package_files, "sha256")
+    validate_checksum_manifest(root / "SHA512SUMS", package_files, "sha512")
+
+
 def validate_browser_embedding_package(root: Path, config: dict[str, Any]) -> None:
     package_config = config["browser_embedding"]["package"]
     tarballs = list(root.glob("*.tgz"))
@@ -1408,6 +1572,9 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
         validate_xcframework_archive(path, config["version"], config["apple"]["artifacts"][path.name]["swiftpm_checksum"])
     validate_wheels(list((bundle / "artifacts").glob("*.whl")), config)
     validate_node_packages(bundle / "artifacts/node", config)
+    validate_browser_retrieval_package(
+        bundle / "artifacts/browser-retrieval", config
+    )
     validate_browser_embedding_package(
         bundle / "artifacts/browser-embedding", config
     )

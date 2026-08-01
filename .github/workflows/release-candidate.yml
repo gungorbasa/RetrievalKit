@@ -183,6 +183,51 @@ jobs:
           if-no-files-found: error
           retention-days: 180
 
+  browser-retrieval:
+    name: Browser retrieval package (${{ matrix.root }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [a, b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_DATE_EPOCH: "0"
+    steps:
+      - name: Check out clean root
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install Rust and WebAssembly target
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install Node.js 24 LTS
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: wrappers/browser/package-lock.json
+      - name: Build, qualify, and assemble closed browser retrieval tarball
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.126 --locked
+          scripts/check-browser-wasm.sh target/release-browser-wasm
+          cd wrappers/browser
+          npm ci
+          cd ../..
+          python3 scripts/release/assemble_browser_package.py \
+            --name @gungorbasa/retrievalkit-browser \
+            --name-approved \
+            --version 0.1.0 \
+            --generated-root target/release-browser-wasm \
+            --output target/release-stage/browser-retrieval
+      - name: Upload browser retrieval candidate artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: root-${{ matrix.root }}-browser-retrieval
+          path: target/release-stage
+          if-no-files-found: error
+          retention-days: 180
+
   kotlin:
     name: Kotlin packages (${{ matrix.root }})
     needs: validate
@@ -236,7 +281,7 @@ jobs:
 
   assemble:
     name: Prove two-root reproducibility and assemble
-    needs: [apple, python, node, browser-embedding, kotlin]
+    needs: [apple, python, node, browser-retrieval, browser-embedding, kotlin]
     runs-on: macos-15
     timeout-minutes: 30
     steps:

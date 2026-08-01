@@ -61,6 +61,16 @@ class ReadmeClaimMutationTests(unittest.TestCase):
         with self.assertRaises(VALIDATOR.ValidationError):
             VALIDATOR.validate_status_labels(stale)
 
+    def test_browser_retrieval_candidate_status_is_required(self) -> None:
+        VALIDATOR.validate_status_labels(README)
+        stale = README.replace(
+            "**Available from source; v0.1.0 candidate; registry bootstrap pending**",
+            "**Available from source**",
+            1,
+        )
+        with self.assertRaises(VALIDATOR.ValidationError):
+            VALIDATOR.validate_status_labels(stale)
+
     def test_changed_number_is_rejected(self) -> None:
         self.assert_rejected(README.replace("7.17×", "7.18×"))
 

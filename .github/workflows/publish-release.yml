@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       npm_trusted_publishers_ready:
-        description: All four approved npm packages are bootstrapped and trust this public-repository workflow
+        description: All five approved npm packages are bootstrapped and trust this public-repository workflow
         required: true
         default: false
         type: boolean
@@ -125,6 +125,9 @@ jobs:
           curl --fail --silent --show-error \
             'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-embedding' \
             | jq --exit-status '.name == "@gungorbasa/retrievalkit-embedding"' > /dev/null
+          curl --fail --silent --show-error \
+            'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-browser' \
+            | jq --exit-status '.name == "@gungorbasa/retrievalkit-browser"' > /dev/null
           curl --fail --silent --show-error \
             'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-browser-embedding' \
             | jq --exit-status '.name == "@gungorbasa/retrievalkit-browser-embedding"' > /dev/null
@@ -244,6 +247,7 @@ jobs:
             target/publication-evidence/release-bundle-v0.1.0/artifacts/*.xcframework.zip
             target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl
             target/publication-evidence/release-bundle-v0.1.0/artifacts/node/*.tgz
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/browser-retrieval/*.tgz
             target/publication-evidence/release-bundle-v0.1.0/artifacts/browser-embedding/*.tgz
             target/publication-evidence/release-bundle-v0.1.0/artifacts/kotlin/*-unsigned-central-bundle.zip
             target/publication-record/publication-authorization-provenance.json
@@ -257,6 +261,7 @@ jobs:
             "$bundle"/artifacts/*.xcframework.zip
             "$bundle"/artifacts/*.whl
             "$bundle"/artifacts/node/*.tgz
+            "$bundle"/artifacts/browser-retrieval/*.tgz
             "$bundle"/artifacts/browser-embedding/*.tgz
             "$bundle"/LICENSE
             "$bundle"/NOTICE
@@ -346,25 +351,31 @@ jobs:
             sha256sum --check publication-authorization-provenance.sha256
           )
           test "$(find "$bundle/artifacts/node" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "3"
+          test "$(find "$bundle/artifacts/browser-retrieval" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "1"
           test "$(find "$bundle/artifacts/browser-embedding" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "1"
           test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz"
           test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz"
           test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-embedding-$VERSION.tgz"
+          test -f "$bundle/artifacts/browser-retrieval/gungorbasa-retrievalkit-browser-$VERSION.tgz"
           test -f "$bundle/artifacts/browser-embedding/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz"
           test "$(jq -r '.artifacts | length' "$bundle/artifacts/node/inventory.json")" = "3"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/browser-retrieval/inventory.json")" = "1"
           test "$(jq -r '.artifacts | length' "$bundle/artifacts/browser-embedding/inventory.json")" = "1"
           test "$(jq -r '.artifacts[] | select(.capability == "base") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit"
           test "$(jq -r '.artifacts[] | select(.capability == "graph") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit-graph"
           test "$(jq -r '.artifacts[] | select(.capability == "embedding") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit-embedding"
+          test "$(jq -r '.artifacts[] | select(.capability == "browser-retrieval-graph") | .npmName' "$bundle/artifacts/browser-retrieval/inventory.json")" = "@gungorbasa/retrievalkit-browser"
           test "$(jq -r '.artifacts[] | select(.capability == "browser-embedding") | .npmName' "$bundle/artifacts/browser-embedding/inventory.json")" = "@gungorbasa/retrievalkit-browser-embedding"
           mkdir -p target/npm
           cp "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz" target/npm/
           cp "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz" target/npm/
           cp "$bundle/artifacts/node/gungorbasa-retrievalkit-embedding-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/browser-retrieval/gungorbasa-retrievalkit-browser-$VERSION.tgz" target/npm/
           cp "$bundle/artifacts/browser-embedding/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz" target/npm/
           jq --slurp \
-            '.[0] as $node | .[1] as $browser | $node | .kind = "retrievalkit-npm-release" | .artifacts = ($node.artifacts + $browser.artifacts)' \
+            '.[0] as $node | .[1] as $browser_retrieval | .[2] as $browser_embedding | $node | .kind = "retrievalkit-npm-release" | .artifacts = ($node.artifacts + $browser_retrieval.artifacts + $browser_embedding.artifacts)' \
             "$bundle/artifacts/node/inventory.json" \
+            "$bundle/artifacts/browser-retrieval/inventory.json" \
             "$bundle/artifacts/browser-embedding/inventory.json" \
             > target/npm/authorized-inventory.json
       - name: Require trusted-publisher bootstrap and unused version
@@ -377,6 +388,7 @@ jobs:
             @gungorbasa/retrievalkit \
             @gungorbasa/retrievalkit-graph \
             @gungorbasa/retrievalkit-embedding \
+            @gungorbasa/retrievalkit-browser \
             @gungorbasa/retrievalkit-browser-embedding
           do
             test "$(npm view "$package" name)" = "$package"
@@ -401,6 +413,10 @@ jobs:
             --access public \
             --ignore-scripts \
             --provenance
+          npm publish "target/npm/gungorbasa-retrievalkit-browser-$VERSION.tgz" \
+            --access public \
+            --ignore-scripts \
+            --provenance
           npm publish "target/npm/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz" \
             --access public \
             --ignore-scripts \
@@ -414,6 +430,7 @@ jobs:
             @gungorbasa/retrievalkit \
             @gungorbasa/retrievalkit-graph \
             @gungorbasa/retrievalkit-embedding \
+            @gungorbasa/retrievalkit-browser \
             @gungorbasa/retrievalkit-browser-embedding
           do
             expected="$(jq -r --arg package "$package" '.artifacts[] | select(.npmName == $package) | .npmIntegrity' "$inventory")"
@@ -457,6 +474,7 @@ jobs:
             target/npm/gungorbasa-retrievalkit-0.1.0.tgz
             target/npm/gungorbasa-retrievalkit-graph-0.1.0.tgz
             target/npm/gungorbasa-retrievalkit-embedding-0.1.0.tgz
+            target/npm/gungorbasa-retrievalkit-browser-0.1.0.tgz
             target/npm/gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz
             target/npm/publication-evidence.json
       - name: Preserve npm publication evidence

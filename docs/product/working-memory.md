@@ -1657,6 +1657,11 @@ Optional post-release work, ordered by evidence need:
   `RetrievalKit-Maven-GPG`. Ephemeral self-hosted-runner registration tokens are
   short-lived and must not be stored in Keychain, the repository, logs, or
   project memory. Only this non-secret handling policy is durable memory.
+- GitHub's workflow-run approval-history response is run-scoped but does not
+  expose an approval-event timestamp. Publication authorization records the
+  post-gate observation time instead and accepts only workflow run attempt 1;
+  any retry requires a fresh workflow dispatch and fresh protected-environment
+  approval so approval history cannot be replayed across attempts.
 - Phase 7 release authorization must accept the required zero-valued
   `physical_device_100k_violation_count` metric name while continuing to reject
   a nonzero value or any actual 100K physical-device evidence or claim. The

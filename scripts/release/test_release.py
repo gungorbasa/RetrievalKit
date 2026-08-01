@@ -786,7 +786,6 @@ class PublicationAuthorizationTests(unittest.TestCase):
                     "user": {"login": "release-owner"},
                     "comment": "Approved exact v0.1.0 candidate",
                     "state": "approved",
-                    "created_at": "2026-07-26T07:00:00Z",
                 }
             ],
         )
@@ -852,6 +851,11 @@ class PublicationAuthorizationTests(unittest.TestCase):
             self.assertEqual(
                 record["authority"]["type"],
                 "github_environment_required_reviewer",
+            )
+            self.assertEqual(record["schema_version"], 2)
+            self.assertEqual(
+                record["authority"]["approvals"][0]["observed_at"],
+                "2026-07-26T07:00:01Z",
             )
             self.assertEqual(
                 record["candidate_evidence"]["runs"]["release_gate"]["run_id"],
@@ -947,6 +951,27 @@ class PublicationAuthorizationTests(unittest.TestCase):
             ):
                 publication_authorization.build_authorization_record(authorization_args)
 
+    def test_rerun_attempt_cannot_reuse_approval_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_args, candidate_path = self.fixture(root)
+            publication_authorization.write_object(
+                candidate_path,
+                publication_authorization.build_candidate_evidence(candidate_args),
+            )
+            authorization_args = self.authorize_args(root, candidate_path)
+            authorization_args.publication_run_attempt = 2
+            publication_run = publication_authorization.load_object(
+                authorization_args.publication_run_json
+            )
+            publication_run["run_attempt"] = 2
+            self.write_json(authorization_args.publication_run_json, publication_run)
+            with self.assertRaisesRegex(
+                publication_authorization.AuthorizationError,
+                "fresh workflow run",
+            ):
+                publication_authorization.build_authorization_record(authorization_args)
+
     def test_approval_from_an_earlier_run_attempt_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -963,7 +988,7 @@ class PublicationAuthorizationTests(unittest.TestCase):
             self.write_json(authorization_args.publication_run_json, publication_run)
             with self.assertRaisesRegex(
                 publication_authorization.AuthorizationError,
-                "no approved required-reviewer event",
+                "approval observation predates",
             ):
                 publication_authorization.build_authorization_record(authorization_args)
 

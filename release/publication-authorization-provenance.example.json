@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "retrievalkit-publication-authorization-provenance",
   "decision": "approved",
   "release": {
@@ -14,7 +14,7 @@
       {
         "reviewer": "replace-with-github-reviewer",
         "state": "approved",
-        "created_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "observed_at": "YYYY-MM-DDTHH:MM:SSZ",
         "comment": "Approved the exact signed-tag candidate."
       }
     ]

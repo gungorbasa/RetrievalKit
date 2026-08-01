@@ -192,16 +192,21 @@ Publication has two distinct stages:
    approval events from GitHub, requires an `approved` event naming the
    `release` environment, and emits
    `publication-authorization-provenance.json`. The record embeds the closed
-   candidate evidence and binds the reviewer, approval timestamp, exact tag and
-   commit, workflow ref, publication run/attempt and start time, all three
+   candidate evidence and binds the reviewer, the timestamp at which the
+   current-run approval was observed, exact tag and commit, workflow ref,
+   publication run/attempt and start time, all three
    prerequisite run IDs, gate-result hashes, and bundle
    inventory/checksum/manifest hashes.
 
 `validate_release.py --publication` accepts only that post-approval record and
-the exact candidate evidence from which it was made. An empty approval API
-response, an unprotected environment, an approval predating the current run
-attempt, a branch-based workflow ref, a different revision/run/attempt, failed
-or stale gate evidence, or any changed candidate byte fails closed.
+the exact candidate evidence from which it was made. GitHub's run-scoped review
+history does not expose an approval-event timestamp, so the record stores the
+time the approved event was observed after the protected job started and
+requires publication run attempt 1; a retry must use a fresh workflow run and
+fresh environment approval. An empty approval API response, an unprotected
+environment, an observation predating the current run, a rerun attempt, a
+branch-based workflow ref, a different revision/run, failed or stale gate
+evidence, or any changed candidate byte fails closed.
 
 The authorization record, its SHA-256, and the candidate evidence are retained
 for the public repository's maximum 90 days as a dedicated Actions artifact.

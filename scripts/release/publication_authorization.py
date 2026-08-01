@@ -348,8 +348,14 @@ def approval_evidence(
     environment: str,
     *,
     not_before: str,
+    observed_at: str,
 ) -> list[dict[str, Any]]:
     attempt_started_at = timestamp(not_before, "publication run start")
+    observation_time = timestamp(observed_at, "environment approval observation")
+    require(
+        observation_time >= attempt_started_at,
+        "environment approval observation predates the current publication run",
+    )
     accepted: list[dict[str, Any]] = []
     for value in approvals:
         if not isinstance(value, dict) or value.get("state") != "approved":
@@ -362,16 +368,12 @@ def approval_evidence(
             continue
         user = value.get("user")
         login = user.get("login") if isinstance(user, dict) else None
-        created_at = value.get("created_at")
         require(isinstance(login, str) and login, "environment approval reviewer identity missing")
-        approved_at = timestamp(created_at, "environment approval")
-        if approved_at < attempt_started_at:
-            continue
         accepted.append(
             {
                 "reviewer": login,
                 "state": "approved",
-                "created_at": created_at,
+                "observed_at": observed_at,
                 "comment": value.get("comment") if isinstance(value.get("comment"), str) else "",
             }
         )
@@ -379,7 +381,7 @@ def approval_evidence(
         accepted,
         f"no approved required-reviewer event found for GitHub environment '{environment}'",
     )
-    return sorted(accepted, key=lambda row: (row["created_at"], row["reviewer"], row["comment"]))
+    return sorted(accepted, key=lambda row: (row["observed_at"], row["reviewer"], row["comment"]))
 
 
 def build_authorization_record(args: argparse.Namespace) -> dict[str, Any]:
@@ -389,6 +391,10 @@ def build_authorization_record(args: argparse.Namespace) -> dict[str, Any]:
     release_gate_run_id = positive_run_id(args.release_gate_run_id, "release gate run id")
     publication_run_id = positive_run_id(args.publication_run_id, "publication run id")
     publication_run_attempt = positive_run_id(args.publication_run_attempt, "publication run attempt")
+    require(
+        publication_run_attempt == 1,
+        "publication authorization requires a fresh workflow run, not a rerun attempt",
+    )
     candidate = load_object(args.candidate_evidence)
     validate_candidate_evidence(
         candidate,
@@ -423,9 +429,10 @@ def build_authorization_record(args: argparse.Namespace) -> dict[str, Any]:
         load_array(args.approvals_json),
         args.environment,
         not_before=publication_run["run_started_at"],
+        observed_at=generated_at,
     )
     record = {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": AUTHORIZATION_KIND,
         "decision": "approved",
         "release": candidate["release"],
@@ -487,7 +494,7 @@ def validate_authorization_record(
         },
         "authorization record",
     )
-    require(record["schema_version"] == 1, "authorization schema version mismatch")
+    require(record["schema_version"] == 2, "authorization schema version mismatch")
     require(record["kind"] == AUTHORIZATION_KIND, "authorization record kind mismatch")
     require(record["decision"] == "approved", "publication decision is not approved")
     require(
@@ -524,14 +531,15 @@ def validate_authorization_record(
             and approval.get("state") == "approved"
             and isinstance(approval.get("reviewer"), str)
             and bool(approval["reviewer"])
-            and isinstance(approval.get("created_at"), str)
-            and TIMESTAMP_PATTERN.fullmatch(approval["created_at"]) is not None,
+            and isinstance(approval.get("observed_at"), str)
+            and TIMESTAMP_PATTERN.fullmatch(approval["observed_at"]) is not None,
             "authorization approval evidence is invalid",
         )
     run = record["publication_run"]
     require(isinstance(run, dict), "publication run evidence is invalid")
     require(run.get("run_id") == publication_run_id, "authorization publication run ID mismatch")
     require(run.get("run_attempt") == publication_run_attempt, "authorization publication run attempt mismatch")
+    require(run.get("run_attempt") == 1, "authorization must come from a fresh publication workflow run")
     require(run.get("head_sha") == revision, "authorization publication run revision mismatch")
     require(run.get("workflow_path") == WORKFLOW_PATHS["publication"], "authorization workflow path mismatch")
     run_start = timestamp(
@@ -540,8 +548,8 @@ def validate_authorization_record(
     )
     for approval in approvals:
         require(
-            timestamp(approval["created_at"], "authorization approval") >= run_start,
-            "authorization approval predates the current publication run attempt",
+            timestamp(approval["observed_at"], "authorization approval observation") >= run_start,
+            "authorization approval observation predates the current publication run",
         )
     require(
         run.get("workflow_ref")

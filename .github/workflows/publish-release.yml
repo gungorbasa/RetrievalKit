@@ -263,9 +263,13 @@ jobs:
             target/publication-record/publication-authorization-provenance.json
       - name: Create immutable GitHub Release assets
         env:
-          GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN cannot create a Release when the tagged revision
+          # changes workflow files. Keep this workflow-scoped credential in
+          # the protected release environment instead.
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          test -n "$GH_TOKEN"
           gh api \
             -H 'X-GitHub-Api-Version: 2026-03-10' \
             "repos/${GITHUB_REPOSITORY}/immutable-releases" \

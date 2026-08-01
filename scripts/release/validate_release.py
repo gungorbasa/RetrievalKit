@@ -663,8 +663,9 @@ def validate_workflows(repo: Path) -> None:
         and "retention-days: 180" not in publication
         and "X-GitHub-Api-Version: 2026-03-10" in publication
         and "immutable-releases" in publication
-        and "jq --exit-status '.enabled == true'" in publication,
-        "publication workflow lacks 90-day retention or immutable-release enforcement",
+        and "jq --exit-status '.enabled == true'" in publication
+        and "GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}" in publication,
+        "publication workflow lacks 90-day retention, immutable-release enforcement, or the protected release credential",
     )
     require(
         "All five approved npm packages" in publication

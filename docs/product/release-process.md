@@ -215,6 +215,13 @@ artifacts. Repository-level immutable releases must be enabled; the publication
 job checks that setting before creating the Release. PyPI, npm, and Maven
 publication jobs depend on successful completion of this protected job.
 
+GitHub does not permit a workflow's built-in `GITHUB_TOKEN` to create a Release
+when the target revision adds or changes workflow files. The Release-creation
+step therefore uses `RELEASE_GITHUB_TOKEN`, stored only in the protected
+`release` environment and backed by the owner's macOS-Keychain-managed GitHub
+CLI credential with `repo` and `workflow` scopes. That credential is not used
+by PyPI, npm, Maven, attestation, or candidate-validation steps.
+
 ## PyPI trusted publication
 
 The PyPI job runs in the protected `pypi` environment with `id-token: write`
@@ -342,6 +349,9 @@ already configured controls:
   [Central Publisher API](https://central.sonatype.org/publish/publish-portal-api/);
 - confirm the workflow token can read Actions run metadata and the
   [`GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals` review-history endpoint](https://docs.github.com/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run);
+- confirm the protected `release` environment contains
+  `RELEASE_GITHUB_TOKEN` with repository and workflow permission solely for
+  creating the GitHub Release;
 - create and push the verified signed release tag. The publication workflow
   must be dispatched with that tag as its workflow ref, not merely supplied as
   the `tag` input.

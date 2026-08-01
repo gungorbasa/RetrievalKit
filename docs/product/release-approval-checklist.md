@@ -73,6 +73,9 @@ Every item is required unless explicitly marked candidate-only.
   hashes, and the bundle inventory/checksum/manifest hashes.
 - [ ] The protected `release` environment approval is present in the GitHub
   workflow-run approvals API response.
+- [ ] The protected `release` environment contains `RELEASE_GITHUB_TOKEN`,
+  sourced from a Keychain-managed credential with `repo` and `workflow`
+  scopes; only the GitHub Release creation step consumes it.
 - [ ] `publication-authorization-provenance.json` validates against the exact
   candidate evidence, tag, revision, publication run ID, and run attempt.
 - [ ] The authorization record, SHA-256, and candidate evidence are retained as

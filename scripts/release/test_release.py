@@ -87,6 +87,26 @@ class ReleaseTests(unittest.TestCase):
             ):
                 validator.validate_workflows(fake)
 
+    def test_release_creation_uses_protected_workflow_capable_credential(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory)
+            shutil.copytree(REPO / ".github", fake / ".github")
+            validator.validate_workflows(fake)
+            publication = fake / ".github/workflows/publish-release.yml"
+            publication.write_text(
+                publication.read_text(encoding="utf-8").replace(
+                    "GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}",
+                    "GH_TOKEN: ${{ github.token }}",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "protected release credential",
+            ):
+                validator.validate_workflows(fake)
+
     def test_swift_package_exposes_base_and_graph_through_one_aggregate(self) -> None:
         package = (REPO / "Package.swift").read_text()
         self.assertIn('.library(name: "RetrievalKit"', package)

@@ -5,7 +5,8 @@ and Kotlin apps. Use it for exact vector and BM25 hybrid retrieval, graph-only
 search with no embeddings, or graph-scoped retrieval that ranks only the
 records related to the user's context. One Rust core, native APIs, and no
 retrieval server. The checked-in browser/WebAssembly runtime and browser
-embedding provider run in dedicated Workers and remain unpublished. The live
+embedding provider run in dedicated Workers; browser embedding joins the
+v0.1.0 release inventory while browser retrieval remains unpublished. The live
 local website Q&A orchestration and browser SLM integration are the next demo
 layer.
 
@@ -155,12 +156,17 @@ the base distribution for flat corpora that do not need traversal.
 | Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
 | Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
 | Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
+| Python `retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
 | TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
 | TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
+| TypeScript `@gungorbasa/retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
+| Browser `@gungorbasa/retrievalkit-browser-embedding` | Worker-owned local FP32 MiniLM embedding | **Available from source; v0.1.0 candidate** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
 | Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Available from source; Maven unpublished** |
 | Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Available from source; Maven unpublished** |
+| Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **Available from source; v0.1.0 candidate** |
 
 Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
 Their graph-enabled distributions already contain the base native retrieval
@@ -364,9 +370,9 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
   iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
   arm64; the initial Android target is arm64-v8a.
 - Browser/WebAssembly retrieval and browser embedding are implemented and
-  desktop-qualified in source, but remain unpublished and outside the current
-  release compatibility surface. The website's grounded browser-SLM demo
-  integration is still pending.
+  desktop-qualified in source. Browser embedding is in the v0.1.0 release
+  inventory; browser retrieval remains unpublished and outside the current
+  release compatibility surface.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
 - Installation remains source-first until the remaining release gates are

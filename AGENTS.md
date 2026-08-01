@@ -221,6 +221,10 @@ unchanged by browser work.
 
 ## Agent Workflow
 
+By owner convention, make and retain repository changes in the primary `main`
+checkout. Do not leave changes only in auxiliary Codex or tool-created
+worktrees unless the owner explicitly requests otherwise.
+
 When making changes:
 
 1. Read the active product spec and nearby code before editing.

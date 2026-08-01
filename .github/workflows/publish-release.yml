@@ -20,12 +20,12 @@ on:
         required: true
         type: string
       npm_trusted_publishers_ready:
-        description: Both scoped npm packages are bootstrapped and trust this public-repository workflow
+        description: All four approved npm packages are bootstrapped and trust this public-repository workflow
         required: true
         default: false
         type: boolean
       pypi_trusted_publishers_ready:
-        description: Both PyPI projects trust this public-repository workflow and protected pypi environment
+        description: All three PyPI projects trust this public-repository workflow and protected pypi environment
         required: true
         default: false
         type: boolean
@@ -122,6 +122,16 @@ jobs:
           curl --fail --silent --show-error \
             'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-graph' \
             | jq --exit-status '.name == "@gungorbasa/retrievalkit-graph"' > /dev/null
+          curl --fail --silent --show-error \
+            'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-embedding' \
+            | jq --exit-status '.name == "@gungorbasa/retrievalkit-embedding"' > /dev/null
+          curl --fail --silent --show-error \
+            'https://registry.npmjs.org/@gungorbasa%2fretrievalkit-browser-embedding' \
+            | jq --exit-status '.name == "@gungorbasa/retrievalkit-browser-embedding"' > /dev/null
+          for project in retrievalkit retrievalkit-graph retrievalkit-embedding; do
+            curl --fail --silent --show-error "https://pypi.org/pypi/$project/json" \
+              | jq --exit-status --arg project "$project" '.info.name | ascii_downcase == $project' > /dev/null
+          done
       - name: Preserve verified candidate for the protected publication job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -234,6 +244,7 @@ jobs:
             target/publication-evidence/release-bundle-v0.1.0/artifacts/*.xcframework.zip
             target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl
             target/publication-evidence/release-bundle-v0.1.0/artifacts/node/*.tgz
+            target/publication-evidence/release-bundle-v0.1.0/artifacts/browser-embedding/*.tgz
             target/publication-evidence/release-bundle-v0.1.0/artifacts/kotlin/*-unsigned-central-bundle.zip
             target/publication-record/publication-authorization-provenance.json
       - name: Create immutable GitHub Release assets
@@ -246,6 +257,7 @@ jobs:
             "$bundle"/artifacts/*.xcframework.zip
             "$bundle"/artifacts/*.whl
             "$bundle"/artifacts/node/*.tgz
+            "$bundle"/artifacts/browser-embedding/*.tgz
             "$bundle"/LICENSE
             "$bundle"/NOTICE
             "$bundle"/THIRD_PARTY_NOTICES.md
@@ -258,7 +270,7 @@ jobs:
             target/publication-record/publication-authorization-provenance.json
             target/publication-record/publication-authorization-provenance.sha256
           )
-          test "${#assets[@]}" -ge 20
+          test "${#assets[@]}" -ge 24
           for asset in "${assets[@]}"; do
             test -f "$asset"
           done
@@ -287,7 +299,7 @@ jobs:
         run: |
           mkdir -p target/pypi
           cp target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl target/pypi/
-          test "$(find target/pypi -name '*.whl' | wc -l | tr -d ' ')" = "10"
+          test "$(find target/pypi -name '*.whl' | wc -l | tr -d ' ')" = "15"
       - name: Publish through PyPI trusted publishing
         uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
         with:
@@ -333,23 +345,40 @@ jobs:
             cd target/publication-authorization/publication-record
             sha256sum --check publication-authorization-provenance.sha256
           )
-          test "$(find "$bundle/artifacts/node" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "2"
+          test "$(find "$bundle/artifacts/node" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "3"
+          test "$(find "$bundle/artifacts/browser-embedding" -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "1"
           test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz"
           test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz"
-          test "$(jq -r '.artifacts | length' "$bundle/artifacts/node/inventory.json")" = "2"
+          test -f "$bundle/artifacts/node/gungorbasa-retrievalkit-embedding-$VERSION.tgz"
+          test -f "$bundle/artifacts/browser-embedding/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/node/inventory.json")" = "3"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/browser-embedding/inventory.json")" = "1"
           test "$(jq -r '.artifacts[] | select(.capability == "base") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit"
           test "$(jq -r '.artifacts[] | select(.capability == "graph") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit-graph"
+          test "$(jq -r '.artifacts[] | select(.capability == "embedding") | .npmName' "$bundle/artifacts/node/inventory.json")" = "@gungorbasa/retrievalkit-embedding"
+          test "$(jq -r '.artifacts[] | select(.capability == "browser-embedding") | .npmName' "$bundle/artifacts/browser-embedding/inventory.json")" = "@gungorbasa/retrievalkit-browser-embedding"
           mkdir -p target/npm
           cp "$bundle/artifacts/node/gungorbasa-retrievalkit-$VERSION.tgz" target/npm/
           cp "$bundle/artifacts/node/gungorbasa-retrievalkit-graph-$VERSION.tgz" target/npm/
-          cp "$bundle/artifacts/node/inventory.json" target/npm/authorized-inventory.json
+          cp "$bundle/artifacts/node/gungorbasa-retrievalkit-embedding-$VERSION.tgz" target/npm/
+          cp "$bundle/artifacts/browser-embedding/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz" target/npm/
+          jq --slurp \
+            '.[0] as $node | .[1] as $browser | $node | .kind = "retrievalkit-npm-release" | .artifacts = ($node.artifacts + $browser.artifacts)' \
+            "$bundle/artifacts/node/inventory.json" \
+            "$bundle/artifacts/browser-embedding/inventory.json" \
+            > target/npm/authorized-inventory.json
       - name: Require trusted-publisher bootstrap and unused version
         env:
           VERSION: "0.1.0"
         run: |
           npm config set registry https://registry.npmjs.org/
           test "$(npm --version)" = "11.6.2"
-          for package in @gungorbasa/retrievalkit @gungorbasa/retrievalkit-graph; do
+          for package in \
+            @gungorbasa/retrievalkit \
+            @gungorbasa/retrievalkit-graph \
+            @gungorbasa/retrievalkit-embedding \
+            @gungorbasa/retrievalkit-browser-embedding
+          do
             test "$(npm view "$package" name)" = "$package"
             if npm view "$package@$VERSION" version > /dev/null 2>&1; then
               echo "$package@$VERSION already exists; npm versions are immutable" >&2
@@ -368,12 +397,25 @@ jobs:
             --access public \
             --ignore-scripts \
             --provenance
+          npm publish "target/npm/gungorbasa-retrievalkit-embedding-$VERSION.tgz" \
+            --access public \
+            --ignore-scripts \
+            --provenance
+          npm publish "target/npm/gungorbasa-retrievalkit-browser-embedding-$VERSION.tgz" \
+            --access public \
+            --ignore-scripts \
+            --provenance
       - name: Verify published npm integrity and write evidence
         env:
           VERSION: "0.1.0"
         run: |
           inventory=target/npm/authorized-inventory.json
-          for package in @gungorbasa/retrievalkit @gungorbasa/retrievalkit-graph; do
+          for package in \
+            @gungorbasa/retrievalkit \
+            @gungorbasa/retrievalkit-graph \
+            @gungorbasa/retrievalkit-embedding \
+            @gungorbasa/retrievalkit-browser-embedding
+          do
             expected="$(jq -r --arg package "$package" '.artifacts[] | select(.npmName == $package) | .npmIntegrity' "$inventory")"
             actual=""
             for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -414,6 +456,8 @@ jobs:
           subject-path: |
             target/npm/gungorbasa-retrievalkit-0.1.0.tgz
             target/npm/gungorbasa-retrievalkit-graph-0.1.0.tgz
+            target/npm/gungorbasa-retrievalkit-embedding-0.1.0.tgz
+            target/npm/gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz
             target/npm/publication-evidence.json
       - name: Preserve npm publication evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -459,12 +503,12 @@ jobs:
           )
           test "$(jq -r '.group' "$bundle/artifacts/kotlin/inventory.json")" = "io.github.gungorbasa"
           test "$(jq -r '.version' "$bundle/artifacts/kotlin/inventory.json")" = "0.1.0"
-          test "$(jq -r '.artifacts | length' "$bundle/artifacts/kotlin/inventory.json")" = "4"
+          test "$(jq -r '.artifacts | length' "$bundle/artifacts/kotlin/inventory.json")" = "6"
           mkdir -p target/maven
           cp -R "$bundle/artifacts/kotlin/maven" target/maven/repository
           find target/maven/repository -type f \( -name '*.pom' -o -name '*.jar' -o -name '*.aar' \) \
             | LC_ALL=C sort > target/maven/authorized-primary-files.txt
-          test "$(wc -l < target/maven/authorized-primary-files.txt | tr -d ' ')" = "16"
+          test "$(wc -l < target/maven/authorized-primary-files.txt | tr -d ' ')" = "24"
           while IFS= read -r artifact; do
             sha256sum "$artifact"
           done < target/maven/authorized-primary-files.txt \
@@ -495,7 +539,7 @@ jobs:
                   --detach-sign \
                   "$artifact"
           done < target/maven/authorized-primary-files.txt
-          test "$(find target/maven/repository -type f -name '*.asc' | wc -l | tr -d ' ')" = "16"
+          test "$(find target/maven/repository -type f -name '*.asc' | wc -l | tr -d ' ')" = "24"
       - name: Construct signed Central Portal bundle
         run: |
           output="$GITHUB_WORKSPACE/target/maven/retrievalkit-kotlin-0.1.0-central-bundle.zip"
@@ -547,7 +591,7 @@ jobs:
               authorizationSha256: $authorizationSha256,
               group: "io.github.gungorbasa",
               version: "0.1.0",
-              signedPrimaryArtifactCount: 16,
+              signedPrimaryArtifactCount: 24,
               centralDeploymentId: $deploymentId,
               publishingType: "AUTOMATIC",
               signedBundleSha256: $bundleSha256

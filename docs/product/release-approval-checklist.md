@@ -31,12 +31,14 @@ Every item is required unless explicitly marked candidate-only.
 
 - [ ] The public graph-capable XCFramework contains arm64 macOS, iOS, and iOS
   Simulator slices.
-- [ ] Both Python distributions pass on CPython 3.10–3.14 macOS arm64.
+- [ ] All three Python distributions pass on CPython 3.10–3.14 macOS arm64.
 - [ ] The authorized npm inventory contains exactly
   `@gungorbasa/retrievalkit@0.1.0` and
-  `@gungorbasa/retrievalkit-graph@0.1.0` macOS arm64 tarballs.
-- [ ] The authorized Maven inventory contains exactly four
-  `io.github.gungorbasa` JVM/Android base/graph publications and 16 primary
+  `@gungorbasa/retrievalkit-graph@0.1.0` and
+  `@gungorbasa/retrievalkit-embedding@0.1.0` macOS arm64 tarballs, plus
+  `@gungorbasa/retrievalkit-browser-embedding@0.1.0`.
+- [ ] The authorized Maven inventory contains exactly six
+  `io.github.gungorbasa` JVM/Android base/graph/embedding publications and 24 primary
   POM/JAR/AAR files.
 - [ ] Every Swift product and the combined base-plus-graph consumer pass; the
   internal graph-neutrality and Python co-import negative tests pass.
@@ -65,13 +67,13 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] The Swift package publishes all four products from the signed revision and
   resolves only `RetrievalKitGraphFFI`.
 - [ ] Trusted PyPI publication uploads exactly the validated wheel inventory.
-- [ ] Both PyPI projects trust the public repository,
+- [ ] All three PyPI projects trust the public repository,
   `publish-release.yml`, and protected `pypi` environment; the
   `pypi_trusted_publishers_ready` dispatch gate is confirmed.
-- [ ] Both npm names were bootstrapped with a non-release version; the public
+- [ ] All four npm names were bootstrapped with a non-release version; the public
   repository, `publish-release.yml`, and protected `npm` environment are
   configured as trusted publishers; the bootstrap credential is revoked.
-- [ ] npm publication uses no registry token, uploads only the two authorized
+- [ ] npm publication uses no registry token, uploads only the four authorized
   tarballs with provenance, and the observed `dist.integrity` values equal the
   authorized inventory.
 - [ ] Central Portal verifies `io.github.gungorbasa`; the protected `maven`
@@ -80,7 +82,7 @@ Every item is required unless explicitly marked candidate-only.
   `0E82 F1A5 487A 4EF3 CCF1 ED6C 3932 66CD 4DD1 58ED`, matches
   `release/retrievalkit-release-signing-key.asc`, remains publicly retrievable,
   and has not expired or been revoked.
-- [ ] Maven publication signs the exact 16 authorized primary files without
+- [ ] Maven publication signs the exact 24 authorized primary files without
   rebuilding them, attests the signed bundle, and retains the Central
   deployment ID.
 - [ ] Fresh remote SwiftPM, PyPI, npm, Maven JVM, and Maven Android consumer

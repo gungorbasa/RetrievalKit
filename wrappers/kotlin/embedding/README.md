@@ -34,5 +34,6 @@ The JVM artifact expects the `retrievalkit_embedding_jni` native aggregate as a
 packaged macOS arm64 resource or through
 `-Dretrievalkit.embedding.native.path=/absolute/path/to/library`.
 
-The coordinates are repository-local and provisional. No Maven publication is
-implied.
+The `io.github.gungorbasa:retrievalkit-embedding` coordinate is included in the
+v0.1.0 release inventory but is not available from Maven Central until the
+protected release gates pass.

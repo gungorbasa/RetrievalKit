@@ -76,13 +76,17 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           architecture: arm64
-      - name: Build and smoke-test both distributions
+      - name: Build and smoke-test all Python distributions
         env:
           PYTHON_BIN: python
           OUTPUT_DIR: target/release-python-wheels
         run: |
+          python3 scripts/release/prepare_onnx_runtime.py macos \
+            --output target/release-onnxruntime
+          export RETRIEVALKIT_ONNX_RUNTIME_LIBRARY="$PWD/target/release-onnxruntime/libonnxruntime.1.24.3.dylib"
           scripts/release/build-python-distribution.sh retrievalkit
           scripts/release/build-python-distribution.sh retrievalkit-graph
+          scripts/release/build-python-distribution.sh retrievalkit-embedding
           base_wheel="$(find target/release-python-wheels -name 'retrievalkit-*.whl' ! -name 'retrievalkit_graph-*' -print -quit)"
           graph_wheel="$(find target/release-python-wheels -name 'retrievalkit_graph-*.whl' -print -quit)"
           scripts/release/test-python-coinstallation.sh python "$base_wheel" "$graph_wheel"
@@ -118,12 +122,18 @@ jobs:
           cache-dependency-path: wrappers/typescript/package-lock.json
       - name: Assemble closed npm tarballs
         run: |
+          python3 scripts/release/prepare_onnx_runtime.py macos \
+            --output target/release-onnxruntime
+          export RETRIEVALKIT_ONNX_RUNTIME_LIBRARY="$PWD/target/release-onnxruntime/libonnxruntime.1.24.3.dylib"
+          export RETRIEVALKIT_BUNDLE_ONNX_RUNTIME=1
+          export RETRIEVALKIT_REQUIRE_BUNDLED_ONNX_RUNTIME=1
           cd wrappers/typescript
           npm ci
           cd ../..
           python3 scripts/release/assemble_node_packages.py \
             --base-name @gungorbasa/retrievalkit \
             --graph-name @gungorbasa/retrievalkit-graph \
+            --embedding-name @gungorbasa/retrievalkit-embedding \
             --names-approved \
             --version 0.1.0 \
             --output target/release-stage/node
@@ -131,6 +141,44 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: root-${{ matrix.root }}-node
+          path: target/release-stage
+          if-no-files-found: error
+          retention-days: 180
+
+  browser-embedding:
+    name: Browser embedding package (${{ matrix.root }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [a, b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_DATE_EPOCH: "0"
+    steps:
+      - name: Check out clean root
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install Node.js 24 LTS
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: wrappers/browser-embedding/package-lock.json
+      - name: Assemble closed browser embedding tarball
+        run: |
+          cd wrappers/browser-embedding
+          npm ci
+          cd ../..
+          python3 scripts/release/assemble_browser_embedding_package.py \
+            --name @gungorbasa/retrievalkit-browser-embedding \
+            --name-approved \
+            --version 0.1.0 \
+            --output target/release-stage/browser-embedding
+      - name: Upload browser embedding candidate artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: root-${{ matrix.root }}-browser-embedding
           path: target/release-stage
           if-no-files-found: error
           retention-days: 180
@@ -143,7 +191,7 @@ jobs:
       matrix:
         root: [a, b]
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       SOURCE_DATE_EPOCH: "0"
     steps:
@@ -164,6 +212,14 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> "$GITHUB_ENV"
       - name: Assemble unsigned Maven Central bundle
         run: |
+          python3 scripts/release/prepare_onnx_runtime.py macos \
+            --output target/release-onnxruntime
+          python3 scripts/release/prepare_onnx_runtime.py android-aar \
+            --output target/onnxruntime-android-1.24.3.aar
+          export RETRIEVALKIT_ONNX_RUNTIME_LIBRARY="$PWD/target/release-onnxruntime/libonnxruntime.1.24.3.dylib"
+          export RETRIEVALKIT_ONNX_RUNTIME_LICENSE="$PWD/target/release-onnxruntime/LICENSE"
+          export RETRIEVALKIT_ONNX_RUNTIME_NOTICES="$PWD/target/release-onnxruntime/ThirdPartyNotices.txt"
+          export RETRIEVALKIT_ONNX_RUNTIME_ANDROID_AAR="$PWD/target/onnxruntime-android-1.24.3.aar"
           python3 scripts/release/assemble_kotlin_packages.py \
             --group io.github.gungorbasa \
             --version 0.1.0 \
@@ -180,7 +236,7 @@ jobs:
 
   assemble:
     name: Prove two-root reproducibility and assemble
-    needs: [apple, python, node, kotlin]
+    needs: [apple, python, node, browser-embedding, kotlin]
     runs-on: macos-15
     timeout-minutes: 30
     steps:

@@ -1,15 +1,19 @@
 # Kotlin/JVM and Android Guide
 
-RetrievalKit has separate base and graph artifacts:
+RetrievalKit has separate base and graph artifacts plus independent embedding
+artifacts:
 
 - Kotlin/JVM: `retrievalkit` and `retrievalkit-graph`.
 - Android: `retrievalkit-android` and `retrievalkit-graph-android`.
+- Embedding: `retrievalkit-embedding` for JVM and
+  `retrievalkit-embedding-android` for Android.
 
 The `io.github.gungorbasa` namespace is verified and its protected publishing
 credentials are configured, but v0.1.0 is not published. Choose exactly one
-artifact per application; the graph artifact already contains retrieval. The
-initial Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and other
-Android ABIs are not claimed.
+retrieval artifact per application; the graph artifact already contains
+retrieval, and the independent embedding artifact may accompany either choice.
+The initial Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and
+other Android ABIs are not claimed.
 
 ## Installation status
 
@@ -19,6 +23,7 @@ The eventual Gradle dependency will have this shape:
 dependencies {
     // PENDING — Central owner setup is complete; v0.1.0 is not published.
     implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")
+    implementation("io.github.gungorbasa:retrievalkit-embedding:0.1.0")
 }
 ```
 

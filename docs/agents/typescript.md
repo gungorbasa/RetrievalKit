@@ -12,8 +12,9 @@ modifying TypeScript, Node native-addon, or browser Worker code.
 - Keep base and graph-capable packages and native aggregates separate. A base
   package must neither load nor depend on graph code, and an application must
   not load both native aggregates in one process.
-- Keep registry names provisional until naming clearance. Do not claim npm
-  publication or availability.
+- The approved v0.1.0 Node registry names are
+  `@gungorbasa/retrievalkit` and `@gungorbasa/retrievalkit-graph`. Do not claim
+  npm publication or availability until the release gates pass.
 - Keep the Node and browser packages separate. The browser package binds the
   dedicated `wasm-bindgen` aggregate and must not import, emulate, or bundle the
   N-API addon. Browser/WASM was separately authorized on 2026-07-26.
@@ -112,9 +113,11 @@ modifying TypeScript, Node native-addon, or browser Worker code.
   provisional and it must not be added to Node package publication scripts.
 - Put optional browser embedding under `wrappers/browser-embedding/` with its
   own lockfile, legal notices, runtime-asset verification, tests, and package
-  content audit. It is independently distributable and remains unpublished.
-- Keep `@gungorbasa/retrievalkit-embedding` private/provisional until package
-  naming and publication are separately authorized.
+  content audit. Its approved v0.1.0 identity is
+  `@gungorbasa/retrievalkit-browser-embedding`.
+- The approved v0.1.0 Node embedding identity is
+  `@gungorbasa/retrievalkit-embedding`. Publish both embedding packages only
+  from the same closed, protected release workflow as the native Node packages.
 - Declare Apache-2.0 and include `LICENSE` and `NOTICE` in every distributable.
 - Test lifecycle, Unicode, metadata, alpha endpoints, persistence, graph
   selection, candidate projection, conformance fixtures, and package contents.

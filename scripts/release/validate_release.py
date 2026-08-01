@@ -24,6 +24,42 @@ ZERO_CHECKSUM = "0" * 64
 ACTION_PATTERN = re.compile(r"uses:\s+[^\s@]+@([0-9a-f]{40})(?:\s|$)")
 BUNDLE_LEGAL_FILES = {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}
 MAVEN_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+ONNX_MACOS_SIZE = 27_724_968
+ONNX_MACOS_SHA256 = (
+    "b65e22247d3ce2976931cfc6be3929e6fb81cd55e2f202e95e0ab8c9de5fa729"
+)
+ONNX_ANDROID_SIZE = 25_831_632
+ONNX_ANDROID_SHA256 = (
+    "4d2318b3849abb8862133d3068fc7e807ed8b2671cc6d83657fff2fcb9e1caad"
+)
+ONNX_LEGAL_IDENTITIES = {
+    "LICENSE": (
+        1_073,
+        "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+    ),
+    "ThirdPartyNotices.txt": (
+        325_054,
+        "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2",
+    ),
+}
+BROWSER_RUNTIME_IDENTITIES = {
+    "dist/runtime/ort-wasm-simd-threaded.mjs": (
+        24_180,
+        "0a1e718d99c41b22c21f2520ff4f9e883a6b5533856e398d21816ee8eb8185d3",
+    ),
+    "dist/runtime/ort-wasm-simd-threaded.wasm": (
+        13_479_978,
+        "d1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6",
+    ),
+    "dist/runtime/ort-wasm-simd-threaded.asyncify.mjs": (
+        47_507,
+        "7236653b8565da4046e459cd0e274123419a1d9f1f8f18fd36c28058346ca655",
+    ),
+    "dist/runtime/ort-wasm-simd-threaded.asyncify.wasm": (
+        24_254_953,
+        "7e83cd6cee77e478bc96a7e91b198144fb5e4126287daf1f9b54bb195ebcd55a",
+    ),
+}
 
 
 class ValidationError(RuntimeError):
@@ -60,6 +96,7 @@ def validate_python_release_metadata(repo: Path, config: dict[str, Any]) -> None
     for relative in (
         Path("wrappers/python/pyproject.toml"),
         Path("wrappers/python-graph/pyproject.toml"),
+        Path("wrappers/python-embedding/pyproject.toml"),
     ):
         text = (repo / relative).read_text(encoding="utf-8")
         project = re.search(
@@ -211,6 +248,18 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
         all(claim in spec for claim in expected_claims),
         "active product spec lacks fixed Node or Maven release identities",
     )
+    complete_spec = normalize_whitespace(spec_text)
+    embedding_claims = (
+        f'`{config["python"]["distributions"][2]}`',
+        f'`{config["node"]["packages"]["embedding"]["name"]}`',
+        f'`{config["browser_embedding"]["package"]["name"]}`',
+        "`retrievalkit-embedding-android`",
+        "Rust embedding crates remain source-only",
+    )
+    require(
+        all(claim in complete_spec for claim in embedding_claims),
+        "active product spec lacks fixed embedding release identities",
+    )
     require(
         "retrievalkit-node-local" not in spec
         and "retrievalkit-node-graph-local" not in spec
@@ -228,6 +277,8 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
             claim in blocker_text
             for claim in (
                 "public docs and source preview",
+                "retrievalkit-embedding PyPI project bootstrapped",
+                "approved embedding npm packages bootstrapped",
                 "fresh complete release candidate",
                 "wrapper onboarding qualification",
                 "Phase 7 scheduled and release gates",
@@ -264,6 +315,10 @@ def static_validation(repo: Path) -> dict[str, Any]:
     semver = r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
     require(re.fullmatch(semver, version) is not None, "VERSION is not semantic")
     require(version == "0.1.0" == config["version"], "release version mismatch")
+    require(
+        config["rust"] == {"publication": "source-only", "crates_io": False},
+        "Rust release must remain source-only",
+    )
     require(f"## {version} - Unreleased preview" in (repo / "CHANGELOG.md").read_text(), "changelog version mismatch")
     require((repo / f"docs/product/v{version}-migration.md").is_file(), "release migration guide missing")
     cargo = (repo / "Cargo.toml").read_text()
@@ -274,7 +329,11 @@ def static_validation(repo: Path) -> dict[str, Any]:
     )
     for manifest in sorted((repo / "crates").glob("*/Cargo.toml")):
         require("version.workspace = true" in manifest.read_text(), f"crate does not inherit workspace version: {manifest}")
-    for pyproject in (repo / "wrappers/python/pyproject.toml", repo / "wrappers/python-graph/pyproject.toml"):
+    for pyproject in (
+        repo / "wrappers/python/pyproject.toml",
+        repo / "wrappers/python-graph/pyproject.toml",
+        repo / "wrappers/python-embedding/pyproject.toml",
+    ):
         require(f'version = "{version}"' in pyproject.read_text(), f"Python version mismatch: {pyproject}")
     validate_python_release_metadata(repo, config)
     validate_persistence_release_contract(repo, config)
@@ -324,7 +383,11 @@ def static_validation(repo: Path) -> dict[str, Any]:
     )
     require("VERSION" in (repo / "scripts/build-xcframework.sh").read_text(), "XCFramework metadata does not read VERSION")
     require(config["python"]["implementations"] == ["cp310", "cp311", "cp312", "cp313", "cp314"], "Python release matrix changed")
-    require(config["python"]["distributions"] == ["retrievalkit", "retrievalkit-graph"], "Python distribution set changed")
+    require(
+        config["python"]["distributions"]
+        == ["retrievalkit", "retrievalkit-graph", "retrievalkit-embedding"],
+        "Python distribution set changed",
+    )
     require(
         config["node"]["packages"]
         == {
@@ -336,17 +399,44 @@ def static_validation(repo: Path) -> dict[str, Any]:
                 "name": "@gungorbasa/retrievalkit-graph",
                 "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz",
             },
+            "embedding": {
+                "name": "@gungorbasa/retrievalkit-embedding",
+                "artifact": "gungorbasa-retrievalkit-embedding-0.1.0.tgz",
+            },
         },
         "Node release identities changed",
     )
     for capability, expected_name in (
         ("base", "@gungorbasa/retrievalkit"),
         ("graph", "@gungorbasa/retrievalkit-graph"),
+        ("embedding", "@gungorbasa/retrievalkit-embedding"),
     ):
         package = load_json(repo / f"wrappers/typescript/{capability}/package.json")
         require(package["name"] == expected_name, f"Node {capability} package identity mismatch")
         require(package.get("private") is True, f"Node {capability} source package must remain private")
         require(package["version"] == version, f"Node {capability} version mismatch")
+    browser_embedding = load_json(repo / "wrappers/browser-embedding/package.json")
+    require(
+        config["browser_embedding"]
+        == {
+            "engines": "^22.13.0 || ^24.0.0",
+            "package": {
+                "name": "@gungorbasa/retrievalkit-browser-embedding",
+                "artifact": "gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz",
+            },
+        },
+        "browser embedding release identity changed",
+    )
+    require(
+        browser_embedding["name"]
+        == config["browser_embedding"]["package"]["name"],
+        "browser embedding package identity mismatch",
+    )
+    require(
+        browser_embedding.get("private") is True
+        and browser_embedding["version"] == version,
+        "browser embedding source package must remain private at the release version",
+    )
     require(
         config["kotlin"]["group"] == "io.github.gungorbasa",
         "Kotlin Maven group changed",
@@ -358,6 +448,8 @@ def static_validation(repo: Path) -> dict[str, Any]:
             "retrievalkit-graph": "jar",
             "retrievalkit-android": "aar",
             "retrievalkit-graph-android": "aar",
+            "retrievalkit-embedding": "jar",
+            "retrievalkit-embedding-android": "aar",
         },
         "Kotlin artifact identities changed",
     )
@@ -434,8 +526,14 @@ def validate_workflows(repo: Path) -> None:
     require(
         "assemble_node_packages.py" in candidate
         and "--base-name @gungorbasa/retrievalkit" in candidate
-        and "--graph-name @gungorbasa/retrievalkit-graph" in candidate,
+        and "--graph-name @gungorbasa/retrievalkit-graph" in candidate
+        and "--embedding-name @gungorbasa/retrievalkit-embedding" in candidate,
         "candidate workflow lacks the approved Node release identities",
+    )
+    require(
+        "assemble_browser_embedding_package.py" in candidate
+        and "--name @gungorbasa/retrievalkit-browser-embedding" in candidate,
+        "candidate workflow lacks the approved browser embedding identity",
     )
     require(
         "assemble_kotlin_packages.py" in candidate
@@ -479,6 +577,7 @@ def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
     pyprojects = (
         repo / "wrappers/python/pyproject.toml",
         repo / "wrappers/python-graph/pyproject.toml",
+        repo / "wrappers/python-embedding/pyproject.toml",
     )
     for pyproject in pyprojects:
         if 'license = { text = "Apache-2.0" }' not in pyproject.read_text(encoding="utf-8"):
@@ -488,7 +587,11 @@ def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
             )
     if not (repo / "THIRD_PARTY_NOTICES.md").is_file():
         blockers.append("third-party notices are absent")
-    for wrapper in ("wrappers/python", "wrappers/python-graph"):
+    for wrapper in (
+        "wrappers/python",
+        "wrappers/python-graph",
+        "wrappers/python-embedding",
+    ):
         for legal_name in ("LICENSE", "NOTICE"):
             root_file = repo / legal_name
             copy_file = repo / wrapper / legal_name
@@ -584,7 +687,15 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
     observed: set[tuple[str, str]] = set()
     for path in paths:
         name = path.name
-        normalized = "retrievalkit-graph" if name.startswith("retrievalkit_graph-") else "retrievalkit" if name.startswith("retrievalkit-") else ""
+        normalized = (
+            "retrievalkit-embedding"
+            if name.startswith("retrievalkit_embedding-")
+            else "retrievalkit-graph"
+            if name.startswith("retrievalkit_graph-")
+            else "retrievalkit"
+            if name.startswith("retrievalkit-")
+            else ""
+        )
         require(bool(normalized), f"unexpected Python wheel: {name}")
         tag = next((tag for tag in config["python"]["implementations"] if f"-{tag}-" in name), "")
         require(bool(tag), f"unexpected Python tag: {name}")
@@ -603,6 +714,40 @@ def validate_wheels(paths: list[Path], config: dict[str, Any]) -> None:
             sbom_bytes = wheel.read(sboms[0])
             require(b"path+file:///workspace/" in sbom_bytes, f"wheel SBOM lacks canonical source paths: {name}")
             require(b"path+file:///private/" not in sbom_bytes, f"wheel SBOM leaks checkout paths: {name}")
+            if normalized == "retrievalkit-embedding":
+                runtime_names = [
+                    item
+                    for item in wheel.namelist()
+                    if item.endswith(
+                        "retrievalkit_embedding/runtime/libonnxruntime.1.24.3.dylib"
+                    )
+                ]
+                require(
+                    len(runtime_names) == 1,
+                    f"embedding wheel runtime inventory mismatch: {name}",
+                )
+                runtime = wheel.read(runtime_names[0])
+                validate_macho_arm64(runtime, f"{name} ONNX Runtime")
+                require(
+                    len(runtime) == ONNX_MACOS_SIZE
+                    and hashlib.sha256(runtime).hexdigest() == ONNX_MACOS_SHA256,
+                    f"embedding wheel ONNX Runtime identity mismatch: {name}",
+                )
+                for legal_name in ONNX_LEGAL_IDENTITIES:
+                    legal = [
+                        item
+                        for item in wheel.namelist()
+                        if item.endswith(
+                            f"retrievalkit_embedding/runtime/{legal_name}"
+                        )
+                    ]
+                    require(
+                        len(legal) == 1,
+                        f"embedding wheel legal inventory mismatch: {name}",
+                    )
+                    validate_onnx_legal(
+                        wheel.read(legal[0]), legal_name, f"{name}/{legal_name}"
+                    )
     expected = {(distribution, tag) for distribution in config["python"]["distributions"] for tag in config["python"]["implementations"]}
     require(observed == expected, f"Python wheel matrix mismatch: missing={sorted(expected - observed)}, extra={sorted(observed - expected)}")
 
@@ -666,6 +811,14 @@ def validate_elf_arm64(data: bytes, label: str) -> None:
     )
 
 
+def validate_onnx_legal(data: bytes, source_name: str, label: str) -> None:
+    size, sha256 = ONNX_LEGAL_IDENTITIES[source_name]
+    require(
+        len(data) == size and hashlib.sha256(data).hexdigest() == sha256,
+        f"ONNX Runtime legal identity mismatch: {label}",
+    )
+
+
 def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
     expected_names = {
         capability: row["artifact"]
@@ -711,23 +864,55 @@ def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
                 for member in members
                 if member.isfile()
             }
+            native_name = (
+                "native/retrievalkit-embedding.node"
+                if capability == "embedding"
+                else "native/retrievalkit.node"
+            )
+            required = {
+                "LICENSE",
+                "NOTICE",
+                "README.md",
+                "dist/index.js",
+                "dist/index.d.ts",
+                native_name,
+                "package.json",
+            }
+            if capability == "embedding":
+                required |= {
+                    "runtime/libonnxruntime.1.24.3.dylib",
+                    "runtime/ONNX-Runtime-LICENSE",
+                    "runtime/ONNX-Runtime-ThirdPartyNotices.txt",
+                }
             require(
-                {
-                    "LICENSE",
-                    "NOTICE",
-                    "README.md",
-                    "dist/index.js",
-                    "dist/index.d.ts",
-                    "native/retrievalkit.node",
-                    "package.json",
-                }.issubset(names),
+                required.issubset(names),
                 f"Node package contents incomplete: {artifact_name}",
             )
             package_file = archive.extractfile("package/package.json")
-            native_file = archive.extractfile("package/native/retrievalkit.node")
+            native_file = archive.extractfile(f"package/{native_name}")
             require(package_file is not None and native_file is not None, f"Node package payload unreadable: {artifact_name}")
             package = json.load(package_file)
             native = native_file.read()
+            runtime = None
+            runtime_legal: dict[str, bytes] = {}
+            if capability == "embedding":
+                runtime_file = archive.extractfile(
+                    "package/runtime/libonnxruntime.1.24.3.dylib"
+                )
+                require(runtime_file is not None, "Node embedding runtime is unreadable")
+                runtime = runtime_file.read()
+                for packaged_name, source_name in (
+                    ("ONNX-Runtime-LICENSE", "LICENSE"),
+                    ("ONNX-Runtime-ThirdPartyNotices.txt", "ThirdPartyNotices.txt"),
+                ):
+                    legal_file = archive.extractfile(
+                        f"package/runtime/{packaged_name}"
+                    )
+                    require(
+                        legal_file is not None,
+                        f"Node embedding legal file is unreadable: {packaged_name}",
+                    )
+                    runtime_legal[source_name] = legal_file.read()
         require(set(row["files"]) == names, f"Node {capability} file inventory mismatch")
         require(
             row["sha512"] == hashlib.sha512(path.read_bytes()).hexdigest(),
@@ -742,6 +927,18 @@ def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
             f"Node package target mismatch: {artifact_name}",
         )
         validate_macho_arm64(native, artifact_name)
+        if capability == "embedding":
+            assert runtime is not None
+            validate_macho_arm64(runtime, f"{artifact_name} ONNX Runtime")
+            require(
+                len(runtime) == ONNX_MACOS_SIZE
+                and hashlib.sha256(runtime).hexdigest() == ONNX_MACOS_SHA256,
+                "Node embedding ONNX Runtime identity mismatch",
+            )
+            for source_name, data in runtime_legal.items():
+                validate_onnx_legal(
+                    data, source_name, f"{artifact_name}/{source_name}"
+                )
         if capability == "base":
             require(
                 not any(
@@ -757,6 +954,100 @@ def validate_node_packages(root: Path, config: dict[str, Any]) -> None:
     package_files = {path.name: path for path in tarballs.values()}
     validate_checksum_manifest(root / "SHA256SUMS", package_files, "sha256")
     validate_checksum_manifest(root / "SHA512SUMS", package_files, "sha512")
+
+
+def validate_browser_embedding_package(root: Path, config: dict[str, Any]) -> None:
+    package_config = config["browser_embedding"]["package"]
+    tarballs = list(root.glob("*.tgz"))
+    require(
+        [path.name for path in tarballs] == [package_config["artifact"]],
+        "browser embedding tarball inventory mismatch",
+    )
+    tarball = tarballs[0]
+    inventory = load_json(root / "inventory.json")
+    require(
+        inventory["kind"] == "retrievalkit-browser-embedding-release"
+        and inventory["artifactReady"] is True
+        and inventory["publicationReady"] is False,
+        "browser embedding inventory readiness mismatch",
+    )
+    require(len(inventory["artifacts"]) == 1, "browser embedding inventory mismatch")
+    row = inventory["artifacts"][0]
+    require(
+        row["capability"] == "browser-embedding"
+        and row["npmName"] == package_config["name"]
+        and row["file"] == package_config["artifact"]
+        and row["version"] == config["version"]
+        and row["runtime"] == "browser-worker"
+        and row["sha256"] == digest(tarball),
+        "browser embedding artifact identity mismatch",
+    )
+    with tarfile.open(tarball, "r:gz") as archive:
+        members = archive.getmembers()
+        require(
+            all(
+                member.name.startswith("package/")
+                and ".." not in Path(member.name).parts
+                and not member.issym()
+                and not member.islnk()
+                for member in members
+            ),
+            "unsafe browser embedding archive inventory",
+        )
+        names = {
+            member.name.removeprefix("package/")
+            for member in members
+            if member.isfile()
+        }
+        required = {
+            "LICENSE",
+            "NOTICE",
+            "README.md",
+            "THIRD_PARTY_NOTICES.md",
+            "package.json",
+            "dist/index.js",
+            "dist/index.d.ts",
+            "dist/worker.js",
+            "dist/worker.d.ts",
+            "dist/runtime/ONNXRUNTIME-LICENSE",
+            "dist/runtime/ONNXRUNTIME-ThirdPartyNotices.txt",
+            "dist/runtime/HUGGINGFACE-TOKENIZERS-LICENSE",
+            *BROWSER_RUNTIME_IDENTITIES,
+        }
+        require(required.issubset(names), "browser embedding package contents incomplete")
+        require(
+            not any(name.endswith(".node") for name in names),
+            "browser embedding package contains native Node code",
+        )
+        package_file = archive.extractfile("package/package.json")
+        require(package_file is not None, "browser embedding package.json is unreadable")
+        package = json.load(package_file)
+        for name, (size, sha256) in BROWSER_RUNTIME_IDENTITIES.items():
+            runtime_file = archive.extractfile(f"package/{name}")
+            require(runtime_file is not None, f"browser runtime is unreadable: {name}")
+            data = runtime_file.read()
+            require(
+                len(data) == size and hashlib.sha256(data).hexdigest() == sha256,
+                f"browser runtime identity mismatch: {name}",
+            )
+    require(set(row["files"]) == names, "browser embedding file inventory mismatch")
+    require(
+        row["sha512"] == hashlib.sha512(tarball.read_bytes()).hexdigest(),
+        "browser embedding SHA-512 inventory mismatch",
+    )
+    require(
+        package["name"] == package_config["name"]
+        and package["version"] == config["version"]
+        and "private" not in package
+        and package["license"] == "Apache-2.0",
+        "browser embedding package metadata mismatch",
+    )
+    validate_checksum_manifest(
+        root / "SHA256SUMS", {tarball.name: tarball}, "sha256"
+    )
+    validate_checksum_manifest(
+        root / "SHA512SUMS", {tarball.name: tarball}, "sha512"
+    )
 
 
 def validate_maven_pom(
@@ -796,6 +1087,14 @@ def validate_kotlin_primary(path: Path, capability: str, packaging: str) -> None
         if packaging == "jar":
             require({"LICENSE", "NOTICE"}.issubset(names), f"Kotlin legal files missing: {path.name}")
             classes = names
+            legal_payloads = {
+                name: archive.read(name)
+                for name in (
+                    "ONNX-Runtime-LICENSE",
+                    "ONNX-Runtime-ThirdPartyNotices.txt",
+                )
+                if name in names
+            }
             base_native = "native/macos-aarch64/libretrievalkit_jni.dylib"
             graph_native = "native/macos-aarch64/libretrievalkit_jni_graph.dylib"
             native_reader = archive.read
@@ -803,10 +1102,75 @@ def validate_kotlin_primary(path: Path, capability: str, packaging: str) -> None
             classes_bytes = archive.read("classes.jar")
             with zipfile.ZipFile(io.BytesIO(classes_bytes)) as classes_archive:
                 classes = set(classes_archive.namelist())
+                legal_payloads = {
+                    name: classes_archive.read(name)
+                    for name in (
+                        "ONNX-Runtime-LICENSE",
+                        "ONNX-Runtime-ThirdPartyNotices.txt",
+                    )
+                    if name in classes
+                }
             require({"LICENSE", "NOTICE"}.issubset(classes), f"Android legal files missing: {path.name}")
             base_native = "jni/arm64-v8a/libretrievalkit_jni.so"
             graph_native = "jni/arm64-v8a/libretrievalkit_jni_graph.so"
             native_reader = archive.read
+        if capability.endswith("embedding"):
+            require(
+                {
+                    "ONNX-Runtime-LICENSE",
+                    "ONNX-Runtime-ThirdPartyNotices.txt",
+                    "runtime-identity.txt",
+                }.issubset(classes),
+                f"Kotlin embedding legal/runtime metadata missing: {path.name}",
+            )
+            validate_onnx_legal(
+                legal_payloads["ONNX-Runtime-LICENSE"],
+                "LICENSE",
+                f"{path.name}/ONNX-Runtime-LICENSE",
+            )
+            validate_onnx_legal(
+                legal_payloads["ONNX-Runtime-ThirdPartyNotices.txt"],
+                "ThirdPartyNotices.txt",
+                f"{path.name}/ONNX-Runtime-ThirdPartyNotices.txt",
+            )
+            if packaging == "jar":
+                embedding_native = (
+                    "native/macos-aarch64/libretrievalkit_embedding_jni.dylib"
+                )
+                runtime_name = "native/macos-aarch64/libonnxruntime.1.24.3.dylib"
+            else:
+                embedding_native = "jni/arm64-v8a/libretrievalkit_embedding_jni.so"
+                runtime_name = "jni/arm64-v8a/libonnxruntime.so"
+            require(
+                embedding_native in names and runtime_name in names,
+                f"Kotlin embedding native inventory mismatch: {path.name}",
+            )
+            require(
+                not any(
+                    "RetrievalDatabase" in name or "GraphDatabase" in name
+                    for name in classes
+                ),
+                f"Kotlin embedding class isolation mismatch: {path.name}",
+            )
+            native = native_reader(embedding_native)
+            runtime = native_reader(runtime_name)
+            if packaging == "jar":
+                validate_macho_arm64(native, path.name)
+                validate_macho_arm64(runtime, f"{path.name} ONNX Runtime")
+                require(
+                    len(runtime) == ONNX_MACOS_SIZE
+                    and hashlib.sha256(runtime).hexdigest() == ONNX_MACOS_SHA256,
+                    f"Kotlin embedding macOS runtime mismatch: {path.name}",
+                )
+            else:
+                validate_elf_arm64(native, path.name)
+                validate_elf_arm64(runtime, f"{path.name} ONNX Runtime")
+                require(
+                    len(runtime) == ONNX_ANDROID_SIZE
+                    and hashlib.sha256(runtime).hexdigest() == ONNX_ANDROID_SHA256,
+                    f"Kotlin embedding Android runtime mismatch: {path.name}",
+                )
+            return
         graph = capability.endswith("graph")
         expected_native = graph_native if graph else base_native
         excluded_native = base_native if graph else graph_native
@@ -978,6 +1342,9 @@ def bundle_validation(repo: Path, bundle: Path) -> dict[str, Any]:
         validate_xcframework_archive(path, config["version"], config["apple"]["artifacts"][path.name]["swiftpm_checksum"])
     validate_wheels(list((bundle / "artifacts").glob("*.whl")), config)
     validate_node_packages(bundle / "artifacts/node", config)
+    validate_browser_embedding_package(
+        bundle / "artifacts/browser-embedding", config
+    )
     validate_kotlin_packages(bundle / "artifacts/kotlin", config)
     sbom = load_json(bundle / "sbom.spdx.json")
     require(sbom["spdxVersion"] == "SPDX-2.3" and sbom["packages"], "SBOM is missing package inventory")

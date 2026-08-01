@@ -6,6 +6,13 @@ All notable user-facing changes and persistence migrations are recorded here.
 
 ### Added
 
+- Optional v0.1.0 embedding packages for Python
+  (`retrievalkit-embedding`), Node
+  (`@gungorbasa/retrievalkit-embedding`), browser Workers
+  (`@gungorbasa/retrievalkit-browser-embedding`), Kotlin/JVM
+  (`io.github.gungorbasa:retrievalkit-embedding`), and Android arm64-v8a
+  (`io.github.gungorbasa:retrievalkit-embedding-android`). Rust embedding
+  crates remain source-only.
 - TypeScript/Node base and graph aggregates for Node.js LTS on macOS arm64,
   selected for publication as `@gungorbasa/retrievalkit` and
   `@gungorbasa/retrievalkit-graph` after npm rejected the equivalent unscoped

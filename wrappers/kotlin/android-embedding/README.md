@@ -20,5 +20,7 @@ build/generated/jniLibs/arm64-v8a/libretrievalkit_embedding_jni.so
 ```
 
 Run `inspectEmbeddingAar` after producing the native aggregate to verify the
-ABI, legal resources, and retrieval/graph exclusion. Coordinates remain
-repository-local and provisional; this module does not authorize publication.
+ABI, legal resources, and retrieval/graph exclusion. The
+`io.github.gungorbasa:retrievalkit-embedding-android` coordinate is included in
+the v0.1.0 release inventory but is not available from Maven Central until the
+protected release gates pass.

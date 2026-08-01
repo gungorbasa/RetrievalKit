@@ -1,7 +1,7 @@
 # RetrievalKit Embedding for Node.js
 
-`@gungorbasa/retrievalkit-embedding` is RetrievalKit's optional, provisional
-Node.js embedding package. It produces local FP32 MiniLM embeddings through the
+`@gungorbasa/retrievalkit-embedding` is RetrievalKit's optional Node.js
+embedding package. It produces local FP32 MiniLM embeddings through the
 official ONNX Runtime 1.24.3 without adding embedding dependencies to the base
 retrieval package.
 
@@ -39,5 +39,5 @@ Only the qualified runtime with exact size 27,724,968 bytes and SHA-256
 is accepted for package-local discovery. The binary is not stored in this
 repository.
 
-The package is not published. Use only the repository-local package until its
-registry name and release metadata are finalized.
+The package is included in the v0.1.0 release inventory but is not available
+from npm until the protected release gates pass.

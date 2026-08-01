@@ -5,31 +5,39 @@ The selected npm identities are:
 - `@gungorbasa/retrievalkit` for retrieval without graph state.
 - `@gungorbasa/retrievalkit-graph` for graph-only and combined graph/retrieval
   applications.
+- `@gungorbasa/retrievalkit-embedding` for the independent Node local
+  embedding provider.
 
 The equivalent unscoped base name was rejected by npm as too similar to an
-existing package, so both Node packages use the release owner's public scope.
-Both scoped names have bootstrap-only placeholder versions and GitHub trusted
-publishers configured. Those placeholders are not SDK releases; v0.1.0 remains
+existing package, so every Node package uses the release owner's public scope.
+The base and graph names have bootstrap-only placeholder versions and GitHub
+trusted publishers configured; the embedding name still requires the same
+one-time setup. Those placeholders are not SDK releases; v0.1.0 remains
 unpublished. From source or after the real release, install or load exactly one
-package in a process. The graph package already contains retrieval capability,
-and its loader rejects mixing native aggregates. A separate
+retrieval package in a process. The independent embedding package may accompany
+it. The graph package already contains retrieval capability, and its loader
+rejects mixing retrieval native aggregates. A separate
 capability-separated browser/WebAssembly runtime is implemented under
 `wrappers/browser`, with an independent embedding provider under
-`wrappers/browser-embedding`. They remain unpublished and are not Node.js
-fallbacks or covered by this Node.js guide.
+`wrappers/browser-embedding`. The embedding provider's approved identity is
+`@gungorbasa/retrievalkit-browser-embedding`; neither browser package is a
+Node.js fallback, and browser retrieval remains outside this Node.js guide.
 
 ## Installation status
 
 The eventual shortest install will be:
 
 ```bash
-# PENDING — bootstrap placeholder only; v0.1.0 is not published.
+# PENDING — v0.1.0 is unpublished; these commands describe the approved release.
 npm install @gungorbasa/retrievalkit-graph
+# Optional independent local embedding provider:
+npm install @gungorbasa/retrievalkit-embedding
 ```
 
 Choose `@gungorbasa/retrievalkit-graph` when relationships matter; it already
 includes retrieval. Choose `@gungorbasa/retrievalkit` for a flat corpus.
-Install exactly one native aggregate in a process.
+Install exactly one retrieval native aggregate in a process; the independent
+embedding aggregate may accompany it.
 
 The available route is the repository source build:
 
@@ -42,10 +50,10 @@ node graph/examples/graph-retrieval.mjs
 ```
 
 The initial qualified target is macOS arm64 with Node.js 22.13+ LTS or Node.js
-24 LTS. Browser qualification is recorded separately and does not create a
-published browser package or release compatibility commitment; Windows, Linux,
-and other native architectures are also not claimed. The reserved package
-names and bootstrap placeholders are not SDK availability claims.
+24 LTS. Browser embedding qualification is recorded separately and joins the
+v0.1.0 release inventory; browser retrieval remains unpublished. Windows,
+Linux, and other native architectures are also not claimed. The reserved
+package names and bootstrap placeholders are not SDK availability claims.
 
 ## Retrieval-only quickstart
 

@@ -41,6 +41,20 @@ def find_jdk17() -> Path | None:
 
 
 JDK17 = find_jdk17()
+GENERATED_NATIVE_INPUTS = (
+    ASSEMBLER.KOTLIN_ROOT
+    / "base/build/generated/resources/native/macos-aarch64/libretrievalkit_jni.dylib",
+    ASSEMBLER.KOTLIN_ROOT
+    / "graph/build/generated/resources/native/macos-aarch64/libretrievalkit_jni_graph.dylib",
+    ASSEMBLER.KOTLIN_ROOT
+    / "embedding/build/generated/resources/native/macos-aarch64/libretrievalkit_embedding_jni.dylib",
+    ASSEMBLER.KOTLIN_ROOT
+    / "android-base/build/generated/jniLibs/arm64-v8a/libretrievalkit_jni.so",
+    ASSEMBLER.KOTLIN_ROOT
+    / "android-graph/build/generated/jniLibs/arm64-v8a/libretrievalkit_jni_graph.so",
+    ASSEMBLER.KOTLIN_ROOT
+    / "android-embedding/build/generated/jniLibs/arm64-v8a/libretrievalkit_embedding_jni.so",
+)
 
 
 class KotlinPackageAssemblyTests(unittest.TestCase):
@@ -68,8 +82,9 @@ class KotlinPackageAssemblyTests(unittest.TestCase):
     @unittest.skipUnless(
         JDK17 is not None
         and ASSEMBLER.platform.system() == "Darwin"
-        and ASSEMBLER.platform.machine() in {"arm64", "aarch64"},
-        "JDK 17 plus the macOS arm64 release host are required",
+        and ASSEMBLER.platform.machine() in {"arm64", "aarch64"}
+        and all(path.is_file() for path in GENERATED_NATIVE_INPUTS),
+        "JDK 17 plus prebuilt macOS/Android release inputs are required",
     )
     def test_maven_layout_is_deterministic_and_capability_isolated(self) -> None:
         assert JDK17 is not None
@@ -87,7 +102,7 @@ class KotlinPackageAssemblyTests(unittest.TestCase):
 
             self.assertEqual(first_inventory, second_inventory)
             self.assertFalse(first_inventory["publicationReady"])
-            self.assertEqual(len(first_inventory["artifacts"]), 4)
+            self.assertEqual(len(first_inventory["artifacts"]), 6)
             self.assertEqual(
                 (first / "SHA256SUMS").read_bytes(),
                 (second / "SHA256SUMS").read_bytes(),

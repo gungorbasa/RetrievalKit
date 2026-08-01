@@ -1,15 +1,18 @@
 # RetrievalKit for Node.js
 
-This directory contains two owner-approved packages:
+This directory contains three owner-approved packages:
 
 - `@gungorbasa/retrievalkit`: retrieval-only native aggregate.
 - `@gungorbasa/retrievalkit-graph`: graph-only and combined graph/retrieval
   native aggregate.
+- `@gungorbasa/retrievalkit-embedding`: independent local FP32 MiniLM
+  embedding provider.
 
 The initial implemented native target is Node.js LTS on macOS arm64. The
 separate browser/WebAssembly runtime and browser embedding provider live at
 `wrappers/browser` and `wrappers/browser-embedding`; they do not load these
-N-API packages and remain unpublished. Other native operating systems and
+N-API packages. Browser embedding joins the v0.1.0 release inventory; browser
+retrieval remains unpublished. Other native operating systems and
 public npm distribution are not claimed. All checked-in Node package manifests
 remain private until closed release assembly.
 
@@ -61,26 +64,27 @@ API examples and lifecycle details.
 ## Assemble npm release tarballs
 
 The checked-in package names remain private placeholders to prevent accidental
-publication. Release assembly therefore requires two names whose ownership has
-already been approved in npm; it never guesses or reserves names:
+publication. Release assembly therefore requires three names approved by the
+owner; it never guesses or reserves names:
 
 ```bash
 python3 ../../scripts/release/assemble_node_packages.py \
   --base-name @gungorbasa/retrievalkit \
   --graph-name @gungorbasa/retrievalkit-graph \
+  --embedding-name @gungorbasa/retrievalkit-embedding \
   --names-approved \
   --version 0.1.0 \
   --output ../../dist/release/node
 ```
 
-The assembler builds both native aggregates and TypeScript distributions,
+The assembler builds all three native aggregates and TypeScript distributions,
 checks the graph-free base dependency tree and Mach-O architecture, rewrites
-only staged package metadata, and runs `npm pack`. It emits two macOS arm64
+only staged package metadata, and runs `npm pack`. It emits three macOS arm64
 tarballs plus `inventory.json`, `SHA256SUMS`, and `SHA512SUMS`. The source
 packages retain `"private": true`; only the verified staged tarballs remove the
 publication blocker.
 
-`--names-approved` records the explicit owner assertion for these two fixed
+`--names-approved` records the explicit owner assertion for these three fixed
 identities. The assembler rejects alternative names and fails before changing
 staged metadata when the assertion is absent.
 

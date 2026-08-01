@@ -73,19 +73,22 @@ implemented, or superseded by the product spec.
   `@gungorbasa/retrievalkit` and `@gungorbasa/retrievalkit-graph`; the Maven
   group remains `io.github.gungorbasa`. Checked-in Node packages remain private
   to prevent an accidental workspace publish, while fail-closed assemblers
-  require exactly those selected public identities. The two-root candidate
-  workflow now builds,
-  inspects, and byte-compares isolated base/graph artifacts for macOS arm64
-  Node/JVM and Android arm64-v8a and integrates them into the same closed
-  Swift/Python/Node/Kotlin bundle. Protected publication jobs consume those
-  exact bytes: npm uses OIDC trusted publishing with provenance, and Maven signs
-  the 16 authorized primary artifacts before Central Portal upload. On
+  require exactly the selected public identities. The two-root candidate
+  workflow now builds, inspects, and byte-compares isolated base, graph, and
+  embedding artifacts for the supported Python, Node/browser, JVM, and Android
+  targets and integrates them into the same closed Swift/Python/Node/Kotlin
+  bundle. Protected publication jobs consume those exact bytes: npm uses OIDC
+  trusted publishing with provenance, and Maven signs the 24 authorized primary
+  artifacts before Central Portal upload. On
   2026-07-26 both scoped npm names received the reviewed non-release
   `0.0.0-bootstrap.0` placeholder and were configured to trust
   `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected `npm`
   environment. The local npm bootstrap credential was removed afterward.
   Both public records resolve anonymously. These placeholders are name
   reservations, not v0.1.0 SDK releases.
+  `@gungorbasa/retrievalkit-embedding` and
+  `@gungorbasa/retrievalkit-browser-embedding` still require the same one-time
+  bootstrap and trusted-publisher setup before release publication.
 - 2026-07-26 PyPI owner setup: `retrievalkit` and `retrievalkit-graph` each
   received a reviewed non-SDK `0.0.0a0` placeholder. Both projects now trust
   only `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected
@@ -94,6 +97,8 @@ implemented, or superseded by the product spec.
   uncreated project names; those temporary publishers and workflows were
   removed after both projects existed. Both public records resolve
   anonymously, and v0.1.0 remains unused.
+  `retrievalkit-embedding` still requires the same one-time bootstrap and
+  trusted-publisher setup before release publication.
 - 2026-07-26 Maven Central owner setup: the automatically provisioned
   `io.github.gungorbasa` namespace is verified. A six-month Portal user token
   named `RetrievalKit GitHub Actions` is installed as
@@ -1042,10 +1047,13 @@ Verification completed without benchmark workloads:
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing
 identity, Central namespace, and Portal token are configured. Registry-owner
-setup is complete:
+setup for the base/graph identities is complete; the embedding PyPI/npm
+identities added on 2026-07-31 still require one-time bootstrap and trusted
+publisher configuration:
 
-1. re-verify both npm and PyPI bootstrap records and their exact
-   trusted-publisher configuration immediately before publication dispatch;
+1. bootstrap the approved embedding PyPI/npm identities, configure their exact
+   trusted publishers, remove temporary credentials, and then re-verify all
+   registry records immediately before publication dispatch;
 2. re-verify the Central namespace, published signing key, and five protected
    Maven secrets immediately before publication dispatch;
 3. resume only when the owner explicitly authorizes the signed-tag and
@@ -1332,7 +1340,7 @@ Optional post-release work, ordered by evidence need:
 
 ## 2026-07-27 Production Browser Embedding
 
-- Browser FP32 MiniLM embedding now lives in the independent, unpublished
+- Browser FP32 MiniLM embedding lives in the independent
   `wrappers/browser-embedding` package. It imports neither browser retrieval,
   Node N-API, nor Rust retrieval code. A dedicated module Worker owns verified
   acquisition, tokenization, ONNX Runtime Web session creation/warmup, FIFO
@@ -1529,10 +1537,23 @@ Optional post-release work, ordered by evidence need:
   remaining risks are in
   `docs/product/reports/kotlin-embedding-production-implementation-qualification-2026-07-27.md`.
 
-## External Naming Risk
+## External Naming Decision
 
-- 2026-07-25: an unrelated `retrieval-kit` crate was published on crates.io on
-  2026-04-27. It describes a Rust library for local document ingestion, vector
-  search, and keyword search, so the overlap is close enough to require
-  package-name and trademark clearance before RetrievalKit is publicly
-  released. Exact-match domain availability does not resolve this collision.
+- 2026-07-31: after considering the unrelated `retrieval-kit` crate published
+  on crates.io on 2026-04-27, the owner decided to keep the product name
+  `RetrievalKit` and proceed. This is an owner decision, not evidence that
+  outside legal counsel performed trademark clearance, and the known naming
+  overlap remains a risk accepted by the owner rather than an unresolved
+  release blocker. The approved registry identities remain PyPI `retrievalkit`
+  and `retrievalkit-graph`, npm `@gungorbasa/retrievalkit` and
+  `@gungorbasa/retrievalkit-graph`, and Maven `io.github.gungorbasa`.
+
+- 2026-07-31 embedding release decision: v0.1.0 also publishes the existing
+  optional embedding integrations for every supported wrapper target. The
+  approved identities are PyPI `retrievalkit-embedding`, npm
+  `@gungorbasa/retrievalkit-embedding` and
+  `@gungorbasa/retrievalkit-browser-embedding`, and Maven
+  `io.github.gungorbasa:retrievalkit-embedding` and
+  `io.github.gungorbasa:retrievalkit-embedding-android`. Swift continues to
+  expose `EmbeddingKit` inside the unified `RetrievalKit` package. Rust
+  embedding crates remain source-only and are not published to crates.io.

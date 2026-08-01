@@ -17,8 +17,10 @@ JNI, Gradle, or Android packaging code.
 - Keep base and graph-capable Gradle modules and native aggregates separate.
   The base artifact must exclude graph code, and an application must not load
   both native aggregates in one process.
-- Maven coordinates are repository-local and provisional until naming
-  clearance. Do not claim public Maven availability.
+- The approved Maven group is `io.github.gungorbasa`. The v0.1.0 embedding
+  artifacts are `retrievalkit-embedding` and
+  `retrievalkit-embedding-android`; publish them only from the same closed,
+  protected release workflow as the retrieval artifacts.
 - Do not claim Kotlin Multiplatform support until separately authorized.
 
 ## Public API

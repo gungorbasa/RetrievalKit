@@ -8,13 +8,17 @@ and accompanied by migration guidance.
 
 - Rust core and C ABI: exact behavior is revisioned with each release.
 - Swift: Swift 6.2, iOS 15+, and macOS 14+ on the published arm64 Apple slices.
-- Python: CPython 3.10–3.14 on macOS arm64 for the first preview.
+- Python: CPython 3.10–3.14 on macOS arm64 for the first preview, including the
+  optional `retrievalkit-embedding` distribution.
 - TypeScript: Node.js LTS on macOS arm64 for the first preview. The separate
-  browser/WebAssembly and browser-embedding packages are implemented and
-  internally qualified but remain unpublished and outside this release
+  `@gungorbasa/retrievalkit-embedding` native package and
+  `@gungorbasa/retrievalkit-browser-embedding` Worker package are included.
+  The browser retrieval package remains unpublished and outside this release
   compatibility surface.
 - Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
-  preview. Kotlin Multiplatform is not supported.
+  preview, including the optional `retrievalkit-embedding` JVM and
+  `retrievalkit-embedding-android` artifacts. Kotlin Multiplatform is not
+  supported.
 - Persistence: V1–V4 base snapshots remain readable; new saves use the current
   checksummed V4 format. Graph capability formats are validated independently.
 

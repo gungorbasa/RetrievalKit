@@ -1,6 +1,6 @@
 # Third-party notices
 
-This provisional package depends on:
+This package depends on:
 
 - `onnxruntime-web` 1.27.0, licensed under MIT. Its complete license and
   generated third-party notices are distributed as

@@ -1,10 +1,12 @@
 # RetrievalKit v0.1.0 release process
 
 Status: release-candidate and runtime authorization implementation complete.
-The public repository, protected GitHub environments, npm and PyPI bootstrap
-packages, npm and PyPI trusted publishers, and Maven signing identity are
+The public repository, protected GitHub environments, base/graph npm and PyPI
+bootstrap packages, their trusted publishers, and Maven signing identity are
 configured. The Maven Central namespace and protected user token are also
-configured. v0.1.0 publication remains blocked on the signed tag and release
+configured. The new embedding PyPI/npm identities require the same one-time
+bootstrap and trusted-publisher setup before publication dispatch. v0.1.0
+publication remains blocked on that setup, the signed tag, and the release
 evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
@@ -13,25 +15,40 @@ separate base and graph native aggregates because loading both into one process
 is unsupported. Swift publishes one graph-capable aggregate containing both
 native capability surfaces.
 
-The approved npm package names are `@gungorbasa/retrievalkit` and
-`@gungorbasa/retrievalkit-graph`. npm rejected the equivalent unscoped base
-name as too similar to an existing package, so both Node packages use one
-consistent owner scope. The approved Maven group is
-`io.github.gungorbasa`. The npm names were bootstrapped and connected to the
-protected GitHub publication workflow on 2026-07-26. Both PyPI names were also
-bootstrapped and connected to that workflow on 2026-07-26. The
+The approved npm package names are `@gungorbasa/retrievalkit`,
+`@gungorbasa/retrievalkit-graph`, `@gungorbasa/retrievalkit-embedding`, and
+`@gungorbasa/retrievalkit-browser-embedding`. npm rejected the equivalent
+unscoped base name as too similar to an existing package, so every npm package
+uses one consistent owner scope. The approved Maven group is
+`io.github.gungorbasa`. The base and graph npm names were bootstrapped and
+connected to the protected GitHub publication workflow on 2026-07-26. The base
+and graph PyPI names were also bootstrapped and connected to that workflow on
+2026-07-26. The
 `io.github.gungorbasa` Central namespace was verified and its protected
 credentials were installed on 2026-07-26. The signed tag and provisioned
 release evidence remain fail-closed external prerequisites.
 
+On 2026-07-31, the owner decided to keep the product name `RetrievalKit` after
+considering the unrelated `retrieval-kit` crate. This owner decision resolves
+naming as a release blocker; it is not a claim that outside legal counsel
+performed trademark clearance. The approved registry identities remain PyPI
+`retrievalkit`, `retrievalkit-graph`, and `retrievalkit-embedding`; npm
+`@gungorbasa/retrievalkit`, `@gungorbasa/retrievalkit-graph`,
+`@gungorbasa/retrievalkit-embedding`, and
+`@gungorbasa/retrievalkit-browser-embedding`; and Maven
+`io.github.gungorbasa`. Rust crates remain source-only.
+
 ## Release contents
 
 - `RetrievalKitGraphFFI.xcframework.zip` for all public Swift products.
-- macOS arm64 `retrievalkit` and `retrievalkit-graph` wheels for CPython 3.10–3.14.
-- macOS arm64 npm tarballs for `@gungorbasa/retrievalkit` and
-  `@gungorbasa/retrievalkit-graph`.
-- Maven publications under `io.github.gungorbasa` for JVM base/graph and
-  Android base/graph, limited to the targets declared in their package metadata.
+- macOS arm64 `retrievalkit`, `retrievalkit-graph`, and
+  `retrievalkit-embedding` wheels for CPython 3.10–3.14.
+- macOS arm64 npm tarballs for `@gungorbasa/retrievalkit`,
+  `@gungorbasa/retrievalkit-graph`, and
+  `@gungorbasa/retrievalkit-embedding`, plus the platform-independent
+  `@gungorbasa/retrievalkit-browser-embedding` Worker package.
+- Maven publications under `io.github.gungorbasa` for JVM/Android base, graph,
+  and embedding packages, limited to the targets declared in their metadata.
 - SHA-256 inventory, SwiftPM checksums, SPDX 2.3 SBOM, and in-toto/SLSA-style
   provenance subjects.
 - Apache-2.0 `LICENSE` and the RetrievalKit company `NOTICE`.
@@ -53,11 +70,11 @@ part of the public Swift release.
 2. Run Phase 7 PR gates and Phase 6/README claim validation.
 3. Build the three-slice arm64 graph-capable XCFramework and canonical zip
    archive; separately run the internal graph-neutrality qualification.
-4. Build both wheel distributions for each CPython 3.10–3.14 interpreter.
-5. Build and inspect the two approved npm tarballs and the four unsigned Maven
+4. Build all three wheel distributions for each CPython 3.10–3.14 interpreter.
+5. Build and inspect the four approved npm tarballs and the six unsigned Maven
    publications.
 6. Smoke-test every Swift product and a combined base-plus-graph consumer,
-   every Python artifact, both npm tarballs, and all JVM/Android publications
+   every Python artifact, all npm tarballs, and all JVM/Android publications
    in fresh consumer environments.
 7. Assemble the closed release bundle with checksums, SBOM, and provenance.
 8. Repeat from a second clean root and compare every byte.
@@ -70,24 +87,36 @@ without publishing. It never invokes a physical-device command.
 ## Node and Kotlin candidate construction
 
 The Node assembler requires the approved npm names and an explicit
-`--names-approved` assertion. It builds and inspects separate macOS arm64 base
-and graph tarballs, preserves the checked-in packages as private repository
-placeholders, proves graph exclusion from the base artifact, and emits SHA-256,
+`--names-approved` assertion. It builds and inspects separate macOS arm64 base,
+graph, and embedding tarballs, preserves the checked-in packages as private
+repository placeholders, proves capability isolation, and emits SHA-256,
 SHA-512, and package-integrity evidence:
 
 ```bash
 python3 scripts/release/assemble_node_packages.py \
   --base-name @gungorbasa/retrievalkit \
   --graph-name @gungorbasa/retrievalkit-graph \
+  --embedding-name @gungorbasa/retrievalkit-embedding \
   --names-approved \
   --version 0.1.0 \
   --output dist/release/node
 ```
 
-The Kotlin assembler uses the approved Maven group. It produces four
-isolated publications—JVM base/graph and Android base/graph—with POM, sources,
-Javadoc, checksums, architecture validation, and a deterministic Central Portal
-bundle. Central publication also requires namespace verification, detached PGP
+The separate browser embedding assembler produces the approved Worker package
+without a native addon or model artifact:
+
+```bash
+python3 scripts/release/assemble_browser_embedding_package.py \
+  --name @gungorbasa/retrievalkit-browser-embedding \
+  --name-approved \
+  --version 0.1.0 \
+  --output dist/release/browser-embedding
+```
+
+The Kotlin assembler uses the approved Maven group. It produces six isolated
+publications—JVM/Android base, graph, and embedding—with POM, sources, Javadoc,
+checksums, architecture validation, and a deterministic Central Portal bundle.
+Central publication also requires namespace verification, detached PGP
 signatures, and a Portal token:
 
 ```bash
@@ -146,8 +175,8 @@ Maven publication jobs depend on successful completion of this protected job.
 
 The PyPI job runs in the protected `pypi` environment with `id-token: write`
 and no API token. It verifies the complete authorized bundle checksum set,
-publishes the ten macOS arm64 CPython wheels plus their source distributions,
-then verifies the public registry records and retains publication evidence.
+publishes the fifteen macOS arm64 CPython wheels, then verifies the public
+registry records and retains publication evidence.
 
 The owner completed the one-time PyPI bootstrap setup on 2026-07-26:
 
@@ -168,14 +197,18 @@ before setting the required `pypi_trusted_publishers_ready` dispatch input to
 true. The `0.0.0a0` artifacts reserve ownership only and must never be
 described as usable SDK releases.
 
+Before v0.1.0 dispatch, bootstrap `retrievalkit-embedding` with the same
+non-SDK placeholder pattern, configure its trusted publisher to the protected
+`pypi` environment, remove temporary bootstrap authority, and verify that
+v0.1.0 remains unused.
+
 ## npm trusted publication
 
 The npm job runs in the protected `npm` environment with `id-token: write` and
 no npm token. It installs the pinned OIDC-capable npm CLI, verifies the complete
-authorized bundle checksum set, stages only
-`artifacts/node/gungorbasa-retrievalkit-0.1.0.tgz` and
-`artifacts/node/gungorbasa-retrievalkit-graph-0.1.0.tgz`, and publishes those
-tarballs with `--provenance`. It then compares each registry `dist.integrity`
+authorized bundle checksum set, stages exactly the three native Node tarballs
+and the browser embedding tarball, and publishes those four artifacts with
+`--provenance`. It then compares each registry `dist.integrity`
 value with the authorized inventory, attests the tarballs/evidence, and retains
 the publication record for 180 days.
 
@@ -192,17 +225,22 @@ The owner completed the one-time bootstrap setup on 2026-07-26:
 Both public records resolved anonymously on 2026-07-26. Re-verify the records
 and exact trusted-publisher settings before setting the required
 `npm_trusted_publishers_ready` dispatch input to true. The pre-approval job then
-verifies that both public package records exist, and the npm job verifies that
-`0.1.0` is unused. Missing bootstrap, missing OIDC trust, an existing version, a
-changed tarball, or a registry integrity mismatch fails closed. Because two npm
-uploads cannot be transactional, a failure after the first succeeds requires an
-incident record and fix-forward release; published npm versions are never
-overwritten.
+verifies that all four public package records exist, and the npm job verifies
+that `0.1.0` is unused. Missing bootstrap, missing OIDC trust, an existing
+version, a changed tarball, or a registry integrity mismatch fails closed.
+Because multiple npm uploads cannot be transactional, a failure after the
+first succeeds requires an incident record and fix-forward release; published
+npm versions are never overwritten.
+
+Before v0.1.0 dispatch, bootstrap `@gungorbasa/retrievalkit-embedding` and
+`@gungorbasa/retrievalkit-browser-embedding` with reviewed non-release
+placeholders, configure both trusted publishers, remove bootstrap credentials,
+and verify that v0.1.0 remains unused.
 
 ## Maven Central publication
 
 The Maven job runs in the protected `maven` environment. It verifies the
-authorized bundle, requires group `io.github.gungorbasa`, copies the exact 16
+authorized bundle, requires group `io.github.gungorbasa`, copies the exact 24
 authorized primary POM/JAR/AAR files, and records their SHA-256 values before
 signing. It imports the environment-protected PGP key, creates detached ASCII
 signatures without rebuilding any primary artifact, constructs the signed
@@ -246,9 +284,11 @@ already configured controls:
   [GitHub's deployment protection rules](https://docs.github.com/actions/reference/deployments-and-environments#deployment-protection-rules);
 - re-verify the existing `release` environment owner-review rule and `v*` tag
   restriction;
-- re-verify the protected `pypi` environment and both bootstrapped projects'
-  trusted publisher for this repository and workflow;
-- re-verify the protected `npm` environment and both bootstrapped packages'
+- bootstrap `retrievalkit-embedding`, then re-verify the protected `pypi`
+  environment and all three projects' trusted publisher for this repository
+  and workflow;
+- bootstrap both embedding npm packages, then re-verify the protected `npm`
+  environment and all four packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - re-verify `io.github.gungorbasa` in Central Portal, the published PGP public
   key, and all five secrets in the protected `maven` environment using the

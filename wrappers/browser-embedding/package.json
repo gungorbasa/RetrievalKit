@@ -2,7 +2,7 @@
   "name": "@gungorbasa/retrievalkit-browser-embedding",
   "version": "0.1.0",
   "private": true,
-  "description": "Provisional local FP32 MiniLM embeddings for dedicated browser Workers",
+  "description": "Local FP32 MiniLM embeddings for dedicated browser Workers",
   "type": "module",
   "license": "Apache-2.0",
   "sideEffects": false,

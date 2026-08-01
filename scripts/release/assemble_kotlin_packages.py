@@ -27,12 +27,16 @@ ARTIFACTS = {
     "jvm-graph": ("retrievalkit-graph", "jar"),
     "android-base": ("retrievalkit-android", "aar"),
     "android-graph": ("retrievalkit-graph-android", "aar"),
+    "jvm-embedding": ("retrievalkit-embedding", "jar"),
+    "android-embedding": ("retrievalkit-embedding-android", "aar"),
 }
 GRADLE_TASKS = [
     ":base:publishMavenPublicationToReleaseRepository",
     ":graph:publishMavenPublicationToReleaseRepository",
     ":android-base:publishReleasePublicationToReleaseRepository",
     ":android-graph:publishReleasePublicationToReleaseRepository",
+    ":embedding:publishMavenPublicationToReleaseRepository",
+    ":android-embedding:publishReleasePublicationToReleaseRepository",
 ]
 MAVEN_GROUP = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$")
 SEMVER = re.compile(
@@ -41,6 +45,14 @@ SEMVER = re.compile(
 )
 POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
 APPROVED_MAVEN_GROUP = "io.github.gungorbasa"
+ONNX_MACOS_SIZE = 27_724_968
+ONNX_MACOS_SHA256 = (
+    "b65e22247d3ce2976931cfc6be3929e6fb81cd55e2f202e95e0ab8c9de5fa729"
+)
+ONNX_ANDROID_SIZE = 25_831_632
+ONNX_ANDROID_SHA256 = (
+    "4d2318b3849abb8862133d3068fc7e807ed8b2671cc6d83657fff2fcb9e1caad"
+)
 
 
 class AssemblyError(RuntimeError):
@@ -175,6 +187,29 @@ def validate_jvm_artifact(path: Path, capability: str) -> None:
     names = zip_files(path)
     if not {"LICENSE", "NOTICE"}.issubset(names):
         raise AssemblyError(f"{path.name} must embed LICENSE and NOTICE")
+    if capability == "jvm-embedding":
+        required = {
+            "ONNX-Runtime-LICENSE",
+            "ONNX-Runtime-ThirdPartyNotices.txt",
+            "runtime-identity.txt",
+            "native/macos-aarch64/libretrievalkit_embedding_jni.dylib",
+            "native/macos-aarch64/libonnxruntime.1.24.3.dylib",
+        }
+        if not required.issubset(names):
+            raise AssemblyError(f"{path.name} is missing embedding runtime content")
+        if any("RetrievalDatabase" in name or "GraphDatabase" in name for name in names):
+            raise AssemblyError(f"{path.name} contains retrieval or graph classes")
+        jni = read_zip_member(
+            path, "native/macos-aarch64/libretrievalkit_embedding_jni.dylib"
+        )
+        runtime = read_zip_member(
+            path, "native/macos-aarch64/libonnxruntime.1.24.3.dylib"
+        )
+        validate_macho_arm64(jni, "Kotlin embedding JNI library")
+        validate_macho_arm64(runtime, "ONNX Runtime macOS library")
+        if len(runtime) != ONNX_MACOS_SIZE or hashlib.sha256(runtime).hexdigest() != ONNX_MACOS_SHA256:
+            raise AssemblyError(f"{path.name} contains an unqualified ONNX Runtime")
+        return
     base_native = "native/macos-aarch64/libretrievalkit_jni.dylib"
     graph_native = "native/macos-aarch64/libretrievalkit_jni_graph.dylib"
     if capability == "jvm-base":
@@ -183,16 +218,44 @@ def validate_jvm_artifact(path: Path, capability: str) -> None:
         if any("Graph" in name for name in names if name.endswith(".class")):
             raise AssemblyError(f"{path.name} contains graph classes")
         validate_macho_arm64(read_zip_member(path, base_native), base_native)
-    else:
+    elif capability == "jvm-graph":
         if graph_native not in names or base_native in names:
             raise AssemblyError(f"{path.name} does not isolate the graph native aggregate")
         if not any("GraphDatabase" in name for name in names):
             raise AssemblyError(f"{path.name} is missing graph classes")
         validate_macho_arm64(read_zip_member(path, graph_native), graph_native)
+    else:
+        raise AssemblyError(f"unsupported JVM capability {capability!r}")
 
 
 def validate_android_artifact(path: Path, capability: str) -> None:
     names = zip_files(path)
+    if capability == "android-embedding":
+        classes = read_zip_member(path, "classes.jar")
+        with zipfile.ZipFile(io.BytesIO(classes)) as classes_archive:
+            class_names = set(classes_archive.namelist())
+        required_classes = {
+            "LICENSE",
+            "NOTICE",
+            "ONNX-Runtime-LICENSE",
+            "ONNX-Runtime-ThirdPartyNotices.txt",
+            "runtime-identity.txt",
+        }
+        required_native = {
+            "jni/arm64-v8a/libretrievalkit_embedding_jni.so",
+            "jni/arm64-v8a/libonnxruntime.so",
+        }
+        if not required_classes.issubset(class_names) or not required_native.issubset(names):
+            raise AssemblyError(f"{path.name} is missing embedding runtime content")
+        if any("RetrievalDatabase" in name or "GraphDatabase" in name for name in class_names):
+            raise AssemblyError(f"{path.name} contains retrieval or graph classes")
+        jni = read_zip_member(path, "jni/arm64-v8a/libretrievalkit_embedding_jni.so")
+        runtime = read_zip_member(path, "jni/arm64-v8a/libonnxruntime.so")
+        validate_elf_arm64(jni, "Android embedding JNI library")
+        validate_elf_arm64(runtime, "ONNX Runtime Android library")
+        if len(runtime) != ONNX_ANDROID_SIZE or hashlib.sha256(runtime).hexdigest() != ONNX_ANDROID_SHA256:
+            raise AssemblyError(f"{path.name} contains an unqualified Android ONNX Runtime")
+        return
     base_native = "jni/arm64-v8a/libretrievalkit_jni.so"
     graph_native = "jni/arm64-v8a/libretrievalkit_jni_graph.so"
     classes = read_zip_member(path, "classes.jar")
@@ -206,12 +269,14 @@ def validate_android_artifact(path: Path, capability: str) -> None:
         if any("Graph" in name for name in class_names if name.endswith(".class")):
             raise AssemblyError(f"{path.name} contains graph classes")
         validate_elf_arm64(read_zip_member(path, base_native), base_native)
-    else:
+    elif capability == "android-graph":
         if graph_native not in names or base_native in names:
             raise AssemblyError(f"{path.name} does not isolate the graph Android aggregate")
         if not any("GraphDatabase" in name for name in class_names):
             raise AssemblyError(f"{path.name} is missing graph classes")
         validate_elf_arm64(read_zip_member(path, graph_native), graph_native)
+    else:
+        raise AssemblyError(f"unsupported Android capability {capability!r}")
 
 
 def copy_publication(
@@ -312,6 +377,11 @@ def assemble(
     environment = java_environment(java_home)
     if not skip_native_build:
         run(["./scripts/build-native.sh", "all"], cwd=KOTLIN_ROOT, environment=environment)
+        run(
+            ["./scripts/build-embedding-native.sh", "all"],
+            cwd=KOTLIN_ROOT,
+            environment=environment,
+        )
 
     clean_output(output)
     maven_output = output / "maven"

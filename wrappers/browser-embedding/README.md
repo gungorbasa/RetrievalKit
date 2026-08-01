@@ -1,8 +1,8 @@
 # RetrievalKit Browser Embedding
 
-Provisional, unpublished browser package for local FP32
-`sentence-transformers/all-MiniLM-L6-v2` embeddings. It is private while naming
-and release approval remain pending.
+Browser package for local FP32 `sentence-transformers/all-MiniLM-L6-v2`
+embeddings. It is included in the v0.1.0 release inventory but is not available
+from npm until the protected release gates pass.
 
 This package is deliberately separate from RetrievalKit retrieval packages. It
 does not import the Node N-API addon, the browser retrieval package, or the Rust

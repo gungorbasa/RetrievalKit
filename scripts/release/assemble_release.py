@@ -60,6 +60,11 @@ def artifact_files(staging: Path) -> list[Path]:
             *staging.glob("*.zip"),
             *staging.glob("*.whl"),
             *(path for path in (staging / "node").rglob("*") if path.is_file()),
+            *(
+                path
+                for path in (staging / "browser-embedding").rglob("*")
+                if path.is_file()
+            ),
             *(path for path in (staging / "kotlin").rglob("*") if path.is_file()),
         ],
         key=lambda path: path.relative_to(staging).as_posix(),
@@ -112,6 +117,7 @@ def assemble(repo: Path, staging: Path, output: Path, revision: str) -> None:
                         "apple-arm64",
                         "python-macos-arm64",
                         "node-macos-arm64",
+                        "browser-embedding-worker",
                         "kotlin-jvm-macos-arm64",
                         "kotlin-android-arm64-v8a",
                     ],

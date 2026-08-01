@@ -1,33 +1,41 @@
 # RetrievalKit for Python
 
-RetrievalKit is one local retrieval system with two distributions:
+RetrievalKit is one local retrieval system with two alternative retrieval
+distributions and one independent embedding distribution:
 
 - Install `retrievalkit-graph` when records have useful relationships. It
   already includes semantic and hybrid retrieval.
 - Install the smaller `retrievalkit` distribution when the corpus is a flat
   collection and graph traversal would add no value.
+- Install `retrievalkit-embedding` independently when the application needs
+  the first-party local FP32 MiniLM provider.
 
-The distributions embed alternative native aggregates, so they are mutually
-exclusive within one process. The examples below use the same Project Apollo
-notes to show how the choice changes scope, not the underlying search model.
+The two retrieval distributions embed alternative native aggregates, so they
+are mutually exclusive within one process. The embedding distribution is an
+independent integration. The examples below use the same Project Apollo notes
+to show how the retrieval choice changes scope, not the underlying search
+model.
 
 ## Installation status
 
 The intended public installs are:
 
 ```bash
-# PENDING — PyPI contains ownership placeholders only; v0.1.0 is unpublished.
+# PENDING — v0.1.0 is unpublished; these commands describe the approved release.
 python -m pip install retrievalkit
 python -m pip install retrievalkit-graph
+python -m pip install retrievalkit-embedding
 ```
 
-Install exactly one. Choose `retrievalkit-graph` when relationships should
-scope retrieval; it already contains base retrieval. Choose `retrievalkit` for
-a flat corpus.
+Install exactly one retrieval aggregate. Choose `retrievalkit-graph` when
+relationships should scope retrieval; it already contains base retrieval.
+Choose `retrievalkit` for a flat corpus.
 
-Both names are reserved with `0.0.0a0` non-SDK placeholders and trust the
-protected release workflow. Do not install the placeholders. The available
-SDK route today is the macOS arm64 graph source preview linked from the
+The base and graph names are reserved with `0.0.0a0` non-SDK placeholders and
+trust the protected release workflow. `retrievalkit-embedding` still requires
+the same one-time bootstrap and trusted-publisher setup. Do not install the
+placeholders. The available SDK route today is the macOS arm64 graph source
+preview linked from the
 [public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site). From a
 repository checkout, the available graph route is:
 

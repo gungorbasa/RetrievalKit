@@ -4,6 +4,10 @@
   "tag": "v0.1.0",
   "status": "preview_release_candidate",
   "repository": "https://github.com/gungorbasa/RetrievalKit",
+  "rust": {
+    "publication": "source-only",
+    "crates_io": false
+  },
   "apple": {
     "architectures": ["arm64"],
     "platforms": {"macos": "14.0", "ios": "15.0", "ios_simulator": "15.0"},
@@ -23,17 +27,25 @@
     "platform": "macosx_arm64",
     "implementations": ["cp310", "cp311", "cp312", "cp313", "cp314"],
     "requires_python": ">=3.10,<3.15",
-    "distributions": ["retrievalkit", "retrievalkit-graph"],
-    "co_installation": "unsupported; one native capability distribution per process"
+    "distributions": ["retrievalkit", "retrievalkit-graph", "retrievalkit-embedding"],
+    "co_installation": "base and graph are mutually exclusive; embedding is independent and may accompany either retrieval distribution"
   },
   "node": {
     "platform": {"os": "darwin", "cpu": "arm64"},
     "engines": "^22.13.0 || ^24.0.0",
     "packages": {
       "base": {"name": "@gungorbasa/retrievalkit", "artifact": "gungorbasa-retrievalkit-0.1.0.tgz"},
-      "graph": {"name": "@gungorbasa/retrievalkit-graph", "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz"}
+      "graph": {"name": "@gungorbasa/retrievalkit-graph", "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz"},
+      "embedding": {"name": "@gungorbasa/retrievalkit-embedding", "artifact": "gungorbasa-retrievalkit-embedding-0.1.0.tgz"}
     },
-    "co_installation": "unsupported; one native capability aggregate per process"
+    "co_installation": "base and graph are mutually exclusive; embedding is independent and may accompany either retrieval package"
+  },
+  "browser_embedding": {
+    "engines": "^22.13.0 || ^24.0.0",
+    "package": {
+      "name": "@gungorbasa/retrievalkit-browser-embedding",
+      "artifact": "gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz"
+    }
   },
   "kotlin": {
     "group": "io.github.gungorbasa",
@@ -42,7 +54,9 @@
       "retrievalkit": "jar",
       "retrievalkit-graph": "jar",
       "retrievalkit-android": "aar",
-      "retrievalkit-graph-android": "aar"
+      "retrievalkit-graph-android": "aar",
+      "retrievalkit-embedding": "jar",
+      "retrievalkit-embedding-android": "aar"
     },
     "central_bundle": "retrievalkit-kotlin-0.1.0-unsigned-central-bundle.zip",
     "signed_in_candidate": false,
@@ -52,7 +66,7 @@
       "expires": "2028-07-25",
       "sha256": "ce67105eb4e3f8b332e99c7d8fdac451ef74a81608c052fb905365922f7acc96"
     },
-    "co_installation": "unsupported; one native capability aggregate per process"
+    "co_installation": "base and graph are mutually exclusive; embedding is independent and may accompany either retrieval artifact"
   },
   "persistence": {
     "base_write_format": 4,
@@ -65,6 +79,8 @@
     "release_revision_transfer": false
   },
   "publication_blockers": [
+    "retrievalkit-embedding PyPI project bootstrapped and trusted publisher configured",
+    "approved embedding npm packages bootstrapped and trusted publishers configured",
     "public docs and source preview rebuilt from the exact release revision",
     "fresh complete release candidate assembled from the exact release revision",
     "wrapper onboarding qualification passing for the release revision",

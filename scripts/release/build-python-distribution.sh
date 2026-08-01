@@ -18,8 +18,14 @@ case "$DISTRIBUTION" in
     WRAPPER_DIR="$ROOT_DIR/wrappers/python-graph"
     SMOKE="$ROOT_DIR/wrappers/python-graph/tests/smoke_installed.py"
     ;;
+  retrievalkit-embedding)
+    WRAPPER_DIR="$ROOT_DIR/wrappers/python-embedding"
+    SMOKE="$ROOT_DIR/wrappers/python-embedding/tests/smoke_installed.py"
+    : "${RETRIEVALKIT_ONNX_RUNTIME_LIBRARY:?Set RETRIEVALKIT_ONNX_RUNTIME_LIBRARY to the qualified libonnxruntime.1.24.3.dylib}"
+    "$PYTHON_BIN" "$WRAPPER_DIR/prepare_runtime.py"
+    ;;
   *)
-    echo "usage: $0 {retrievalkit|retrievalkit-graph}" >&2
+    echo "usage: $0 {retrievalkit|retrievalkit-graph|retrievalkit-embedding}" >&2
     exit 2
     ;;
 esac

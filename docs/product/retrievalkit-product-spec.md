@@ -134,7 +134,8 @@ Native Rust exposes the cross-platform ONNX provider from the separate
 Swift embedding is direct Core ML through the provider-neutral
 `wrappers/swift/EmbeddingKit` package; the completed Swift ONNX comparison and
 its Apple ONNX Runtime build material are retired from active source,
-packaging, and CI.
+packaging, and CI. Rust embedding crates remain source-only and are not
+published to crates.io in v0.1.0.
 
 Production Python and Node embedding integrations live in this monorepo but
 ship as separate optional distributions:
@@ -152,8 +153,9 @@ Python exposes synchronous `load`, `prefetch`, `embed`, and `embed_batch`
 operations while releasing the GIL around native model work. Node exposes
 promise-based `load`, `prefetch`, `embed`, and `embedBatch`, performs blocking
 native work away from the JavaScript event loop, and provides explicit
-lifecycle cleanup. Registry identities remain provisional and neither package
-is published.
+lifecycle cleanup. Their v0.1.0 registry identities are fixed as
+`retrievalkit-embedding` and `@gungorbasa/retrievalkit-embedding`. Neither
+package is published until the release gates pass.
 
 Production Kotlin embedding is another independently distributable optional
 integration:
@@ -172,7 +174,9 @@ embedding errors. Output must contain exactly 384 finite, L2-normalized F32
 values with the qualified 256-token limit. Kotlin adds no coroutine dependency;
 callers select their own dispatcher. `AndroidOnnxEmbedder` places verified
 artifacts under the application cache and returns the same `OnnxEmbedder`.
-Coordinates remain provisional and neither module is published.
+Their v0.1.0 Maven coordinates are fixed under `io.github.gungorbasa` as
+`retrievalkit-embedding` and `retrievalkit-embedding-android`. Neither module
+is published until the release gates pass.
 
 Kotlin model acquisition is limited to `load` or explicit `prefetch`.
 `localOnly` is network-free. The implementation reuses the Rust provider's
@@ -231,8 +235,9 @@ ort-wasm-simd-threaded.asyncify.wasm
   7e83cd6cee77e478bc96a7e91b198144fb5e4126287daf1f9b54bb195ebcd55a
 ```
 
-The browser embedding registry identity remains provisional. No browser
-embedding package has been published.
+The v0.1.0 browser embedding registry identity is fixed as
+`@gungorbasa/retrievalkit-browser-embedding`. It is not published until the
+release gates pass.
 
 On the Apple M1 Max reference host, a real Chrome 150 dedicated-Worker WebGPU
 run with 50 warm-ups and 750 measured 32-token queries produced warm p95
@@ -563,8 +568,9 @@ after corpus-pack import measurements show that rebuilding derived structures
 is a material startup cost, or when signed prebuilt databases are required as
 cross-platform distribution artifacts.
 
-The browser retrieval and embedding packages are implemented and
-desktop-qualified but unpublished. The private website repository ships a
+The browser retrieval package is implemented and desktop-qualified but remains
+unpublished. The browser embedding package is included in the v0.1.0 release
+inventory. The private website repository ships a
 versioned Apollo 11 corpus pack and builds one combined
 `GraphRetrievalDatabase` in RetrievalKit WASM. Vector mode uses local MiniLM
 ranking followed by a Qwen3 0.6B answer. Graph Text validates and executes

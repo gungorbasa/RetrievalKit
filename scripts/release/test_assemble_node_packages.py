@@ -35,12 +35,13 @@ class NodePackageAssemblyTests(unittest.TestCase):
                 with self.assertRaises(ASSEMBLER.AssemblyError):
                     ASSEMBLER.validate_version(invalid)
 
-    def test_requires_explicit_name_ownership_assertion(self) -> None:
+    def test_requires_explicit_name_approval_assertion(self) -> None:
         with tempfile.TemporaryDirectory(prefix="retrievalkit-node-name-gate-") as root:
-            with self.assertRaisesRegex(ASSEMBLER.AssemblyError, "ownership is unresolved"):
+            with self.assertRaisesRegex(ASSEMBLER.AssemblyError, "approval is unresolved"):
                 ASSEMBLER.assemble(
                     base_name="@retrievalkit-release-test/core",
                     graph_name="@retrievalkit-release-test/graph",
+                    embedding_name="@retrievalkit-release-test/embedding",
                     version="0.1.0",
                     output=Path(root) / "output",
                     skip_native_build=True,
@@ -53,6 +54,7 @@ class NodePackageAssemblyTests(unittest.TestCase):
                 ASSEMBLER.assemble(
                     base_name="@example/retrievalkit",
                     graph_name="@example/retrievalkit-graph",
+                    embedding_name="@example/retrievalkit-embedding",
                     version="0.1.0",
                     output=Path(root) / "output",
                     names_approved=True,
@@ -62,8 +64,16 @@ class NodePackageAssemblyTests(unittest.TestCase):
 
     @unittest.skipUnless(
         ASSEMBLER.platform.system() == "Darwin"
-        and ASSEMBLER.platform.machine() in {"arm64", "aarch64"},
-        "release target is macOS arm64",
+        and ASSEMBLER.platform.machine() in {"arm64", "aarch64"}
+        and all(
+            (directory / ASSEMBLER.NATIVE_FILES[capability]).is_file()
+            for capability, directory in ASSEMBLER.PACKAGE_DIRECTORIES.items()
+        )
+        and all(
+            (ASSEMBLER.PACKAGE_DIRECTORIES["embedding"] / path).is_file()
+            for path in ASSEMBLER.EMBEDDING_RUNTIME_FILES
+        ),
+        "prebuilt macOS arm64 Node release inputs are required",
     )
     def test_artifacts_are_deterministic_closed_and_publishable(self) -> None:
         with tempfile.TemporaryDirectory(prefix="retrievalkit-node-assembly-test-") as root:
@@ -72,6 +82,7 @@ class NodePackageAssemblyTests(unittest.TestCase):
             arguments = {
                 "base_name": "@gungorbasa/retrievalkit",
                 "graph_name": "@gungorbasa/retrievalkit-graph",
+                "embedding_name": "@gungorbasa/retrievalkit-embedding",
                 "version": "0.1.0-test.1",
                 "names_approved": True,
                 "skip_native_build": True,

@@ -74,6 +74,14 @@ class ReleaseTests(unittest.TestCase):
             "Maven Central namespace verification",
             " ".join(config["publication_blockers"]),
         )
+        self.assertIn(
+            "retrievalkit-embedding PyPI project bootstrapped",
+            " ".join(config["publication_blockers"]),
+        )
+        self.assertIn(
+            "approved embedding npm packages bootstrapped",
+            " ".join(config["publication_blockers"]),
+        )
         self.assertEqual(
             config["node"]["packages"],
             {
@@ -85,6 +93,17 @@ class ReleaseTests(unittest.TestCase):
                     "name": "@gungorbasa/retrievalkit-graph",
                     "artifact": "gungorbasa-retrievalkit-graph-0.1.0.tgz",
                 },
+                "embedding": {
+                    "name": "@gungorbasa/retrievalkit-embedding",
+                    "artifact": "gungorbasa-retrievalkit-embedding-0.1.0.tgz",
+                },
+            },
+        )
+        self.assertEqual(
+            config["browser_embedding"]["package"],
+            {
+                "name": "@gungorbasa/retrievalkit-browser-embedding",
+                "artifact": "gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz",
             },
         )
         self.assertEqual(config["kotlin"]["group"], "io.github.gungorbasa")
@@ -95,6 +114,8 @@ class ReleaseTests(unittest.TestCase):
                 "retrievalkit-graph",
                 "retrievalkit-android",
                 "retrievalkit-graph-android",
+                "retrievalkit-embedding",
+                "retrievalkit-embedding-android",
             },
         )
         signing = config["kotlin"]["signing"]
@@ -115,6 +136,7 @@ class ReleaseTests(unittest.TestCase):
             for relative in (
                 Path("wrappers/python/pyproject.toml"),
                 Path("wrappers/python-graph/pyproject.toml"),
+                Path("wrappers/python-embedding/pyproject.toml"),
             ):
                 target = fake / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -317,7 +339,11 @@ class ReleaseTests(unittest.TestCase):
     def test_wrapper_legal_files_match_root(self) -> None:
         result = validator.static_validation(REPO)
         self.assertNotIn("third-party notices are absent", result["publication_blockers"])
-        for wrapper in ("wrappers/python", "wrappers/python-graph"):
+        for wrapper in (
+            "wrappers/python",
+            "wrappers/python-graph",
+            "wrappers/python-embedding",
+        ):
             for legal_name in ("LICENSE", "NOTICE"):
                 self.assertNotIn(
                     f"wrapper legal file out of sync: {wrapper}/{legal_name}",
@@ -337,12 +363,17 @@ class ReleaseTests(unittest.TestCase):
             fake = Path(directory)
             for name in ("Cargo.toml", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
                 shutil.copy2(REPO / name, fake / name)
-            for wrapper in ("wrappers/python", "wrappers/python-graph"):
+            for wrapper in (
+                "wrappers/python",
+                "wrappers/python-graph",
+                "wrappers/python-embedding",
+            ):
                 (fake / wrapper).mkdir(parents=True)
                 shutil.copy2(REPO / wrapper / "pyproject.toml", fake / wrapper / "pyproject.toml")
                 shutil.copy2(REPO / "NOTICE", fake / wrapper / "NOTICE")
             (fake / "wrappers/python/LICENSE").write_text("stale", encoding="utf-8")
             shutil.copy2(REPO / "LICENSE", fake / "wrappers/python-graph/LICENSE")
+            shutil.copy2(REPO / "LICENSE", fake / "wrappers/python-embedding/LICENSE")
             config = validator.load_json(REPO / "release/release-v0.1.0.json")
             blockers = validator.publication_blockers(fake, config)
             self.assertIn("wrapper legal file out of sync: wrappers/python/LICENSE", blockers)
@@ -420,6 +451,9 @@ class ReleaseTests(unittest.TestCase):
                 mock.patch.object(validator, "validate_xcframework_archive"),
                 mock.patch.object(validator, "validate_wheels"),
                 mock.patch.object(validator, "validate_node_packages") as node_validation,
+                mock.patch.object(
+                    validator, "validate_browser_embedding_package"
+                ) as browser_embedding_validation,
                 mock.patch.object(validator, "validate_kotlin_packages") as kotlin_validation,
             ):
                 result = validator.bundle_validation(REPO, output)
@@ -427,6 +461,10 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(result["artifact_count"], 5)
             node_validation.assert_called_once_with(
                 output / "artifacts/node",
+                validator.load_json(REPO / "release/release-v0.1.0.json"),
+            )
+            browser_embedding_validation.assert_called_once_with(
+                output / "artifacts/browser-embedding",
                 validator.load_json(REPO / "release/release-v0.1.0.json"),
             )
             kotlin_validation.assert_called_once_with(

@@ -80,8 +80,9 @@ Python code.
   Model acquisition is allowed only during explicit `load` or `prefetch`;
   `local_only` must be network-free. Model precision remains independent from
   RetrievalKit's default signed-I8 database encoding.
-- Keep registry metadata provisional and do not add the optional embedding
-  package to retrieval-package publication until separately authorized.
+- The approved v0.1.0 embedding distribution is `retrievalkit-embedding`.
+  Publish it only from the same closed, protected release workflow as the base
+  and graph distributions.
 
 ## FFI And Ownership
 

@@ -22,21 +22,36 @@ TYPESCRIPT_ROOT = REPO_ROOT / "wrappers" / "typescript"
 SOURCE_NAMES = {
     "base": "@gungorbasa/retrievalkit",
     "graph": "@gungorbasa/retrievalkit-graph",
+    "embedding": "@gungorbasa/retrievalkit-embedding",
 }
 APPROVED_NAMES = SOURCE_NAMES
 PACKAGE_DIRECTORIES = {
     "base": TYPESCRIPT_ROOT / "base",
     "graph": TYPESCRIPT_ROOT / "graph",
+    "embedding": TYPESCRIPT_ROOT / "embedding",
 }
-REQUIRED_PACKAGE_FILES = {
+COMMON_PACKAGE_FILES = {
     "LICENSE",
     "NOTICE",
     "README.md",
     "dist/index.js",
     "dist/index.d.ts",
-    "native/retrievalkit.node",
     "package.json",
 }
+NATIVE_FILES = {
+    "base": "native/retrievalkit.node",
+    "graph": "native/retrievalkit.node",
+    "embedding": "native/retrievalkit-embedding.node",
+}
+EMBEDDING_RUNTIME_FILES = {
+    "runtime/libonnxruntime.1.24.3.dylib",
+    "runtime/ONNX-Runtime-LICENSE",
+    "runtime/ONNX-Runtime-ThirdPartyNotices.txt",
+}
+ONNX_RUNTIME_SIZE = 27_724_968
+ONNX_RUNTIME_SHA256 = (
+    "b65e22247d3ce2976931cfc6be3929e6fb81cd55e2f202e95e0ab8c9de5fa729"
+)
 NPM_NAME = re.compile(
     r"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
 )
@@ -135,11 +150,12 @@ def release_metadata(
     metadata.pop("scripts", None)
     metadata["name"] = name
     metadata["version"] = version
-    metadata["description"] = (
-        "Local-first exact, BM25, and hybrid retrieval for Node.js on macOS arm64"
-        if capability == "base"
-        else "Optional local graph and graph-scoped retrieval for Node.js on macOS arm64"
-    )
+    descriptions = {
+        "base": "Local-first exact, BM25, and hybrid retrieval for Node.js on macOS arm64",
+        "graph": "Optional local graph and graph-scoped retrieval for Node.js on macOS arm64",
+        "embedding": "Optional local FP32 MiniLM embeddings for Node.js on macOS arm64",
+    }
+    metadata["description"] = descriptions[capability]
     metadata["publishConfig"] = {
         "access": "public",
         "registry": "https://registry.npmjs.org/",
@@ -178,7 +194,10 @@ def inspect_tarball(
             for member in members
             if member.isfile()
         )
-        missing = REQUIRED_PACKAGE_FILES.difference(files)
+        required = COMMON_PACKAGE_FILES | {NATIVE_FILES[capability]}
+        if capability == "embedding":
+            required |= EMBEDDING_RUNTIME_FILES
+        missing = required.difference(files)
         if missing:
             raise AssemblyError(
                 f"{tarball.name} is missing required files: {', '.join(sorted(missing))}"
@@ -188,6 +207,14 @@ def inspect_tarball(
         if package_file is None:
             raise AssemblyError(f"{tarball.name} package.json could not be read")
         metadata = json.load(package_file)
+        runtime = None
+        if capability == "embedding":
+            runtime_file = archive.extractfile(
+                "package/runtime/libonnxruntime.1.24.3.dylib"
+            )
+            if runtime_file is None:
+                raise AssemblyError(f"{tarball.name} ONNX Runtime could not be read")
+            runtime = runtime_file.read()
 
     if metadata.get("name") != expected_name or metadata.get("version") != expected_version:
         raise AssemblyError(f"{tarball.name} contains unexpected package identity")
@@ -205,6 +232,10 @@ def inspect_tarball(
         if file_name.startswith(("dist/", "native/"))
     ):
         raise AssemblyError(f"{tarball.name} contains graph executable content")
+    if capability == "embedding":
+        assert runtime is not None
+        if len(runtime) != ONNX_RUNTIME_SIZE or hashlib.sha256(runtime).hexdigest() != ONNX_RUNTIME_SHA256:
+            raise AssemblyError(f"{tarball.name} contains an unqualified ONNX Runtime")
     return files
 
 
@@ -220,6 +251,7 @@ def assemble(
     *,
     base_name: str,
     graph_name: str,
+    embedding_name: str,
     version: str,
     output: Path,
     names_approved: bool = False,
@@ -228,20 +260,22 @@ def assemble(
 ) -> dict[str, Any]:
     if not names_approved:
         raise AssemblyError(
-            "npm package ownership is unresolved; pass --names-approved only after the "
-            "owner confirms control of both requested names"
+            "npm package-name approval is unresolved; pass --names-approved only after "
+            "the owner approves all requested names"
         )
     names = {
         "base": validate_npm_name(base_name),
         "graph": validate_npm_name(graph_name),
+        "embedding": validate_npm_name(embedding_name),
     }
     if names != APPROVED_NAMES:
         raise AssemblyError(
-            "release names must be exactly base='@gungorbasa/retrievalkit' "
-            "and graph='@gungorbasa/retrievalkit-graph'"
+            "release names must be exactly base='@gungorbasa/retrievalkit', "
+            "graph='@gungorbasa/retrievalkit-graph', and "
+            "embedding='@gungorbasa/retrievalkit-embedding'"
         )
-    if names["base"] == names["graph"]:
-        raise AssemblyError("base and graph npm package names must be different")
+    if len(set(names.values())) != len(names):
+        raise AssemblyError("Node npm package names must be different")
     validate_version(version)
     validate_host()
 
@@ -251,14 +285,14 @@ def assemble(
         for package_directory in PACKAGE_DIRECTORIES.values():
             run(["npm", "run", "build"], cwd=package_directory)
     run(["node", "./scripts/verify-package-content.mjs"], cwd=TYPESCRIPT_ROOT)
-    for package_directory in PACKAGE_DIRECTORIES.values():
-        validate_macho_arm64(package_directory / "native" / "retrievalkit.node")
+    for capability, package_directory in PACKAGE_DIRECTORIES.items():
+        validate_macho_arm64(package_directory / NATIVE_FILES[capability])
 
     clean_output(output)
     artifacts: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="retrievalkit-node-release-") as temporary:
         staging_root = Path(temporary)
-        for capability in ("base", "graph"):
+        for capability in ("base", "graph", "embedding"):
             source = PACKAGE_DIRECTORIES[capability]
             staging = staging_root / capability
             staging.mkdir()
@@ -353,6 +387,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--base-name", required=True, help="owner-approved base npm name")
     parser.add_argument("--graph-name", required=True, help="owner-approved graph npm name")
+    parser.add_argument(
+        "--embedding-name",
+        required=True,
+        help="owner-approved embedding npm name",
+    )
     parser.add_argument("--version", default="0.1.0")
     parser.add_argument(
         "--output",
@@ -362,7 +401,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--names-approved",
         action="store_true",
-        help="assert that the owner controls both supplied npm names",
+        help="assert that the owner approved all supplied npm names",
     )
     parser.add_argument("--skip-native-build", action="store_true")
     parser.add_argument("--skip-typescript-build", action="store_true")
@@ -375,6 +414,7 @@ def main() -> int:
         inventory = assemble(
             base_name=arguments.base_name,
             graph_name=arguments.graph_name,
+            embedding_name=arguments.embedding_name,
             version=arguments.version,
             output=arguments.output,
             names_approved=arguments.names_approved,

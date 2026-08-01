@@ -31,11 +31,9 @@ Install exactly one retrieval aggregate. Choose `retrievalkit-graph` when
 relationships should scope retrieval; it already contains base retrieval.
 Choose `retrievalkit` for a flat corpus.
 
-The base and graph names are reserved with `0.0.0a0` non-SDK placeholders and
-trust the protected release workflow. `retrievalkit-embedding` still requires
-the same one-time bootstrap and trusted-publisher setup. Do not install the
-placeholders. The available SDK route today is the macOS arm64 graph source
-preview linked from the
+All three names are reserved with `0.0.0a0` non-SDK placeholders and trust the
+protected release workflow. Do not install the placeholders. The available SDK
+route today is the macOS arm64 graph source preview linked from the
 [public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site). From a
 repository checkout, the available graph route is:
 

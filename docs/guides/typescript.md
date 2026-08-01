@@ -11,7 +11,7 @@ The selected npm identities are:
 The equivalent unscoped base name was rejected by npm as too similar to an
 existing package, so every Node package uses the release owner's public scope.
 The base and graph names have bootstrap-only placeholder versions and GitHub
-trusted publishers configured; the embedding name still requires the same
+trusted publishers configured; both embedding npm names still require the same
 one-time setup. Those placeholders are not SDK releases; v0.1.0 remains
 unpublished. From source or after the real release, install or load exactly one
 retrieval package in a process. The independent embedding package may accompany

@@ -1,13 +1,13 @@
 # RetrievalKit v0.1.0 release process
 
 Status: release-candidate and runtime authorization implementation complete.
-The public repository, protected GitHub environments, base/graph npm and PyPI
-bootstrap packages, their trusted publishers, and Maven signing identity are
-configured. The Maven Central namespace and protected user token are also
-configured. The new embedding PyPI/npm identities require the same one-time
-bootstrap and trusted-publisher setup before publication dispatch. v0.1.0
-publication remains blocked on that setup, the signed tag, and the release
-evidence gates below.
+The public repository, protected GitHub environments, all three PyPI projects,
+base/graph npm bootstrap packages, their trusted publishers, and Maven signing
+identity are configured. The Maven Central namespace and protected user token
+are also configured. The new embedding npm identities require the same
+one-time bootstrap and trusted-publisher setup before publication dispatch.
+v0.1.0 publication remains blocked on that setup, the signed tag, and the
+release evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
 previews from one signed source revision. Python, Node, and Kotlin retain
@@ -21,9 +21,9 @@ The approved npm package names are `@gungorbasa/retrievalkit`,
 unscoped base name as too similar to an existing package, so every npm package
 uses one consistent owner scope. The approved Maven group is
 `io.github.gungorbasa`. The base and graph npm names were bootstrapped and
-connected to the protected GitHub publication workflow on 2026-07-26. The base
-and graph PyPI names were also bootstrapped and connected to that workflow on
-2026-07-26. The
+connected to the protected GitHub publication workflow on 2026-07-26. All
+three PyPI names were bootstrapped and connected to that workflow by
+2026-08-01. The
 `io.github.gungorbasa` Central namespace was verified and its protected
 credentials were installed on 2026-07-26. The signed tag and provisioned
 release evidence remain fail-closed external prerequisites.
@@ -178,29 +178,27 @@ and no API token. It verifies the complete authorized bundle checksum set,
 publishes the fifteen macOS arm64 CPython wheels, then verifies the public
 registry records and retains publication evidence.
 
-The owner completed the one-time PyPI bootstrap setup on 2026-07-26:
+The owner completed the one-time PyPI bootstrap setup by 2026-08-01:
 
-1. `retrievalkit` and `retrievalkit-graph` each received a non-SDK `0.0.0a0`
-   placeholder;
+1. `retrievalkit`, `retrievalkit-graph`, and `retrievalkit-embedding` each
+   received a non-SDK `0.0.0a0` placeholder;
 2. each project trusts the public `gungorbasa/RetrievalKit` repository,
    `publish-release.yml` workflow, and `pypi` environment;
 3. the temporary bootstrap publishers and one-time bootstrap workflows were
    removed; and
-4. neither project contains v0.1.0 SDK artifacts.
+4. none of the projects contains v0.1.0 SDK artifacts.
 
 PyPI requires different pending-publisher identities when multiple not-yet-
-created project names are bootstrapped, so the two names temporarily used
-separate bootstrap workflows. Once the projects existed, both were configured
-with the same protected production publisher. Both public records resolved
-anonymously on 2026-07-26. Re-verify the records and exact publisher settings
-before setting the required `pypi_trusted_publishers_ready` dispatch input to
-true. The `0.0.0a0` artifacts reserve ownership only and must never be
+created project names are bootstrapped, so the projects temporarily used
+separate bootstrap workflows. Once each project existed, it was configured
+with the same protected production publisher. All three public records
+resolved anonymously by 2026-08-01. The `retrievalkit-embedding` bootstrap ran
+successfully as GitHub Actions run `30690365488`; its temporary publisher and
+temporary `main` environment access were then removed, leaving the production
+publisher and `v*` tag policy. Re-verify the records and exact publisher
+settings before setting the required `pypi_trusted_publishers_ready` dispatch
+input to true. The `0.0.0a0` artifacts reserve ownership only and must never be
 described as usable SDK releases.
-
-Before v0.1.0 dispatch, bootstrap `retrievalkit-embedding` with the same
-non-SDK placeholder pattern, configure its trusted publisher to the protected
-`pypi` environment, remove temporary bootstrap authority, and verify that
-v0.1.0 remains unused.
 
 ## npm trusted publication
 
@@ -284,9 +282,8 @@ already configured controls:
   [GitHub's deployment protection rules](https://docs.github.com/actions/reference/deployments-and-environments#deployment-protection-rules);
 - re-verify the existing `release` environment owner-review rule and `v*` tag
   restriction;
-- bootstrap `retrievalkit-embedding`, then re-verify the protected `pypi`
-  environment and all three projects' trusted publisher for this repository
-  and workflow;
+- re-verify the protected `pypi` environment and all three projects' trusted
+  publisher for this repository and workflow;
 - bootstrap both embedding npm packages, then re-verify the protected `npm`
   environment and all four packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);

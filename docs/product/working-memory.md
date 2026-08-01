@@ -89,16 +89,18 @@ implemented, or superseded by the product spec.
   `@gungorbasa/retrievalkit-embedding` and
   `@gungorbasa/retrievalkit-browser-embedding` still require the same one-time
   bootstrap and trusted-publisher setup before release publication.
-- 2026-07-26 PyPI owner setup: `retrievalkit` and `retrievalkit-graph` each
-  received a reviewed non-SDK `0.0.0a0` placeholder. Both projects now trust
+- 2026-08-01 PyPI owner setup: `retrievalkit`, `retrievalkit-graph`, and
+  `retrievalkit-embedding` each received a reviewed non-SDK `0.0.0a0`
+  placeholder. All three projects now trust
   only `gungorbasa/RetrievalKit`, `publish-release.yml`, and the protected
   `pypi` environment. Separate temporary bootstrap workflows were required
   because PyPI rejects one identical pending-publisher identity for multiple
   uncreated project names; those temporary publishers and workflows were
-  removed after both projects existed. Both public records resolve
-  anonymously, and v0.1.0 remains unused.
-  `retrievalkit-embedding` still requires the same one-time bootstrap and
-  trusted-publisher setup before release publication.
+  removed after the projects existed. All three public records resolve
+  anonymously, and v0.1.0 remains unused. The embedding placeholder was
+  published by successful GitHub Actions run `30690365488`; temporary `main`
+  access to the `pypi` environment was removed afterward, leaving only the
+  `v*` tag policy.
 - 2026-07-26 Maven Central owner setup: the automatically provisioned
   `io.github.gungorbasa` namespace is verified. A six-month Portal user token
   named `RetrievalKit GitHub Actions` is installed as
@@ -1047,11 +1049,11 @@ Verification completed without benchmark workloads:
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing
 identity, Central namespace, and Portal token are configured. Registry-owner
-setup for the base/graph identities is complete; the embedding PyPI/npm
-identities added on 2026-07-31 still require one-time bootstrap and trusted
-publisher configuration:
+setup for all three PyPI identities and the base/graph npm identities is
+complete. The embedding npm identities added on 2026-07-31 still require
+one-time bootstrap and trusted-publisher configuration:
 
-1. bootstrap the approved embedding PyPI/npm identities, configure their exact
+1. bootstrap the approved embedding npm identities, configure their exact
    trusted publishers, remove temporary credentials, and then re-verify all
    registry records immediately before publication dispatch;
 2. re-verify the Central namespace, published signing key, and five protected

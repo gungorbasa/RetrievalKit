@@ -1,0 +1,59 @@
+name: Bootstrap PyPI retrievalkit-embedding ownership
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_bootstrap:
+        description: Publish the non-SDK retrievalkit-embedding 0.0.0a0 placeholder
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-pypi-retrievalkit-embedding-ownership
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Publish retrievalkit-embedding ownership placeholder through pending OIDC
+    if: >-
+      inputs.confirm_bootstrap
+      && github.ref == 'refs/heads/main'
+      && github.actor == 'gungorbasa'
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the reviewed bootstrap definition
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Require the project name to remain unused
+        run: |
+          status="$(
+            curl --silent --show-error \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              "https://pypi.org/pypi/retrievalkit-embedding/json"
+          )"
+          test "$status" = "404"
+
+      - name: Build and inspect the non-SDK placeholder
+        run: |
+          python3 -m pip install --disable-pip-version-check build==1.3.0
+          python3 scripts/release/build_pypi_embedding_bootstrap_placeholder.py \
+            --output target/pypi-bootstrap
+
+      - name: Publish through the pending retrievalkit-embedding publisher
+        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        with:
+          packages-dir: target/pypi-bootstrap

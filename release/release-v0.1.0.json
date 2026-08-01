@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "tag": "v0.1.0",
   "status": "preview_release_candidate",
+  "release_freeze": {
+    "status": "frozen",
+    "frozen_on": "2026-08-01",
+    "revision_binding": "commit-containing-this-record",
+    "post_freeze_change_policy": "new-freeze-commit-required"
+  },
   "repository": "https://github.com/gungorbasa/RetrievalKit",
   "rust": {
     "publication": "source-only",
@@ -104,7 +110,6 @@
     "release_revision_transfer": false
   },
   "publication_blockers": [
-    "retrievalkit-embedding PyPI project bootstrapped and trusted publisher configured",
     "public docs and source preview rebuilt from the exact release revision",
     "fresh complete release candidate assembled from the exact release revision",
     "wrapper onboarding qualification passing for the release revision",

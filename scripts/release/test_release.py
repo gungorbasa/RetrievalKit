@@ -74,13 +74,22 @@ class ReleaseTests(unittest.TestCase):
             "Maven Central namespace verification",
             " ".join(config["publication_blockers"]),
         )
-        self.assertIn(
+        self.assertNotIn(
             "retrievalkit-embedding PyPI project bootstrapped",
             " ".join(config["publication_blockers"]),
         )
         self.assertNotIn(
             "retrievalkit-browser npm package bootstrapped",
             " ".join(config["publication_blockers"]),
+        )
+        self.assertEqual(
+            config["release_freeze"],
+            {
+                "status": "frozen",
+                "frozen_on": "2026-08-01",
+                "revision_binding": "commit-containing-this-record",
+                "post_freeze_change_policy": "new-freeze-commit-required",
+            },
         )
         self.assertEqual(
             config["node"]["packages"],

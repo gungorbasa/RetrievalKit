@@ -108,12 +108,12 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Guarded npm and Maven Central publication jobs consume the authorized
   candidate bytes without rebuilding them. npm uses trusted publishing with
   provenance; Maven signs the exact primary files with the dedicated
-  RetrievalKit release key before uploading a Central Portal bundle. Both
-  scoped npm names now have bootstrap-only placeholders and trust the protected
-  GitHub publication workflow. Both PyPI names now have non-SDK `0.0.0a0`
-  placeholders and trust the same protected workflow through the `pypi`
-  environment. The `io.github.gungorbasa` Central namespace is verified, its
-  signing identity is public, and all five Maven publishing secrets are
+  RetrievalKit release key before uploading a Central Portal bundle. All five
+  scoped npm names now have bootstrap-only placeholders and trust the
+  protected GitHub publication workflow. All three PyPI names now have non-SDK
+  `0.0.0a0` placeholders and trust the same protected workflow through the
+  `pypi` environment. The `io.github.gungorbasa` Central namespace is verified,
+  its signing identity is public, and all five Maven publishing secrets are
   installed in the protected environment. v0.1.0 remains unpublished; the
   signed tag and provisioned release gates remain external prerequisites.
 

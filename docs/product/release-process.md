@@ -1,11 +1,20 @@
 # RetrievalKit v0.1.0 release process
 
-Status: release-candidate and runtime authorization implementation complete.
+Status: v0.1.0 scope, identities, platform statuses, and release claims frozen
+on 2026-08-01; release-candidate and runtime authorization implementation is
+complete. The commit containing the machine-readable `release_freeze` record
+is the eligible candidate source revision. Any later source or release-truth
+change requires a new freeze commit and repeat validation before candidate
+assembly.
 The public repository, protected GitHub environments, all three PyPI projects,
 all five npm packages, their trusted publishers, and Maven signing identity are
 configured. The Maven Central namespace and protected user token are
 configured. v0.1.0 publication remains blocked on final registry
 re-verification, the signed tag, and the release evidence gates below.
+
+The freeze does not authorize the release-candidate workflow, Phase 7 scheduled
+or controlled release workflows, a tag, a GitHub Release, or registry
+publication. Those remain separate owner-controlled steps.
 
 The automated release candidate ships the Swift, Python, Node.js, browser, and
 Kotlin previews from one signed source revision. Python, Node, and Kotlin retain

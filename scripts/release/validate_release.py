@@ -273,16 +273,26 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
     )
     blocker_text = " ".join(config["publication_blockers"])
     require(
-        "npm trusted publishing configured" not in blocker_text
+        "bootstrapped and trusted publisher configured" not in blocker_text
+        and "npm trusted publishing configured" not in blocker_text
         and "Maven Central namespace verification" not in blocker_text,
         "release config lists completed registry setup as a publication blocker",
+    )
+    require(
+        config.get("release_freeze")
+        == {
+            "status": "frozen",
+            "frozen_on": "2026-08-01",
+            "revision_binding": "commit-containing-this-record",
+            "post_freeze_change_policy": "new-freeze-commit-required",
+        },
+        "release config does not contain the exact v0.1.0 freeze policy",
     )
     require(
         all(
             claim in blocker_text
             for claim in (
                 "public docs and source preview",
-                "retrievalkit-embedding PyPI project bootstrapped",
                 "fresh complete release candidate",
                 "wrapper onboarding qualification",
                 "Phase 7 scheduled and release gates",

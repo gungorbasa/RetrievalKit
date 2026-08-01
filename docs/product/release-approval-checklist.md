@@ -4,6 +4,9 @@ Every item is required unless explicitly marked candidate-only.
 
 ## Identity and legal
 
+- [ ] Candidate source is the exact commit containing the frozen
+  `release/release-v0.1.0.json` record. Any post-freeze change has a new freeze
+  commit and repeats the freeze validation before candidate assembly.
 - [ ] `VERSION`, Cargo, Python, Swift, Node, Kotlin, changelog, and manifests
   equal `0.1.0`.
 - [ ] Release revision is clean and matches the verified signed `v0.1.0` tag.

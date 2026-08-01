@@ -6,6 +6,15 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-01 v0.1.0 release freeze: the owner authorized Step 3 only. Version,
+  package identities, release contents, compatibility claims, Android preview
+  status, browser retrieval inclusion, and publication boundaries are frozen.
+  The exact eligible candidate source is the commit containing the
+  machine-readable `release_freeze` record in
+  `release/release-v0.1.0.json`. Any later source or release-truth change
+  requires a new freeze commit and repeat validation. This freeze does not
+  authorize candidate, scheduled Phase 7, controlled release Phase 7,
+  publication, GitHub Release, or tag workflows.
 - 2026-08-01 browser retrieval release decision: include
   `@gungorbasa/retrievalkit-browser` in the v0.1.0 npm inventory alongside the
   independent browser embedding package. Its closed tarball must contain the
@@ -1089,6 +1098,10 @@ setup for all three PyPI identities and all five npm identities is complete:
    Maven secrets immediately before publication dispatch;
 3. resume only when the owner explicitly authorizes the signed-tag and
    provisioned Phase 7 evidence gates.
+
+Step 3 release freeze is complete. The next owner-controlled action is Step 4,
+assembling the release candidate from the exact freeze commit. Do not dispatch
+that workflow without explicit authorization.
 
 Do not publish v0.1.0, create its tag, rebuild frozen qualification fixtures,
 or resume physical-device work until the corresponding documented gate is

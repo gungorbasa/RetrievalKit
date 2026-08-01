@@ -28,7 +28,7 @@ def write_source(repo: Path, source: Path) -> None:
     (source / "pyproject.toml").write_text(
         f"""\
 [build-system]
-requires = ["setuptools==80.9.0"]
+requires = ["setuptools==75.8.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -37,8 +37,7 @@ version = "{VERSION}"
 description = "Ownership bootstrap placeholder; not a RetrievalKit SDK release"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license = {{ text = "Apache-2.0" }}
 authors = [
   {{ name = "EGGYOLK YAZILIM TİCARET LİMİTED ŞİRKETİ" }}
 ]
@@ -52,6 +51,7 @@ Repository = "https://github.com/gungorbasa/RetrievalKit"
 
 [tool.setuptools]
 py-modules = ["{MODULE}"]
+license-files = ["LICENSE", "NOTICE"]
 """,
         encoding="utf-8",
     )
@@ -94,9 +94,10 @@ def validate_artifacts(output: Path) -> None:
     required_metadata = (
         f"Name: {PROJECT}\n",
         f"Version: {VERSION}\n",
+        "Metadata-Version: 2.2\n",
         "Summary: Ownership bootstrap placeholder; not a RetrievalKit SDK release\n",
         "Requires-Python: >=3.10\n",
-        "License-Expression: Apache-2.0\n",
+        "License: Apache-2.0\n",
     )
     for value in required_metadata:
         if value not in metadata:
@@ -104,9 +105,7 @@ def validate_artifacts(output: Path) -> None:
     if module != '"""Ownership bootstrap placeholder; no SDK code."""\n':
         raise SystemExit(f"unexpected executable content in {wheel_path.name}")
     for license_name in ("LICENSE", "NOTICE"):
-        if not any(
-            name.endswith(f".dist-info/licenses/{license_name}") for name in names
-        ):
+        if not any(name.endswith(f".dist-info/{license_name}") for name in names):
             raise SystemExit(f"missing {license_name} in {wheel_path.name}")
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -19,6 +20,19 @@ SPEC.loader.exec_module(ASSEMBLER)
 
 
 class NodePackageAssemblyTests(unittest.TestCase):
+    def test_relative_output_is_normalized_before_staged_npm_pack(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="retrievalkit-node-output-") as root:
+            previous = Path.cwd()
+            os.chdir(root)
+            try:
+                output = ASSEMBLER.clean_output(Path("target/release-stage/node"))
+            finally:
+                os.chdir(previous)
+
+            self.assertTrue(output.is_absolute())
+            self.assertEqual(output, Path(root).resolve() / "target/release-stage/node")
+            self.assertTrue(output.is_dir())
+
     def test_rejects_provisional_or_invalid_public_names(self) -> None:
         for invalid in (
             "RetrievalKit",

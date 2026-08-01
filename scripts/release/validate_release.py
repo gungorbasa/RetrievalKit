@@ -635,6 +635,10 @@ def validate_workflows(repo: Path) -> None:
         and "--group io.github.gungorbasa" in candidate,
         "candidate workflow lacks the approved Kotlin release identity",
     )
+    require(
+        '"$android_home/cmdline-tools/latest/bin/sdkmanager"' in candidate,
+        "candidate workflow does not invoke sdkmanager through ANDROID_HOME",
+    )
     publication = (repo / ".github/workflows/publish-release.yml").read_text()
     require("environment: release" in publication and "environment: pypi" in publication, "publication jobs lack protected environments")
     require(

@@ -253,7 +253,7 @@ jobs:
           java-version: "17"
       - name: Install Android NDK 26
         run: |
-          sdkmanager "platforms;android-34" "ndk;26.1.10909125"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "ndk;26.1.10909125"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> "$GITHUB_ENV"
       - name: Assemble unsigned Maven Central bundle
         run: |

@@ -116,13 +116,14 @@ def validate_macho_arm64(path: Path) -> None:
         raise AssemblyError(f"{path} is not a 64-bit arm64 Mach-O native addon")
 
 
-def clean_output(output: Path) -> None:
+def clean_output(output: Path) -> Path:
     resolved = output.resolve()
     if resolved in {Path("/"), REPO_ROOT.resolve(), TYPESCRIPT_ROOT.resolve()}:
         raise AssemblyError(f"refusing to replace unsafe output directory {resolved}")
     if resolved.exists():
         shutil.rmtree(resolved)
     resolved.mkdir(parents=True)
+    return resolved
 
 
 def copy_declared_files(source: Path, destination: Path, metadata: dict[str, Any]) -> None:
@@ -288,7 +289,7 @@ def assemble(
     for capability, package_directory in PACKAGE_DIRECTORIES.items():
         validate_macho_arm64(package_directory / NATIVE_FILES[capability])
 
-    clean_output(output)
+    output = clean_output(output)
     artifacts: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="retrievalkit-node-release-") as temporary:
         staging_root = Path(temporary)

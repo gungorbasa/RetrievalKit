@@ -1087,6 +1087,20 @@ Verification completed without benchmark workloads:
 
 ## Likely Next Tasks
 
+- 2026-08-01 Step 4 fix-forward: release-candidate run `30707874268` at
+  freeze revision `551b9ed1f9c71ee2ad9370f84141ae6a9d0f580b` passed source,
+  Apple, Python 3.10-3.14, browser retrieval, and browser embedding jobs, but
+  did not assemble a closed candidate. Both Node roots failed because the
+  assembler passed a repository-relative output path to `npm pack` while its
+  working directory was a temporary staged package; both Kotlin roots stopped
+  before packaging because the refreshed macOS runner did not expose bare
+  `sdkmanager`. The owner authorized a fix-forward cycle. The Node assembler
+  now normalizes its output path before staged packing, and the candidate
+  workflow invokes the SDK manager through `$ANDROID_HOME`, matching CI. The
+  commit containing these fixes and this record is the new freeze revision;
+  candidate assembly must be repeated from that exact commit. No device
+  command, tag, GitHub Release, or publication is authorized by this decision.
+
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing
 identity, Central namespace, and Portal token are configured. Registry-owner

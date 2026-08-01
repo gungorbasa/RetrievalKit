@@ -1660,5 +1660,5 @@ Optional post-release work, ordered by evidence need:
 - Phase 7 release authorization must accept the required zero-valued
   `physical_device_100k_violation_count` metric name while continuing to reject
   a nonzero value or any actual 100K physical-device evidence or claim. The
-  validator and mutation tests enforce that distinction; no device command is
-  authorized.
+  validator, gate runner, and mutation tests enforce that distinction; no
+  device command is authorized.

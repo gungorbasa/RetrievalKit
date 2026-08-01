@@ -137,7 +137,11 @@ def controlled_metric(
         )
         return int(observed[metric]) + missing + prohibited
     if metric == "physical_device_100k_violation_count":
-        encoded = json.dumps(observation, sort_keys=True).lower()
+        claim_scope = json.loads(json.dumps(observation))
+        claim_metrics = claim_scope.get("metrics", {})
+        if isinstance(claim_metrics, dict):
+            claim_metrics.pop(metric, None)
+        encoded = json.dumps(claim_scope, sort_keys=True).lower()
         return int(observed[metric]) + int("100k" in encoded)
     return observed[metric]
 

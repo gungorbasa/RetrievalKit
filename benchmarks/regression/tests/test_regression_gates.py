@@ -233,6 +233,16 @@ class RegressionGateMutationTests(unittest.TestCase):
         observation["proposed_workload"] = "100k physical device support"
         self.assert_gate_failed(self.evaluate("release", observation), "P7-RELEASE-NO-100K")
 
+    def test_required_zero_physical_device_violation_metric_can_pass(self) -> None:
+        result = self.evaluate("release", self.tier_observation("release"))
+        row = next(
+            gate
+            for gate in result["gates"]
+            if gate["gate_id"] == "P7-RELEASE-NO-100K"
+        )
+        self.assertEqual(row["actual"], 0)
+        self.assertEqual(row["status"], "passed")
+
     def test_missing_platform_or_version_qualifier_is_rejected(self) -> None:
         observation = self.tier_observation("release")
         del observation["platform"]["toolchain"]

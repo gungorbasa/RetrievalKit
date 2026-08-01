@@ -67,7 +67,18 @@ def main() -> int:
             raise AuthorizationError("authorization owner is missing")
         if date.fromisoformat(authorization["expires_on"]) < date.today():
             raise AuthorizationError("release authorization is expired")
-        encoded = json.dumps([authorization, observation], sort_keys=True).lower()
+        claim_scope = json.loads(json.dumps(observation))
+        metrics = claim_scope.get("metrics")
+        if not isinstance(metrics, dict):
+            raise AuthorizationError("release observation metrics are missing")
+        excluded_lane_violations = metrics.pop(
+            "physical_device_100k_violation_count", None
+        )
+        if excluded_lane_violations != 0:
+            raise AuthorizationError(
+                "physical-device excluded-lane violation count must be zero"
+            )
+        encoded = json.dumps([authorization, claim_scope], sort_keys=True).lower()
         if "100k" in encoded:
             raise AuthorizationError("100K physical-device evidence is permanently excluded")
         platform = observation.get("platform", {})

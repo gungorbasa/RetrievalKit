@@ -1657,3 +1657,8 @@ Optional post-release work, ordered by evidence need:
   `RetrievalKit-Maven-GPG`. Ephemeral self-hosted-runner registration tokens are
   short-lived and must not be stored in Keychain, the repository, logs, or
   project memory. Only this non-secret handling policy is durable memory.
+- Phase 7 release authorization must accept the required zero-valued
+  `physical_device_100k_violation_count` metric name while continuing to reject
+  a nonzero value or any actual 100K physical-device evidence or claim. The
+  validator and mutation tests enforce that distinction; no device command is
+  authorized.

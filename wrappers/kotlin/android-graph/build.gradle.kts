@@ -66,7 +66,7 @@ afterEvaluate {
                 artifactId = "retrievalkit-graph-android"
                 pom {
                     name.set("RetrievalKit Graph Android arm64-v8a")
-                    description.set("Optional local graph and graph-scoped retrieval for Android arm64-v8a")
+                    description.set("Preview AAR for optional local graph and graph-scoped retrieval on Android arm64-v8a")
                 }
             }
         }

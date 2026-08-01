@@ -466,8 +466,10 @@ package/Worker boundaries to improve the number.
 
 The Kotlin embedding slice is implemented and JVM-qualified on the 2026-07-27
 reference host. Android arm64-v8a cross-compilation and closed AAR inspection
-pass; live-device inference remains a release gate. No Kotlin embedding
-artifact has been published.
+pass. Android API 24+ arm64-v8a ships as an explicit v0.1.0 preview; live-device
+inference, compatibility, and performance remain unqualified and deferred, but
+are not a v0.1.0 publication blocker. No Kotlin embedding artifact has been
+published.
 
 Each slice should update tests, wrapper docs, the changelog, and working memory,
 then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.

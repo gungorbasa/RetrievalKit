@@ -13,7 +13,11 @@ credentials are configured, but v0.1.0 is not published. Choose exactly one
 retrieval artifact per application; the graph artifact already contains
 retrieval, and the independent embedding artifact may accompany either choice.
 The initial Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and
-other Android ABIs are not claimed.
+other Android ABIs are not claimed. Android is an explicit v0.1.0 preview.
+Cross-compilation, AAR packaging, closed inventory, ABI/architecture, JVM/JNI-
+contract, and fresh consumer resolution/compilation are retained release
+checks. Live-device inference, lifecycle, compatibility, and performance are
+unqualified and deferred, and their absence does not block v0.1.0.
 
 ## Installation status
 
@@ -173,6 +177,11 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
 Inspect both AARs before consumption: the base artifact must contain only the
 base aggregate, the graph artifact must contain only the graph aggregate, each
 under `jni/arm64-v8a/`, and both must carry `LICENSE` and `NOTICE`.
+
+These host-side checks do not qualify a physical Android device. Do not treat
+a successful build or AAR inspection as evidence that model acquisition,
+inference, lifecycle, memory, thermal behavior, offline restart, broad device
+compatibility, or performance passed on Android hardware.
 
 See [`wrappers/kotlin/README.md`](../../wrappers/kotlin/README.md) for native
 paths, Gradle properties, artifact inspection, and lifecycle details.

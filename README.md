@@ -38,7 +38,7 @@ not usable SDK releases.
 | Python | `python -m pip install retrievalkit-graph` | Names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; CPython 3.10–3.14 |
 | Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; Node.js 22.13+ or 24 LTS |
 | Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
-| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | Android API 24+; arm64-v8a |
+| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | **Preview**; Central namespace and protected credentials configured; v0.1.0 unpublished | Packaging qualified for Android API 24+ arm64-v8a; live-device inference and performance unqualified |
 
 The public identities have been selected. npm and PyPI ownership and
 trusted-publisher setup and Maven Central owner setup are complete. Every
@@ -164,14 +164,23 @@ the base distribution for flat corpora that do not need traversal.
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
 | Kotlin/JVM `io.github.gungorbasa:retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
-| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Available from source; Maven unpublished** |
-| Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Available from source; Maven unpublished** |
-| Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **Available from source; v0.1.0 candidate** |
+| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Preview from source; Maven unpublished; live-device unqualified** |
+| Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Preview from source; Maven unpublished; live-device unqualified** |
+| Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **v0.1.0 preview candidate; live-device inference unqualified** |
 
 Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
 Their graph-enabled distributions already contain the base native retrieval
 capabilities. Node loaders enforce this with a process-global guard; JVM and
 Android applications must depend on exactly one artifact.
+
+Android API 24+ arm64-v8a is an explicit v0.1.0 preview. Cross-compilation,
+AAR packaging, closed inventory, ABI/architecture, JVM/JNI-contract, and fresh
+consumer dependency-resolution/compilation checks remain release gates. No
+physical Android device was available, so live-device model acquisition,
+inference, lifecycle, memory, thermal behavior, offline restart, compatibility,
+and performance are unqualified and deferred. That missing evidence does not
+block v0.1.0, and RetrievalKit does not claim production readiness, device
+compatibility, or Android performance beyond the existing evidence.
 
 Swift uses one package and one graph-capable native aggregate. Add the package
 once, then select `RetrievalKit`, `RetrievalKitGraph`, or both products.
@@ -368,7 +377,8 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 - V1 is designed for local indexes with fewer than 50K chunks.
 - Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
   iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
-  arm64; the initial Android target is arm64-v8a.
+  arm64; Android API 24+ arm64-v8a ships as an explicit preview with live-device
+  inference, compatibility, and performance unqualified.
 - Browser/WebAssembly retrieval and browser embedding are implemented and
   desktop-qualified in source. Browser embedding is in the v0.1.0 release
   inventory; browser retrieval remains unpublished and outside the current

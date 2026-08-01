@@ -453,6 +453,58 @@ def static_validation(repo: Path) -> dict[str, Any]:
         },
         "Kotlin artifact identities changed",
     )
+    require(
+        config["kotlin"]["android_preview"]
+        == {
+            "status": "preview",
+            "min_sdk": 24,
+            "abi": "arm64-v8a",
+            "retained_non_device_checks": [
+                "build",
+                "packaging",
+                "closed-inventory",
+                "abi-architecture",
+                "jvm-jni-contract",
+                "fresh-consumer-compilation-install-resolution",
+            ],
+            "live_device_inference_qualified": False,
+            "live_device_inference_publication_blocker": False,
+            "claim_policy": (
+                "no production, performance, or device-compatibility claims "
+                "beyond existing evidence"
+            ),
+        },
+        "Android preview release contract changed",
+    )
+    require(
+        not any(
+            "android" in blocker.lower()
+            and (
+                "device inference" in blocker.lower()
+                or "physical device" in blocker.lower()
+            )
+            for blocker in config["publication_blockers"]
+        ),
+        "live Android device qualification must not be a publication blocker",
+    )
+    for relative in (
+        "README.md",
+        "docs/guides/kotlin.md",
+        "docs/product/compatibility-policy.md",
+        "docs/product/release-process.md",
+        "docs/product/retrievalkit-product-spec.md",
+        "wrappers/kotlin/README.md",
+        "wrappers/kotlin/android-embedding/README.md",
+    ):
+        android_contract = normalize_whitespace(
+            (repo / relative).read_text(encoding="utf-8")
+        ).lower()
+        require(
+            "android" in android_contract
+            and "preview" in android_contract
+            and "unqualified" in android_contract,
+            f"Android preview qualification boundary missing: {relative}",
+        )
     signing = config["kotlin"]["signing"]
     require(
         signing["fingerprint"] == "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED",
@@ -550,8 +602,18 @@ def validate_workflows(repo: Path) -> None:
         "publication workflow bypasses signed-tag, candidate, or runtime authority validation",
     )
     release_workflows = candidate + publication.lower()
-    forbidden_device_commands = ("xcrun devicectl", "ios-deploy", "xcodebuild test-without-building")
-    require(not any(command in release_workflows for command in forbidden_device_commands), "distribution workflow contains a physical-device command")
+    forbidden_device_commands = (
+        "xcrun devicectl",
+        "ios-deploy",
+        "xcodebuild test-without-building",
+        "adb ",
+        "connectedandroidtest",
+        "connectedcheck",
+    )
+    require(
+        not any(command in release_workflows for command in forbidden_device_commands),
+        "distribution workflow contains a physical-device command",
+    )
 
 
 def publication_blockers(repo: Path, config: dict[str, Any]) -> list[str]:
@@ -1070,6 +1132,10 @@ def validate_maven_pom(
     )
     if packaging == "aar":
         require(text("packaging") == "aar", f"Maven POM packaging mismatch: {path.name}")
+        require(
+            text("description").startswith("Preview "),
+            f"Android Maven POM must declare preview status: {path.name}",
+        )
     for name in ("name", "description", "url", "licenses", "developers", "scm"):
         require(root.find(f"m:{name}", MAVEN_NAMESPACE) is not None, f"Maven POM lacks {name}: {path.name}")
     license_name = root.findtext(

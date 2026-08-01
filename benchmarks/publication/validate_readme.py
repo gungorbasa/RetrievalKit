@@ -74,8 +74,6 @@ def validate_status_labels(readme: str) -> None:
     for sdk in (
         "Kotlin/JVM `io.github.gungorbasa:retrievalkit`",
         "Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph`",
-        "Android `io.github.gungorbasa:retrievalkit-android`",
-        "Android `io.github.gungorbasa:retrievalkit-graph-android`",
     ):
         require(
             re.search(
@@ -84,6 +82,27 @@ def validate_status_labels(readme: str) -> None:
             ),
             f"incorrect Maven source status for {sdk}",
         )
+    for sdk in (
+        "Android `io.github.gungorbasa:retrievalkit-android`",
+        "Android `io.github.gungorbasa:retrievalkit-graph-android`",
+    ):
+        require(
+            re.search(
+                rf"\| {re.escape(sdk)} \|.*\| "
+                r"\*\*Preview from source; Maven unpublished; live-device unqualified\*\* \|",
+                readme,
+            ),
+            f"incorrect Android preview status for {sdk}",
+        )
+    require(
+        re.search(
+            r"\| Android `io\.github\.gungorbasa:retrievalkit-embedding-android` "
+            r"\|.*\| \*\*v0\.1\.0 preview candidate; "
+            r"live-device inference unqualified\*\* \|",
+            readme,
+        ),
+        "incorrect Android embedding preview status",
+    )
     require(
         re.search(
             r"public SwiftPM, PyPI, npm, and Maven publication\s+remain blocked",

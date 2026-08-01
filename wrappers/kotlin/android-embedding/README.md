@@ -4,6 +4,14 @@ This AAR reuses the Kotlin API from the sibling `embedding` module and packages
 the independent `retrievalkit_embedding_jni` aggregate for Android
 `arm64-v8a`. It has no dependency on RetrievalKit's database AAR.
 
+This is an explicit v0.1.0 preview. Cross-compilation, AAR packaging, closed
+inventory, ABI/architecture, the JVM/JNI contract, and fresh consumer
+resolution/compilation remain required and can run without a device.
+Live-device model acquisition, inference, lifecycle, compatibility, and
+performance are unqualified and deferred; they are not a v0.1.0 publication
+blocker. Do not infer production or device compatibility from a successful
+package check.
+
 Use `AndroidOnnxEmbedder.load(context)` or
 `AndroidOnnxEmbedder.prefetch(context)` so verified model artifacts are placed
 under the application cache. The returned `OnnxEmbedder` has the same blocking,

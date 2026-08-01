@@ -26,6 +26,14 @@ Every item is required unless explicitly marked candidate-only.
   exports for Python, Swift, Node, and Kotlin; retain its machine-readable
   timing, machine/toolchain, and dependency-cache evidence with the release
   record.
+- [ ] Android API 24+ arm64-v8a is recorded as an explicit preview. Its
+  cross-compilation, AAR packaging, closed-inventory, ABI/architecture,
+  JVM/JNI-contract, and fresh consumer resolution/compilation checks pass.
+- [ ] Release evidence states that live Android device acquisition, inference,
+  lifecycle, memory, thermal behavior, offline restart, compatibility, and
+  performance remain unqualified and deferred. Missing physical-device
+  evidence is not a v0.1.0 publication blocker and no device-inference pass is
+  claimed.
 
 ## Artifacts
 
@@ -85,6 +93,7 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] Maven publication signs the exact 24 authorized primary files without
   rebuilding them, attests the signed bundle, and retains the Central
   deployment ID.
-- [ ] Fresh remote SwiftPM, PyPI, npm, Maven JVM, and Maven Android consumer
-  projects pass.
+- [ ] Fresh remote SwiftPM, PyPI, npm, and Maven JVM consumer projects pass.
+  A fresh Maven Android consumer resolves and compiles each selected preview
+  AAR; this check does not require or claim physical-device execution.
 - [ ] Changelog, compatibility notes, and rollback owner are confirmed.

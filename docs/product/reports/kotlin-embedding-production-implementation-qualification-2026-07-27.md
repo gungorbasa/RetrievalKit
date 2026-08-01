@@ -13,6 +13,12 @@ publicly and independently defaults database storage to
 `I8ScalarQuantized`; existing databases and persistence formats do not change.
 No artifact was published.
 
+> Status update (2026-08-01): the owner designated Android API 24+
+> arm64-v8a as an explicit v0.1.0 preview. The host-side evidence in this report
+> remains valid, but live-device inference, compatibility, and performance are
+> unqualified and deferred rather than a v0.1.0 publication blocker. This
+> report does not claim that Android device inference passed.
+
 ## Environment
 
 - Host: Apple M1 Max, arm64
@@ -307,7 +313,8 @@ cargo run --locked --release \
 
 - No Android device was attached. Live Android model acquisition, inference,
   lifecycle, performance, memory, thermal behavior, and offline restart remain
-  release gates.
+  unqualified and deferred. Under the 2026-08-01 owner decision, they are not
+  v0.1.0 publication blockers and no device pass may be claimed.
 - The initial Android artifact supports only arm64-v8a and minSdk 24.
 - The model cache is roughly 97 MB and the platform runtime materially
   increases JAR/AAR unpacked size.

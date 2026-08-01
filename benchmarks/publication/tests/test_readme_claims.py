@@ -51,6 +51,16 @@ class ReadmeClaimMutationTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_android_preview_status_is_required(self) -> None:
+        VALIDATOR.validate_status_labels(README)
+        stale = README.replace(
+            "**Preview from source; Maven unpublished; live-device unqualified**",
+            "**Available from source; Maven unpublished**",
+            1,
+        )
+        with self.assertRaises(VALIDATOR.ValidationError):
+            VALIDATOR.validate_status_labels(stale)
+
     def test_changed_number_is_rejected(self) -> None:
         self.assert_rejected(README.replace("7.17×", "7.18×"))
 

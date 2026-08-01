@@ -313,8 +313,15 @@ measured sum is `8.393 ms`, below the 10 ms combined gate; retrieval-only
 remains below 8 ms. Both Kotlin/Rust directions also pass the actual
 RetrievalKit vector, hybrid, graph-scoped vector, and graph-scoped hybrid I8
 gates, while BM25, graph-scoped BM25, and graph-only selection remain exactly
-identical. Android qualification currently covers cross-compilation and closed
-arm64-v8a AAR inspection; live device inference remains a release gate.
+identical. Android arm64-v8a ships as an explicit v0.1.0 preview. Its retained
+qualification covers cross-compilation, base/graph/embedding AAR packaging,
+closed inventory, ABI and ELF architecture, the JVM/JNI contract, and fresh
+consumer dependency resolution and compilation. Live physical-device model
+acquisition, inference, lifecycle, memory, thermal behavior, offline restart,
+device compatibility, and performance remain unqualified and are deferred
+until a device is available. Their absence is not a v0.1.0 publication
+blocker. No production, performance, or device-compatibility claim may exceed
+the existing evidence.
 
 The Rust ONNX artifacts remain pinned in public repository
 `gungorbasa/retrievalkit-minilm` at immutable commit

@@ -118,6 +118,38 @@ class ReleaseTests(unittest.TestCase):
                 "retrievalkit-embedding-android",
             },
         )
+        self.assertEqual(
+            config["kotlin"]["android_preview"],
+            {
+                "status": "preview",
+                "min_sdk": 24,
+                "abi": "arm64-v8a",
+                "retained_non_device_checks": [
+                    "build",
+                    "packaging",
+                    "closed-inventory",
+                    "abi-architecture",
+                    "jvm-jni-contract",
+                    "fresh-consumer-compilation-install-resolution",
+                ],
+                "live_device_inference_qualified": False,
+                "live_device_inference_publication_blocker": False,
+                "claim_policy": (
+                    "no production, performance, or device-compatibility claims "
+                    "beyond existing evidence"
+                ),
+            },
+        )
+        self.assertFalse(
+            any(
+                "android" in blocker.lower()
+                and (
+                    "device inference" in blocker.lower()
+                    or "physical device" in blocker.lower()
+                )
+                for blocker in config["publication_blockers"]
+            )
+        )
         signing = config["kotlin"]["signing"]
         self.assertEqual(
             signing["fingerprint"],
@@ -167,6 +199,41 @@ class ReleaseTests(unittest.TestCase):
                 "Python requires-python missing: wrappers/python-graph",
             ):
                 validator.validate_python_release_metadata(fake, config)
+
+    def test_android_maven_pom_requires_preview_description(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            pom = Path(directory) / "retrievalkit-android-0.1.0.pom"
+            preview = """\
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <groupId>io.github.gungorbasa</groupId>
+  <artifactId>retrievalkit-android</artifactId>
+  <version>0.1.0</version>
+  <packaging>aar</packaging>
+  <name>RetrievalKit Android arm64-v8a</name>
+  <description>Preview AAR for Android arm64-v8a</description>
+  <url>https://retrievalkit-docs.gungorbasa.chatgpt.site</url>
+  <licenses><license><name>Apache License, Version 2.0</name></license></licenses>
+  <developers><developer><name>RetrievalKit</name></developer></developers>
+  <scm><url>https://github.com/gungorbasa/RetrievalKit</url></scm>
+</project>
+"""
+            pom.write_text(preview, encoding="utf-8")
+            arguments = {
+                "group": "io.github.gungorbasa",
+                "artifact_id": "retrievalkit-android",
+                "version": "0.1.0",
+                "packaging": "aar",
+            }
+            validator.validate_maven_pom(pom, **arguments)
+            pom.write_text(
+                preview.replace("Preview AAR", "Production AAR"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "must declare preview status",
+            ):
+                validator.validate_maven_pom(pom, **arguments)
 
     def test_persistence_documentation_rejects_v3_as_current(self) -> None:
         config = validator.load_json(REPO / "release/release-v0.1.0.json")

@@ -71,8 +71,10 @@ part of the public Swift release.
 5. Build and inspect the four approved npm tarballs and the six unsigned Maven
    publications.
 6. Smoke-test every Swift product and a combined base-plus-graph consumer,
-   every Python artifact, all npm tarballs, and all JVM/Android publications
-   in fresh consumer environments.
+   every Python artifact, all npm tarballs, and all JVM publications in fresh
+   consumer environments. For Android, resolve and compile fresh Gradle
+   consumers against each selected AAR and retain the package, ABI, and JNI
+   inspection evidence; do not require device execution.
 7. Assemble the closed release bundle with checksums, SBOM, and provenance.
 8. Repeat from a second clean root and compare every byte.
 9. Validate the bundle independently and complete the
@@ -80,6 +82,16 @@ part of the public Swift release.
 
 The manual `release-candidate.yml` workflow performs the build and validation
 without publishing. It never invokes a physical-device command.
+
+Android API 24+ arm64-v8a is an explicit v0.1.0 preview. The candidate must
+retain cross-compilation, AAR assembly, closed-inventory, ABI/architecture,
+JVM/JNI-contract, and fresh consumer dependency-resolution/compilation checks.
+Live Android device model acquisition, inference, lifecycle, memory, thermal,
+offline-restart, compatibility, and performance evidence remains unqualified
+and is deferred until a device is available. Missing live-device evidence is
+not a v0.1.0 publication blocker, and release material must not imply that
+Android device inference passed or make production, performance, or device-
+compatibility claims beyond the retained evidence.
 
 ## Node and Kotlin candidate construction
 
@@ -318,7 +330,8 @@ revision:
 - Phase 7 scheduled and controlled release results are provisioned and passed;
 - README numeric claims remain explicitly historical or are newly authorized;
 - bundle inventory, checksums, SBOM, provenance, attestations, and fresh
-  consumer smoke tests pass;
+  consumer smoke tests pass, with Android limited to dependency resolution,
+  compilation, package/ABI inspection, and other host-verifiable checks;
 - `v0.1.0` is a verified signed tag, the publication workflow runs from that
   tag, and every prerequisite run resolves to the same commit;
 - the protected release environment records a required-reviewer approval that

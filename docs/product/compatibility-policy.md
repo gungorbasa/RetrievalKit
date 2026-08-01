@@ -18,7 +18,11 @@ and accompanied by migration guidance.
 - Kotlin: Kotlin/JVM with Android arm64-v8a native packaging for the first
   preview, including the optional `retrievalkit-embedding` JVM and
   `retrievalkit-embedding-android` artifacts. Kotlin Multiplatform is not
-  supported.
+  supported. Android API 24+ arm64-v8a is an explicit preview whose build,
+  packaging, inventory, ABI/architecture, JVM/JNI-contract, and fresh consumer
+  resolution/compilation checks remain required and can run without a device.
+  Live Android device inference, lifecycle, compatibility, and performance remain
+  unqualified and deferred; they are not a v0.1.0 publication blocker.
 - Persistence: V1–V4 base snapshots remain readable; new saves use the current
   checksummed V4 format. Graph capability formats are validated independently.
 
@@ -58,4 +62,5 @@ Kotlin Maven coordinates are fixed under `io.github.gungorbasa`. Registry
 publication is not claimed until the release gates pass. x86_64 Apple, Linux
 desktop/server, Windows, the unpublished browser/WASM target, and Kotlin
 Multiplatform have no compatibility commitment until a release manifest lists
-them.
+them. The Android preview makes no production, performance, or device-
+compatibility commitment beyond the host-verifiable evidence listed above.

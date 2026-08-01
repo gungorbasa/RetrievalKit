@@ -50,6 +50,22 @@
   "kotlin": {
     "group": "io.github.gungorbasa",
     "targets": ["jvm-macos-arm64", "android-arm64-v8a"],
+    "android_preview": {
+      "status": "preview",
+      "min_sdk": 24,
+      "abi": "arm64-v8a",
+      "retained_non_device_checks": [
+        "build",
+        "packaging",
+        "closed-inventory",
+        "abi-architecture",
+        "jvm-jni-contract",
+        "fresh-consumer-compilation-install-resolution"
+      ],
+      "live_device_inference_qualified": false,
+      "live_device_inference_publication_blocker": false,
+      "claim_policy": "no production, performance, or device-compatibility claims beyond existing evidence"
+    },
     "artifacts": {
       "retrievalkit": "jar",
       "retrievalkit-graph": "jar",

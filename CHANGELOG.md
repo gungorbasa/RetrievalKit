@@ -23,7 +23,11 @@ All notable user-facing changes and persistence migrations are recorded here.
 - Kotlin/JVM and Android base and graph aggregates under the selected
   `io.github.gungorbasa` Maven group, with typed JNI transport, `FloatArray`
   embeddings, `AutoCloseable` lifecycle, opaque synchronized handles, and
-  Android arm64-v8a AAR packaging.
+  Android arm64-v8a AAR packaging. Android API 24+ arm64-v8a ships as an
+  explicit preview: host-verifiable build, package, inventory, ABI/JNI, and
+  fresh consumer compilation/resolution checks remain required, while live
+  device inference, compatibility, and performance are unqualified, deferred,
+  and non-blocking for v0.1.0 publication.
 - Python graph queries, results, and stable candidate projection now cross
   PyO3 as typed values without JSON. Projection filtering, stale-selection
   checks, ordering, and counts remain owned by the canonical Rust corpus.

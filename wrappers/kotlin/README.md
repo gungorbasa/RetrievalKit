@@ -2,8 +2,13 @@
 
 RetrievalKit exposes the Rust-owned local retrieval and graph databases through
 an idiomatic, blocking Kotlin/JVM API and a thin typed JNI boundary. The initial
-Android package contains an `arm64-v8a` native library. Kotlin Multiplatform,
-browsers, servers, and other Android ABIs are not claimed.
+Android package contains an `arm64-v8a` native library and ships as an explicit
+v0.1.0 preview. Its host-verifiable build, package, inventory, ABI/architecture,
+JVM/JNI-contract, and fresh consumer resolution/compilation checks are
+required and device-independent. Live-device inference, lifecycle,
+compatibility, and performance are unqualified and deferred, and their absence
+does not block v0.1.0. Kotlin
+Multiplatform, browsers, servers, and other Android ABIs are not claimed.
 
 The owner-approved Maven coordinates are:
 
@@ -12,6 +17,8 @@ io.github.gungorbasa:retrievalkit:0.1.0
 io.github.gungorbasa:retrievalkit-graph:0.1.0
 io.github.gungorbasa:retrievalkit-android:0.1.0
 io.github.gungorbasa:retrievalkit-graph-android:0.1.0
+io.github.gungorbasa:retrievalkit-embedding:0.1.0
+io.github.gungorbasa:retrievalkit-embedding-android:0.1.0
 ```
 
 They do not imply that artifacts are available from a public Maven registry.
@@ -158,19 +165,25 @@ python3 ../../scripts/release/assemble_kotlin_packages.py \
 ```
 
 The assembler builds the macOS arm64 JVM and Android arm64-v8a native
-aggregates, then creates four isolated publications:
+aggregates, then creates six isolated publications:
 
 ```text
 <group>:retrievalkit
 <group>:retrievalkit-graph
 <group>:retrievalkit-android
 <group>:retrievalkit-graph-android
+<group>:retrievalkit-embedding
+<group>:retrievalkit-embedding-android
 ```
 
 Every publication contains its main JAR or AAR, sources JAR, Javadoc JAR,
 Apache-2.0 POM metadata, and MD5/SHA-1/SHA-256/SHA-512 checksum companions.
 The output also includes an inventory and a deterministic Central Portal bundle.
 Base artifacts are rejected if they contain graph classes or graph native code.
+
+Android assembly and inspection do not claim physical-device qualification.
+No live Android model acquisition, inference, lifecycle, memory, thermal,
+offline-restart, compatibility, or performance pass exists for v0.1.0.
 
 Central requires PGP signatures. Pass `--signing-key <gpg-key-id>` only from an
 approved secret-bearing release environment, and pass `--namespace-verified`

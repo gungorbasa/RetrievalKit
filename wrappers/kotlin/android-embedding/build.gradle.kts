@@ -110,7 +110,7 @@ afterEvaluate {
                 artifactId = "retrievalkit-embedding-android"
                 pom {
                     name.set("RetrievalKit Embedding for Android arm64-v8a")
-                    description.set("Verified FP32 all-MiniLM-L6-v2 embeddings for Android arm64-v8a")
+                    description.set("Preview FP32 all-MiniLM-L6-v2 embedding AAR for Android arm64-v8a")
                     url.set("https://retrievalkit-docs.gungorbasa.chatgpt.site")
                     licenses {
                         license {

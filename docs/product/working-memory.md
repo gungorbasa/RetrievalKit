@@ -6,6 +6,17 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-01 Android v0.1.0 release decision: no physical Android device is
+  currently available, so Android API 24+ arm64-v8a ships as an explicit
+  preview. Retain cross-compilation, base/graph/embedding AAR packaging, closed
+  inventory, ABI/architecture, JVM/JNI-contract, and fresh consumer dependency
+  resolution/compilation release checks. Live-device model acquisition,
+  inference, lifecycle, memory, thermal behavior, offline restart, device
+  compatibility, and performance remain unqualified and are deferred until a
+  device is available. Missing live-device evidence is not a v0.1.0
+  publication blocker. Never claim an Android device inference pass or make
+  production, performance, or device-compatibility claims beyond existing
+  evidence.
 - 2026-07-30 website demo direction: the browser/WASM retrieval package and
   independent browser embedding Worker are implemented and desktop-qualified
   but unpublished. The public website demo uses curated first-party documents,
@@ -1532,9 +1543,10 @@ Optional post-release work, ordered by evidence need:
   is `12,061,602` bytes with SHA-256
   `ecc7a93ce6917f3887cf560355c11d1a97a87b15f9cea8449a036c39e79ea996`;
   its only native entries are the arm64-v8a JNI aggregate and official ONNX
-  Runtime. Live Android device inference was not available and remains a
-  release gate. No Maven artifact, RetrievalKit release, tag, or SDK package
-  was published.
+  Runtime. Live Android device inference was not available; the 2026-08-01
+  owner decision now classifies it as unqualified deferred evidence rather
+  than a v0.1.0 release gate. No Maven artifact, RetrievalKit release, tag, or
+  SDK package was published.
 - Exact commands, hashes, conformance metrics, package inventories, and
   remaining risks are in
   `docs/product/reports/kotlin-embedding-production-implementation-qualification-2026-07-27.md`.

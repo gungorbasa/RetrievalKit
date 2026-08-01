@@ -2,12 +2,10 @@
 
 Status: release-candidate and runtime authorization implementation complete.
 The public repository, protected GitHub environments, all three PyPI projects,
-base/graph npm bootstrap packages, their trusted publishers, and Maven signing
-identity are configured. The Maven Central namespace and protected user token
-are also configured. The new embedding npm identities require the same
-one-time bootstrap and trusted-publisher setup before publication dispatch.
-v0.1.0 publication remains blocked on that setup, the signed tag, and the
-release evidence gates below.
+all four npm packages, their trusted publishers, and Maven signing identity are
+configured. The Maven Central namespace and protected user token are also
+configured. v0.1.0 publication remains blocked on final registry
+re-verification, the signed tag, and the release evidence gates below.
 
 The automated release candidate ships the Swift, Python, Node.js, and Kotlin
 previews from one signed source revision. Python, Node, and Kotlin retain
@@ -20,11 +18,10 @@ The approved npm package names are `@gungorbasa/retrievalkit`,
 `@gungorbasa/retrievalkit-browser-embedding`. npm rejected the equivalent
 unscoped base name as too similar to an existing package, so every npm package
 uses one consistent owner scope. The approved Maven group is
-`io.github.gungorbasa`. The base and graph npm names were bootstrapped and
-connected to the protected GitHub publication workflow on 2026-07-26. All
-three PyPI names were bootstrapped and connected to that workflow by
-2026-08-01. The
-`io.github.gungorbasa` Central namespace was verified and its protected
+`io.github.gungorbasa`. All four npm names and all three PyPI names were
+bootstrapped and connected to the protected GitHub publication workflow by
+2026-08-01. The `io.github.gungorbasa` Central namespace was verified and its
+protected
 credentials were installed on 2026-07-26. The signed tag and provisioned
 release evidence remain fail-closed external prerequisites.
 
@@ -211,16 +208,16 @@ value with the authorized inventory, attests the tarballs/evidence, and retains
 the publication record for 180 days.
 
 npm trusted publishing cannot establish a package name that does not exist.
-The owner completed the one-time bootstrap setup on 2026-07-26:
+The owner completed the one-time bootstrap setup by 2026-08-01:
 
-1. both names received the non-release `0.0.0-bootstrap.0` placeholder;
+1. all four names received the non-release `0.0.0-bootstrap.0` placeholder;
 2. each package trusts the public
    `gungorbasa/RetrievalKit` repository, `publish-release.yml` workflow, and
    `npm` environment;
 3. the local bootstrap credential was removed; and
-4. neither package contains v0.1.0 SDK artifacts.
+4. none of the packages contains v0.1.0 SDK artifacts.
 
-Both public records resolved anonymously on 2026-07-26. Re-verify the records
+All four public records resolved anonymously by 2026-08-01. Re-verify the records
 and exact trusted-publisher settings before setting the required
 `npm_trusted_publishers_ready` dispatch input to true. The pre-approval job then
 verifies that all four public package records exist, and the npm job verifies
@@ -229,11 +226,6 @@ version, a changed tarball, or a registry integrity mismatch fails closed.
 Because multiple npm uploads cannot be transactional, a failure after the
 first succeeds requires an incident record and fix-forward release; published
 npm versions are never overwritten.
-
-Before v0.1.0 dispatch, bootstrap `@gungorbasa/retrievalkit-embedding` and
-`@gungorbasa/retrievalkit-browser-embedding` with reviewed non-release
-placeholders, configure both trusted publishers, remove bootstrap credentials,
-and verify that v0.1.0 remains unused.
 
 ## Maven Central publication
 
@@ -284,8 +276,7 @@ already configured controls:
   restriction;
 - re-verify the protected `pypi` environment and all three projects' trusted
   publisher for this repository and workflow;
-- bootstrap both embedding npm packages, then re-verify the protected `npm`
-  environment and all four packages'
+- re-verify the protected `npm` environment and all four packages'
   [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/);
 - re-verify `io.github.gungorbasa` in Central Portal, the published PGP public
   key, and all five secrets in the protected `maven` environment using the

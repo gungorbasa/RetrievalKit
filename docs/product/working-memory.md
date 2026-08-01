@@ -1643,3 +1643,17 @@ Optional post-release work, ordered by evidence need:
   `io.github.gungorbasa:retrievalkit-embedding-android`. Swift continues to
   expose `EmbeddingKit` inside the unified `RetrievalKit` package. Rust
   embedding crates remain source-only and are not published to crates.io.
+
+## 2026-08-01 Release Evidence Retention Decision
+
+- The owner approved the public-repository retention model for v0.1.0. GitHub
+  Actions artifacts and logs use GitHub's public-repository maximum of 90 days;
+  requests for 180 days are invalid because GitHub caps them to 90 days.
+- Repository-level immutable releases are enabled for
+  `gungorbasa/RetrievalKit`. Publication must fail closed unless that setting is
+  active, and validated package artifacts plus compact authorization evidence
+  must be attached to the immutable GitHub Release for lifetime preservation.
+- The existing Maven GPG passphrase remains in macOS Keychain service
+  `RetrievalKit-Maven-GPG`. Ephemeral self-hosted-runner registration tokens are
+  short-lived and must not be stored in Keychain, the repository, logs, or
+  project memory. Only this non-secret handling policy is durable memory.

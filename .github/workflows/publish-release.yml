@@ -151,7 +151,7 @@ jobs:
           name: verified-release-candidate-v0.1.0
           path: target/publication-evidence
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   github-release:
     name: Record approval, attest, and publish GitHub/SwiftPM assets
@@ -249,7 +249,7 @@ jobs:
             target/publication-record/publication-authorization-provenance.sha256
             target/publication-evidence/candidate-evidence.json
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
       - name: Attest release artifacts and authorization record
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
@@ -266,6 +266,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          gh api \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/${GITHUB_REPOSITORY}/immutable-releases" \
+            | jq --exit-status '.enabled == true' > /dev/null
           bundle=target/publication-evidence/release-bundle-v0.1.0
           assets=(
             "$bundle"/artifacts/*.xcframework.zip
@@ -495,7 +499,7 @@ jobs:
             target/npm/authorized-inventory.json
             target/npm/publication-evidence.json
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   maven:
     name: Sign and upload Maven Central Portal bundle
@@ -641,4 +645,4 @@ jobs:
             target/maven/central-deployment-id.txt
             target/maven/publication-evidence.json
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90

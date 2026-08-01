@@ -639,6 +639,11 @@ def validate_workflows(repo: Path) -> None:
         '"$android_home/cmdline-tools/latest/bin/sdkmanager"' in candidate,
         "candidate workflow does not invoke sdkmanager through ANDROID_HOME",
     )
+    require(
+        candidate.count("retention-days: 90") == 7
+        and "retention-days: 180" not in candidate,
+        "candidate workflow does not use the public-repository 90-day retention maximum",
+    )
     publication = (repo / ".github/workflows/publish-release.yml").read_text()
     require("environment: release" in publication and "environment: pypi" in publication, "publication jobs lack protected environments")
     require(
@@ -652,6 +657,14 @@ def validate_workflows(repo: Path) -> None:
         and "publication_authorization.py authorize" in publication
         and "--authorization-record" in publication,
         "publication workflow bypasses clean-keyring signed-tag, candidate, or runtime authority validation",
+    )
+    require(
+        publication.count("retention-days: 90") == 4
+        and "retention-days: 180" not in publication
+        and "X-GitHub-Api-Version: 2026-03-10" in publication
+        and "immutable-releases" in publication
+        and "jq --exit-status '.enabled == true'" in publication,
+        "publication workflow lacks 90-day retention or immutable-release enforcement",
     )
     require(
         "All five approved npm packages" in publication

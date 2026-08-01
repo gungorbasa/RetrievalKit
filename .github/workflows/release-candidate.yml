@@ -52,7 +52,7 @@ jobs:
           name: root-${{ matrix.root }}-apple
           path: target/release-apple-artifacts/*.zip
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   python:
     name: Python ${{ matrix.python }} (${{ matrix.root }})
@@ -96,7 +96,7 @@ jobs:
           name: root-${{ matrix.root }}-python-${{ matrix.python }}
           path: target/release-python-wheels/*.whl
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   node:
     name: Node packages (${{ matrix.root }})
@@ -143,7 +143,7 @@ jobs:
           name: root-${{ matrix.root }}-node
           path: target/release-stage
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   browser-embedding:
     name: Browser embedding package (${{ matrix.root }})
@@ -181,7 +181,7 @@ jobs:
           name: root-${{ matrix.root }}-browser-embedding
           path: target/release-stage
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   browser-retrieval:
     name: Browser retrieval package (${{ matrix.root }})
@@ -226,7 +226,7 @@ jobs:
           name: root-${{ matrix.root }}-browser-retrieval
           path: target/release-stage
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   kotlin:
     name: Kotlin packages (${{ matrix.root }})
@@ -277,7 +277,7 @@ jobs:
           name: root-${{ matrix.root }}-kotlin
           path: target/release-stage
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   assemble:
     name: Prove two-root reproducibility and assemble
@@ -319,4 +319,4 @@ jobs:
           name: release-candidate-v0.1.0
           path: target/release-bundle-v0.1.0
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90

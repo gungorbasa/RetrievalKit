@@ -204,9 +204,11 @@ attempt, a branch-based workflow ref, a different revision/run/attempt, failed
 or stale gate evidence, or any changed candidate byte fails closed.
 
 The authorization record, its SHA-256, and the candidate evidence are retained
-for 180 days as a dedicated Actions artifact. They are also attested and
-attached to the GitHub Release alongside the package artifacts. PyPI, npm, and
-Maven publication jobs depend on successful completion of this protected job.
+for the public repository's maximum 90 days as a dedicated Actions artifact.
+They are also attested and attached to the GitHub Release alongside the package
+artifacts. Repository-level immutable releases must be enabled; the publication
+job checks that setting before creating the Release. PyPI, npm, and Maven
+publication jobs depend on successful completion of this protected job.
 
 ## PyPI trusted publication
 
@@ -246,7 +248,8 @@ and the browser retrieval and browser embedding tarballs, and publishes those
 five artifacts with
 `--provenance`. It then compares each registry `dist.integrity`
 value with the authorized inventory, attests the tarballs/evidence, and retains
-the publication record for 180 days.
+the publication record for the public repository's maximum 90 days. The
+published tarballs remain independently retained by npm.
 
 npm trusted publishing cannot establish a package name that does not exist.
 The owner completed all five packages' one-time bootstrap setup by 2026-08-01:
@@ -279,7 +282,9 @@ signing. It imports the environment-protected PGP key, creates detached ASCII
 signatures without rebuilding any primary artifact, constructs the signed
 Central Portal bundle, and uploads it with `publishingType=AUTOMATIC` using the
 protected Central user-token secrets. The signed bundle, publication evidence,
-and deployment ID are attested or retained for 180 days.
+and deployment ID are attested and retained in Actions for the public
+repository's maximum 90 days; the published artifacts remain independently
+retained by Maven Central.
 
 The `maven` environment must contain:
 

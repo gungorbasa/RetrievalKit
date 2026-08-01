@@ -76,8 +76,9 @@ Every item is required unless explicitly marked candidate-only.
 - [ ] `publication-authorization-provenance.json` validates against the exact
   candidate evidence, tag, revision, publication run ID, and run attempt.
 - [ ] The authorization record, SHA-256, and candidate evidence are retained as
-  a 180-day Actions artifact and attached to the GitHub Release.
-- [ ] GitHub Release is created from the verified tag with validated assets only.
+  a 90-day Actions artifact and attached to the GitHub Release.
+- [ ] Repository-level immutable releases are enabled, and the GitHub Release is
+  created from the verified tag with validated assets only.
 - [ ] The Swift package publishes all four products from the signed revision and
   resolves only `RetrievalKitGraphFFI`.
 - [ ] Trusted PyPI publication uploads exactly the validated wheel inventory.

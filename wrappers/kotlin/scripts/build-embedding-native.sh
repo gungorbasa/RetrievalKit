@@ -37,6 +37,13 @@ install_runtime_tree() {
   done
 }
 
+install_project_legal_tree() {
+  destination=$1
+  mkdir -p "$destination"
+  install -m 0644 "$REPO_DIR/LICENSE" "$destination/LICENSE"
+  install -m 0644 "$REPO_DIR/NOTICE" "$destination/NOTICE"
+}
+
 prepare_macos_runtime() {
   : "${RETRIEVALKIT_ONNX_RUNTIME_LIBRARY:?Set RETRIEVALKIT_ONNX_RUNTIME_LIBRARY to the qualified libonnxruntime.1.24.3.dylib}"
   runtime_dir=$(dirname -- "$RETRIEVALKIT_ONNX_RUNTIME_LIBRARY")
@@ -101,6 +108,7 @@ build_android() {
   "$toolchain/llvm-strip" --strip-unneeded \
     "$platform/libretrievalkit_embedding_jni.so"
   install -m 0755 "$prepared/libonnxruntime.so" "$platform/libonnxruntime.so"
+  install_project_legal_tree "$generated/resources"
   install_runtime_tree "$prepared" "$generated/resources"
 }
 

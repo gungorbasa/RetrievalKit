@@ -1102,11 +1102,14 @@ Verification completed without benchmark workloads:
   Android embedding module's `prepareLegalResources` Copy task replaced the
   generated resource directory after native preparation and removed the ONNX
   license, notices, and runtime identity from the AAR. The redundant task is
-  removed because `build-embedding-native.sh` installs the complete legal and
-  runtime resource set together. The commit containing all fixes and this
-  record is the new freeze revision; candidate assembly must be repeated from
-  that exact commit. No device command, tag, GitHub Release, or publication is
-  authorized by this decision.
+  removed, and `build-embedding-native.sh` now installs both the project
+  `LICENSE`/`NOTICE` and the complete ONNX legal/runtime resource set together.
+  Candidate run `30709218517` at revision `9384bff` confirmed that a clean root
+  also requires those project legal files to be installed by native
+  preparation rather than inherited from a prior Gradle output. The commit
+  containing all fixes and this record is the new freeze revision; candidate
+  assembly must be repeated from that exact commit. No device command, tag,
+  GitHub Release, or publication is authorized by this decision.
 
 The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
 npm names, PyPI projects, protected GitHub environments, Maven signing

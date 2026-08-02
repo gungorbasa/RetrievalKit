@@ -10,17 +10,17 @@ scheduled Phase 7 run `30716653472`, controlled release Phase 7 run
 `30716694199`, and the protected GitHub Release/Maven portions of publication
 run `30717163488` passed. The immutable preview GitHub Release and all six
 Maven publications exist. The first three npm packages exist with exact
-candidate integrity. All fifteen PyPI wheels and both browser npm packages are
-pending the bounded recovery in [the release process](release-process.md#bounded-v010-publication-recovery).
+candidate integrity. All fifteen PyPI wheels and both browser npm packages were
+completed by bounded recovery run `30732626862` in [the release process](release-process.md#bounded-v010-publication-recovery).
 
 Recovery completion additionally requires:
 
-- [ ] all fifteen exact wheel filenames and SHA-256 values match PyPI;
-- [ ] both exact browser tarball `dist.integrity` values match npm;
-- [ ] recovery evidence records that npm provenance was disabled for those two
+- [x] all fifteen exact wheel filenames and SHA-256 values match PyPI;
+- [x] both exact browser tarball `dist.integrity` values match npm;
+- [x] recovery evidence records that npm provenance was disabled for those two
   immutable tarballs and does not claim provenance passed;
-- [ ] fresh registry consumers pass after registry replication; and
-- [ ] machine-readable publication truth and public availability docs reflect
+- [x] fresh registry consumers pass after registry replication; and
+- [x] machine-readable publication truth and public availability docs reflect
   the observed final state.
 
 ## Identity and legal
@@ -114,9 +114,11 @@ Recovery completion additionally requires:
   version; the public repository, `publish-release.yml`, and protected `npm`
   environment are their exact trusted publishers; no bootstrap credential
   remains.
-- [ ] npm publication uses no registry token, uploads only the five authorized
-  tarballs with provenance, and the observed `dist.integrity` values equal the
-  authorized inventory.
+- [ ] npm publication uses no registry token and uploads only the five
+  authorized tarballs. The three native packages carry npm provenance; the two
+  exact browser recovery tarballs explicitly record the approved provenance
+  exception and GitHub attestations. Every observed `dist.integrity` value
+  equals the authorized inventory.
 - [ ] Central Portal verifies `io.github.gungorbasa`; the protected `maven`
   environment contains the PGP identity and Central user-token secrets.
 - [ ] The Maven signing key fingerprint is

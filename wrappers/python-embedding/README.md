@@ -31,8 +31,7 @@ package-local runtime directory. Package-local discovery accepts only the
 qualified macOS arm64 library with its pinned exact size and SHA-256. This
 repository does not contain the runtime binary.
 
-This distribution is included in the v0.1.0 release inventory but is not
-available from PyPI until the protected release gates pass.
+The v0.1.0 preview is published on PyPI as `retrievalkit-embedding`.
 
 ## Qualification
 

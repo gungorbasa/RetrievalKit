@@ -18,24 +18,21 @@ model.
 
 ## Installation status
 
-The intended public installs are:
+The public preview installs are:
 
 ```bash
-# PENDING — v0.1.0 is unpublished; these commands describe the approved release.
-python -m pip install retrievalkit
-python -m pip install retrievalkit-graph
-python -m pip install retrievalkit-embedding
+python -m pip install retrievalkit==0.1.0
+python -m pip install retrievalkit-graph==0.1.0
+python -m pip install retrievalkit-embedding==0.1.0
 ```
 
 Install exactly one retrieval aggregate. Choose `retrievalkit-graph` when
 relationships should scope retrieval; it already contains base retrieval.
 Choose `retrievalkit` for a flat corpus.
 
-All three names are reserved with `0.0.0a0` non-SDK placeholders and trust the
-protected release workflow. Do not install the placeholders. The available SDK
-route today is the macOS arm64 graph source preview linked from the
-[public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site). From a
-repository checkout, the available graph route is:
+All three v0.1.0 distributions were published through the protected trusted-
+publisher workflow. The older `0.0.0a0` records are ownership placeholders,
+not SDK releases. From a repository checkout, the graph source route is:
 
 ```bash
 PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh

@@ -2,9 +2,17 @@
 
 All notable user-facing changes and persistence migrations are recorded here.
 
-## 0.1.0 - Unreleased preview
+## 0.1.0 - 2026-08-01 preview
 
 ### Added
+
+- Published the immutable v0.1.0 preview through SwiftPM, PyPI, npm, and Maven
+  Central. All fifteen PyPI wheels, five npm tarballs, and six Maven
+  publications match the authorized release inventory. The two immutable
+  browser npm tarballs were recovered through trusted OIDC with npm provenance
+  disabled because their manifests omitted repository metadata; GitHub
+  attestations and explicit recovery evidence cover those artifacts, and no
+  provenance-pass claim is made for them.
 
 - Optional v0.1.0 embedding packages for Python
   (`retrievalkit-embedding`), Node
@@ -114,8 +122,8 @@ All notable user-facing changes and persistence migrations are recorded here.
   `0.0.0a0` placeholders and trust the same protected workflow through the
   `pypi` environment. The `io.github.gungorbasa` Central namespace is verified,
   its signing identity is public, and all five Maven publishing secrets are
-  installed in the protected environment. v0.1.0 remains unpublished; the
-  signed tag and provisioned release gates remain external prerequisites.
+  installed in the protected environment. The signed tag and exact-revision
+  gates passed, and the preview is now published.
 
 ### Compatibility
 

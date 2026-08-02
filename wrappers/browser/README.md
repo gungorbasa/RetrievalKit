@@ -5,10 +5,8 @@ graph traversal, and generation validation run in Rust/WebAssembly inside a
 dedicated Web Worker; the UI thread only performs typed marshaling and receives
 results.
 
-The approved v0.1.0 identity is `@gungorbasa/retrievalkit-browser`. The package
-is in the release inventory, and npm contains only its non-SDK bootstrap
-placeholder with the exact trusted publisher configured. v0.1.0 remains
-unpublished. It does not import, modify, or bundle the existing Node.js/N-API
+The published v0.1.0 identity is `@gungorbasa/retrievalkit-browser`. It does
+not import, modify, or bundle the existing Node.js/N-API
 wrapper.
 
 Applications that need local MiniLM embeddings may use the independent

@@ -240,8 +240,7 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
         *(f"`{target}`" for target in config["kotlin"]["targets"]),
         (
             f"These npm names and Maven coordinates are fixed for "
-            f"`{config['version']}`, but the SDK packages remain unpublished "
-            "until the release gates pass"
+            f"`{config['version']}`"
         ),
     )
     require(
@@ -401,6 +400,42 @@ def validate_publication_status(repo: Path) -> None:
         ),
         "PyPI publication status inventory mismatch",
     )
+    if status["status"] == "published_preview":
+        require(
+            registries["npm"]["status"] == "published"
+            and registries["npm"]["missing"] == []
+            and registries["npm"]["browser_recovery_npm_provenance"] is False
+            and registries["npm"]["browser_recovery_github_attested"] is True,
+            "published npm recovery status mismatch",
+        )
+        require(
+            registries["pypi"]["status"] == "published"
+            and registries["pypi"]["missing"] == []
+            and registries["pypi"]["trusted_publishing"] is True,
+            "published PyPI recovery status mismatch",
+        )
+        require(
+            status["recovery"]["successful_run_id"] == 30732626862
+            and status["recovery"]["published_exact_authorized_artifacts"] is True
+            and status["recovery"]["manifest_repack_used"] is False
+            and status["recovery"]["patch_release_fallback_used"] is False,
+            "successful recovery evidence mismatch",
+        )
+        require(
+            status["post_publication_validation"]
+            == {
+                "validated_on": "2026-08-02",
+                "swiftpm_remote_consumer": "passed",
+                "pypi_cp314_base_embedding_consumer": "passed",
+                "pypi_cp314_graph_embedding_consumer": "passed",
+                "npm_node24_base_embedding_consumer": "passed",
+                "npm_node24_graph_embedding_consumer": "passed",
+                "npm_node24_browser_embedding_consumer": "passed",
+                "maven_jdk17_jvm_android_resolution": "passed",
+                "physical_device_commands_run": False,
+            },
+            "post-publication consumer validation mismatch",
+        )
     require(
         status["recovery"]["tag"] == "v0.1.0-recovery.2"
         and "0.1.1" in status["recovery"]["policy"]
@@ -425,7 +460,11 @@ def static_validation(repo: Path) -> dict[str, Any]:
         config["rust"] == {"publication": "source-only", "crates_io": False},
         "Rust release must remain source-only",
     )
-    require(f"## {version} - Unreleased preview" in (repo / "CHANGELOG.md").read_text(), "changelog version mismatch")
+    require(
+        f"## {version} - 2026-08-01 preview"
+        in (repo / "CHANGELOG.md").read_text(),
+        "changelog version mismatch",
+    )
     require((repo / f"docs/product/v{version}-migration.md").is_file(), "release migration guide missing")
     cargo = (repo / "Cargo.toml").read_text()
     require(f'version = "{version}"' in cargo, "Cargo workspace version mismatch")

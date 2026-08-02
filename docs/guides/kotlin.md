@@ -8,8 +8,8 @@ artifacts:
 - Embedding: `retrievalkit-embedding` for JVM and
   `retrievalkit-embedding-android` for Android.
 
-The `io.github.gungorbasa` namespace is verified and its protected publishing
-credentials are configured, but v0.1.0 is not published. Choose exactly one
+The `io.github.gungorbasa` namespace publishes v0.1.0 through the protected
+release workflow. Choose exactly one
 retrieval artifact per application; the graph artifact already contains
 retrieval, and the independent embedding artifact may accompany either choice.
 The initial Android target is API 24+ on `arm64-v8a`; Kotlin Multiplatform and
@@ -21,21 +21,19 @@ unqualified and deferred, and their absence does not block v0.1.0.
 
 ## Installation status
 
-The eventual Gradle dependency will have this shape:
+The public preview dependency has this shape:
 
 ```kotlin
 dependencies {
-    // PENDING — Central owner setup is complete; v0.1.0 is not published.
     implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")
     implementation("io.github.gungorbasa:retrievalkit-embedding:0.1.0")
 }
 ```
 
-For Android, the graph artifact will use
+For Android, the graph artifact uses
 `io.github.gungorbasa:retrievalkit-graph-android:0.1.0`. Base applications will
 use `io.github.gungorbasa:retrievalkit:0.1.0` on JVM or
-`io.github.gungorbasa:retrievalkit-android:0.1.0` on Android. None of these
-artifacts is published to a public Maven repository yet. Choose exactly one
+`io.github.gungorbasa:retrievalkit-android:0.1.0` on Android. Choose exactly one
 base or graph artifact; graph already includes retrieval.
 
 The available JVM route is the repository source build:

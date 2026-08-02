@@ -5,9 +5,9 @@ frozen on 2026-08-01 at signed source revision
 `09cb2d8f9e56e604c39912de38e69ed24d542b16`. The candidate, onboarding,
 scheduled Phase 7, and controlled release Phase 7 gates passed at that exact
 revision. The signed `v0.1.0` tag and immutable preview GitHub Release now
-exist. Maven Central and three native Node npm packages published successfully;
-PyPI and the two browser npm packages require the bounded recovery described
-below. [`release/publication-v0.1.0.json`](../../release/publication-v0.1.0.json)
+exist. Maven Central, PyPI, and all five npm packages are published; the bounded
+recovery described below completed the initially missing PyPI wheels and two
+browser npm packages. [`release/publication-v0.1.0.json`](../../release/publication-v0.1.0.json)
 is the machine-readable operational publication status.
 
 The original freeze did not itself authorize those later steps. Their completed
@@ -295,7 +295,7 @@ npm then rejected `@gungorbasa/retrievalkit-browser` provenance because the
 immutable browser tarball omitted `repository`; browser embedding was not
 attempted. No v0.1.0 PyPI file or browser npm version was created.
 
-The owner authorized a narrow recovery on 2026-08-02. It runs from the signed
+The owner authorized a narrow recovery on 2026-08-02. It ran from the signed
 operational tag `v0.1.0-recovery.2` through the same public
 `publish-release.yml` and protected `release`, `pypi`, and `npm` environments.
 The recovery validator requires the original signed release revision, candidate
@@ -315,6 +315,11 @@ narrower built-in/OIDC credentials.
 2. publishing the exact two missing authorized browser tarballs through npm
    trusted publishing with npm provenance disabled, then matching registry
    integrity to the frozen inventory.
+
+Recovery `.2` run `30732626862` passed both operations. All fifteen PyPI wheel
+digests and all five npm integrity values match the authorized candidate. The
+exact browser tarballs were accepted, so no manifest repack and no `0.1.1`
+fallback occurred.
 
 GitHub attestations still cover the two recovered npm tarballs and recovery
 record. npm provenance is disabled only because provenance validation requires

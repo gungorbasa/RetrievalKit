@@ -58,39 +58,30 @@ def validate_local_links(repo: Path, readme: str) -> None:
 
 
 def validate_status_labels(readme: str) -> None:
-    for sdk in ("Swift `RetrievalKit`", "Swift `RetrievalKitGraph`", "Swift `EmbeddingKit`", "Swift `RetrievalKitPipeline`", "Python `retrievalkit`", "Python `retrievalkit-graph`"):
-        require(re.search(rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source\*\* \|", readme), f"incorrect source status for {sdk}")
     for sdk in (
+        "Swift `RetrievalKit`",
+        "Swift `RetrievalKitGraph`",
+        "Swift `EmbeddingKit`",
+        "Swift `RetrievalKitPipeline`",
+        "Python `retrievalkit`",
+        "Python `retrievalkit-graph`",
+        "Python `retrievalkit-embedding`",
         "TypeScript `@gungorbasa/retrievalkit`",
         "TypeScript `@gungorbasa/retrievalkit-graph`",
-    ):
-        require(
-            re.search(
-                rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source; bootstrap placeholder only\*\* \|",
-                readme,
-            ),
-            f"incorrect npm bootstrap status for {sdk}",
-        )
-    for sdk in (
+        "TypeScript `@gungorbasa/retrievalkit-embedding`",
+        "Browser `@gungorbasa/retrievalkit-browser`",
+        "Browser `@gungorbasa/retrievalkit-browser-embedding`",
         "Kotlin/JVM `io.github.gungorbasa:retrievalkit`",
         "Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph`",
+        "Kotlin/JVM `io.github.gungorbasa:retrievalkit-embedding`",
     ):
         require(
             re.search(
-                rf"\| {re.escape(sdk)} \|.*\| \*\*Available from source; Maven unpublished\*\* \|",
+                rf"\| {re.escape(sdk)} \|.*\| \*\*Published preview\*\* \|",
                 readme,
             ),
-            f"incorrect Maven source status for {sdk}",
+            f"incorrect published preview status for {sdk}",
         )
-    require(
-        re.search(
-            r"\| Browser `@gungorbasa/retrievalkit-browser` \|.*\| "
-            r"\*\*Available from source; v0\.1\.0 candidate; "
-            r"bootstrap placeholder only\*\* \|",
-            readme,
-        ),
-        "incorrect browser retrieval release status",
-    )
     for sdk in (
         "Android `io.github.gungorbasa:retrievalkit-android`",
         "Android `io.github.gungorbasa:retrievalkit-graph-android`",
@@ -98,7 +89,7 @@ def validate_status_labels(readme: str) -> None:
         require(
             re.search(
                 rf"\| {re.escape(sdk)} \|.*\| "
-                r"\*\*Preview from source; Maven unpublished; live-device unqualified\*\* \|",
+                r"\*\*Published preview; live-device unqualified\*\* \|",
                 readme,
             ),
             f"incorrect Android preview status for {sdk}",
@@ -106,7 +97,7 @@ def validate_status_labels(readme: str) -> None:
     require(
         re.search(
             r"\| Android `io\.github\.gungorbasa:retrievalkit-embedding-android` "
-            r"\|.*\| \*\*v0\.1\.0 preview candidate; "
+            r"\|.*\| \*\*Published preview; "
             r"live-device inference unqualified\*\* \|",
             readme,
         ),
@@ -114,12 +105,12 @@ def validate_status_labels(readme: str) -> None:
     )
     require(
         re.search(
-            r"public SwiftPM, PyPI, npm, and Maven publication\s+remain blocked",
+            r"public SwiftPM, PyPI, npm, and Maven publication\s+completed",
             readme,
             re.IGNORECASE,
         )
         is not None,
-        "README must deny public registry availability for provisional wrappers",
+        "README must state completed public preview distribution",
     )
 
 

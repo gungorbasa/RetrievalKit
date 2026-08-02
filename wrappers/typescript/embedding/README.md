@@ -39,5 +39,5 @@ Only the qualified runtime with exact size 27,724,968 bytes and SHA-256
 is accepted for package-local discovery. The binary is not stored in this
 repository.
 
-The package is included in the v0.1.0 release inventory but is not available
-from npm until the protected release gates pass.
+The v0.1.0 preview is published as
+`@gungorbasa/retrievalkit-embedding`.

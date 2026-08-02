@@ -296,13 +296,14 @@ delay packaging the already-tested V1 SDK.
 
 ## Phase 5: Release and Distribution
 
-Status: the combined `v0.1.0` Swift/Python release-candidate surface, automatic
+Status: the combined `v0.1.0` Swift/Python release surface, automatic
 PR CI, one public Swift package backed by one graph-capable binary, macOS arm64
 wheel matrix, deterministic bundle metadata, checksums, SBOM, provenance,
-governance documents, and guarded publication workflows are implemented.
-External publication remains blocked on provisioned Phase 7 scheduled/release
-gates, release-revision claim authorization, a signed tag, and owner approval.
-Apache-2.0 licensing and company attribution are complete.
+governance documents, and guarded publication workflows are implemented. The
+exact-revision Phase 7 gates, signed tag, protected approval, and bounded
+partial-publication recovery completed; SwiftPM, PyPI, npm, and Maven Central
+now carry the v0.1.0 preview. Apache-2.0 licensing and company attribution are
+complete.
 
 Goal: make RetrievalKit installable without cloning the repository or manually
 building Rust artifacts.

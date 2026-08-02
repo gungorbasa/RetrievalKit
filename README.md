@@ -25,32 +25,28 @@ layers rather than SDK packages.
 
 ## Install status
 
-RetrievalKit is still a source preview. **No v0.1.0 registry release is
-available yet.** The commands below show the intended shortest install
-experience after the publication gates pass; use the linked source quickstarts
-today. Existing npm and PyPI records contain bootstrap-only placeholders, not
-usable SDK releases.
+RetrievalKit v0.1.0 is published as a preview. The commands below install the
+qualified initial packages. Platform limits are part of the support contract;
+in particular, Android remains a packaging-qualified arm64-v8a preview with no
+live-device inference or performance qualification.
 
 | SDK | Intended public install | Publication status | Qualified initial target |
 | --- | --- | --- | --- |
-| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | Public source available; pending v0.1.0 tag and release XCFramework | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
-| Python | `python -m pip install retrievalkit-graph` | Names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; CPython 3.10–3.14 |
-| Node.js | `npm install @gungorbasa/retrievalkit-graph` | Scoped names reserved and trusted publishing configured; v0.1.0 unpublished | macOS arm64; Node.js 22.13+ or 24 LTS |
-| Browser | `npm install @gungorbasa/retrievalkit-browser` | Name reserved and trusted publishing configured; v0.1.0 unpublished | Dedicated Worker; portable and SIMD128 WASM tiers |
-| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | Central namespace and protected credentials configured; v0.1.0 unpublished | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
-| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | **Preview**; Central namespace and protected credentials configured; v0.1.0 unpublished | Packaging qualified for Android API 24+ arm64-v8a; live-device inference and performance unqualified |
+| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | **Published preview** | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
+| Python | `python -m pip install retrievalkit-graph==0.1.0` | **Published preview** | macOS arm64; CPython 3.10–3.14 |
+| Node.js | `npm install @gungorbasa/retrievalkit-graph@0.1.0` | **Published preview** | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Browser | `npm install @gungorbasa/retrievalkit-browser@0.1.0` | **Published preview** | Dedicated Worker; portable and SIMD128 WASM tiers |
+| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | **Published preview** | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
+| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | **Published preview** | Packaging qualified for Android API 24+ arm64-v8a; live-device inference and performance unqualified |
 
-The public identities have been selected. npm and PyPI ownership and
-trusted-publisher setup and Maven Central owner setup are complete.
-Every v0.1.0 publication is still pending, so the install commands do not yet
-provide an SDK release. For Swift, add one package and select `RetrievalKit` for a flat
+The public identities and trusted publishers are configured, and v0.1.0 is
+available from all four distribution channels. For Swift, add one package and select `RetrievalKit` for a flat
 corpus, `RetrievalKitGraph` for relationships plus retrieval, or both. For
 Python, Node, and Kotlin, choose exactly one native distribution in a process:
 graph-enabled packages already include base retrieval.
 
-**Available now:** [run the checked-in source quickstarts](#run-from-source).
-The downloadable Python graph source preview is also available from the
-[public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site).
+The checked-in [source quickstarts](#run-from-source) remain available for
+contributors and unsupported source targets.
 
 ## Three ways to search
 
@@ -150,24 +146,24 @@ the base distribution for flat corpora that do not need traversal.
 
 | SDK | Capability | Status |
 | --- | --- | --- |
-| Swift `RetrievalKit` | Base corpus and retrieval | **Available from source** |
-| Swift `RetrievalKitGraph` | Graph aggregate with retrieval | **Available from source** |
-| Swift `EmbeddingKit` | Local Core ML embedding integration | **Available from source** |
-| Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Available from source** |
-| Python `retrievalkit` | Base corpus and retrieval | **Available from source** |
-| Python `retrievalkit-graph` | Graph aggregate with retrieval | **Available from source** |
-| Python `retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
-| TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
-| TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Available from source; bootstrap placeholder only** |
-| TypeScript `@gungorbasa/retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
-| Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and graph-scoped WASM retrieval | **Available from source; v0.1.0 candidate; bootstrap placeholder only** |
-| Browser `@gungorbasa/retrievalkit-browser-embedding` | Worker-owned local FP32 MiniLM embedding | **Available from source; v0.1.0 candidate** |
-| Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Available from source; Maven unpublished** |
-| Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Available from source; Maven unpublished** |
-| Kotlin/JVM `io.github.gungorbasa:retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Available from source; v0.1.0 candidate** |
-| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Preview from source; Maven unpublished; live-device unqualified** |
-| Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Preview from source; Maven unpublished; live-device unqualified** |
-| Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **v0.1.0 preview candidate; live-device inference unqualified** |
+| Swift `RetrievalKit` | Base corpus and retrieval | **Published preview** |
+| Swift `RetrievalKitGraph` | Graph aggregate with retrieval | **Published preview** |
+| Swift `EmbeddingKit` | Local Core ML embedding integration | **Published preview** |
+| Swift `RetrievalKitPipeline` | Chunk → embed → index → search orchestration | **Published preview** |
+| Python `retrievalkit` | Base corpus and retrieval | **Published preview** |
+| Python `retrievalkit-graph` | Graph aggregate with retrieval | **Published preview** |
+| Python `retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Published preview** |
+| TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval; selected npm identity | **Published preview** |
+| TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Published preview** |
+| TypeScript `@gungorbasa/retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Published preview** |
+| Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and graph-scoped WASM retrieval | **Published preview** |
+| Browser `@gungorbasa/retrievalkit-browser-embedding` | Worker-owned local FP32 MiniLM embedding | **Published preview** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit` | Base corpus and retrieval | **Published preview** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit-graph` | Graph aggregate with retrieval | **Published preview** |
+| Kotlin/JVM `io.github.gungorbasa:retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Published preview** |
+| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | **Published preview; live-device unqualified** |
+| Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Published preview; live-device unqualified** |
+| Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **Published preview; live-device inference unqualified** |
 
 Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
 Their graph-enabled distributions already contain the base native retrieval
@@ -188,8 +184,7 @@ once, then select `RetrievalKit`, `RetrievalKitGraph`, or both products.
 `RetrievalKitGraphFFI` contains the shared base and graph entry points, so a
 Swift application never links competing native aggregates. Selecting only
 `RetrievalKit` keeps graph APIs out of the Swift target, although SwiftPM still
-downloads the graph-capable binary. Until public distribution starts, use the
-checked-in source packages shown in the quickstarts below.
+downloads the graph-capable binary.
 
 `GraphRetrievalDatabase` is the complete graph-scoped search product.
 `GraphDatabase` is available for applications that need only traversal and
@@ -197,8 +192,7 @@ candidate projection, with no retrieval configuration or embeddings.
 
 ## Run from source
 
-The `v0.1.0` preview release candidate is source-first while the remaining
-release qualification gates are completed. Start at the repository root. Each
+For a source checkout, start at the repository root. Each
 quickstart below checks its required toolchain before compiling and runs a
 checked-in example; none publishes or downloads a RetrievalKit package from a
 public registry.
@@ -387,13 +381,12 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
   the qualified release surface.
 - RetrievalKit is licensed under
   [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
-- Installation remains source-first until the remaining release gates are
-  owner-approved.
+- Installation is available through SwiftPM, PyPI, npm, and Maven Central for
+  the qualified preview targets.
 - Benchmark evidence supports scoped observations, not a universal competitor
   claim.
-- Public SwiftPM, PyPI, npm, and Maven publication remain blocked pending the
-  signed release tag, provisioned release gates, and claim authorization for
-  the release revision.
+- Public SwiftPM, PyPI, npm, and Maven publication completed from the signed
+  release revision and exact authorized artifacts.
 
 ## Documentation
 
@@ -414,4 +407,4 @@ and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publicat
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
-RetrievalKit `v0.1.0` is a preview. Public distribution has not started.
+RetrievalKit `v0.1.0` is a published preview.

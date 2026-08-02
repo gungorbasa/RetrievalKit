@@ -21,7 +21,7 @@ io.github.gungorbasa:retrievalkit-embedding:0.1.0
 io.github.gungorbasa:retrievalkit-embedding-android:0.1.0
 ```
 
-They do not imply that artifacts are available from a public Maven registry.
+All six v0.1.0 preview artifacts are available from Maven Central.
 
 ## API
 

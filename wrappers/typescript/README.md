@@ -12,8 +12,8 @@ The initial implemented native target is Node.js LTS on macOS arm64. The
 separate browser/WebAssembly runtime and browser embedding provider live at
 `wrappers/browser` and `wrappers/browser-embedding`; they do not load these
 N-API packages. Browser embedding joins the v0.1.0 release inventory; browser
-retrieval remains unpublished. Other native operating systems and
-public npm distribution are not claimed. All checked-in Node package manifests
+retrieval is published separately as `@gungorbasa/retrievalkit-browser`.
+Other native operating systems are not claimed. All checked-in Node package manifests
 remain private until closed release assembly.
 
 ## Build and verify

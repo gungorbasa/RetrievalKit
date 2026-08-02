@@ -14,10 +14,9 @@ The selected npm identities are:
 
 The equivalent unscoped base name was rejected by npm as too similar to an
 existing package, so every Node package uses the release owner's public scope.
-All five approved npm names have bootstrap-only placeholder versions and GitHub
-trusted publishers configured. Those placeholders are not SDK releases;
-v0.1.0 remains unpublished.
-From source or after the real release, install or load exactly one
+All five approved npm names publish v0.1.0 through their GitHub trusted
+publisher. The older bootstrap versions are ownership placeholders, not SDK
+releases. Install or load exactly one
 retrieval package in a process. The independent embedding package may accompany
 it. The graph package already contains retrieval capability, and its loader
 rejects mixing retrieval native aggregates. A separate
@@ -27,17 +26,16 @@ capability-separated browser/WebAssembly runtime is implemented under
 
 ## Installation status
 
-The eventual shortest install will be:
+The public preview installs are:
 
 ```bash
-# PENDING — v0.1.0 is unpublished; these commands describe the approved release.
-npm install @gungorbasa/retrievalkit-graph
+npm install @gungorbasa/retrievalkit-graph@0.1.0
 # Optional independent local embedding provider:
-npm install @gungorbasa/retrievalkit-embedding
+npm install @gungorbasa/retrievalkit-embedding@0.1.0
 
 # Browser applications use two independent Worker packages:
-npm install @gungorbasa/retrievalkit-browser
-npm install @gungorbasa/retrievalkit-browser-embedding
+npm install @gungorbasa/retrievalkit-browser@0.1.0
+npm install @gungorbasa/retrievalkit-browser-embedding@0.1.0
 ```
 
 Choose `@gungorbasa/retrievalkit-graph` when relationships matter; it already
@@ -50,7 +48,7 @@ Worker/WASM package rather than separate base and graph npm packages. See the
 [`wrappers/browser` guide](../../wrappers/browser/README.md) for the packaged
 WASM tier imports and Worker entrypoint.
 
-The available route is the repository source build:
+The repository source build remains available for contributors:
 
 ```bash
 cd wrappers/typescript

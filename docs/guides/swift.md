@@ -11,11 +11,9 @@ database types:
 
 ## Installation status
 
-The eventual public SwiftPM dependency is intentionally shown first:
+The public preview SwiftPM dependency is:
 
 ```swift
-// Package.swift — PENDING, not installable until the v0.1.0 tag and
-// versioned XCFramework release asset are public.
 .package(
   url: "https://github.com/gungorbasa/RetrievalKit.git",
   from: "0.1.0"
@@ -27,9 +25,8 @@ traversal and graph-scoped retrieval, or both products from that one package.
 `EmbeddingKit` and `RetrievalKitPipeline` are additional products in the same
 package.
 
-**This dependency is not active today.** The repository source is public, but
-the v0.1.0 tag and release asset required by the root package manifest are not
-available. The available route is the checked-in source quickstart:
+The signed v0.1.0 tag and versioned XCFramework release asset are public. The
+checked-in source quickstart remains available for contributors:
 
 ```bash
 scripts/build-xcframework.sh --macos-only --graph
@@ -40,7 +37,7 @@ The initial qualified package target is macOS 14+ arm64 and iOS 15+ arm64 for
 physical devices and Apple-silicon simulators. Intel macOS and x86_64 iOS
 simulators are not claimed.
 
-The planned public Swift package exposes both `RetrievalKit` and
+The public Swift package exposes both `RetrievalKit` and
 `RetrievalKitGraph`
 products over one graph-capable native aggregate. An application may select
 either product or both. Selecting only `RetrievalKit` keeps graph APIs out of

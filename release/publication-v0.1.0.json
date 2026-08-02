@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "0.1.0",
-  "status": "partial_publication_recovery_authorized",
+  "status": "published_preview",
   "release": {
     "tag": "v0.1.0",
     "source_revision": "09cb2d8f9e56e604c39912de38e69ed24d542b16",
@@ -30,25 +30,27 @@
       "deployment_id": "0a1fd42c-56f2-4f16-9c1d-7ab8d765bf08"
     },
     "npm": {
-      "status": "partial",
+      "status": "published",
       "published": [
         "@gungorbasa/retrievalkit",
         "@gungorbasa/retrievalkit-graph",
-        "@gungorbasa/retrievalkit-embedding"
-      ],
-      "missing": [
+        "@gungorbasa/retrievalkit-embedding",
         "@gungorbasa/retrievalkit-browser",
         "@gungorbasa/retrievalkit-browser-embedding"
-      ]
+      ],
+      "missing": [],
+      "browser_recovery_npm_provenance": false,
+      "browser_recovery_github_attested": true
     },
     "pypi": {
-      "status": "missing",
-      "published": [],
-      "missing": [
+      "status": "published",
+      "published": [
         "retrievalkit",
         "retrievalkit-graph",
         "retrievalkit-embedding"
-      ]
+      ],
+      "missing": [],
+      "trusted_publishing": true
     }
   },
   "recovery": {
@@ -61,6 +63,10 @@
         "reason": "built-in workflow token could not read the immutable-releases administration endpoint"
       }
     ],
+    "successful_run_id": 30732626862,
+    "published_exact_authorized_artifacts": true,
+    "manifest_repack_used": false,
+    "patch_release_fallback_used": false,
     "policy": "publish exact authorized missing artifacts first; correct only unpublished browser manifests if npm rejects exact bytes; use 0.1.1 only if 0.1.0 cannot be completed",
     "forbidden": [
       "move-or-recreate-v0.1.0-tag",
@@ -68,6 +74,17 @@
       "republish-maven",
       "replace-existing-registry-version"
     ]
+  },
+  "post_publication_validation": {
+    "validated_on": "2026-08-02",
+    "swiftpm_remote_consumer": "passed",
+    "pypi_cp314_base_embedding_consumer": "passed",
+    "pypi_cp314_graph_embedding_consumer": "passed",
+    "npm_node24_base_embedding_consumer": "passed",
+    "npm_node24_graph_embedding_consumer": "passed",
+    "npm_node24_browser_embedding_consumer": "passed",
+    "maven_jdk17_jvm_android_resolution": "passed",
+    "physical_device_commands_run": false
   },
   "android": {
     "status": "preview",

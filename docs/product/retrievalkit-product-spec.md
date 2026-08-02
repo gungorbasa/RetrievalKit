@@ -236,8 +236,8 @@ ort-wasm-simd-threaded.asyncify.wasm
 ```
 
 The v0.1.0 browser embedding registry identity is fixed as
-`@gungorbasa/retrievalkit-browser-embedding`. It is not published until the
-release gates pass.
+`@gungorbasa/retrievalkit-browser-embedding`. Its exact authorized artifact is
+published.
 
 On the Apple M1 Max reference host, a real Chrome 150 dedicated-Worker WebGPU
 run with 50 warm-ups and 750 measured 32-token queries produced warm p95
@@ -401,10 +401,9 @@ The owner approved `@gungorbasa/retrievalkit-browser` as the v0.1.0 browser
 retrieval registry identity on 2026-08-01. Its independent npm tarball contains
 the Worker wrapper and both portable and SIMD128 `wasm-bindgen` tiers. It stays
 separate from the Node N-API packages and from
-`@gungorbasa/retrievalkit-browser-embedding`. Publication remains blocked until
-the exact candidate and release gates pass. Its registry record and exact
+`@gungorbasa/retrievalkit-browser-embedding`. Its registry record and exact
 trusted publisher were configured with a non-SDK placeholder on 2026-08-01;
-v0.1.0 remains unpublished.
+the exact authorized v0.1.0 artifact is now published.
 
 The browser package exposes the same capability-separated products:
 
@@ -585,8 +584,7 @@ is a material startup cost, or when signed prebuilt databases are required as
 cross-platform distribution artifacts.
 
 The browser retrieval and embedding packages are implemented,
-desktop-qualified, and included as separate v0.1.0 npm release artifacts. Both
-remain unpublished until the protected release gates pass. The private website repository ships a
+desktop-qualified, and published as separate v0.1.0 npm release artifacts. The private website repository ships a
 versioned Apollo 11 corpus pack and builds one combined
 `GraphRetrievalDatabase` in RetrievalKit WASM. Vector mode uses local MiniLM
 ranking followed by a Qwen3 0.6B answer. Graph Text validates and executes
@@ -759,8 +757,8 @@ native targets are macOS arm64 for JVM use and Android arm64-v8a, with no
 Kotlin Multiplatform claim. Their release target IDs are `jvm-macos-arm64` and
 `android-arm64-v8a`. Base consumers in either ecosystem must not load or depend
 on graph code, and applications must not load both native aggregates in one
-process. These npm names and Maven coordinates are fixed for `0.1.0`, but the
-SDK packages remain unpublished until the release gates pass.
+process. These npm names and Maven coordinates are fixed for `0.1.0` and
+published.
 
 The first optional graph release is limited to deterministic explicit
 references, reference collections, document/chunk structure, bounded typed

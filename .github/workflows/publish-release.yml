@@ -687,7 +687,7 @@ jobs:
           RELEASE_SIGNING_FINGERPRINT: 0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED
           RELEASE_SIGNING_KEY: release/retrievalkit-release-signing-key.asc
         run: |
-          test "$RECOVERY_TAG" = "v0.1.0-recovery.1"
+          test "$RECOVERY_TAG" = "v0.1.0-recovery.2"
           test "$RELEASE_TAG" = "v0.1.0"
           test "$CANDIDATE_RUN" = "30716625698"
           test "$SCHEDULED_RUN" = "30716653472"
@@ -709,6 +709,7 @@ jobs:
       - name: Download immutable candidate, gates, and original authorization
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
           SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
@@ -739,7 +740,9 @@ jobs:
             > "$recovery/runs/publication-jobs.json"
           gh api "repos/$REPOSITORY/releases/tags/v0.1.0" \
             > "$recovery/runs/github-release.json"
-          gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+          test -n "$RELEASE_GITHUB_TOKEN"
+          GH_TOKEN="$RELEASE_GITHUB_TOKEN" gh api \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
             "repos/$REPOSITORY/immutable-releases" \
             > "$recovery/runs/immutable-releases.json"
       - name: Validate the exact partial-publication recovery boundary

@@ -52,7 +52,15 @@
     }
   },
   "recovery": {
-    "tag": "v0.1.0-recovery.1",
+    "tag": "v0.1.0-recovery.2",
+    "prepublication_attempts": [
+      {
+        "tag": "v0.1.0-recovery.1",
+        "run_id": 30732556353,
+        "result": "failed-before-registry-jobs",
+        "reason": "built-in workflow token could not read the immutable-releases administration endpoint"
+      }
+    ],
     "policy": "publish exact authorized missing artifacts first; correct only unpublished browser manifests if npm rejects exact bytes; use 0.1.1 only if 0.1.0 cannot be completed",
     "forbidden": [
       "move-or-recreate-v0.1.0-tag",

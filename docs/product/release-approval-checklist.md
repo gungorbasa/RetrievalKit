@@ -96,7 +96,8 @@ Recovery completion additionally requires:
   workflow-run approvals API response.
 - [ ] The protected `release` environment contains `RELEASE_GITHUB_TOKEN`,
   sourced from a Keychain-managed credential with `repo` and `workflow`
-  scopes; only the GitHub Release creation step consumes it.
+  scopes; the GitHub Release creation step and bounded recovery's read-only
+  immutable-release status check are its only consumers.
 - [ ] `publication-authorization-provenance.json` validates against the exact
   candidate evidence, tag, revision, publication run ID, and run attempt.
 - [ ] The authorization record, SHA-256, and candidate evidence are retained as

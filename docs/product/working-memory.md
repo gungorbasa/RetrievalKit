@@ -15,7 +15,7 @@ implemented, or superseded by the product spec.
   `0.1.0` candidate bytes for base, graph, and Node embedding; browser retrieval
   and browser embedding are missing. PyPI has no `0.1.0` files because the old
   pinned publisher action rejected valid wheel metadata before upload. Owner
-  authorizes a signed `v0.1.0-recovery.1` operational tag to publish the exact
+  authorizes a signed `v0.1.0-recovery.2` operational tag to publish the exact
   fifteen wheels with the current PyPI action and first attempt the exact two
   missing browser tarballs with npm provenance disabled. This provenance
   exception must be disclosed and never described as passed provenance. If npm
@@ -25,6 +25,10 @@ implemented, or superseded by the product spec.
   release tag or GitHub Release, republish Maven or existing npm versions, or
   run a physical-device command. Machine-readable operational status is
   `release/publication-v0.1.0.json`.
+  Recovery `.1` run `30732556353` failed before validation or registry jobs
+  because the built-in workflow token could not read GitHub's
+  immutable-release administration endpoint; `.2` uses the already protected
+  workflow-capable credential for that read only.
 
 - 2026-08-01 signed-tag verification correction: the first local `v0.1.0`
   signature was cryptographically valid but GitHub rejected the tagger's

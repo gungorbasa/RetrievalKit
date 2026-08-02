@@ -402,7 +402,7 @@ def validate_publication_status(repo: Path) -> None:
         "PyPI publication status inventory mismatch",
     )
     require(
-        status["recovery"]["tag"] == "v0.1.0-recovery.1"
+        status["recovery"]["tag"] == "v0.1.0-recovery.2"
         and "0.1.1" in status["recovery"]["policy"]
         and set(status["recovery"]["forbidden"])
         == {
@@ -782,7 +782,7 @@ def validate_workflows(repo: Path) -> None:
     )
     require(
         "validate_publication_recovery.py" in publication
-        and "v0.1.0-recovery.1" in publication
+        and "v0.1.0-recovery.2" in publication
         and "NPM_CONFIG_PROVENANCE: \"false\"" in publication
         and "recreate-github-release" not in publication,
         "publication workflow lacks the fail-closed partial-release recovery boundary",

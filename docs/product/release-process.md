@@ -218,7 +218,9 @@ when the target revision adds or changes workflow files. The Release-creation
 step therefore uses `RELEASE_GITHUB_TOKEN`, stored only in the protected
 `release` environment and backed by the owner's macOS-Keychain-managed GitHub
 CLI credential with `repo` and `workflow` scopes. That credential is not used
-by PyPI, npm, Maven, attestation, or candidate-validation steps.
+by PyPI, npm, Maven, attestation, or candidate-validation steps. Bounded
+recovery may also use it for the read-only immutable-release administration
+check that the built-in workflow token cannot access.
 
 ## PyPI trusted publication
 
@@ -294,11 +296,19 @@ immutable browser tarball omitted `repository`; browser embedding was not
 attempted. No v0.1.0 PyPI file or browser npm version was created.
 
 The owner authorized a narrow recovery on 2026-08-02. It runs from the signed
-operational tag `v0.1.0-recovery.1` through the same public
+operational tag `v0.1.0-recovery.2` through the same public
 `publish-release.yml` and protected `release`, `pypi`, and `npm` environments.
 The recovery validator requires the original signed release revision, candidate
 and Phase 7 run IDs, protected authorization record, immutable preview Release,
 and exact original job outcomes. It permits only:
+
+The first operational tag, `v0.1.0-recovery.1`, produced run `30732556353`.
+It stopped before validation and before either registry job because the
+built-in workflow token could not read GitHub's immutable-release
+administration endpoint. No publication was attempted. Recovery `.2` reads
+that one endpoint with the existing protected workflow-capable GitHub
+credential; candidate downloads and every registry operation retain their
+narrower built-in/OIDC credentials.
 
 1. publishing the exact fifteen authorized wheels with the current pinned
    PyPI trusted-publisher action; and
@@ -386,8 +396,9 @@ already configured controls:
 - confirm the workflow token can read Actions run metadata and the
   [`GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals` review-history endpoint](https://docs.github.com/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run);
 - confirm the protected `release` environment contains
-  `RELEASE_GITHUB_TOKEN` with repository and workflow permission solely for
-  creating the GitHub Release;
+  `RELEASE_GITHUB_TOKEN` with repository and workflow permission for creating
+  the GitHub Release and, during bounded recovery only, reading the immutable-
+  release administration status;
 - create and push the verified signed release tag. The publication workflow
   must be dispatched with that tag as its workflow ref, not merely supplied as
   the `tag` input.

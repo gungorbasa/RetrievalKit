@@ -6,6 +6,26 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-02 v0.1.0 partial-publication recovery decision: signed tag
+  `v0.1.0` and immutable preview GitHub Release `363621324` point to
+  `09cb2d8f9e56e604c39912de38e69ed24d542b16`. Candidate run `30716625698`,
+  scheduled Phase 7 run `30716653472`, controlled release Phase 7 run
+  `30716694199`, protected GitHub Release creation, and Maven publication all
+  passed. Maven Central has all six JVM/Android artifacts. npm has exact
+  `0.1.0` candidate bytes for base, graph, and Node embedding; browser retrieval
+  and browser embedding are missing. PyPI has no `0.1.0` files because the old
+  pinned publisher action rejected valid wheel metadata before upload. Owner
+  authorizes a signed `v0.1.0-recovery.1` operational tag to publish the exact
+  fifteen wheels with the current PyPI action and first attempt the exact two
+  missing browser tarballs with npm provenance disabled. This provenance
+  exception must be disclosed and never described as passed provenance. If npm
+  rejects exact bytes without creating a version, only the missing browser
+  manifests may be repackaged with correct repository metadata as `0.1.0`.
+  Use `0.1.1` only if `0.1.0` cannot be completed. Never move/recreate the
+  release tag or GitHub Release, republish Maven or existing npm versions, or
+  run a physical-device command. Machine-readable operational status is
+  `release/publication-v0.1.0.json`.
+
 - 2026-08-01 signed-tag verification correction: the first local `v0.1.0`
   signature was cryptographically valid but GitHub rejected the tagger's
   `gungorbasa@gmail.com` identity because the registered release key verifies

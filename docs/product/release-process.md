@@ -1,20 +1,18 @@
 # RetrievalKit v0.1.0 release process
 
-Status: v0.1.0 scope, identities, platform statuses, and release claims frozen
-on 2026-08-01; release-candidate and runtime authorization implementation is
-complete. The commit containing the machine-readable `release_freeze` record
-is the eligible candidate source revision. Any later source or release-truth
-change requires a new freeze commit and repeat validation before candidate
-assembly.
-The public repository, protected GitHub environments, all three PyPI projects,
-all five npm packages, their trusted publishers, and Maven signing identity are
-configured. The Maven Central namespace and protected user token are
-configured. v0.1.0 publication remains blocked on final registry
-re-verification, the signed tag, and the release evidence gates below.
+Status: v0.1.0 scope, identities, platform statuses, and release claims were
+frozen on 2026-08-01 at signed source revision
+`09cb2d8f9e56e604c39912de38e69ed24d542b16`. The candidate, onboarding,
+scheduled Phase 7, and controlled release Phase 7 gates passed at that exact
+revision. The signed `v0.1.0` tag and immutable preview GitHub Release now
+exist. Maven Central and three native Node npm packages published successfully;
+PyPI and the two browser npm packages require the bounded recovery described
+below. [`release/publication-v0.1.0.json`](../../release/publication-v0.1.0.json)
+is the machine-readable operational publication status.
 
-The freeze does not authorize the release-candidate workflow, Phase 7 scheduled
-or controlled release workflows, a tag, a GitHub Release, or registry
-publication. Those remain separate owner-controlled steps.
+The original freeze did not itself authorize those later steps. Their completed
+workflow runs and protected approval remain immutable evidence; recovery does
+not repeat or broaden them.
 
 The automated release candidate ships the Swift, Python, Node.js, browser, and
 Kotlin previews from one signed source revision. Python, Node, and Kotlin retain
@@ -284,6 +282,44 @@ version, a changed tarball, or a registry integrity mismatch fails closed.
 Because multiple npm uploads cannot be transactional, a failure after the
 first succeeds requires an incident record and fix-forward release; published
 npm versions are never overwritten.
+
+## Bounded v0.1.0 publication recovery
+
+Publication run `30717163488` completed the protected approval, immutable
+GitHub Release, attestations, Maven Central upload, and the first three npm
+uploads. PyPI failed before OIDC upload because the previously pinned PyPI
+publisher action could not parse the wheels' valid `Metadata-Version: 2.4`.
+npm then rejected `@gungorbasa/retrievalkit-browser` provenance because the
+immutable browser tarball omitted `repository`; browser embedding was not
+attempted. No v0.1.0 PyPI file or browser npm version was created.
+
+The owner authorized a narrow recovery on 2026-08-02. It runs from the signed
+operational tag `v0.1.0-recovery.1` through the same public
+`publish-release.yml` and protected `release`, `pypi`, and `npm` environments.
+The recovery validator requires the original signed release revision, candidate
+and Phase 7 run IDs, protected authorization record, immutable preview Release,
+and exact original job outcomes. It permits only:
+
+1. publishing the exact fifteen authorized wheels with the current pinned
+   PyPI trusted-publisher action; and
+2. publishing the exact two missing authorized browser tarballs through npm
+   trusted publishing with npm provenance disabled, then matching registry
+   integrity to the frozen inventory.
+
+GitHub attestations still cover the two recovered npm tarballs and recovery
+record. npm provenance is disabled only because provenance validation requires
+repository metadata that the immutable candidate tarballs do not contain. This
+exception must be stated explicitly; it is not evidence that npm provenance
+passed. The browser assemblers now require correct repository metadata for all
+future artifacts.
+
+The recovery must not move or recreate `v0.1.0`, recreate its GitHub Release,
+republish Maven, overwrite any registry version, rebuild a wheel, or publish
+the already-present Node packages. If npm rejects the exact unpublished browser
+bytes without creating either version, the next permitted attempt may add only
+the correct repository metadata to those two unpublished manifests and publish
+them as `0.1.0` with provenance. Use `0.1.1` only if a registry makes completion
+of `0.1.0` impossible.
 
 ## Maven Central publication
 

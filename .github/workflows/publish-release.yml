@@ -34,6 +34,15 @@ on:
         required: true
         default: false
         type: boolean
+      recovery_mode:
+        description: Recover only the missing PyPI and browser npm v0.1.0 publications from the immutable authorized candidate
+        required: true
+        default: false
+        type: boolean
+      publication_run_id:
+        description: Original partially successful publication workflow run ID (recovery mode only)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -46,6 +55,7 @@ concurrency:
 jobs:
   validate-candidate:
     name: Validate signed identity and immutable candidate evidence
+    if: ${{ inputs.recovery_mode == false }}
     runs-on: ubuntu-24.04
     steps:
       - name: Check out signed tag
@@ -324,7 +334,7 @@ jobs:
           cp target/publication-evidence/release-bundle-v0.1.0/artifacts/*.whl target/pypi/
           test "$(find target/pypi -name '*.whl' | wc -l | tr -d ' ')" = "15"
       - name: Publish through PyPI trusted publishing
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: target/pypi
 
@@ -648,5 +658,370 @@ jobs:
             target/maven/signed-central-bundle.sha256
             target/maven/central-deployment-id.txt
             target/maven/publication-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  validate-recovery:
+    name: Authorize exact v0.1.0 registry recovery
+    if: ${{ inputs.recovery_mode }}
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out and verify the signed recovery tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Require the fixed recovery identity
+        env:
+          RECOVERY_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
+          RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
+          PUBLICATION_RUN: ${{ inputs.publication_run_id }}
+          RELEASE_SOURCE_REVISION: 09cb2d8f9e56e604c39912de38e69ed24d542b16
+          RELEASE_SIGNING_FINGERPRINT: 0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED
+          RELEASE_SIGNING_KEY: release/retrievalkit-release-signing-key.asc
+        run: |
+          test "$RECOVERY_TAG" = "v0.1.0-recovery.1"
+          test "$RELEASE_TAG" = "v0.1.0"
+          test "$CANDIDATE_RUN" = "30716625698"
+          test "$SCHEDULED_RUN" = "30716653472"
+          test "$RELEASE_GATE_RUN" = "30716694199"
+          test "$PUBLICATION_RUN" = "30717163488"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_SOURCE_REVISION"
+          verification_home="$RUNNER_TEMP/retrievalkit-recovery-verification"
+          install -d -m 700 "$verification_home"
+          actual_fingerprint="$(
+            gpg --batch --with-colons --show-keys --fingerprint "$RELEASE_SIGNING_KEY" \
+              | awk -F: '$1 == "fpr" { print $10; exit }'
+          )"
+          test "$actual_fingerprint" = "$RELEASE_SIGNING_FINGERPRINT"
+          GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"
+          GNUPGHOME="$verification_home" git verify-tag "$RELEASE_TAG"
+          GNUPGHOME="$verification_home" git verify-tag "$RECOVERY_TAG"
+          test "$GITHUB_SHA" = "$(git rev-list -n 1 "$RECOVERY_TAG")"
+          test "$GITHUB_SHA" != "$RELEASE_SOURCE_REVISION"
+      - name: Download immutable candidate, gates, and original authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
+          RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
+          PUBLICATION_RUN: ${{ inputs.publication_run_id }}
+        run: |
+          recovery=target/publication-recovery
+          mkdir -p "$recovery/runs" "$recovery/gates"
+          gh run download "$CANDIDATE_RUN" --repo "$REPOSITORY" \
+            --name release-candidate-v0.1.0 \
+            --dir "$recovery/release-bundle-v0.1.0"
+          gh run download "$SCHEDULED_RUN" --repo "$REPOSITORY" \
+            --dir target/recovery-scheduled
+          gh run download "$RELEASE_GATE_RUN" --repo "$REPOSITORY" \
+            --dir target/recovery-release-gate
+          gh run download "$PUBLICATION_RUN" --repo "$REPOSITORY" \
+            --name publication-authorization-v0.1.0 \
+            --dir "$recovery/original-authorization"
+          test "$(find target/recovery-scheduled -name result.json | wc -l | tr -d ' ')" = "1"
+          test "$(find target/recovery-release-gate -name result.json | wc -l | tr -d ' ')" = "1"
+          cp "$(find target/recovery-scheduled -name result.json)" \
+            "$recovery/gates/scheduled-result.json"
+          cp "$(find target/recovery-release-gate -name result.json)" \
+            "$recovery/gates/release-result.json"
+          gh api "repos/$REPOSITORY/actions/runs/$PUBLICATION_RUN" \
+            > "$recovery/runs/publication.json"
+          gh api "repos/$REPOSITORY/actions/runs/$PUBLICATION_RUN/jobs?per_page=100" \
+            > "$recovery/runs/publication-jobs.json"
+          gh api "repos/$REPOSITORY/releases/tags/v0.1.0" \
+            > "$recovery/runs/github-release.json"
+          gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$REPOSITORY/immutable-releases" \
+            > "$recovery/runs/immutable-releases.json"
+      - name: Validate the exact partial-publication recovery boundary
+        env:
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          SCHEDULED_RUN: ${{ inputs.scheduled_run_id }}
+          RELEASE_GATE_RUN: ${{ inputs.release_gate_run_id }}
+          PUBLICATION_RUN: ${{ inputs.publication_run_id }}
+          RELEASE_SOURCE_REVISION: 09cb2d8f9e56e604c39912de38e69ed24d542b16
+        run: |
+          recovery=target/publication-recovery
+          (
+            cd "$recovery/release-bundle-v0.1.0"
+            sha256sum --check checksums.sha256
+          )
+          (
+            cd "$recovery/original-authorization/publication-record"
+            sha256sum --check publication-authorization-provenance.sha256
+          )
+          python3 scripts/release/validate_publication_recovery.py \
+            --repository "$REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --source-revision "$RELEASE_SOURCE_REVISION" \
+            --candidate-run-id "$CANDIDATE_RUN" \
+            --scheduled-run-id "$SCHEDULED_RUN" \
+            --release-gate-run-id "$RELEASE_GATE_RUN" \
+            --publication-run-id "$PUBLICATION_RUN" \
+            --bundle "$recovery/release-bundle-v0.1.0" \
+            --scheduled-result "$recovery/gates/scheduled-result.json" \
+            --release-gate-result "$recovery/gates/release-result.json" \
+            --candidate-evidence "$recovery/original-authorization/publication-evidence/candidate-evidence.json" \
+            --authorization-record "$recovery/original-authorization/publication-record/publication-authorization-provenance.json" \
+            --publication-run "$recovery/runs/publication.json" \
+            --publication-jobs "$recovery/runs/publication-jobs.json" \
+            --release "$recovery/runs/github-release.json" \
+            --immutable-releases "$recovery/runs/immutable-releases.json" \
+            --output "$recovery/recovery-authorization.json"
+      - name: Preserve the recovery authorization
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publication-recovery-authorization-v0.1.0
+          path: target/publication-recovery/recovery-authorization.json
+          if-no-files-found: error
+          retention-days: 90
+
+  recover-pypi:
+    name: Recover exact v0.1.0 PyPI wheels
+    if: ${{ inputs.recovery_mode }}
+    needs: validate-recovery
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the protected recovery authorization
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: publication-recovery-authorization-v0.1.0
+          path: target/recovery-authorization
+      - name: Download and stage the exact authorized wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          gh run download "$CANDIDATE_RUN" --repo "$REPOSITORY" \
+            --name release-candidate-v0.1.0 \
+            --dir target/recovery-candidate
+          test "$(sha256sum target/recovery-candidate/checksums.sha256 | cut -d ' ' -f 1)" = \
+            "$(jq -r '.authorizedEvidence.checksumsSha256' target/recovery-authorization/recovery-authorization.json)"
+          test "$(sha256sum target/recovery-candidate/inventory.json | cut -d ' ' -f 1)" = \
+            "$(jq -r '.authorizedEvidence.inventorySha256' target/recovery-authorization/recovery-authorization.json)"
+          (
+            cd target/recovery-candidate
+            sha256sum --check checksums.sha256
+          )
+          mkdir -p target/pypi-recovery
+          cp target/recovery-candidate/artifacts/*.whl target/pypi-recovery/
+          test "$(find target/pypi-recovery -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')" = "15"
+          for project in retrievalkit retrievalkit-graph retrievalkit-embedding; do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              "https://pypi.org/pypi/$project/0.1.0/json")"
+            test "$status" = "404"
+          done
+      - name: Publish exact wheels through current PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: target/pypi-recovery
+      - name: Verify all public wheel identities and write recovery evidence
+        run: |
+          for _attempt in 1 2 3 4 5 6 7 8 9 10; do
+            ready=true
+            for project in retrievalkit retrievalkit-graph retrievalkit-embedding; do
+              curl --fail --silent --show-error \
+                "https://pypi.org/pypi/$project/0.1.0/json" \
+                --output "target/pypi-recovery/$project.json" || ready=false
+            done
+            if [ "$ready" = "true" ]; then break; fi
+            sleep 3
+          done
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("target/pypi-recovery")
+          expected = {
+              wheel.name: hashlib.sha256(wheel.read_bytes()).hexdigest()
+              for wheel in root.glob("*.whl")
+          }
+          observed = {}
+          for project in ("retrievalkit", "retrievalkit-graph", "retrievalkit-embedding"):
+              payload = json.loads((root / f"{project}.json").read_text())
+              files = payload["urls"]
+              if len(files) != 5:
+                  raise SystemExit(f"{project} has {len(files)} files, expected 5")
+              for row in files:
+                  observed[row["filename"]] = row["digests"]["sha256"]
+          if observed != expected:
+              raise SystemExit("PyPI wheel filename or SHA-256 inventory mismatch")
+          evidence = {
+              "schemaVersion": 1,
+              "kind": "retrievalkit-pypi-publication-recovery",
+              "repository": "gungorbasa/RetrievalKit",
+              "releaseTag": "v0.1.0",
+              "releaseSourceRevision": "09cb2d8f9e56e604c39912de38e69ed24d542b16",
+              "workflowRunId": int(__import__("os").environ["GITHUB_RUN_ID"]),
+              "trustedPublishing": True,
+              "files": [
+                  {"filename": name, "sha256": sha256}
+                  for name, sha256 in sorted(expected.items())
+              ],
+          }
+          (root / "publication-recovery-evidence.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+      - name: Preserve PyPI recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pypi-publication-recovery-v0.1.0
+          path: target/pypi-recovery/publication-recovery-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  recover-npm-browser:
+    name: Recover exact v0.1.0 browser npm tarballs
+    if: ${{ inputs.recovery_mode }}
+    needs: validate-recovery
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - name: Install the pinned OIDC-capable npm CLI
+        run: npm install --global npm@11.6.2
+      - name: Download the protected recovery authorization
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: publication-recovery-authorization-v0.1.0
+          path: target/recovery-authorization
+      - name: Download and stage only the two exact missing tarballs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          gh run download "$CANDIDATE_RUN" --repo "$REPOSITORY" \
+            --name release-candidate-v0.1.0 \
+            --dir target/recovery-candidate
+          test "$(sha256sum target/recovery-candidate/checksums.sha256 | cut -d ' ' -f 1)" = \
+            "$(jq -r '.authorizedEvidence.checksumsSha256' target/recovery-authorization/recovery-authorization.json)"
+          test "$(sha256sum target/recovery-candidate/inventory.json | cut -d ' ' -f 1)" = \
+            "$(jq -r '.authorizedEvidence.inventorySha256' target/recovery-authorization/recovery-authorization.json)"
+          (
+            cd target/recovery-candidate
+            sha256sum --check checksums.sha256
+          )
+          mkdir -p target/npm-recovery
+          cp target/recovery-candidate/artifacts/browser-retrieval/gungorbasa-retrievalkit-browser-0.1.0.tgz target/npm-recovery/
+          cp target/recovery-candidate/artifacts/browser-embedding/gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz target/npm-recovery/
+          cp target/recovery-candidate/artifacts/node/inventory.json target/npm-recovery/node-inventory.json
+          cp target/recovery-candidate/artifacts/browser-retrieval/inventory.json target/npm-recovery/browser-inventory.json
+          cp target/recovery-candidate/artifacts/browser-embedding/inventory.json target/npm-recovery/browser-embedding-inventory.json
+          test "$(find target/npm-recovery -maxdepth 1 -name '*.tgz' | wc -l | tr -d ' ')" = "2"
+          for tarball in target/npm-recovery/*.tgz; do
+            tar --extract --gzip --to-stdout --file "$tarball" package/package.json \
+              | jq --exit-status '.repository == null' > /dev/null
+          done
+      - name: Require the known partial npm registry state
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          test "$(npm --version)" = "11.6.2"
+          for package in \
+            @gungorbasa/retrievalkit \
+            @gungorbasa/retrievalkit-graph \
+            @gungorbasa/retrievalkit-embedding
+          do
+            expected="$(jq -r --arg package "$package" '.artifacts[] | select(.npmName == $package) | .npmIntegrity' target/npm-recovery/node-inventory.json)"
+            test "$(npm view "$package@0.1.0" dist.integrity)" = "$expected"
+          done
+          for package in \
+            @gungorbasa/retrievalkit-browser \
+            @gungorbasa/retrievalkit-browser-embedding
+          do
+            if npm view "$package@0.1.0" version > /dev/null 2>&1; then
+              echo "$package@0.1.0 already exists; refusing recovery overwrite" >&2
+              exit 1
+            fi
+          done
+      - name: Publish exact browser tarballs through npm trusted publishing
+        env:
+          NPM_CONFIG_PROVENANCE: "false"
+        run: |
+          npm publish target/npm-recovery/gungorbasa-retrievalkit-browser-0.1.0.tgz \
+            --access public \
+            --ignore-scripts
+          npm publish target/npm-recovery/gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz \
+            --access public \
+            --ignore-scripts
+      - name: Verify all five npm identities and write recovery evidence
+        run: |
+          jq --slurp \
+            '.[0].artifacts + .[1].artifacts + .[2].artifacts' \
+            target/npm-recovery/node-inventory.json \
+            target/npm-recovery/browser-inventory.json \
+            target/npm-recovery/browser-embedding-inventory.json \
+            > target/npm-recovery/authorized-artifacts.json
+          for package in \
+            @gungorbasa/retrievalkit \
+            @gungorbasa/retrievalkit-graph \
+            @gungorbasa/retrievalkit-embedding \
+            @gungorbasa/retrievalkit-browser \
+            @gungorbasa/retrievalkit-browser-embedding
+          do
+            expected="$(jq -r --arg package "$package" '.[] | select(.npmName == $package) | .npmIntegrity' target/npm-recovery/authorized-artifacts.json)"
+            actual=""
+            for _attempt in 1 2 3 4 5 6 7 8 9 10; do
+              actual="$(npm view "$package@0.1.0" dist.integrity 2>/dev/null || true)"
+              if [ "$actual" = "$expected" ]; then break; fi
+              sleep 3
+            done
+            test "$actual" = "$expected"
+          done
+          jq --null-input \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --slurpfile artifacts target/npm-recovery/authorized-artifacts.json \
+            '{
+              schemaVersion: 1,
+              kind: "retrievalkit-npm-publication-recovery",
+              repository: $repository,
+              releaseTag: "v0.1.0",
+              releaseSourceRevision: "09cb2d8f9e56e604c39912de38e69ed24d542b16",
+              workflowRunId: ($runId | tonumber),
+              trustedPublishing: true,
+              recoveredArtifactsUseNpmProvenance: false,
+              provenanceExceptionReason: "immutable candidate browser manifests omitted repository metadata",
+              artifacts: $artifacts[0]
+            }' > target/npm-recovery/publication-recovery-evidence.json
+      - name: Attest exact recovered npm tarballs and evidence
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            target/npm-recovery/gungorbasa-retrievalkit-browser-0.1.0.tgz
+            target/npm-recovery/gungorbasa-retrievalkit-browser-embedding-0.1.0.tgz
+            target/npm-recovery/publication-recovery-evidence.json
+      - name: Preserve npm recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-publication-recovery-v0.1.0
+          path: target/npm-recovery/publication-recovery-evidence.json
           if-no-files-found: error
           retention-days: 90

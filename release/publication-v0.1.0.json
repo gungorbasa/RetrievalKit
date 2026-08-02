@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "status": "partial_publication_recovery_authorized",
+  "release": {
+    "tag": "v0.1.0",
+    "source_revision": "09cb2d8f9e56e604c39912de38e69ed24d542b16",
+    "github_release_id": 363621324,
+    "immutable": true,
+    "prerelease": true
+  },
+  "evidence_runs": {
+    "candidate": 30716625698,
+    "scheduled_phase7": 30716653472,
+    "release_phase7": 30716694199,
+    "publication": 30717163488
+  },
+  "registries": {
+    "maven_central": {
+      "status": "published",
+      "version": "0.1.0",
+      "artifacts": [
+        "retrievalkit",
+        "retrievalkit-graph",
+        "retrievalkit-embedding",
+        "retrievalkit-android",
+        "retrievalkit-graph-android",
+        "retrievalkit-embedding-android"
+      ],
+      "deployment_id": "0a1fd42c-56f2-4f16-9c1d-7ab8d765bf08"
+    },
+    "npm": {
+      "status": "partial",
+      "published": [
+        "@gungorbasa/retrievalkit",
+        "@gungorbasa/retrievalkit-graph",
+        "@gungorbasa/retrievalkit-embedding"
+      ],
+      "missing": [
+        "@gungorbasa/retrievalkit-browser",
+        "@gungorbasa/retrievalkit-browser-embedding"
+      ]
+    },
+    "pypi": {
+      "status": "missing",
+      "published": [],
+      "missing": [
+        "retrievalkit",
+        "retrievalkit-graph",
+        "retrievalkit-embedding"
+      ]
+    }
+  },
+  "recovery": {
+    "tag": "v0.1.0-recovery.1",
+    "policy": "publish exact authorized missing artifacts first; correct only unpublished browser manifests if npm rejects exact bytes; use 0.1.1 only if 0.1.0 cannot be completed",
+    "forbidden": [
+      "move-or-recreate-v0.1.0-tag",
+      "recreate-github-release",
+      "republish-maven",
+      "replace-existing-registry-version"
+    ]
+  },
+  "android": {
+    "status": "preview",
+    "live_device_inference_qualified": false,
+    "live_device_inference_publication_blocker": false
+  }
+}

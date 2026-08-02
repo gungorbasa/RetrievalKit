@@ -2,6 +2,27 @@
 
 Every item is required unless explicitly marked candidate-only.
 
+## Execution record
+
+The signed source revision is
+`09cb2d8f9e56e604c39912de38e69ed24d542b16`. Candidate run `30716625698`,
+scheduled Phase 7 run `30716653472`, controlled release Phase 7 run
+`30716694199`, and the protected GitHub Release/Maven portions of publication
+run `30717163488` passed. The immutable preview GitHub Release and all six
+Maven publications exist. The first three npm packages exist with exact
+candidate integrity. All fifteen PyPI wheels and both browser npm packages are
+pending the bounded recovery in [the release process](release-process.md#bounded-v010-publication-recovery).
+
+Recovery completion additionally requires:
+
+- [ ] all fifteen exact wheel filenames and SHA-256 values match PyPI;
+- [ ] both exact browser tarball `dist.integrity` values match npm;
+- [ ] recovery evidence records that npm provenance was disabled for those two
+  immutable tarballs and does not claim provenance passed;
+- [ ] fresh registry consumers pass after registry replication; and
+- [ ] machine-readable publication truth and public availability docs reflect
+  the observed final state.
+
 ## Identity and legal
 
 - [ ] Candidate source is the exact commit containing the frozen

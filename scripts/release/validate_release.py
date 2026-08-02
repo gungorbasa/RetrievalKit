@@ -323,6 +323,98 @@ def validate_active_release_claims(repo: Path, config: dict[str, Any]) -> None:
     )
 
 
+def validate_publication_status(repo: Path) -> None:
+    status = load_json(repo / "release/publication-v0.1.0.json")
+    require(
+        status["schema_version"] == 1 and status["version"] == "0.1.0",
+        "publication status identity mismatch",
+    )
+    require(
+        status["status"]
+        in {"partial_publication_recovery_authorized", "published_preview"},
+        "publication status is invalid",
+    )
+    require(
+        status["release"]
+        == {
+            "tag": "v0.1.0",
+            "source_revision": "09cb2d8f9e56e604c39912de38e69ed24d542b16",
+            "github_release_id": 363621324,
+            "immutable": True,
+            "prerelease": True,
+        },
+        "published GitHub Release identity mismatch",
+    )
+    require(
+        status["evidence_runs"]
+        == {
+            "candidate": 30716625698,
+            "scheduled_phase7": 30716653472,
+            "release_phase7": 30716694199,
+            "publication": 30717163488,
+        },
+        "publication evidence run identity mismatch",
+    )
+    require(
+        status["android"]
+        == {
+            "status": "preview",
+            "live_device_inference_qualified": False,
+            "live_device_inference_publication_blocker": False,
+        },
+        "publication status changed the Android preview boundary",
+    )
+    registries = status["registries"]
+    require(
+        registries["maven_central"]["status"] == "published"
+        and registries["maven_central"]["version"] == "0.1.0"
+        and set(registries["maven_central"]["artifacts"])
+        == {
+            "retrievalkit",
+            "retrievalkit-graph",
+            "retrievalkit-embedding",
+            "retrievalkit-android",
+            "retrievalkit-graph-android",
+            "retrievalkit-embedding-android",
+        },
+        "Maven publication status mismatch",
+    )
+    require(
+        set(registries["npm"]["published"] + registries["npm"]["missing"])
+        == {
+            "@gungorbasa/retrievalkit",
+            "@gungorbasa/retrievalkit-graph",
+            "@gungorbasa/retrievalkit-embedding",
+            "@gungorbasa/retrievalkit-browser",
+            "@gungorbasa/retrievalkit-browser-embedding",
+        }
+        and not set(registries["npm"]["published"]).intersection(
+            registries["npm"]["missing"]
+        ),
+        "npm publication status inventory mismatch",
+    )
+    require(
+        set(registries["pypi"]["published"] + registries["pypi"]["missing"])
+        == {"retrievalkit", "retrievalkit-graph", "retrievalkit-embedding"}
+        and not set(registries["pypi"]["published"]).intersection(
+            registries["pypi"]["missing"]
+        ),
+        "PyPI publication status inventory mismatch",
+    )
+    require(
+        status["recovery"]["tag"] == "v0.1.0-recovery.1"
+        and "0.1.1" in status["recovery"]["policy"]
+        and set(status["recovery"]["forbidden"])
+        == {
+            "move-or-recreate-v0.1.0-tag",
+            "recreate-github-release",
+            "republish-maven",
+            "replace-existing-registry-version",
+        },
+        "publication recovery policy mismatch",
+    )
+
+
 def static_validation(repo: Path) -> dict[str, Any]:
     config = load_json(repo / "release/release-v0.1.0.json")
     version = (repo / "VERSION").read_text().strip()
@@ -352,6 +444,7 @@ def static_validation(repo: Path) -> dict[str, Any]:
     validate_python_release_metadata(repo, config)
     validate_persistence_release_contract(repo, config)
     validate_active_release_claims(repo, config)
+    validate_publication_status(repo)
     swift_packages = config["apple"]["packages"]
     require(set(swift_packages) == {"unified"}, "Swift package set changed")
     package_texts: dict[str, str] = {}
@@ -453,6 +546,15 @@ def static_validation(repo: Path) -> dict[str, Any]:
         and browser_retrieval["version"] == version,
         "browser retrieval source package must remain private at the release version",
     )
+    require(
+        browser_retrieval.get("repository")
+        == {
+            "type": "git",
+            "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+            "directory": "wrappers/browser",
+        },
+        "browser retrieval source package repository mismatch",
+    )
     browser_embedding = load_json(repo / "wrappers/browser-embedding/package.json")
     require(
         config["browser_embedding"]
@@ -474,6 +576,15 @@ def static_validation(repo: Path) -> dict[str, Any]:
         browser_embedding.get("private") is True
         and browser_embedding["version"] == version,
         "browser embedding source package must remain private at the release version",
+    )
+    require(
+        browser_embedding.get("repository")
+        == {
+            "type": "git",
+            "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+            "directory": "wrappers/browser-embedding",
+        },
+        "browser embedding source package repository mismatch",
     )
     require(
         config["kotlin"]["group"] == "io.github.gungorbasa",
@@ -650,8 +761,10 @@ def validate_workflows(repo: Path) -> None:
         "git verify-tag" in publication
         and "release/retrievalkit-release-signing-key.asc" in publication
         and "0E82F1A5487A4EF3CCF1ED6C393266CD4DD158ED" in publication
-        and 'GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"'
-        in publication
+        and publication.count(
+            'GNUPGHOME="$verification_home" gpg --batch --import "$RELEASE_SIGNING_KEY"'
+        )
+        == 2
         and 'GNUPGHOME="$verification_home" git verify-tag' in publication
         and "publication_authorization.py candidate" in publication
         and "publication_authorization.py authorize" in publication
@@ -659,13 +772,20 @@ def validate_workflows(repo: Path) -> None:
         "publication workflow bypasses clean-keyring signed-tag, candidate, or runtime authority validation",
     )
     require(
-        publication.count("retention-days: 90") == 4
+        publication.count("retention-days: 90") == 7
         and "retention-days: 180" not in publication
         and "X-GitHub-Api-Version: 2026-03-10" in publication
         and "immutable-releases" in publication
         and "jq --exit-status '.enabled == true'" in publication
         and "GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}" in publication,
         "publication workflow lacks 90-day retention, immutable-release enforcement, or the protected release credential",
+    )
+    require(
+        "validate_publication_recovery.py" in publication
+        and "v0.1.0-recovery.1" in publication
+        and "NPM_CONFIG_PROVENANCE: \"false\"" in publication
+        and "recreate-github-release" not in publication,
+        "publication workflow lacks the fail-closed partial-release recovery boundary",
     )
     require(
         "All five approved npm packages" in publication
@@ -1192,6 +1312,15 @@ def validate_browser_retrieval_package(root: Path, config: dict[str, Any]) -> No
         == {"access": "public", "registry": "https://registry.npmjs.org/"},
         "browser retrieval package publication metadata mismatch",
     )
+    require(
+        package.get("repository")
+        == {
+            "type": "git",
+            "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+            "directory": "wrappers/browser",
+        },
+        "browser retrieval package repository mismatch",
+    )
     for tier, wasm in wasm_payloads.items():
         require(
             wasm.startswith(b"\x00asm\x01\x00\x00\x00"),
@@ -1299,6 +1428,15 @@ def validate_browser_embedding_package(root: Path, config: dict[str, Any]) -> No
         and "private" not in package
         and package["license"] == "Apache-2.0",
         "browser embedding package metadata mismatch",
+    )
+    require(
+        package.get("repository")
+        == {
+            "type": "git",
+            "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+            "directory": "wrappers/browser-embedding",
+        },
+        "browser embedding package repository mismatch",
     )
     validate_checksum_manifest(
         root / "SHA256SUMS", {tarball.name: tarball}, "sha256"

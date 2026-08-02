@@ -5,6 +5,15 @@
   "description": "Local FP32 MiniLM embeddings for dedicated browser Workers",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+    "directory": "wrappers/browser-embedding"
+  },
+  "bugs": {
+    "url": "https://github.com/gungorbasa/RetrievalKit/issues"
+  },
+  "homepage": "https://retrievalkit-docs.gungorbasa.chatgpt.site",
   "sideEffects": false,
   "files": [
     "dist",

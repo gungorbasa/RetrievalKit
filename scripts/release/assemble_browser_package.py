@@ -18,6 +18,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "wrappers" / "browser"
 APPROVED_NAME = "@gungorbasa/retrievalkit-browser"
+EXPECTED_REPOSITORY = {
+    "type": "git",
+    "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+    "directory": "wrappers/browser",
+}
 NPM_NAME = re.compile(r"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$")
 SEMVER = re.compile(
     r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
@@ -179,6 +184,8 @@ def inspect_tarball(tarball: Path, name: str, version: str) -> list[str]:
         "registry": "https://registry.npmjs.org/",
     }:
         raise AssemblyError(f"{tarball.name} is not pinned to public npm publication")
+    if metadata.get("repository") != EXPECTED_REPOSITORY:
+        raise AssemblyError(f"{tarball.name} does not identify the RetrievalKit repository")
     exports = metadata.get("exports", {})
     for tier in WASM_TIERS:
         require_export = {

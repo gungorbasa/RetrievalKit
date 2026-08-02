@@ -5,6 +5,15 @@
   "description": "Browser and Web Worker bindings for RetrievalKit",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gungorbasa/RetrievalKit.git",
+    "directory": "wrappers/browser"
+  },
+  "bugs": {
+    "url": "https://github.com/gungorbasa/RetrievalKit/issues"
+  },
+  "homepage": "https://retrievalkit-docs.gungorbasa.chatgpt.site",
   "files": [
     "dist",
     "LICENSE",

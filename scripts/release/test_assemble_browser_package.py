@@ -30,6 +30,7 @@ class BrowserPackageAssemblyTests(unittest.TestCase):
             "description": "source placeholder",
             "type": "module",
             "license": "Apache-2.0",
+            "repository": ASSEMBLER.EXPECTED_REPOSITORY,
             "files": ["dist", "LICENSE", "NOTICE", "README.md"],
             "exports": {
                 ".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"},

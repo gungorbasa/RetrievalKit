@@ -1,9 +1,19 @@
 # RetrievalKit for browsers
 
+> [RetrievalKit](../../README.md) › SDKs › Browser / WebAssembly
+
 An additive browser wrapper for RetrievalKit. Retrieval, filtering, ranking,
 graph traversal, and generation validation run in Rust/WebAssembly inside a
 dedicated Web Worker; the UI thread only performs typed marshaling and receives
 results.
+
+```bash
+npm install @gungorbasa/retrievalkit-browser@0.1.0
+```
+
+Use the Node.js package for N-API applications. Use this package when the
+database must live in a dedicated browser Worker and persist only for the
+current page session.
 
 The published v0.1.0 identity is `@gungorbasa/retrievalkit-browser`. It does
 not import, modify, or bundle the existing Node.js/N-API
@@ -14,7 +24,7 @@ Applications that need local MiniLM embeddings may use the independent
 coupled: this retrieval API continues accepting caller-produced
 `Float32Array` values, and no database operation loads or downloads a model.
 
-## Runtime status
+## Runtime capabilities
 
 The initial adapter reports its capabilities at startup:
 
@@ -35,7 +45,7 @@ slice. `simd` and `performanceTier` describe the generated adapter actually
 loaded by the Worker. `performanceTier` is either `"portable"` or
 `"simd128"`.
 
-## Worker setup
+## Quickstart: create the Worker
 
 The release tarball includes qualified portable and SIMD128 `wasm-bindgen`
 artifacts. The application owns a small Worker entry and wires those package

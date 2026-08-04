@@ -1,7 +1,14 @@
 # EmbeddingKit Swift
 
+> [RetrievalKit](../../../README.md) › SDKs › Swift embedding
+
 EmbeddingKit is a provider-neutral embedding layer intended to pair with
 RetrievalKit without making RetrievalKit depend on an embedding model.
+
+Add the root Swift package at version `0.1.0`, then select the `EmbeddingKit`
+product. Model loading is explicit and independent from database construction.
+
+## Quickstart
 
 RetrievalKit keeps the retrieval boundary explicit:
 
@@ -41,7 +48,7 @@ file-by-file verified, then compiled locally with Core ML. Concurrent callers
 share acquisition work. Inference, indexing, search, and RetrievalDatabase
 initialization never download model data.
 
-## Current Scope
+## Current scope
 
 - `TextEmbedder`: async, `Sendable` text embedding protocol.
 - `EmbeddingModelInfo`: model identity, revision, dimension, token limit, and
@@ -55,7 +62,7 @@ initialization never download model data.
 - `EmbeddingBenchmark`: shared benchmark runner for single-query and batch
   latency measurement.
 
-## Local Or Bundled Models
+## Local or bundled models
 
 The existing initializer remains available for applications that bundle or
 otherwise manage their own Core ML model:
@@ -103,7 +110,7 @@ The Core ML provider expects a compiled model whose input/output boundary is:
 Default Core ML feature names:
 
 | Purpose | Feature |
-|---|---|
+| --- | --- |
 | Token IDs | `input_ids` |
 | Attention mask | `attention_mask` |
 | Token type IDs | `token_type_ids` |
@@ -117,7 +124,7 @@ backend actors are loaded. The default is `1`. Larger values can improve batch
 throughput while keeping each `MLModel` isolated to its own actor; benchmark
 `1`, `2`, and `4` before choosing a production default.
 
-## Benchmark Shape
+## Benchmark shape
 
 Use the same shape as RetrievalKit retrieval benchmarks:
 
@@ -130,7 +137,7 @@ Use the same shape as RetrievalKit retrieval benchmarks:
 Target report table:
 
 | Model | Runtime | Compute | Dim | Batch | Init | P50 | P95 | P99 | Mean | Throughput |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 
 ## Benchmark CLI
 
@@ -178,7 +185,7 @@ Supported query JSON shapes:
 {"query": "single query"}
 ```
 
-## Build And Test
+## Build and test
 
 ```bash
 cd wrappers/swift/EmbeddingKit

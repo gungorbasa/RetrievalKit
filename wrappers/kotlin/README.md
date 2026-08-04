@@ -1,5 +1,7 @@
 # RetrievalKit for Kotlin
 
+> [RetrievalKit](../../README.md) › SDKs › Kotlin/JVM and Android
+
 RetrievalKit exposes the Rust-owned local retrieval and graph databases through
 an idiomatic, blocking Kotlin/JVM API and a thin typed JNI boundary. The initial
 Android package contains an `arm64-v8a` native library and ships as an explicit
@@ -7,8 +9,8 @@ v0.1.0 preview. Its host-verifiable build, package, inventory, ABI/architecture,
 JVM/JNI-contract, and fresh consumer resolution/compilation checks are
 required and device-independent. Live-device inference, lifecycle,
 compatibility, and performance are unqualified and deferred, and their absence
-does not block v0.1.0. Kotlin
-Multiplatform, browsers, servers, and other Android ABIs are not claimed.
+does not block v0.1.0. Kotlin Multiplatform, browsers, servers, and other
+Android ABIs are not claimed.
 
 The owner-approved Maven coordinates are:
 
@@ -23,7 +25,12 @@ io.github.gungorbasa:retrievalkit-embedding-android:0.1.0
 
 All six v0.1.0 preview artifacts are available from Maven Central.
 
-## API
+For flat retrieval, add `io.github.gungorbasa:retrievalkit:0.1.0`. For graph
+traversal or graph-scoped retrieval, add
+`io.github.gungorbasa:retrievalkit-graph:0.1.0` instead. One process must load
+exactly one native retrieval aggregate.
+
+## Quickstart
 
 `RetrievalDatabase`, `GraphDatabase`, and `GraphRetrievalDatabase` implement
 `AutoCloseable`, so use Kotlin `use` to release native state deterministically.
@@ -150,11 +157,11 @@ The inspection tasks fail unless each AAR has exactly its intended
 classes or the graph native library are present. `LICENSE` and `NOTICE` are
 included in JARs and generated native-resource trees.
 
-## Assemble Maven release artifacts
+## Rebuild Maven release artifacts
 
 The checked-in default is the owner-approved `io.github.gungorbasa` group.
-Release assembly still requires the group explicitly and does not claim that
-Central Portal has verified the namespace:
+Release assembly is a local reconstruction step. It still requires the group
+explicitly and never treats local output as proof of publication:
 
 ```bash
 python3 ../../scripts/release/assemble_kotlin_packages.py \
@@ -189,8 +196,9 @@ Central requires PGP signatures. Pass `--signing-key <gpg-key-id>` only from an
 approved secret-bearing release environment, and pass `--namespace-verified`
 only after the owner confirms control of the fixed namespace. Without those
 assertions, the inventory records the exact blockers and reports
-`publicationReady: false`.
-Assembly never uploads or publishes. Run the deterministic package test with:
+`publicationReady: false`. This describes the local assembly result, not the
+already published official v0.1.0 artifacts. Assembly never uploads or
+publishes. Run the deterministic package test with:
 
 ```bash
 RETRIEVALKIT_JAVA_HOME="$JAVA_HOME" \

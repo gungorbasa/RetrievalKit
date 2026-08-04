@@ -1,6 +1,12 @@
 # RetrievalKit FFI
 
-This crate exposes a small C ABI for device-side benchmark harnesses.
+> [RetrievalKit](../../README.md) › Rust crates › C ABI
+
+This crate exposes the C ABI shared by Swift, device benchmark harnesses, and
+the optional graph-capable native aggregate. Application developers should use
+a language wrapper unless they are integrating a new native boundary.
+
+## Benchmark entrypoints
 
 The first exported entrypoint is:
 
@@ -32,6 +38,8 @@ Passing `NULL` or an empty string uses the default benchmark config:
 The returned string is UTF-8 JSON and must be released with
 `retrievalkit_string_free`.
 
+## Graph candidate projection
+
 The optional graph aggregate also provides typed candidate projection for
 `RetrievalKitGraphDatabase` and `RetrievalKitGraphRetrievalDatabase`. These calls accept a native
 `RetrievalKitGraphResult` plus an optional `RetrievalKitFilter` and return lexical stable chunk
@@ -42,6 +50,8 @@ then release it exactly once with
 `retrievalkit_graph_candidate_projection_clear` on its address. Failed calls leave
 the output unchanged, and stale or cross-corpus results use the graph
 stale-generation status.
+
+## Report contents
 
 The report includes runtime SIMD capability flags and one result row for each
 dimension, encoding, and filter mode. On Apple platforms, the report also
@@ -66,7 +76,7 @@ phase RSS on Apple platforms, exercises persistence and compaction, and checks
 optional memory, disk, and latency budgets. Run each invocation in a fresh
 process. See `docs/product/memory-benchmark.md` for the schema and commands.
 
-## Threading Contract
+## Threading contract
 
 After construction or loading, exact, keyword, and hybrid search plus the
 dimension/count accessors may use one `RetrievalKitIndex` concurrently. Every call must

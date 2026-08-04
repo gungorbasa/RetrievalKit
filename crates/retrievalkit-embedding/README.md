@@ -1,8 +1,19 @@
 # retrievalkit-embedding
 
+> [RetrievalKit](../../README.md) › Rust crates › Embedding provider
+
 Optional local text embeddings for RetrievalKit. This crate is separate from
 `retrievalkit-core`: constructing an embedder may download a pinned model,
 while database initialization, indexing, and search never do.
+
+Use this crate when a native Rust integration needs the pinned ONNX MiniLM
+provider. Language SDK users should prefer their platform package:
+[Swift](../../wrappers/swift/EmbeddingKit/README.md),
+[Python](../../wrappers/python-embedding/README.md),
+[Node.js](../../wrappers/typescript/embedding/README.md), or
+[Kotlin](../../wrappers/kotlin/embedding/README.md).
+
+## Quickstart
 
 ```rust
 use retrievalkit_embedding::{OnnxTextEmbedder, TextEmbedder};
@@ -15,6 +26,8 @@ let vector = embedder.embed("fast local retrieval")?;
 # Ok::<(), retrievalkit_embedding::EmbeddingError>(())
 ```
 
+## Model and vector contract
+
 FP32 is the canonical default profile. FP16 and dynamic signed-INT8 Q8 are
 explicit, opt-in model-weight formats. All three profiles return 384 finite
 normalized `f32` values, use masked mean pooling, and truncate at 256
@@ -26,6 +39,8 @@ inference. It is independent of RetrievalKit's
 embeddings are stored and scored in a RetrievalKit database. Selecting Q8
 model weights does not select I8 database storage, and selecting I8 database
 storage does not change the embedding model profile.
+
+## Acquisition and runtime
 
 The built-in artifacts are pinned to commit
 `617ce926c1f9e0289365d3e999474cc28b1645d4` of
@@ -41,6 +56,8 @@ and pass its path to the builder, or set
 `RETRIEVALKIT_ONNX_RUNTIME_LIBRARY`. The crate uses `ort` 2.0.0-rc.12's
 API-24 dynamic-loading boundary and never substitutes a different prebuilt
 runtime.
+
+## Verify and benchmark
 
 Run the ignored live-download test explicitly:
 

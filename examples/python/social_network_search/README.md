@@ -1,14 +1,25 @@
 # Social Network Search Example
 
+> [RetrievalKit](../../../README.md) › Examples › Python › Social network search
+
+Build a local 28K-chunk RetrievalKit index over scene and shot descriptions,
+then compare vector, BM25, and hybrid queries with metadata and time filters.
+This is a reproducible local example, not bundled sample data or a portable
+benchmark claim.
+
+## Prerequisites
+
 This example builds a local RetrievalKit index from:
 
 ```text
 /Users/gungorbasa/Desktop/the_social_network_v.1.32.json
 ```
 
-It uses FastEmbed for local text embeddings and RetrievalKit for local retrieval.
+The source file is not committed. Update the input path in the command or local
+configuration when the fixture lives elsewhere. The example uses FastEmbed for
+local text embeddings and RetrievalKit for local retrieval.
 
-## Embedding Architecture
+## How data becomes searchable
 
 - Source data: scene and shot descriptions from the JSON file.
 - Chunking: mirrors the retrieval-engine processors:
@@ -64,7 +75,7 @@ It installs:
 - `fastembed`
 - `PyYAML`
 
-## Build And Search
+## Build and search
 
 Build the index and run the default query:
 
@@ -112,10 +123,14 @@ target/social-network-example-venv/bin/python \
   --measured-queries 750
 ```
 
-Latest measured results on `MacBookPro18,4` / Apple M1 Max:
+### Historical local observation
+
+Latest measured results on `MacBookPro18,4` / Apple M1 Max. These numbers apply
+only to the named fixture, models, commands, and host; they are not measurements
+of the current checkout:
 
 | System | Corpus | Embedding | Search | P50 | P95 | P99 | Mean |
-|---|---:|---|---|---:|---:|---:|---:|
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
 | MiniLM Core ML + Swift exact search | 28,650 chunks | `all-MiniLM-L6-v2` seq=256 | Swift RetrievalKit | 3.439 ms | 4.042 ms | 6.028 ms | 3.527 ms |
 | BGE FastEmbed + Python exact search | 28,650 chunks | `BAAI/bge-small-en-v1.5` | Python RetrievalKit | 8.295 ms | 10.033 ms | 12.128 ms | 8.588 ms |
 

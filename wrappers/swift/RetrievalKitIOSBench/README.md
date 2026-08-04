@@ -1,7 +1,16 @@
 # RetrievalKit iOS Benchmark App
 
+> [RetrievalKit](../../../README.md) › Tooling › iOS benchmark app
+
 This Xcode project runs the Rust FFI benchmark through
 `RetrievalKitFFI.xcframework`.
+
+> [!CAUTION]
+> The Phase 4b physical-device collection is closed. Do not install, launch, or
+> resume its device workloads. The commands below document validation and
+> development surfaces; they do not authorize new physical-device execution.
+
+## Qualification boundary
 
 Phase 4 uses two separate release products in this project. `RetrievalKitIOSBench`
 links only `RetrievalKitFFI` and records zero graph state creations, graph file
@@ -52,11 +61,15 @@ python3 benchmarks/device-graph/validate_artifacts.py \
   --stress-cancellation-authorization benchmarks/device-graph/phase4b-device-safety-cancellation-authorization-v1.json
 ```
 
+## Build and linkage checks
+
 Build both release products and inspect their arm64 symbols with:
 
 ```bash
 scripts/verify-ios-benchmark-linkage.sh
 ```
+
+## Historical Phase 4 protocol
 
 The graph-capable release launch requires `--phase4-graph-preflight`, one
 `--phase4-workload`, and one `--phase4-encoding f32|i8`. Add
@@ -77,6 +90,8 @@ records raw 1 ms RSS samples and uses the app's isolated Application Support
 directory; `save` always targets a unique sample directory and refuses to
 overwrite prior evidence.
 
+## Local app setup
+
 Build the XCFramework first:
 
 ```bash
@@ -92,6 +107,8 @@ Open or build the project:
 ```bash
 open wrappers/swift/RetrievalKitIOSBench/RetrievalKitIOSBench.xcodeproj
 ```
+
+## Benchmark modes
 
 The app has six benchmark modes:
 

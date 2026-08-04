@@ -1,17 +1,26 @@
 # RetrievalKitGraph
 
+> [RetrievalKit](../../../README.md) › SDKs › Swift graph aggregate
+
 RetrievalKit with schema-driven graph capabilities included. This package links
 the aggregate `RetrievalKitGraphFFI` artifact, including semantic and hybrid
 retrieval. Install it instead of the base `RetrievalKit` native artifact; never
 link both native artifacts into one app.
 
+Add the root Swift package at version `0.1.0`, then select the
+`RetrievalKitGraph` product.
+
 For a human-readable Project Apollo walkthrough and decision guide, start with
 the canonical [Swift guide](../../../docs/guides/swift.md).
+
+## Choose a database
 
 The package exposes two concrete products over the same canonical corpus model:
 
 - `GraphDatabase` owns corpus and graph capabilities only.
 - `GraphRetrievalDatabase` owns corpus, graph, and retrieval capabilities.
+
+## Graph-only quickstart
 
 Graph-only construction has no metric, encoding, dimension, or embeddings:
 
@@ -35,6 +44,8 @@ let projection = try await database.projectCandidates(
 // Stable lexical (recordID, chunkKey) identities; no internal IDs are exposed.
 print(projection.candidates)
 ```
+
+## Graph-scoped retrieval
 
 Combined construction adds retrieval explicitly. A generation-bound graph
 selection can scope retrieval without copying records or exposing internal IDs:
@@ -72,6 +83,8 @@ Exact, keyword, and hybrid hits return effective metadata using the shared
 `MetadataValue` type. Hybrid traces expose `alpha`; graph scope constrains the
 candidate set but is not another scoring signal.
 
+## Lifecycle and results
+
 Both database owners and their query views are actors. `GraphSelection` retains
 its native candidate scope and releases it automatically; callers do not close
 query results manually. Database `close()` is available for deterministic early
@@ -79,6 +92,8 @@ release, with `deinit` as the normal fallback. Both database types expose
 `projectCandidates(from:filter:)`; filtering, generation checks, and stable
 identity ordering run in Rust. The returned `GraphCandidateProjection` also
 reports source-node and before/after-filter chunk counts.
+
+## Build and verify from source
 
 Run the focused examples:
 

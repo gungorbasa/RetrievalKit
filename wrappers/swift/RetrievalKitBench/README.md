@@ -1,6 +1,12 @@
 # RetrievalKit Swift Benchmark Harness
 
+> [RetrievalKit](../../../README.md) › Tooling › macOS benchmark harness
+
 This SwiftPM package is a macOS command-line harness for the Rust FFI benchmark.
+It is contributor tooling, not an application SDK or a source of public claims
+without the matching frozen benchmark contract.
+
+## Build the native library
 
 Build the Rust FFI library first:
 
@@ -17,6 +23,8 @@ scripts/build-xcframework.sh
 
 The script writes `target/apple/RetrievalKitFFI.xcframework`.
 
+## Run
+
 Run a small link/smoke benchmark:
 
 ```bash
@@ -30,6 +38,8 @@ Run the default device benchmark:
 cd wrappers/swift/RetrievalKitBench
 swift run -c release retrievalkit-bench
 ```
+
+## Default workload
 
 The default config is owned by `retrievalkit-ffi` and currently runs:
 

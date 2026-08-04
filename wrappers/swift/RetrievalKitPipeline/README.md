@@ -1,5 +1,7 @@
 # RetrievalKit Pipeline
 
+> [RetrievalKit](../../../README.md) › SDKs › Swift ingestion pipeline
+
 `RetrievalKitPipeline` is the optional high-level Swift package that composes:
 
 - `RetrievalKit` for shared Rust text chunking, indexing, persistence,
@@ -7,6 +9,10 @@
 - `EmbeddingKit` for provider-neutral batch and query embeddings.
 
 The lower-level packages remain independently usable.
+
+Add the root Swift package at version `0.1.0`, then select
+`RetrievalKitPipeline` together with the retrieval and embedding products your
+application uses.
 
 ## Usage
 
@@ -52,7 +58,7 @@ range:
 - `retrievalkit.chunk.start_byte`
 - `retrievalkit.chunk.end_byte`
 
-## Custom Chunking
+## Custom chunking
 
 Applications can replace the built-in Rust chunker by implementing
 `DocumentChunker`, which is owned and validated by `RetrievalKitPipeline`:

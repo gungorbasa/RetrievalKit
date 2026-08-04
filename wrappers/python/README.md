@@ -1,12 +1,22 @@
 # RetrievalKit Python Wrapper
 
+> [RetrievalKit](../../README.md) › SDKs › Python base package
+
+`retrievalkit` is the flat-corpus Python package for exact vector, BM25, and
+hybrid retrieval. Install `retrievalkit-graph` instead when relationships must
+select or scope records; never load both native aggregates in one process.
+
+```bash
+python -m pip install retrievalkit==0.1.0
+```
+
+For the shortest end-to-end example, start with the
+[Python guide](../../docs/guides/python.md) or
+[`database_quickstart.py`](examples/database_quickstart.py).
+
 This is a thin Python wrapper around the RetrievalKit Rust retrieval core. Python
 provides an ergonomic API, while Rust handles indexing, filtering, ranking,
 persistence, and result tracing.
-
-For the Project Apollo walkthrough and guidance on choosing hybrid, semantic,
-graph scope, and metadata filters, start with the canonical
-[Python guide](../../docs/guides/python.md).
 
 The wrapper does not include an embedding model. Callers provide embeddings from
 the same local or remote provider for indexing and querying.

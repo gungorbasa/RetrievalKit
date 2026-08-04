@@ -1,5 +1,7 @@
 # RetrievalKit for Node.js
 
+> [RetrievalKit](../../README.md) › SDKs › TypeScript / Node.js
+
 This directory contains three owner-approved packages:
 
 - `@gungorbasa/retrievalkit`: retrieval-only native aggregate.
@@ -8,15 +10,25 @@ This directory contains three owner-approved packages:
 - `@gungorbasa/retrievalkit-embedding`: independent local FP32 MiniLM
   embedding provider.
 
+All three v0.1.0 preview packages are published on npm. Choose one retrieval
+aggregate and optionally add the independent embedding provider:
+
+```bash
+npm install @gungorbasa/retrievalkit@0.1.0
+# or: npm install @gungorbasa/retrievalkit-graph@0.1.0
+npm install @gungorbasa/retrievalkit-embedding@0.1.0
+```
+
 The initial implemented native target is Node.js LTS on macOS arm64. The
 separate browser/WebAssembly runtime and browser embedding provider live at
 `wrappers/browser` and `wrappers/browser-embedding`; they do not load these
-N-API packages. Browser embedding joins the v0.1.0 release inventory; browser
-retrieval is published separately as `@gungorbasa/retrievalkit-browser`.
-Other native operating systems are not claimed. All checked-in Node package manifests
-remain private until closed release assembly.
+N-API packages. Browser retrieval is published separately as
+`@gungorbasa/retrievalkit-browser`. Other native operating systems are not
+claimed. Checked-in Node manifests remain private to prevent accidental source
+workspace publication; the verified release assembler produces public
+tarballs.
 
-## Build and verify
+## Develop from source
 
 The initial target requires macOS arm64, Node.js 22.13+ LTS or Node.js 24 LTS,
 and Rust `cargo`. Node.js 24 LTS is recommended for a new setup. Current,
@@ -61,7 +73,7 @@ never round silently.
 See [base/README.md](base/README.md) and [graph/README.md](graph/README.md) for
 API examples and lifecycle details.
 
-## Assemble npm release tarballs
+## Rebuild npm release tarballs
 
 The checked-in package names remain private placeholders to prevent accidental
 publication. Release assembly therefore requires three names approved by the
@@ -94,7 +106,7 @@ Run the deterministic package-content test after building the native addons:
 python3 ../../scripts/release/test_assemble_node_packages.py
 ```
 
-Assembly does not publish. npm account ownership of both selected names and a
-trusted-publisher configuration are external release prerequisites. The
-inventory marks the tarballs `artifactReady` after inspection while keeping
-`publicationReady` false until that external upload authorization exists.
+Assembly does not publish. The inventory marks locally inspected tarballs
+`artifactReady` while keeping `publicationReady` false without protected upload
+authorization. This local state does not contradict the already published
+official v0.1.0 artifacts.

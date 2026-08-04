@@ -1,9 +1,17 @@
 # RetrievalKit Embedding for Kotlin/JVM
 
+> [RetrievalKit](../../../README.md) › SDKs › Kotlin embedding
+
+```kotlin
+implementation("io.github.gungorbasa:retrievalkit-embedding:0.1.0")
+```
+
 This optional package provides blocking FP32 `all-MiniLM-L6-v2` text
 embeddings. It is separate from the RetrievalKit database package: embedding
 produces 384-value, finite, L2-normalized `FloatArray` values, while database
 storage may independently use RetrievalKit's signed-I8 encoding.
+
+## Quickstart
 
 ```kotlin
 OnnxEmbedder.prefetch()
@@ -12,6 +20,8 @@ OnnxEmbedder.load(localOnly = true).use { embedder ->
     val query: FloatArray = embedder.embed("local semantic search")
 }
 ```
+
+## Acquisition and offline behavior
 
 Only `load(...)` and `prefetch(...)` may acquire model files. `localOnly = true`
 prohibits network acquisition. An application may pass `cacheDirectory` for
@@ -25,6 +35,8 @@ The package pins `gungorbasa/retrievalkit-minilm` commit
 `b81e0e9393a25630eda184cfa373f2f28eed08c2ed92ae3d4097504e5f7ab4b2`.
 Empty or blank text and empty batches fail with typed input errors.
 
+## Lifecycle and runtime
+
 Calls on one embedder are serialized. The API deliberately has no coroutine
 dependency; applications choose the appropriate dispatcher for blocking
 loading and inference. `close()` is deterministic and idempotent, and later
@@ -34,6 +46,5 @@ The JVM artifact expects the `retrievalkit_embedding_jni` native aggregate as a
 packaged macOS arm64 resource or through
 `-Dretrievalkit.embedding.native.path=/absolute/path/to/library`.
 
-The `io.github.gungorbasa:retrievalkit-embedding` coordinate is included in the
-v0.1.0 release inventory but is not available from Maven Central until the
-protected release gates pass.
+The `io.github.gungorbasa:retrievalkit-embedding:0.1.0` preview is available
+from Maven Central for the qualified macOS arm64 target.

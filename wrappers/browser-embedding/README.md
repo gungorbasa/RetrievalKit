@@ -1,14 +1,20 @@
 # RetrievalKit Browser Embedding
 
-Browser package for local FP32 `sentence-transformers/all-MiniLM-L6-v2`
-embeddings. The v0.1.0 preview is published as
-`@gungorbasa/retrievalkit-browser-embedding`.
+> [RetrievalKit](../../README.md) › SDKs › Browser embedding
 
-This package is deliberately separate from RetrievalKit retrieval packages. It
-does not import the Node N-API addon, the browser retrieval package, or the Rust
-retrieval core. An application owns a dedicated module Worker; model
-acquisition, tokenization, ONNX session creation, warmup, and inference all run
-there.
+Local FP32 `sentence-transformers/all-MiniLM-L6-v2` embedding in a dedicated
+browser Worker. This independent provider does not import RetrievalKit
+retrieval, and retrieval does not download or invoke the model automatically.
+
+```bash
+npm install @gungorbasa/retrievalkit-browser-embedding@0.1.0
+```
+
+The v0.1.0 preview is published as
+`@gungorbasa/retrievalkit-browser-embedding`. It imports neither the Node N-API
+addon nor the Rust retrieval core. The application owns a dedicated module
+Worker for acquisition, tokenization, ONNX session creation, warmup, and
+inference.
 
 ## Frozen contract
 

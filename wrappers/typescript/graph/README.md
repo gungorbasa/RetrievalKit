@@ -1,14 +1,25 @@
 # RetrievalKit Node graph aggregate
 
+> [RetrievalKit](../../../README.md) › SDKs › Node.js graph aggregate
+
+```bash
+npm install @gungorbasa/retrievalkit-graph@0.1.0
+```
+
 `@gungorbasa/retrievalkit-graph` is the approved graph-capable aggregate
 package name. The package remains private in the source workspace until release
 assembly removes that safety gate. The initial supported runtime is Node.js LTS
 on macOS arm64.
+The assembled v0.1.0 preview is published on npm.
+
+## Choose a database
 
 It contains two products:
 
 - `GraphDatabase`: canonical corpus plus graph; no vectors or BM25.
 - `GraphRetrievalDatabase`: one canonical corpus with graph and retrieval.
+
+## Quickstart
 
 Builders use ordinary records. `GraphDatabaseBuilder.add()` accepts graph-only
 records. `GraphRetrievalDatabaseBuilder.add()` optionally pairs record content
@@ -56,6 +67,8 @@ try {
   await database.close();
 }
 ```
+
+## Results and lifecycle
 
 Graph queries return typed matches, complete typed path edges and provenance,
 truncation state, and trace counts. Selections are opaque generation-bound

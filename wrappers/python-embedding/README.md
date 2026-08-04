@@ -1,9 +1,17 @@
 # retrievalkit-embedding
 
-Optional local FP32 text embeddings for RetrievalKit's Python API. This package
-is deliberately separate from the retrieval database distribution: constructing
-or prefetching an `OnnxEmbedder` may download verified model artifacts, while
-database initialization, indexing, search, and embedding inference never do.
+> [RetrievalKit](../../README.md) › SDKs › Python embedding
+
+Independent local FP32 MiniLM embeddings for Python. It can be used beside
+either retrieval aggregate and never makes embedding a hidden database step.
+Only construction or explicit prefetch may download verified model artifacts;
+inference and database operations do not.
+
+```bash
+python -m pip install retrievalkit-embedding==0.1.0
+```
+
+## Quickstart
 
 ```python
 from retrievalkit_embedding import OnnxEmbedder
@@ -13,6 +21,8 @@ embedder = OnnxEmbedder.load(local_only=True)
 vector = embedder.embed("local retrieval")
 assert len(vector) == 384
 ```
+
+## Model, acquisition, and runtime
 
 The default and only production-exposed model profile is the pinned FP32
 `all-MiniLM-L6-v2` export. Inputs use the qualified 256-token limit and every

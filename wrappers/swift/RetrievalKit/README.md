@@ -1,6 +1,12 @@
 # RetrievalKit Swift
 
+> [RetrievalKit](../../../README.md) › SDKs › Swift base retrieval
+
 Swift wrapper for RetrievalKit's Rust retrieval core.
+
+Add the root package at version `0.1.0` and select `RetrievalKit` for a flat
+corpus. Select `RetrievalKitGraph` instead when relationships must drive graph
+traversal or scope retrieval.
 
 For the Project Apollo walkthrough and guidance on choosing hybrid, semantic,
 graph scope, and metadata filters, start with the canonical
@@ -13,7 +19,7 @@ The wrapper is intentionally thin:
 - Retrieval, filtering, ranking, persistence, and traces stay in Rust.
 - Swift provides Apple-platform API shape, ownership, and error mapping.
 
-## Build And Test
+## Build and test from source
 
 The default package manifest consumes the built XCFramework at:
 
@@ -56,7 +62,7 @@ checkout.
 `target/debug/libretrievalkit_ffi.a`, but release validation should use the
 default `Package.swift` and the XCFramework.
 
-## Retrieval Database
+## Retrieval database
 
 Use `RetrievalDatabase` when an application needs semantic or hybrid retrieval
 without graph traversal. Embeddings are produced by the caller and paired
@@ -103,7 +109,7 @@ Run the focused example with the checked entrypoint:
 scripts/run-swift-quickstart.sh base-retrieval
 ```
 
-## Lower-level API
+## Lower-level compatibility API
 
 `VectorIndex` remains available for existing mutable-index clients. Progressive
 database builders do not expose dimensions, chunks, or keyed embedding maps.
@@ -142,7 +148,7 @@ for result in results {
 }
 ```
 
-## Current API Surface
+## API and concurrency
 
 - Create/load/save `RetrievalDatabase` and the compatibility `VectorIndex`.
 - Upsert and delete documents.
@@ -171,7 +177,7 @@ async let lexical = index.keywordSearch(text: "exact name")
 let (semanticHits, lexicalHits) = try await (semantic, lexical)
 ```
 
-## Persistence Safety
+## Persistence safety
 
 `save(to:)` publishes a complete immutable snapshot. RetrievalKit writes and syncs
 the new generation before atomically switching `manifest.json`, so an

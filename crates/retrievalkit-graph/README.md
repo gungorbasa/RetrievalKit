@@ -1,6 +1,15 @@
 # retrievalkit-graph
 
+> [RetrievalKit](../../README.md) › Rust crates › Graph engine
+
 Optional, fully local, schema-driven graph retrieval for RetrievalKit.
+
+The crate owns schema validation, deterministic graph construction, bounded
+traversal, persistence, and projection into generation-bound retrieval scopes.
+It does not infer relationships, prescribe an application domain, or replace
+the canonical corpus owned by `retrievalkit-core`.
+
+## Schema quickstart
 
 The package does not prescribe people/projects, products/categories, notes,
 files, or any other domain. Applications map their own canonical `RecordType`s
@@ -45,6 +54,8 @@ let graph = GraphIndex::build(core, schema)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Capability status
+
 M2 supports:
 
 - one record-node mapping per canonical record type;
@@ -56,6 +67,8 @@ M2 supports:
 - cycles, canonical shortest paths, limits, cancellation, and provenance;
 - record/chunk projection into generation-bound `CandidateScope` values;
 - delegated exact, BM25, and hybrid ranking without changing core hot paths.
+
+## Persistence
 
 M3.1 adds the persistence contract beneath the eventual filesystem bundle:
 

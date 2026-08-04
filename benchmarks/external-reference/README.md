@@ -1,5 +1,11 @@
 # Phase 5 External Reference Implementations
 
+> [RetrievalKit](../../README.md) › Benchmarks › External references
+
+Reproduce and validate the frozen macOS comparison between RetrievalKit and
+external exact-search implementations. Start with **Run** for a new emission;
+use **Validate** when checking the committed compact evidence.
+
 This directory contains benchmark-only adapters for the retrieval benchmark
 roadmap's Phase 5. Nothing here is linked into RetrievalKit production crates or
 public wrappers, and nothing executes on a physical device.

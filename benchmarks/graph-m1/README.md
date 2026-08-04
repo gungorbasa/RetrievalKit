@@ -1,7 +1,14 @@
 # M1 Candidate Scope Benchmark
 
-This benchmark isolates retrieval latency. Index construction and query
-embedding are outside the timed region. Run it with:
+> [RetrievalKit](../../README.md) › Benchmarks › Candidate scopes
+
+Measures the retrieval cost of generation-bound candidate scopes while keeping
+index construction and embedding outside the timed region. The recorded result
+is development evidence from one named host, not a release claim.
+
+## Run
+
+From the repository root:
 
 ```bash
 cargo bench -p retrievalkit-core --bench graph_free_regression
@@ -31,7 +38,7 @@ same harness and machine. The current column is the median p95 from three final
 verification runs after M2; this reduces sensitivity to a single noisy run:
 
 | Operation | Pre-M1 p95 | M1 p95 | Change |
-|---|---:|---:|---:|
+| --- | ---: | ---: | ---: |
 | Exact | 910 µs | 922 µs | +1.32% |
 | BM25 | 2,199 µs | 2,253 µs | +2.46% |
 | Hybrid | 3,192 µs | 3,277 µs | +2.66% |
@@ -42,7 +49,7 @@ this host was not pinned, the result does not replace release qualification.
 Scoped p95:
 
 | Operation | Sparse 1% | Dense 50% |
-|---|---:|---:|
+| --- | ---: | ---: |
 | Exact | 12 µs | 613 µs |
 | BM25 | 189 µs | 1,159 µs |
 | Hybrid | 232 µs | 1,955 µs |

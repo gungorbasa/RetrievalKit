@@ -1,6 +1,12 @@
 # Generic M2 Graph Benchmark
 
-Run:
+> [RetrievalKit](../../README.md) › Benchmarks › Bounded graph traversal
+
+Measures graph build, bounded traversal, candidate projection, and scoped
+exact retrieval on a deterministic synthetic graph. It validates the
+implementation shape; it does not establish a universal capacity envelope.
+
+## Run
 
 ```bash
 cargo bench -p retrievalkit-graph --bench bounded_traversal
@@ -27,7 +33,7 @@ cargo bench -p retrievalkit-graph --bench bounded_traversal
 ## 2026-07-11 result
 
 | Measurement | Result |
-|---|---:|
+| --- | ---: |
 | Full graph build | 12 ms |
 | Bounded traversal p95 | 18 µs |
 | Record-node candidate projection p95 | 1 µs |

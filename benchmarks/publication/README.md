@@ -1,13 +1,17 @@
 # Phase 6 benchmark publication
 
-This directory generates and independently validates the frozen,
-repository-local Phase 6 benchmark publication package.
+> [RetrievalKit](../../README.md) › Benchmarks › Publication
+
+Build and independently validate the frozen, repository-local evidence package
+that authorizes the benchmark wording in the root README. These commands
+transform existing evidence only: they do not benchmark, retune, download, or
+run a physical device.
 
 The checked-in package is under `artifacts/phase6-publication-v1`. Large raw
 Phase 3 and Phase 4b evidence remains untracked under `target/`; Phase 5's
 frozen compact artifacts remain under `benchmarks/external-reference`.
 
-Generate:
+## Generate
 
 ```sh
 python3 benchmarks/publication/generate_publication.py \
@@ -18,7 +22,7 @@ python3 benchmarks/publication/generate_publication.py \
   --output /tmp/phase6-publication-v1
 ```
 
-Validate:
+## Validate
 
 ```sh
 python3 benchmarks/publication/validate_publication.py \

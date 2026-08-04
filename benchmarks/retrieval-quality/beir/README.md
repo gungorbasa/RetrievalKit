@@ -1,15 +1,26 @@
 # BEIR Evaluation Adapters
 
+> [RetrievalKit](../../../README.md) › Benchmarks › Retrieval quality › BEIR
+
+Prepare SciFact or NFCorpus for external comparability without committing or
+redistributing their corpora, queries, judgments, embeddings, or run outputs.
+
+## Supported datasets
+
 RetrievalKit supports the following evaluation-only BEIR collections:
 
 | Dataset | Documents | Test queries | Test qrels | Archive MD5 |
-|:--|--:|--:|--:|:--|
+| :-- | --: | --: | --: | :-- |
 | SciFact | 5,183 | 300 | 339 | `5f7d1de60b170fc8027bb7898e2efca1` |
 | NFCorpus | 3,633 | 323 | 12,334 | `a89dba18a62ef92f7d323ec890a0d38d` |
+
+## Prepare a collection
 
 Run `scripts/quality/prepare_beir.py` to download, verify, and prepare a
 collection under `target/benchmarks/beir/`. No corpus, query, qrels, embedding,
 or generated run artifact is checked into this directory.
+
+## Licensing and redistribution
 
 The source archives are provided through the
 [BEIR dataset catalog](https://github.com/beir-cellar/beir/wiki/Datasets-available).
@@ -35,6 +46,8 @@ CI must not cache, publish, or redistribute the downloaded archives, extracted
 collections, embeddings, or generated result artifacts. Any future CI
 redistribution requires a separate license review and the required attribution;
 the current adapters intentionally write only to ignored `target/` paths.
+
+## Canonical comparison
 
 Canonical comparison uses one RetrievalKit chunk per BEIR document and embeds the
 title followed by two newlines and the document text. Alternative chunking is a

@@ -1,5 +1,13 @@
 # Phase 7 regression gates
 
+> [RetrievalKit](../../README.md) › Benchmarks › Regression gates
+
+Run deterministic PR, scheduled, or release checks against frozen benchmark
+identities. Missing controlled evidence produces `not_provisioned`; it never
+becomes a synthetic pass.
+
+## PR gate
+
 Run the deterministic PR gate from the repository root:
 
 ```bash
@@ -9,6 +17,8 @@ scripts/benchmarks/run-phase7-pr.sh
 The command runs the production-backed Rust smoke test, validates the static
 contract/registry/fixture and frozen Phase 4–6 identities, generates two fresh
 result roots, and proves byte identity.
+
+## Scheduled and release tiers
 
 Scheduled and release tiers consume a canonical observation JSON with
 `inputs`, `metrics`, and `platform` objects. `inputs.provisioned` must contain

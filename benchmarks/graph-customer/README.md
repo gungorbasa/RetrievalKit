@@ -1,5 +1,10 @@
 # Graph Customer Fixture Contract
 
+> [RetrievalKit](../../README.md) › Benchmarks › Customer fixture contract
+
+**Status:** template only. This directory contains no completed customer
+fixture and authorizes no customer-workload or production-readiness claim.
+
 This directory defines the evidence required before RetrievalKit starts M2's
 optional graph engine. It deliberately contains no customer records, graph
 facts, expected results, device claims, or latency targets.

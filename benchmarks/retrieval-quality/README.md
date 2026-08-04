@@ -1,5 +1,14 @@
 # Retrieval-Quality Benchmark
 
+> [RetrievalKit](../../README.md) › Benchmarks › Retrieval quality
+
+This directory separates three kinds of evidence: checked-in deterministic
+fixtures, public-collection adapters that write only to ignored storage, and
+independent metric validation. Start with the V2 command below for the standard
+offline quality gate.
+
+## V2 offline quality gate
+
 The versioned `v1` fixture combines human-authored workspace documents,
 graded relevance judgments, exact-name and semantic queries, metadata filters,
 deletion checks, replacement checks, and deterministic distractors. Document

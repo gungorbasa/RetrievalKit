@@ -1,9 +1,14 @@
 # RetrievalKit V3 Retrieval-Quality Fixture
 
-Status: frozen conformance collection; graph-aware evaluation-artifact Phase 1
-is complete. The Phase 1.1 and Phase 1.2a-c qualification artifacts remain
-intentionally partial, while a separate release-context publication pipeline
-now verifies official `trec_eval` and assembles the closed public layout.
+> [RetrievalKit](../../../README.md) › Benchmarks › Retrieval quality › V3
+
+**Status:** frozen synthetic conformance collection. Treat every checked-in
+identity and expected result as immutable qualification input.
+
+Graph-aware evaluation-artifact Phase 1 is complete. The Phase 1.1 and Phase
+1.2a-c qualification artifacts remain intentionally partial, while a separate
+release-context publication pipeline now verifies official `trec_eval` and
+assembles the closed public layout.
 
 This directory is the checked-in synthetic A-J collection defined by
 `docs/product/graph-retrieval-evaluation-contract-v3.md`. Its seven records,
@@ -26,6 +31,8 @@ The completed qualification slices are:
   independent Python graph oracle; and
 - Phase 1.2c: nine production graph-scoped E-G runs, paired comparisons,
   combined persistence, independent reconstruction, and pinned `ir_measures`.
+
+## Generate qualification evidence
 
 Generate the complete A-G qualification into a fresh ignored directory:
 
@@ -65,6 +72,8 @@ python3 scripts/quality/finalize_v3_phase_1_2c_artifacts.py \
   --artifacts "$ARTIFACTS" --check-only
 ```
 
+## Failure semantics
+
 The evaluator always emits one result and metric row per declared query.
 Successful executions retain their deterministic results. A classified
 query-local contract failure emits an `invalid_execution` row only for that
@@ -73,6 +82,8 @@ ranking, and run-wide contract failures invalidate every attempted row in the
 affected run while preserving `excluded_pre_freeze` rows. Invalid rows have no
 hits or projected documents, contribute no metric value, and emit no TREC,
 selection, or path rows. Unrelated runs remain valid.
+
+## Publication boundary
 
 The finalizer requires exactly 56 files before its own index, rejects missing
 or unexpected paths, and verifies an existing stored index against a fresh

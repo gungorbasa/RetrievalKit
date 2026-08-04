@@ -1,55 +1,83 @@
-# Documentation
+# RetrievalKit documentation
 
-This directory separates active product decisions from deferred research notes.
+> [RetrievalKit](../README.md) › Documentation
+
+Use this directory to move from product-level guidance to implementation and
+evidence. The product specification is authoritative; guides explain public
+APIs; reports record completed qualification; research documents describe work
+that is not part of the current product.
+
+## Start here
+
+| You want to… | Read |
+| --- | --- |
+| Integrate the SDK | [Swift](guides/swift.md), [Python](guides/python.md), [TypeScript/browser](guides/typescript.md), or [Kotlin/Android](guides/kotlin.md) guide |
+| Understand the supported product | [Product specification](product/retrievalkit-product-spec.md) |
+| Check compatibility and migration rules | [Compatibility policy](product/compatibility-policy.md) and [v0.1.0 migration](product/v0.1.0-migration.md) |
+| Build or publish a release | [Release process](product/release-process.md) and [approval checklist](product/release-approval-checklist.md) |
+| Review benchmark evidence | [Publication contract](product/benchmark-publication-contract-v1.md) and [reports](product/reports/) |
+| Continue agent work | [Working memory](product/working-memory.md) |
+
+## Active product direction
+
+RetrievalKit V1 is a local-first SDK for indexes with fewer than 50K chunks.
+Its primary engine is exact vector search, combined with BM25, query-time
+hybrid ranking, metadata filters, graph traversal, graph-scoped retrieval,
+transactional persistence on native targets, and idiomatic language wrappers.
+
+HNSW, ANN, server mode, synchronization, and distributed database features are
+outside V1 unless the product specification changes.
 
 ## Guides
 
-Start here for product choices and runnable Project Apollo examples:
+- [Swift](guides/swift.md)
+- [Python](guides/python.md)
+- [TypeScript and browser](guides/typescript.md)
+- [Kotlin/JVM and Android](guides/kotlin.md)
 
-- [`guides/swift.md`](guides/swift.md)
-- [`guides/python.md`](guides/python.md)
-- [`guides/typescript.md`](guides/typescript.md)
-- [`guides/kotlin.md`](guides/kotlin.md)
+Each guide uses the same Project Apollo scenario so API choices can be compared
+without changing the problem being solved.
 
-## Product
+## Product documents
 
-Current implementation source of truth:
+- [Product specification](product/retrievalkit-product-spec.md) — supported
+  architecture, behavior, and scope.
+- [Capability-separated architecture](product/capability-separated-architecture.md)
+  — ownership and parity across base, graph, and combined products.
+- [Compatibility policy](product/compatibility-policy.md) — public API,
+  persistence, and platform compatibility.
+- [Release process](product/release-process.md) — guarded build, validation,
+  authorization, and publication workflow.
+- [Artifact retention policy](product/artifact-retention-policy.md) — durable
+  and generated evidence boundaries.
+- [Working memory](product/working-memory.md) — current project-scoped handoff
+  context; not a substitute for the product specification.
 
-- [`product/retrievalkit-product-spec.md`](product/retrievalkit-product-spec.md)
-- [`product/working-memory.md`](product/working-memory.md) for active handoff
-  context and recent decisions that should survive chat changes
-- [`product/memory-benchmark.md`](product/memory-benchmark.md) for isolated RSS,
-  persistence, search, and compaction validation
-- [`product/reports/retrieval-quality-v2-report.md`](product/reports/retrieval-quality-v2-report.md)
-  for the active harder vector-only and hybrid quality evidence
-- [`product/retrieval-quality-evaluation-standard.md`](product/retrieval-quality-evaluation-standard.md)
-  for the Moss comparison, industry gold standards, and V3 evaluation plan
-- [`product/reports/retrieval-quality-v1-report.md`](product/reports/retrieval-quality-v1-report.md)
-  for the original 12-query baseline
-- [`product/size-speed-report.md`](product/size-speed-report.md) for the current
-  compact-index footprint and retrieval-speed analysis
-- [`product/release-process.md`](product/release-process.md) for the guarded
-  current Swift/Python release-candidate workflow; the provisional Node and
-  Kotlin artifacts are source-only and are not yet publication inputs
-- [`product/reports/v0.1.0-release-candidate-report.md`](product/reports/v0.1.0-release-candidate-report.md)
-  for the qualified artifact identities, verification, and remaining blockers
+## Evidence and reports
+
+Completed qualification reports live under [`product/reports/`](product/reports/).
+Start with:
+
+- [v0.1.0 release candidate](product/reports/v0.1.0-release-candidate-report.md)
+- [Cross-language wrapper parity](product/reports/cross-language-wrapper-parity-audit.md)
+- [Retrieval quality V2](product/reports/retrieval-quality-v2-report.md)
+- [SDK developer experience](product/reports/sdk-devex-live-audit-2026-07-24.md)
+- [Browser portable baseline](product/reports/browser-wasm-portable-baseline-2026-07-26.md)
+
+Benchmark claims must remain scoped to their frozen inputs, source revision,
+device, and expiry. The root README is checked against the Phase 6 claim
+register in CI.
 
 ## Research
 
-Technical explorations that are not part of the current V1 scope:
+Documents under [`research/`](research/) are exploratory and do not authorize
+product behavior. In particular, the HNSW and TurboVec notes do not change the
+exact-search-first V1 direction.
 
-- [`research/rust-hnsw-vector-search-plan.md`](research/rust-hnsw-vector-search-plan.md)
-- [`research/turbovec-notes.md`](research/turbovec-notes.md)
+## Contributing to documentation
 
-## Current Direction
+Update the product specification when supported behavior or scope changes.
+Keep implementation reports factual and dated, keep runnable examples tied to
+checked source, and move superseded handoff notes out of working memory.
 
-RetrievalKit V1 is a small-index local retrieval SDK:
-
-```text
-target size: fewer than 50K chunks
-primary engine: exact vector search
-retrieval: exact vector + BM25 + hybrid ranking
-priority: speed, correctness, filtering, persistence, native SDK integration
-```
-
-HNSW/ANN work is deferred until exact/hybrid retrieval is polished and benchmarked on real iOS datasets.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for repository checks.

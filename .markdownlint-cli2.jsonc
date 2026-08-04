@@ -1,0 +1,24 @@
+{
+  "config": {
+    "MD013": false,
+    "MD033": {
+      "allowed_elements": [
+        "details",
+        "div",
+        "img",
+        "p",
+        "strong",
+        "summary"
+      ]
+    }
+  },
+  "globs": [
+    "README.md",
+    "benchmarks/**/README.md",
+    "crates/**/README.md",
+    "docs/README.md",
+    "examples/**/README.md",
+    "wrappers/*/README.md",
+    "wrappers/*/*/README.md"
+  ]
+}

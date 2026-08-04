@@ -1,148 +1,165 @@
-# ![RetrievalKit — local retrieval, graph search, and graph-scoped retrieval](assets/readme/hero.svg)
+# ![RetrievalKit — local retrieval without a server](assets/readme/hero.svg)
 
-RetrievalKit is one local retrieval engine for Swift, Python, TypeScript/Node,
-and Kotlin apps. Use it for exact vector and BM25 hybrid retrieval, graph-only
-search with no embeddings, or graph-scoped retrieval that ranks only the
-records related to the user's context. One Rust core, native APIs, and no
-retrieval server. The browser/WebAssembly retrieval and independent embedding
-packages run in dedicated Workers and both join the v0.1.0 release inventory.
-The live local website Q&A orchestration and browser SLM remain application
-layers rather than SDK packages.
+RetrievalKit is an in-process retrieval SDK for apps with fewer than 50K
+chunks. It combines exact vector search, BM25, hybrid ranking, metadata filters,
+graph traversal, and graph-scoped retrieval behind native Swift, Python,
+TypeScript, Kotlin, Android, and browser APIs—all backed by the same Rust core.
+
+No retrieval server is required. Indexing and search run locally; embeddings
+stay caller-controlled.
 
 <div align="center">
 
-[![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust)](https://www.rust-lang.org/)
-[![Swift](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift)](https://www.swift.org/)
-[![Python](https://img.shields.io/badge/Python-3.10%E2%80%933.14-3776AB?logo=python)](https://www.python.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-22.13%2B%20%7C%2024%20LTS-339933?logo=node.js)](https://nodejs.org/)
-[![Kotlin](https://img.shields.io/badge/Kotlin-JVM%2011-7F52FF?logo=kotlin)](https://kotlinlang.org/)
-[![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple)](https://developer.apple.com/ios/)
-[![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple)](https://developer.apple.com/macos/)
+[![Release](https://img.shields.io/github/v/release/gungorbasa/RetrievalKit?include_prereleases&sort=semver)](https://github.com/gungorbasa/RetrievalKit/releases/tag/v0.1.0)
+[![CI](https://github.com/gungorbasa/RetrievalKit/actions/workflows/ci.yml/badge.svg)](https://github.com/gungorbasa/RetrievalKit/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-0A0D12.svg)](LICENSE)
 
-**[Public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site)** · **[Swift guide](docs/guides/swift.md)** · **[Python guide](docs/guides/python.md)** · **[TypeScript guide](docs/guides/typescript.md)** · **[Kotlin guide](docs/guides/kotlin.md)** · **[Run from source](#run-from-source)** · **[See validated benchmarks](#measured-proof)**
+**[Quickstart](#quickstart)** · **[Choose an API](#choose-an-api)** ·
+**[Install](#install)** · **[Run from source](#run-from-source)** ·
+**[See validated benchmarks](#benchmarks)** · **[Documentation](#documentation)** ·
+**[Public docs](https://retrievalkit-docs.gungorbasa.chatgpt.site)**
 
 </div>
 
-## Install status
+## Quickstart
 
-RetrievalKit v0.1.0 is published as a preview. The commands below install the
-qualified initial packages. Platform limits are part of the support contract;
-in particular, Android remains a packaging-qualified arm64-v8a preview with no
-live-device inference or performance qualification.
+The Python base package is the shortest way to see the complete retrieval path.
+It accepts your document and query embeddings, stores the index locally, and
+runs ranking in-process.
 
-| SDK | Intended public install | Publication status | Qualified initial target |
-| --- | --- | --- | --- |
-| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | **Published preview** | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
-| Python | `python -m pip install retrievalkit-graph==0.1.0` | **Published preview** | macOS arm64; CPython 3.10–3.14 |
-| Node.js | `npm install @gungorbasa/retrievalkit-graph@0.1.0` | **Published preview** | macOS arm64; Node.js 22.13+ or 24 LTS |
-| Browser | `npm install @gungorbasa/retrievalkit-browser@0.1.0` | **Published preview** | Dedicated Worker; portable and SIMD128 WASM tiers |
-| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | **Published preview** | macOS arm64 native library; build with JDK 17, run bytecode on Java 11+ |
-| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | **Published preview** | Packaging qualified for Android API 24+ arm64-v8a; live-device inference and performance unqualified |
+```bash
+python -m pip install retrievalkit==0.1.0
+```
 
-The public identities and trusted publishers are configured, and v0.1.0 is
-available from all four distribution channels. For Swift, add one package and select `RetrievalKit` for a flat
-corpus, `RetrievalKitGraph` for relationships plus retrieval, or both. For
-Python, Node, and Kotlin, choose exactly one native distribution in a process:
-graph-enabled packages already include base retrieval.
+```python
+from retrievalkit import Document, RetrievalDatabaseBuilder
 
-The checked-in [source quickstarts](#run-from-source) remain available for
-contributors and unsupported source targets.
+builder = RetrievalDatabaseBuilder(
+    corpus_id="project-notes",
+    metric="dot_product",
+    encoding="f32",
+)
+builder.upsert(
+    Document(
+        id="decision-swift",
+        text="We chose Swift for Project Apollo's Apple platform client.",
+        metadata={"project": "apollo", "status": "approved"},
+    ),
+    embedding=[1.0, 0.0],
+)
+builder.upsert(
+    Document(
+        id="launch-checklist",
+        text="Project Apollo launch checklist and release owners.",
+        metadata={"project": "apollo", "status": "draft"},
+    ),
+    embedding=[0.0, 1.0],
+)
 
-## Three ways to search
+database = builder.build()
+hits = database.retrieval.hybrid_search(
+    "Why did we choose Swift?",
+    [1.0, 0.0],
+    where={"project": "apollo"},
+    limit=1,
+)
 
-Choose the smallest product that matches the question. The three paths share
-the same canonical corpus and Rust-owned correctness guarantees, but you do
-not have to configure capabilities you do not use.
+print(hits[0]["document_id"])
+```
 
-| Query path | Use | What it does |
-|---|---|---|
-| **Retrieval search** | `RetrievalDatabase` | Exact vector, BM25 text, or hybrid ranking over a flat corpus |
-| **Graph search** | `GraphDatabase` | Traverses relationships and projects stable candidates with no retrieval configuration or embeddings |
-| **Graph-scoped retrieval** | `GraphRetrievalDatabase` | Uses a graph query to choose candidates, then runs exact vector, BM25 text, or hybrid ranking inside that scope |
+```text
+decision-swift
+```
 
-Within either retrieval-capable product, the query inputs select the ranking
-mode: pass an embedding for vector-only search, text for BM25-only search, or
-both with `alpha` for hybrid search. Metadata filters are hard constraints and
-work with every retrieval variation.
+The two-dimensional vectors make the example deterministic; use embeddings
+from the same production model for both indexed documents and queries. For a
+checked-in runnable version, see
+[`database_quickstart.py`](wrappers/python/examples/database_quickstart.py).
 
-Graph search is a complete standalone path. If you only need to follow
-relationships, match graph fields, or project related records, build a
-`GraphDatabase`; no embedding model or vector index is involved.
+Prefer another language? Start with the
+[Swift](docs/guides/swift.md), [Python](docs/guides/python.md),
+[TypeScript](docs/guides/typescript.md), or [Kotlin](docs/guides/kotlin.md)
+guide.
 
-## One search, the right context
+## Choose an API
 
-Imagine a workspace with notes from many teams and projects. Someone opens
-Project Apollo and asks:
+RetrievalKit has three database types. Choose the smallest one that matches how
+your application finds context.
 
-> Why did we choose Swift?
+| If you need to… | Use | Search behavior |
+| --- | --- | --- |
+| Search a flat collection of documents | `RetrievalDatabase` | Exact vector, BM25 text, or hybrid ranking |
+| Traverse relationships without embeddings | `GraphDatabase` | Match, traverse, and project related records |
+| Find related records, then rank only within that scope | `GraphRetrievalDatabase` | Graph-scoped exact vector, BM25, or hybrid ranking |
 
-RetrievalKit can use three kinds of evidence without turning them into three
-different products:
+For retrieval-capable databases, the query inputs choose the mode:
 
-1. The Apollo relationship selects notes that belong to that project.
-2. A metadata rule can require `status = approved`.
-3. Semantic similarity and BM25 keyword evidence rank the remaining notes.
+```text
+embedding only          → exact vector search
+text only               → BM25 search
+text + embedding + alpha → hybrid search
+```
 
-The result is the Apollo architecture decision—not an unrelated note that
-happens to mention Swift.
+Metadata filters are hard constraints in every retrieval mode. Graph scope is
+different: it answers “which records are related?” before the ranker runs.
+Relationships are supplied by your application; RetrievalKit does not infer or
+invent a graph.
 
-Graph scope is not a separate result engine or a third scoring signal. It
-chooses the candidate neighborhood; the same hybrid ranker then orders those
-candidates. Relationships are supplied by your application. RetrievalKit does
-not automatically extract or invent a graph.
+## Install
 
-Hybrid search should be the normal default when a user types a query: vector
-similarity catches paraphrases while BM25 preserves exact names and terms.
-Choose vector-only when there is no useful query text—such as finding records
-similar to another record—or when keyword overlap should intentionally have no
-effect.
+RetrievalKit v0.1.0 is a published preview. Choose a base package for flat
+corpora or the graph aggregate when records have useful relationships. Graph
+aggregates already include base retrieval.
 
-Graph scope and metadata filters solve different problems. A graph answers
-“what is related to this record?” A filter answers “which records satisfy this
-rule?” They can be used together, or the graph can be queried on its own.
+| SDK | Graph-enabled install | Qualified preview target |
+| --- | --- | --- |
+| Swift | `.package(url: "https://github.com/gungorbasa/RetrievalKit.git", from: "0.1.0")` | macOS 14+ arm64; iOS 15+ arm64 device and simulator |
+| Python | `python -m pip install retrievalkit-graph==0.1.0` | macOS arm64; CPython 3.10–3.14 |
+| Node.js | `npm install @gungorbasa/retrievalkit-graph@0.1.0` | macOS arm64; Node.js 22.13+ or 24 LTS |
+| Browser | `npm install @gungorbasa/retrievalkit-browser@0.1.0` | Dedicated Worker; portable and SIMD128 WASM tiers |
+| Kotlin/JVM | `implementation("io.github.gungorbasa:retrievalkit-graph:0.1.0")` | macOS arm64 native library; JDK 17 build, Java 11+ runtime |
+| Android | `implementation("io.github.gungorbasa:retrievalkit-graph-android:0.1.0")` | API 24+ arm64-v8a packaging; live-device behavior unqualified |
 
-## How RetrievalKit works
+Base packages are named `retrievalkit`, `@gungorbasa/retrievalkit`, and
+`io.github.gungorbasa:retrievalkit`. Optional embedding integrations are
+published separately so applications can bring their own model or use the
+first-party local MiniLM provider.
+
+> [!IMPORTANT]
+> Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
+> Install exactly one retrieval aggregate; the
+> independent embedding package may be used alongside either one.
+
+## How it works
 
 <p align="center">
   <img src="assets/readme/architecture.svg" width="100%"
-       alt="RetrievalKit data flow: records enter one corpus; retrieval-only queries use exact vector, BM25, or hybrid ranking; graph-only queries traverse and project related records without embeddings; graph-scoped retrieval narrows candidates by relationships before ranking; transactional checksummed snapshots persist the same state.">
+       alt="One canonical corpus feeds retrieval-only, graph-only, or graph-scoped retrieval paths in the shared Rust core.">
 </p>
 
-Indexing, graph traversal, filtering, ranking, trace construction, and
-persistence all run in the shared Rust core. The language wrappers provide
-idiomatic APIs over the same ownership model and correctness guarantees.
+The canonical corpus owns records, chunks, metadata, stable identities, and
+generations. Retrieval and graph indexes are derived capabilities over that
+state. The Rust core owns indexing, graph traversal, filtering, ranking,
+traces, and persistence; wrappers provide idiomatic APIs and lifecycle
+handling without reimplementing retrieval behavior.
 
-Embeddings are caller-provided. To keep the complete ingestion and query flow
-private, use a local embedding provider such as a Core ML model through
-[EmbeddingKit](wrappers/swift/EmbeddingKit/README.md). If your application
-sends text to a remote embedding service, that embedding step is not local or
-private, even though RetrievalKit still indexes and searches locally.
+Native databases use transactional, checksummed snapshots. Browser databases
+are in-memory and owned by a dedicated Worker; browser persistence is not part
+of v0.1.0.
 
-## Start with your language
+### Privacy boundary
 
-The canonical guides use the same Project Apollo data and explain what to
-choose, when, and why:
+Database construction, indexing, filtering, retrieval, graph traversal, and
+persistence require no network call. Embeddings remain explicit inputs. Use a
+local provider when text must stay on-device; if your app sends text to a
+remote embedding API, that embedding step is remote even though RetrievalKit
+search remains local.
 
-- **[Swift guide](docs/guides/swift.md)** — retrieval-only search, graph-only
-  traversal, graph-scoped retrieval, traces, persistence, and local embeddings.
-- **[Python guide](docs/guides/python.md)** — all three query paths with
-  Pythonic builders, checked-in examples, lifecycle, and packaging.
-- **[TypeScript guide](docs/guides/typescript.md)** — asynchronous Node.js
-  builders and typed N-API values on macOS arm64.
-- **[Kotlin guide](docs/guides/kotlin.md)** — Kotlin/JVM and Android
-  arm64-v8a builders over a typed JNI boundary.
+## Package matrix
 
-The complete programs are checked into the repository and are exercised by the
-wrapper validation scripts, so the documentation stays tied to executable
-examples.
-
-## Package selection and platform support
-
-Choose the graph-enabled distribution when relationships are meaningful to
-your product. It includes both `GraphDatabase` for graph-only search and
-`GraphRetrievalDatabase` for graph-scoped retrieval; the latter also includes
-exact vector, BM25, hybrid ranking, filters, traces, and persistence. Choose
-the base distribution for flat corpora that do not need traversal.
+Every published wrapper preserves the same corpus ownership, search semantics,
+filtering rules, persistence guarantees where supported, and deterministic
+ordering. Syntax and lifecycle remain native to each language.
 
 | SDK | Capability | Status |
 | --- | --- | --- |
@@ -153,8 +170,8 @@ the base distribution for flat corpora that do not need traversal.
 | Python `retrievalkit` | Base corpus and retrieval | **Published preview** |
 | Python `retrievalkit-graph` | Graph aggregate with retrieval | **Published preview** |
 | Python `retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Published preview** |
-| TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval; selected npm identity | **Published preview** |
-| TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval; selected npm identity | **Published preview** |
+| TypeScript `@gungorbasa/retrievalkit` | Base corpus and retrieval | **Published preview** |
+| TypeScript `@gungorbasa/retrievalkit-graph` | Graph aggregate with retrieval | **Published preview** |
 | TypeScript `@gungorbasa/retrievalkit-embedding` | Local FP32 MiniLM embedding integration | **Published preview** |
 | Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and graph-scoped WASM retrieval | **Published preview** |
 | Browser `@gungorbasa/retrievalkit-browser-embedding` | Worker-owned local FP32 MiniLM embedding | **Published preview** |
@@ -165,71 +182,41 @@ the base distribution for flat corpora that do not need traversal.
 | Android `io.github.gungorbasa:retrievalkit-graph-android` | Graph aggregate AAR for arm64-v8a | **Published preview; live-device unqualified** |
 | Android `io.github.gungorbasa:retrievalkit-embedding-android` | Local FP32 MiniLM embedding AAR for arm64-v8a | **Published preview; live-device inference unqualified** |
 
-Python, Node, and Kotlin base and graph native aggregates are mutually exclusive within one process.
-Their graph-enabled distributions already contain the base native retrieval
-capabilities. Node loaders enforce this with a process-global guard; JVM and
-Android applications must depend on exactly one artifact.
+Public SwiftPM, PyPI, npm, and Maven publication completed from the signed
+release revision and authorized artifacts. Android qualification covers
+cross-compilation, packaging, inventory, ABI/JNI contracts, and fresh consumer
+resolution and compilation—not physical-device inference, compatibility,
+memory, thermal behavior, or performance.
 
-Android API 24+ arm64-v8a is an explicit v0.1.0 preview. Cross-compilation,
-AAR packaging, closed inventory, ABI/architecture, JVM/JNI-contract, and fresh
-consumer dependency-resolution/compilation checks remain release gates. No
-physical Android device was available, so live-device model acquisition,
-inference, lifecycle, memory, thermal behavior, offline restart, compatibility,
-and performance are unqualified and deferred. That missing evidence does not
-block v0.1.0, and RetrievalKit does not claim production readiness, device
-compatibility, or Android performance beyond the existing evidence.
-
-Swift uses one package and one graph-capable native aggregate. Add the package
-once, then select `RetrievalKit`, `RetrievalKitGraph`, or both products.
-`RetrievalKitGraphFFI` contains the shared base and graph entry points, so a
-Swift application never links competing native aggregates. Selecting only
-`RetrievalKit` keeps graph APIs out of the Swift target, although SwiftPM still
-downloads the graph-capable binary.
-
-`GraphRetrievalDatabase` is the complete graph-scoped search product.
-`GraphDatabase` is available for applications that need only traversal and
-candidate projection, with no retrieval configuration or embeddings.
+Swift ships one graph-capable native aggregate so `RetrievalKit` and
+`RetrievalKitGraph` can coexist in one app. Selecting only `RetrievalKit` keeps
+graph APIs out of the Swift target, although SwiftPM still downloads the shared
+binary.
 
 ## Run from source
 
-For a source checkout, start at the repository root. Each
-quickstart below checks its required toolchain before compiling and runs a
-checked-in example; none publishes or downloads a RetrievalKit package from a
-public registry.
+Clone the repository and run one checked quickstart from the repository root.
+Each script verifies its required toolchain before building.
 
-### Python
+<details>
+<summary><strong>Python</strong></summary>
 
-The initial wheel target is macOS arm64 with CPython 3.10-3.14. Install
-[Rust](https://rustup.rs/) and a supported Python interpreter, then build the
-graph-enabled wrapper once:
+Requires Rust and CPython 3.10–3.14.
 
 ```bash
 PYTHON_BIN=python3 scripts/check-python-graph-wrapper.sh
-```
-
-Run graph-only search with no embeddings:
-
-```bash
-target/python-graph-wrapper-check-venv-py*/bin/python \
-  wrappers/python-graph/examples/graph_quickstart.py
-```
-
-Expected output includes: `graph-only=retrieval`.
-
-Or run graph-scoped hybrid retrieval:
-
-```bash
 target/python-graph-wrapper-check-venv-py*/bin/python \
   wrappers/python-graph/examples/graph_retrieval_quickstart.py
 ```
 
 Expected output: `graph-hybrid=decision-swift`.
 
-### TypeScript/Node
+</details>
 
-The initial Node target is macOS arm64 with Node.js 22.13+ LTS or Node.js 24
-LTS. Install [Rust](https://rustup.rs/) and a supported Node.js LTS release,
-then run:
+<details>
+<summary><strong>TypeScript / Node.js</strong></summary>
+
+Requires Rust and Node.js 22.13+ or 24 LTS.
 
 ```bash
 cd wrappers/typescript
@@ -239,13 +226,14 @@ npm run build
 node graph/examples/graph-retrieval.mjs
 ```
 
-The printed result contains `documentId: 'local'`.
+The result contains `documentId: 'local'`.
 
-### Kotlin/JVM
+</details>
 
-The initial Kotlin/JVM native package runs on macOS arm64. Building requires
-Rust and JDK 17; the produced bytecode can run on Java 11+. On macOS, select an
-installed JDK 17 and run:
+<details>
+<summary><strong>Kotlin / JVM</strong></summary>
+
+Requires Rust and JDK 17 on macOS arm64. Published bytecode runs on Java 11+.
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
@@ -256,12 +244,15 @@ cd wrappers/kotlin
 ./gradlew :example-retrieval:run
 ```
 
-Expected output includes:
+Expected output includes
 `kotlin: Kotlin calls the local Rust retrieval core. (1.0)`.
 
-### Swift
+</details>
 
-Run the Swift graph-enabled Apollo example:
+<details>
+<summary><strong>Swift</strong></summary>
+
+Requires Rust, Swift 6.2, and macOS 14+ on Apple silicon.
 
 ```bash
 scripts/build-xcframework.sh --macos-only --graph
@@ -270,23 +261,18 @@ scripts/run-swift-quickstart.sh graph-retrieval
 
 Expected output: `graph-hybrid=decision-swift`.
 
-See the [Python guide](docs/guides/python.md) or
-[Swift guide](docs/guides/swift.md) for complete code, retrieval-only commands,
-semantic-only variations, persistence, and trace inspection.
+</details>
 
-The [TypeScript guide](docs/guides/typescript.md) and
-[Kotlin guide](docs/guides/kotlin.md) include native build, package-content,
-local-install, and Android AAR commands.
+## Benchmarks
 
-## Measured proof
+The public benchmark claims below are historical observations from a frozen
+Phase 6 workload. They are not measurements of the current checkout. They apply
+to RetrievalKit revision `9c784d2f11b91bb907150aa1b6046880ff89fde6`, were
+reported on 2026-07-21, and expire on 2027-07-21. Retrieval timings exclude
+embedding generation.
 
-These are historical observations authorized by the frozen
-[Phase 6 claim register](benchmarks/publication/artifacts/phase6-publication-v1/claim-register.json),
-not measurements of the current checkout. They apply to RetrievalKit revision
-`9c784d2f11b91bb907150aa1b6046880ff89fde6`, were reported on 2026-07-21,
-and expire on 2027-07-21. Retrieval timings exclude embedding generation.
-
-### Exact retrieval on Apple M1 Max
+<details>
+<summary><strong>Exact retrieval on Apple M1 Max</strong></summary>
 
 <!-- claim:P6-MAC-EXACT-001 -->
 On the frozen exact F32, 384-dimensional, top-10 benchmark, RetrievalKit revision
@@ -316,10 +302,14 @@ possible input.
 <!-- /claim -->
 
 These ratios describe one exact-search workload, not universal competitor
-superiority. See the [methodology](benchmarks/publication/artifacts/phase6-publication-v1/methodology.md)
+superiority. See the
+[methodology](benchmarks/publication/artifacts/phase6-publication-v1/methodology.md)
 and [Mac evidence report](benchmarks/publication/artifacts/phase6-publication-v1/mac-systems-performance.md).
 
-### Graph-scoped quality on HotpotQA
+</details>
+
+<details>
+<summary><strong>Graph-scoped quality on HotpotQA</strong></summary>
 
 <!-- claim:P6-QUALITY-001 -->
 Across the frozen 296-query HotpotQA linked-abstracts test comparison,
@@ -343,10 +333,13 @@ across 296 valid graph queries, with zero empty scopes. Candidate reduction is
 not a retrieval-latency speedup and retention was not perfect.
 <!-- /claim -->
 
-The workload contains 12,670 chunks. Full details are in the
+The workload contains 12,670 chunks. See the full
 [retrieval-quality evidence](benchmarks/publication/artifacts/phase6-publication-v1/retrieval-quality.md).
 
-### Physical-device qualification
+</details>
+
+<details>
+<summary><strong>Physical-device qualification</strong></summary>
 
 <!-- claim:P6-DEVICE-001 -->
 On a physical iPhone 17 Pro Max (`iPhone18,2`, `V54AP`), the supported 10K,
@@ -364,47 +357,66 @@ eligible for support, performance, latency, quality, product, or marketing
 claims.
 <!-- /claim -->
 
-See the [physical-device evidence report](benchmarks/publication/artifacts/phase6-publication-v1/physical-device-systems-performance.md)
+See the
+[physical-device evidence report](benchmarks/publication/artifacts/phase6-publication-v1/physical-device-systems-performance.md)
 and [Phase 6 validation result](benchmarks/publication/artifacts/phase6-publication-v1-validation.json).
 
-## Scope and release status
+</details>
 
-- V1 is designed for local indexes with fewer than 50K chunks.
-- Initial binary qualification focuses on arm64 Apple platforms: macOS 14+ and
-  iOS 15+, including the arm64 iOS Simulator. The initial Node target is macOS
-  arm64; Android API 24+ arm64-v8a ships as an explicit preview with live-device
-  inference, compatibility, and performance unqualified.
-- Browser/WebAssembly retrieval and browser embedding are implemented,
-  desktop-qualified in source, and included as separate v0.1.0 npm packages.
-  The retrieval tarball carries portable and SIMD128 WASM tiers; persistence,
-  threaded WASM, Safari, Firefox, and physical mobile browsers remain outside
-  the qualified release surface.
-- RetrievalKit is licensed under
-  [Apache License 2.0](LICENSE), with company attribution in [NOTICE](NOTICE).
-- Installation is available through SwiftPM, PyPI, npm, and Maven Central for
-  the qualified preview targets.
-- Benchmark evidence supports scoped observations, not a universal competitor
-  claim.
-- Public SwiftPM, PyPI, npm, and Maven publication completed from the signed
-  release revision and exact authorized artifacts.
+## Scope and limitations
+
+- V1 is optimized for exact retrieval over local indexes with fewer than 50K
+  chunks. HNSW and other ANN indexes are intentionally deferred.
+- Native persistence uses transactional, checksummed snapshots. Browser v0.1.0
+  databases are Worker-owned and in-memory; portable cross-platform snapshots
+  are not claimed.
+- The initial native binary targets focus on arm64 Apple platforms. Node.js,
+  Python, and Kotlin/JVM packages initially target macOS arm64.
+- Android API 24+ arm64-v8a is a packaging-qualified preview. Live-device
+  inference, compatibility, lifecycle, memory, thermal behavior, offline
+  restart, and performance remain unqualified.
+- Embedding latency is separate from retrieval latency. RetrievalKit accepts
+  caller-provided embeddings and never hides a hosted inference call inside a
+  database operation.
+- Benchmark evidence supports the named frozen workloads only; it is not a
+  universal performance or quality claim.
 
 ## Documentation
 
+### Start by language
+
 - [Swift guide](docs/guides/swift.md)
 - [Python guide](docs/guides/python.md)
-- [TypeScript guide](docs/guides/typescript.md)
-- [Kotlin guide](docs/guides/kotlin.md)
+- [TypeScript and browser guide](docs/guides/typescript.md)
+- [Kotlin/JVM and Android guide](docs/guides/kotlin.md)
+
+### Architecture and product decisions
+
 - [Product specification](docs/product/retrievalkit-product-spec.md)
 - [Capability-separated architecture](docs/product/capability-separated-architecture.md)
-- [Swift wrapper API/build reference](wrappers/swift/RetrievalKit/README.md)
-- [Swift graph wrapper API/build reference](wrappers/swift/RetrievalKitGraph/README.md)
-- [Python wrapper API/build reference](wrappers/python/README.md)
-- [Python graph wrapper API/build reference](wrappers/python-graph/README.md)
-- [TypeScript wrapper API/build reference](wrappers/typescript/README.md)
-- [Kotlin/JVM and Android API/build reference](wrappers/kotlin/README.md)
+- [Compatibility policy](docs/product/compatibility-policy.md)
 - [Release process](docs/product/release-process.md)
-- [Changelog](CHANGELOG.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
 
-RetrievalKit `v0.1.0` is a published preview.
+### Wrapper references
+
+- [Swift base API](wrappers/swift/RetrievalKit/README.md) and
+  [Swift graph API](wrappers/swift/RetrievalKitGraph/README.md)
+- [Python base API](wrappers/python/README.md) and
+  [Python graph API](wrappers/python-graph/README.md)
+- [TypeScript / Node.js API](wrappers/typescript/README.md)
+- [Browser / WebAssembly API](wrappers/browser/README.md)
+- [Kotlin/JVM and Android API](wrappers/kotlin/README.md)
+
+## Contributing, support, and license
+
+Focused bug reports, documentation corrections, reproduction cases, and
+changes within the V1 product scope are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and use the
+[issue templates](.github/ISSUE_TEMPLATE) for bugs or feature requests.
+
+Report vulnerabilities privately through the [security
+policy](SECURITY.md). Release history is recorded in the
+[changelog](CHANGELOG.md).
+
+RetrievalKit is licensed under the [Apache License 2.0](LICENSE). Copyright and
+distribution notices are in [NOTICE](NOTICE).

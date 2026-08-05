@@ -1,12 +1,19 @@
 # ![RetrievalKit — local retrieval without a server](assets/readme/hero.svg)
 
-RetrievalKit is an in-process retrieval SDK for apps with fewer than 50K
-chunks. It combines exact vector search, BM25, hybrid ranking, metadata filters,
-graph traversal, and graph-scoped retrieval behind native Swift, Python,
-TypeScript, Kotlin, Android, and browser APIs—all backed by the same Rust core.
+RetrievalKit is an Apache-2.0 in-process retrieval SDK that replaces the
+usual local stack — full-text index, vector extension, and hand-written
+fusion code — with three separately callable query paths in one Rust core:
+exact vector search, BM25/hybrid with query-time weighting, and graph-scoped
+retrieval over relationships you declare in a schema. Native Swift, Python,
+TypeScript, Kotlin, Android (packaging preview), and browser APIs.
 
-No retrieval server is required. Indexing and search run locally; embeddings
-stay caller-controlled.
+It is built for 1K to fewer than 50K chunks that live on the device. Build,
+persist, and query all run in your process: no account, no API key, no cloud
+index build. The core makes no network calls; the optional embedding
+packages download a pinned model once, then run offline. Embeddings are
+caller-provided by default. The graph path needs no vectors, no metric, and
+no embeddings at all, and graph scope is a hard candidate filter over the
+unchanged exact ranker — it never changes a score.
 
 <div align="center">
 

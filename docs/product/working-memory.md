@@ -1642,3 +1642,17 @@ target inside the supported fewer-than-50K envelope.
   a nonzero value or any actual 100K physical-device evidence or claim. The
   validator, gate runner, and mutation tests enforce that distinction; no
   device command is authorized.
+
+## 2026-08-09 GitHub README Direction
+
+- The root README is the developer-focused counterpart to `retrievalkit.com`.
+  Its reading order is outcome, recorded product proof, quickstart, API choice,
+  architecture, installation, validated evidence, and reference material.
+- README visuals reuse the public website's warm-white, near-black, and blue
+  system plus the application-boundary and query/result motifs. Keep canonical
+  links to `https://retrievalkit.com/`, `/demo/`, and `/documentation/` rather
+  than the retired Sites hostname.
+- Benchmark claim blocks, package status rows, and source/benchmark CTA wording
+  are release-validator inputs. After future README edits, run the bundled
+  README asset audit, `benchmarks/publication/validate_readme.py`, and the
+  README claim mutation tests before treating the change as complete.

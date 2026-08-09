@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="430" viewBox="0 0 1200 430"
+     role="img" aria-labelledby="title desc">
+  <title id="title">A recorded RetrievalKit hybrid query and its ranked result</title>
+  <desc id="desc">A Swift hybrid search asks when the Apollo 11 crew entered lunar orbit. RetrievalKit returns the Mission Highlights passage with score 0.870 and a trace showing its vector and keyword ranks.</desc>
+
+  <rect x="1" y="1" width="1198" height="428" rx="22" fill="#1C2028" stroke="#303642" stroke-width="2"/>
+  <path d="M600 1 V429" stroke="#303642"/>
+
+  <g id="query-pane">
+    <text x="38" y="42" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" letter-spacing="1.5" fill="#8F98A7">QUERY.SWIFT</text>
+    <text x="562" y="42" text-anchor="end"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#50A2FF">HYBRID · α 0.6</text>
+    <path d="M0 62 H600" stroke="#303642"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20">
+      <text x="38" y="100" fill="#F06D7E">let <tspan fill="#E9EDF2">hits = </tspan>try await</text>
+      <text x="62" y="134" fill="#E9EDF2">retrievalDatabase.<tspan fill="#7CB8FF">search</tspan>(</text>
+      <text x="62" y="172" fill="#7CB8FF">text:<tspan fill="#E9EDF2">&#160;"When did the crew enter</tspan></text>
+      <text x="62" y="202" fill="#E9EDF2">      lunar orbit?",</text>
+      <text x="62" y="240" fill="#7CB8FF">embedding:<tspan fill="#E9EDF2">&#160;queryEmbedding,</tspan></text>
+      <text x="62" y="276" fill="#7CB8FF">alpha:<tspan fill="#E9EDF2">&#160;0.6,</tspan></text>
+      <text x="62" y="312" fill="#7CB8FF">limit:<tspan fill="#E9EDF2">&#160;5</tspan></text>
+      <text x="38" y="346" fill="#E9EDF2">)</text>
+    </g>
+
+    <circle cx="42" cy="382" r="6" fill="#20C77A"/>
+    <text x="58" y="389" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#AEB7C3">RUNS INSIDE THE APPLICATION PROCESS</text>
+  </g>
+
+  <g id="result-pane" transform="translate(600 0)">
+    <text x="38" y="42" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" letter-spacing="1.5" fill="#8F98A7">RECORDED RESULT</text>
+    <text x="562" y="42" text-anchor="end"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#8F98A7">15 PASSAGES</text>
+    <path d="M0 62 H600" stroke="#303642"/>
+
+    <text x="38" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#8F98A7">01</text>
+    <text x="76" y="104" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="22" font-weight="700" fill="#F4F6F8">Mission Highlights</text>
+    <text x="562" y="104" text-anchor="end"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="20" fill="#F4F6F8">0.870</text>
+
+    <text x="38" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" fill="#C3CAD4">On July 19, after Apollo 11 had flown behind the</text>
+    <text x="38" y="180" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" fill="#C3CAD4">moon, the first lunar orbit insertion maneuver placed</text>
+    <text x="38" y="210" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" fill="#C3CAD4">the spacecraft into its initial lunar orbit.</text>
+
+    <text x="38" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#7CB8FF">vector #1 · keyword #5 · matched lunar, orbit</text>
+    <path d="M38 278 H562" stroke="#303642"/>
+
+    <text x="38" y="318" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#8F98A7">02</text>
+    <text x="76" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" fill="#DCE1E7">Mission Objective</text>
+    <text x="562" y="318" text-anchor="end"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#DCE1E7">0.851</text>
+    <path d="M38 342 H562" stroke="#303642"/>
+    <text x="38" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#8F98A7">03</text>
+    <text x="76" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" fill="#DCE1E7">Mission Highlights</text>
+    <text x="562" y="382" text-anchor="end"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" fill="#DCE1E7">0.843</text>
+  </g>
+</svg>

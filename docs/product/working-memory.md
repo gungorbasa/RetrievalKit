@@ -6,6 +6,22 @@ implemented, or superseded by the product spec.
 
 ## Current Workflow
 
+- 2026-08-09 post-release hardening: `main` started clean and synchronized at
+  `de0a015`. The README/release static validators passed, but two mutation tests
+  still targeted pre-publication package labels; those tests now mutate the
+  exact published Android and browser rows, and all 44 focused tests pass.
+  GitHub currently reports no repository self-hosted runner matching the
+  scheduled macOS/ARM64 Phase 7 job, so run `30794858335` waited without
+  executing a step and was cancelled after 24 hours. Restore that runner and
+  rerun the scheduled gate before treating recurring automation as green.
+  External PR `#1` at `2a3c309` has a clean one-file scope and passes the README
+  claim validator, but should not land unchanged: its opener implies browser
+  persistence even though v0.1.0 browser databases are session-memory-only,
+  and “graph path” plus “exact ranker” conflates graph-only traversal with
+  graph-scoped vector/BM25/hybrid retrieval. Keep the supported 1K-to-fewer-
+  than-50K envelope, change persistence to native-only, say “graph-only path,”
+  and say “retrieval ranker.”
+
 - 2026-08-02 v0.1.0 publication recovery completed: signed tag
   `v0.1.0` and immutable preview GitHub Release `363621324` point to
   `09cb2d8f9e56e604c39912de38e69ed24d542b16`. Candidate run `30716625698`,
@@ -78,7 +94,8 @@ implemented, or superseded by the product spec.
 - 2026-07-30 website demo direction: the browser/WASM retrieval package and
   independent browser embedding Worker are implemented, desktop-qualified,
   included in the v0.1.0 inventory under the later 2026-08-01 decision, and
-  still unpublished. The public website demo uses curated first-party documents,
+  published through the protected release and bounded recovery. The public
+  website demo uses curated first-party documents,
   accepts arbitrary visitor questions, and runs local browser embedding,
   RetrievalKit WASM search, and a grounded browser SLM. Suggested questions and
   pre-rendered marketing answers may advertise the experience, but interactive
@@ -232,9 +249,8 @@ implemented, or superseded by the product spec.
   graph-free `RetrievalKitFFI` artifact and repository-local component package
   remain for isolation and symbol-neutrality qualification, not publication.
   `TextChunker` is part of `RetrievalKit`; `RetrievalKitIngest` is no longer a
-  separate Swift product. Public release is no longer blocked on a standalone
-  graph repository; owner authorization, signed-tag, claims, and Phase 7 gates
-  remain.
+  separate Swift product. This removed the standalone graph-repository blocker;
+  the later v0.1.0 signed release and Phase 7 gates completed.
 - 2026-07-25 wrapper onboarding qualification baseline: CI now exercises Node/macOS
   arm64, Kotlin/JVM/macOS arm64 with JDK 17, Android arm64-v8a, and explicitly
   non-release Python source portability on Windows. Wrapper build entrypoints
@@ -274,13 +290,10 @@ implemented, or superseded by the product spec.
   query object still owns one vector copy, and advanced multi-document graph
   upsert serializes embeddings on the cold JSON path. Optimize those only with
   measured, compatibility-tested ABI changes; they are not wrapper semantics.
-- 2026-07-23 owner sequencing decision: pause release qualification and all
-  new benchmark work until the SDK implementation is finalized. Do not rebuild
-  the release candidate, provision Phase 7 scheduled/release evidence, resume
-  device work, or add another performance/quality benchmark without a new
-  explicit owner task. The active slice is SDK API, behavior, wrapper parity,
-  and developer-experience completion. The already-collected evidence and
-  fail-closed publication gates remain intact for later resumption.
+- 2026-07-23 historical owner sequencing decision: release qualification and
+  new benchmark work paused until SDK API, behavior, wrapper parity, and
+  developer-experience completion. That pause was later lifted and v0.1.0
+  publication completed; it is not a current execution gate.
 - 2026-07-24 SDK-finalization approach: combine parity-first closure with
   developer-experience work. Contract dependencies set the order, while native
   API naming, errors, types, examples, and docs close inside every slice rather
@@ -1061,34 +1074,18 @@ about `0.51 ms` average for `384d` and `0.81 ms` average for `768d`.
   graph aggregate includes retrieval; base artifacts are checked to exclude
   graph code and dependencies.
 
-Verification completed without benchmark workloads:
+Verification current as of 2026-08-09:
 
-- Scoped Rust format checks for the Python, Node, and JNI crates pass, and
-  workspace clippy with all targets/features passes. The repository-wide format
-  check still reports pre-existing formatting drift in unrelated CLI, core,
-  FFI, graph, and benchmark files under the installed rustfmt; those files were
-  deliberately left untouched.
-- Base and graph Cargo checks pass for Python, Node, and JNI.
-- Python Ruff, strict mypy, base `27` tests, graph `8` tests, all three
-  examples, CPython 3.14 wheel builds, and isolated installed-wheel smoke tests
-  pass.
-- TypeScript build/typecheck/lint pass; base `6` and graph `7` tests pass.
-  Package-content, graph-exclusion, isolated local-install, all three examples,
-  Node 24 LTS, and production-dependency audit checks pass.
-- Kotlin/JVM base and graph unit/conformance tests pass from a forced rerun.
-  Retrieval-only, graph-only, and combined examples pass. Both Android release
-  AARs assemble and pass base/graph aggregate inspection; the JNI payloads are
-  arm64-v8a.
-- README claim validation/tests and release validation pass. Publication still
-  requires owner authorization, a signed tag, authorized claims, and
-  provisioned passing Phase 7 gates.
-- The broad `cargo test --workspace --all-features --no-fail-fast` run passes
-  every non-CLI target but fails 34 `retrievalkit-cli` V3 qualification tests
-  at their common fixture integrity precondition:
-  `manifests/chunking.json` is recorded as 715 bytes but is 718 bytes. This
-  tracked frozen benchmark/release evidence predates and is unrelated to the
-  wrapper changes. It was not regenerated because benchmark and release
-  qualification remain explicitly paused.
+- `cargo fmt --all -- --check`, warnings-denied workspace/all-target/all-feature
+  Clippy, and `cargo test --workspace --all-features --no-fail-fast` pass. The
+  pinned public-model download test remains intentionally ignored by the
+  offline workspace run. The earlier 34-test V3 fixture-integrity failure no
+  longer reproduces.
+- All 44 README-claim and release unit tests pass. Static README claim and
+  release validation report `PASS` with no publication blockers.
+- v0.1.0 publication and post-publication clean-consumer checks are complete;
+  final registry and provenance state remains in
+  `release/publication-v0.1.0.json`.
 
 ## 2026-07-26 Release Truth Lock
 
@@ -1105,8 +1102,8 @@ Verification completed without benchmark workloads:
   historical evidence for revision `fccb3a9`, not current packaging guidance.
 - Focused release tests, static release validation, Python base/graph wrapper
   checks, CPython 3.14 wheel builds, isolated installation smoke tests, and
-  built-wheel metadata inspection pass. The next DX blocker is rebuilding the
-  public website and source preview from the same current release truth.
+  built-wheel metadata inspection pass. The public website and source preview
+  were rebuilt later; current follow-up is a clean public-consumer DX audit.
 
 ## 2026-07-26 Public Query-Path Positioning
 
@@ -1122,84 +1119,30 @@ Verification completed without benchmark workloads:
   neighborhood; the graph is not a separate scoring signal. The same retrieval
   engine ranks within the selected scope.
 
-## Likely Next Tasks
+## Post-v0.1.0 Next Tasks
 
-- 2026-08-01 Step 4 fix-forward: release-candidate run `30707874268` at
-  freeze revision `551b9ed1f9c71ee2ad9370f84141ae6a9d0f580b` passed source,
-  Apple, Python 3.10-3.14, browser retrieval, and browser embedding jobs, but
-  did not assemble a closed candidate. Both Node roots failed because the
-  assembler passed a repository-relative output path to `npm pack` while its
-  working directory was a temporary staged package; both Kotlin roots stopped
-  before packaging because the refreshed macOS runner did not expose bare
-  `sdkmanager`. The owner authorized a fix-forward cycle. The Node assembler
-  now normalizes its output path before staged packing, and the candidate
-  workflow invokes the SDK manager through `$ANDROID_HOME`, matching CI. The
-  first fix-forward candidate run `30708545960` at revision `424dee1` proved
-  both corrections, then exposed a second Kotlin packaging defect: the
-  Android embedding module's `prepareLegalResources` Copy task replaced the
-  generated resource directory after native preparation and removed the ONNX
-  license, notices, and runtime identity from the AAR. The redundant task is
-  removed, and `build-embedding-native.sh` now installs both the project
-  `LICENSE`/`NOTICE` and the complete ONNX legal/runtime resource set together.
-  Candidate run `30709218517` at revision `9384bff` confirmed that a clean root
-  also requires those project legal files to be installed by native
-  preparation rather than inherited from a prior Gradle output. Candidate run
-  `30709601819` at revision `a926747` then passed every independent package job,
-  including both Kotlin roots, but the final bundle gate found that both
-  byte-identical Apple roots now produce the graph XCFramework SwiftPM checksum
-  `5cac49a81d352eb5a50e588bfed108b7c0ab356e2284ff079e41f58685fd288a`.
-  `Package.swift` and machine-readable release truth are updated together to
-  that independently reproduced checksum. The commit containing all fixes and
-  this record is the new freeze revision; candidate assembly must be repeated
-  from that exact commit. No device command, tag, GitHub Release, or
-  publication is authorized by this decision.
+1. Restore green recurring automation: bring the controlled macOS/ARM64
+   self-hosted runner online and rerun the cancelled scheduled Phase 7 gate.
+2. Resolve PR `#1`'s browser-persistence and graph-path wording, approve its
+   first-time-contributor workflow, and require normal claim/release checks
+   before merge.
+3. Re-run the developer-experience audit from clean, unauthenticated SwiftPM,
+   PyPI, npm, Maven, and browser consumers now that every package is public.
+4. Qualify Android model acquisition, inference, lifecycle, offline restart,
+   memory, thermal behavior, and compatibility on a physical arm64-v8a device.
+5. Qualify mobile browsers plus private-mode and cache-pressure behavior.
+6. Before broader device-budget claims, qualify F16/F32 and compaction headroom
+   on older supported Apple devices and benchmark I8 dot-product on devices
+   without `dotprod`.
+7. Expand retrieval-quality evidence with BEIR/TREC-compatible runs, pooled
+   blind judgments, and anonymized application queries.
 
-The owner explicitly resumed Phase B release setup on 2026-07-26. The scoped
-npm names, PyPI projects, protected GitHub environments, Maven signing
-identity, Central namespace, and Portal token are configured. Registry-owner
-setup for all three PyPI identities and all five npm identities is complete:
-
-1. re-verify all registry records and exact protected publisher settings
-   immediately before publication dispatch;
-2. re-verify the Central namespace, published signing key, and five protected
-   Maven secrets immediately before publication dispatch;
-3. resume only when the owner explicitly authorizes the signed-tag and
-   provisioned Phase 7 evidence gates.
-
-Step 3 release freeze is complete. The next owner-controlled action is Step 4,
-assembling the release candidate from the exact freeze commit. Do not dispatch
-that workflow without explicit authorization.
-
-Do not publish v0.1.0, create its tag, rebuild frozen qualification fixtures,
-or resume physical-device work until the corresponding documented gate is
-explicitly reached.
-
-The canonical result/trace contracts and shared retrieval/graph conformance
-expectations now cover Rust, Swift, Python, TypeScript, and Kotlin. Python,
-Node, and Kotlin base and graph runners remain separate because their native
-aggregates are intentionally mutually exclusive; Swift uses the documented
-unified aggregate exception. Current packaging and compatibility status comes
-from `release/release-v0.1.0.json`, `docs/product/release-process.md`,
-`docs/product/compatibility-policy.md`, and the active product spec. The dated
-cross-language parity audit is preserved as historical evidence for its
-recorded source revision.
-
-The v0.1.0 release gates and bounded publication recovery are complete. Use
-`docs/product/release-process.md`, `docs/product/release-approval-checklist.md`,
-and `release/publication-v0.1.0.json` for the final evidence and provenance
-exception. Future release work starts with post-release verification or a new
-version; do not rerun v0.1.0 publication jobs.
-
-Optional post-release work, ordered by evidence need:
-
-- qualify F16/F32 and compact/compaction headroom on older supported Apple
-  devices before generalizing the existing iPhone 17 Pro Max budgets;
-- expand external quality evaluation with BEIR/TREC-compatible runs, pooled
-  blind judgments, and anonymized application queries;
-- benchmark the I8 dot-product path on devices that may not expose `dotprod`;
-- explore parallel exact scanning only after measured CPU pressure, and begin
-  ANN research only if exact search still misses the frozen latency/recall
-  targets.
+The v0.1.0 release gates and bounded recovery are finished. Do not rerun its
+publication jobs, move or recreate its tag or GitHub Release, republish existing
+registry versions, or describe recovered browser npm provenance as passed.
+Future release work starts with a new version. Keep parallel exact scanning and
+ANN/HNSW deferred until exact search misses a frozen latency, energy, or recall
+target inside the supported fewer-than-50K envelope.
 
 ## 2026-07-26 Browser/WebAssembly Additive Target
 
@@ -1233,10 +1176,10 @@ Optional post-release work, ordered by evidence need:
   the portable fallback before database construction. Complete portable/SIMD
   result conformance passes for 384d and a 396d tail case. Native scoring,
   public database/search methods, and every existing language wrapper remain
-  unchanged; cross-browser qualification remains pending.
-- Browser package publication, site deployment, a release tag, and public
-  performance claims remain unauthorized. Cross-browser and device
-  qualification is still required.
+  unchanged. Later desktop qualification covered Chrome, Firefox, and Safari.
+- Browser package publication, site deployment, and the v0.1.0 release later
+  completed. Physical mobile browsers and private-mode/cache-pressure behavior
+  remain unqualified.
 
 ## 2026-07-26 Shared ONNX Embedding Experiment
 

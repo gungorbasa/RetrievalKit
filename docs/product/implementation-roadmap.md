@@ -1,8 +1,8 @@
 # RetrievalKit Implementation Roadmap
 
-This roadmap translates the product specification into the remaining engineering
-work. It prioritizes correctness and usable local SDK functionality before new
-retrieval engines.
+This roadmap records the completed V1 implementation and orders post-release
+hardening work. It prioritizes correctness, adoption evidence, and qualification
+gaps before new retrieval engines.
 
 ## Current Baseline
 
@@ -17,9 +17,16 @@ Completed:
 - Crash-safe generation-based persistence with cross-process save locking.
 - Explicit compaction with stable active chunk IDs.
 - Swift, Python, FFI, benchmark CLI, and Apple XCFramework paths.
+- Node.js, Kotlin/JVM, Android arm64-v8a, and browser/WASM wrappers.
+- Separate Swift, Python, Node.js, Kotlin, and browser embedding integrations.
+- Public SwiftPM, PyPI, npm, and Maven Central preview distribution.
+- A public browser demo using live local embedding, RetrievalKit WASM retrieval,
+  and browser generation over a versioned first-party corpus.
 - Synthetic, fixture-backed, macOS, iOS, and persistence benchmarks.
 
-The remaining V1 work is production hardening, measurement, and distribution.
+V1 implementation and distribution are complete. Remaining work is
+post-release automation repair, public-consumer validation, broader platform
+qualification, and optional evidence expansion.
 
 The implementation and qualification plan for advertising RetrievalKit as a
 complete semantic, hybrid, and graph-scoped retrieval package is maintained in
@@ -104,19 +111,20 @@ controlled scheduled/full gates, and manual evidence-only release
 qualification now fail closed through a 26-gate registry and independent
 validator. See `docs/product/reports/phase-7-regression-gates-report.md` and
 `docs/product/reports/phase-6-benchmark-publication-report.md`.
-This does not begin the separate release-and-distribution Phase 5 below.
+That benchmark phase is distinct from the completed release-and-distribution
+Phase 5 below.
 
 ## Priority Summary
 
-| Order | Workstream | Why now | Gate to finish |
+| Phase | Workstream | Status | Remaining work |
 |---:|---|---|---|
-| 1 | Corruption detection | Persistence must fail clearly on damaged data | Every persisted payload is verified before use |
-| 2 | Thread-safety contract | Wrapper behavior must be predictable under concurrency | Supported concurrent operations are documented and tested |
-| 3 | Memory-budget validation | Compaction and load can temporarily increase RSS | 24K/50K target scenarios fit documented device budgets |
-| 4 | Real retrieval-quality benchmark | Candidate defaults need evidence from realistic data | Recall and ranking quality are measured against exact ground truth |
-| 5 | Release and distribution | Source-only SDKs cannot be adopted reliably | CI builds, tests, signs, and publishes supported artifacts |
-| 6 | Exact-search scaling gate | Determine whether >50K needs a new engine | Measurements choose parallel exact scan or ANN research |
-| 7 | Website and in-browser demo | Adoption needs a public page that proves the local-first claim live | Demo retrieval runs entirely in the visitor's browser from a published site |
+| 1 | Corruption detection | Complete | Maintenance only |
+| 2 | Thread-safety contract | Complete | Extend tests with future public operations |
+| 3 | Memory-budget validation | Complete for the qualified iPhone 17 matrix | Older Apple devices before broader budget claims |
+| 4 | Real retrieval-quality benchmark | Complete for V1 defaults and release claims | Optional BEIR/TREC and application-derived judgments |
+| 5 | Release and distribution | Complete; v0.1.0 published | Repair recurring automation and validate future releases |
+| 6 | Exact-search scaling gate | Not triggered | Reopen only after a measured <50K latency, energy, or recall miss |
+| 7 | Website and in-browser demo | Complete; packages and live demo published | Mobile browser and cache-pressure qualification |
 
 ## Phase 1: Corruption Detection
 
@@ -332,6 +340,10 @@ Exit criteria:
 
 ## Phase 6: Exact-Search Scaling Decision
 
+Status: gate not triggered. The qualified fewer-than-50K exact-search product
+meets its current release targets, so parallel scanning and ANN/HNSW remain
+deferred.
+
 Goal: extend capacity only when measurements show the current engine misses its
 latency target.
 
@@ -355,130 +367,63 @@ improves measured latency without violating the agreed recall target.
 
 ## Phase 7: Browser/WebAssembly SDK and Public Demo
 
-Status: authorized and in progress 2026-07-26. The product-spec amendment is
-recorded in `retrievalkit-product-spec.md`. No package publication, website
-deployment, release tag, or public browser performance claim is authorized by
-this implementation phase. A separate 2026-08-01 owner decision later added
-`@gungorbasa/retrievalkit-browser` to the v0.1.0 release inventory. A subsequent
-owner instruction authorized only its non-SDK registry bootstrap and trusted
-publisher setup; no candidate/release workflow, tag, or v0.1.0 publication was
-authorized.
+Status: complete and published in v0.1.0. The protected release and bounded
+publication recovery shipped `@gungorbasa/retrievalkit-browser` and
+`@gungorbasa/retrievalkit-browser-embedding`; final release truth is recorded
+in `release/publication-v0.1.0.json`.
 
 Goal: publish a public website whose demo proves the local-first claim by
 running RetrievalKit retrieval entirely in the visitor's browser, with an
 optional on-device LLM answering over the retrieved results.
 
-Implementation work:
+Delivered:
 
-- Publish a static site (GitHub Pages first; custom domain optional) that
-  reuses the README visual identity and follows the claim policy: permitted
-  Phase 6 claims only, with their frozen-revision qualifiers.
-- Add a separate `wasm-bindgen` aggregate of `retrievalkit-core` plus
-  `retrievalkit-graph`. Native-default persistence (`fs2`, filesystem paths,
-  mmap, and `zstd`) is excluded from this target only. Native aggregates and
-  their performance paths remain unchanged.
-- Add a typed browser TypeScript package exposing `RetrievalDatabase`,
-  `GraphDatabase`, and `GraphRetrievalDatabase`, including vector, BM25,
-  hybrid, graph-only, and graph-scoped retrieval paths.
-- Own every database inside a dedicated Web Worker. Use batched contiguous
-  embedding transfers and one request/response boundary per operation.
-- Establish native/WASM result conformance and a browser benchmark harness
-  before choosing scoring optimizations.
-- Preserve native SimSIMD unchanged. The 6.5.16 portable C path was tested but
-  does not produce a linkable `wasm32-unknown-unknown` release archive, so use a
-  WASM-only portable Rust scorer as the baseline. Add a separately detected
-  WASM SIMD128 tier only if required. Add optional threaded WASM only when
-  measurements justify its deployment cost.
-- Keep the first browser database in memory. Add versioned byte-snapshot
-  persistence through IndexedDB or OPFS only after the in-memory API and
-  performance gates pass.
-- Run query embedding in the browser with a small local model (for example
-  MiniLM 384d via transformers.js) so the full query flow stays on-device.
-- Ship 2–3 small curated scenarios with prebuilt graph edges (for example
-  notes with backlinks, personal-CRM contacts, papers with citations) so the
-  demo can show semantic, hybrid, and graph-scoped retrieval side by side
-  with the retrieval trace visible. Graphs are prebuilt per scenario because
-  graph scopes are application-defined; the demo does not imply automatic
-  graph construction, which is not an SDK capability.
-- Add an opt-in in-browser LLM answer layer (WebGPU, small model) on top of
-  the retrieved hits. Retrieval-only remains the default path so the demo
-  works without WebGPU and without a large weight download.
+- A separate `wasm-bindgen` aggregate exposes `RetrievalDatabase`,
+  `GraphDatabase`, and `GraphRetrievalDatabase` without changing native Cargo
+  defaults, persistence, SimSIMD, or wrapper behavior.
+- Dedicated Workers own browser databases and local MiniLM embedding. Retrieval
+  has portable and SIMD128 tiers; browser databases remain intentionally
+  in-memory for the current page session.
+- Checked-in lifecycle, conformance, transfer, cache, and 10K/25K/50K benchmark
+  paths qualify Chrome, Firefox, and Safari on the documented desktop reference
+  environments and budgets.
+- The public Apollo 11 demo uses live browser embedding, RetrievalKit WASM
+  vector/graph/combined retrieval, and grounded browser generation. Website
+  source and deployment remain in the private `gungorbasa/RetrievalKit-Website`
+  repository, as required by the repository boundary.
+- Numeric public claims remain mapped to the frozen claim register, and the
+  website demo never selects interactive results from canned answers.
 
-Exit criteria:
+Open qualification, not V1 implementation work:
 
-- Existing native Rust, Swift, Python, Node.js, Kotlin/JVM, and Android checks
-  remain unchanged and pass.
-- The portable WASM aggregate compiles and all three database products pass
-  browser lifecycle and conformance tests.
-- Retrieval stays off the UI thread and large embedding buffers use
-  transferable ownership or bounded bulk copies.
-- Benchmark reports separate WASM startup, transfer, embedding, retrieval, and
-  end-to-end time at 10K, 25K, and 50K supported-product sizes.
-- The published demo performs indexing-free query retrieval with no network
-  request on the query path after initial asset download.
-- Wasm retrieval results match native results on a checked-in fixture.
-- The LLM layer is optional, clearly labeled, and its absence does not break
-  the demo.
-- Every numeric statement on the site maps to a permitted claim.
+- Physical mobile browsers and private-mode/cache-pressure behavior.
+- The full generated-answer demo outside its qualified Apple-silicon
+  Chromium/WebGPU environment.
+- Portable browser database snapshots; IndexedDB/OPFS persistence requires a
+  separate format, integrity, migration, size, and hostile-input design.
 
 ## Recommended Execution Order
 
-Implement one independently releasable slice at a time:
+Complete one evidence-bearing slice at a time:
 
-1. Checksummed manifest and read-only validation API.
-2. Typed Swift/Python validation errors and corruption tests.
-3. Thread-safety contract and read-only concurrency tests.
-4. Isolated memory/compaction device benchmark presets.
-5. Real retrieval-quality fixture and candidate-limit report.
-6. CI and public Apple package distribution.
-7. Add TREC-compatible external and production-derived quality evaluation.
-8. Reassess parallel exact search and ANN using the collected evidence.
-9. Complete the browser/WASM SDK qualification, then separately authorize and
-   publish the website and browser demo.
-10. Maintain the qualified MiniLM provider boundaries: the optional Rust ONNX
-    provider remains separate; production Swift uses the pinned FP32 direct
-    Core ML archive through `EmbeddingKit`; and production Python/Node expose
-    independently distributable FP32-only wrappers over the Rust provider.
-    Browser exposes a separate Worker-owned FP32-only package over direct
-    ONNX Runtime Web and the browser tokenizer; retrieval packages remain
-    embedding-neutral.
-    The completed Swift ONNX comparison remains historical evidence and its
-    Apple runtime packaging is retired. Kotlin/JVM and Android arm64-v8a now
-    expose a separate FP32-only optional package through the shared Rust ONNX
-    provider and an isolated JNI aggregate.
+1. Restore green recurring automation and keep `main` release validators in
+   sync with published status wording.
+2. Re-run the developer-experience audit from clean, unauthenticated consumers
+   of every published package family.
+3. Qualify Android model acquisition, inference, lifecycle, offline restart,
+   memory, thermal behavior, and compatibility on a physical arm64-v8a device.
+4. Qualify mobile browsers plus private-mode and cache-pressure behavior before
+   broadening the desktop browser claims.
+5. Qualify older Apple-device memory and compaction headroom before generalizing
+   the iPhone 17 Pro Max budgets.
+6. Expand retrieval-quality evidence with BEIR/TREC-compatible runs, pooled
+   blind judgments, and anonymized application queries.
+7. Reopen parallel exact scanning or ANN/HNSW only after a measured miss inside
+   the supported fewer-than-50K product envelope.
 
-The browser embedding slice is implemented. Chrome WebGPU and Firefox WASM now
-pass the production desktop correctness, real CacheStorage, lifecycle, and 50K
-SIMD128 retrieval matrix on the 2026-07-27 reference host. The actual Chrome
-same-page embedding-plus-retrieval p95 is `12.460 ms` after the 2026-07-28
-copy cleanup. The owner accepted provider-tiered reference budgets of `15 ms`
-for WebGPU embedding plus SIMD128 retrieval, `25 ms` for WASM compatibility
-embedding plus SIMD128 retrieval, and `8 ms` for retrieval-only. Chrome and
-Firefox pass their respective tiers. Safari 26.5.2 now passes the full
-correctness/cache/50K matrix after WebDriver was enabled, but its WebGPU
-end-to-end p95 is `18.380 ms`. The owner accepted a Safari-specific `20 ms`
-reference budget, so Safari passes and further WebGPU optimization is deferred.
-Mobile browsers and private-mode/cache-pressure behavior remain open as
-recorded in the dated reports. Package publication is now authorized only
-through the v0.1.0 protected release gates.
-
-The 2026-07-28 hot-path investigation removed two redundant single-embedding
-F32 copies; the final uninstrumented 50K Chrome p95 was `12.460 ms`. Phase
-instrumentation showed that the difference from isolated embedding is inside
-WebGPU inference under the sustained 50K workload, not the Worker/client
-boundary. Browser/GPU tracing is optional future optimization work, not a
-release gate. Do not change FP32, the 32-token query, 50K corpus, or separate
-package/Worker boundaries to improve the number.
-
-The Kotlin embedding slice is implemented and JVM-qualified on the 2026-07-27
-reference host. Android arm64-v8a cross-compilation and closed AAR inspection
-pass. Android API 24+ arm64-v8a ships as an explicit v0.1.0 preview; live-device
-inference, compatibility, and performance remain unqualified and deferred, but
-are not a v0.1.0 publication blocker. No Kotlin embedding artifact has been
-published.
-
-Each slice should update tests, wrapper docs, the changelog, and working memory,
-then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
+Every slice must preserve the capability-separated architecture and optional
+embedding boundaries, update current docs and tests, and pass the affected
+wrapper, release, and claim validators before landing.
 
 ## Explicitly Deferred
 
@@ -489,5 +434,5 @@ then pass Rust, Python, Swift, wheel, and Apple packaging checks before commit.
 - Embedding-model execution inside the Rust retrieval core.
 - Reintroducing Swift ONNX or making Q8 the production Swift embedding default;
   direct Core ML FP32 is the qualified production path.
-- NIST TREC participation before release distribution is working; retain it as
-  a committed post-release evaluation milestone.
+- NIST TREC participation until the post-release evaluation expansion is
+  explicitly scheduled.

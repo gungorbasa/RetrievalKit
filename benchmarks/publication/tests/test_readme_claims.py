@@ -54,18 +54,22 @@ class ReadmeClaimMutationTests(unittest.TestCase):
     def test_android_preview_status_is_required(self) -> None:
         VALIDATOR.validate_status_labels(README)
         stale = README.replace(
-            "**Preview from source; Maven unpublished; live-device unqualified**",
-            "**Available from source; Maven unpublished**",
+            "| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | "
+            "**Published preview; live-device unqualified** |",
+            "| Android `io.github.gungorbasa:retrievalkit-android` | Base AAR for arm64-v8a | "
+            "**Published preview** |",
             1,
         )
         with self.assertRaises(VALIDATOR.ValidationError):
             VALIDATOR.validate_status_labels(stale)
 
-    def test_browser_retrieval_candidate_status_is_required(self) -> None:
+    def test_browser_retrieval_published_status_is_required(self) -> None:
         VALIDATOR.validate_status_labels(README)
         stale = README.replace(
-            "**Available from source; v0.1.0 candidate; bootstrap placeholder only**",
-            "**Available from source**",
+            "| Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and "
+            "graph-scoped WASM retrieval | **Published preview** |",
+            "| Browser `@gungorbasa/retrievalkit-browser` | Worker-owned base, graph, and "
+            "graph-scoped WASM retrieval | **Available from source** |",
             1,
         )
         with self.assertRaises(VALIDATOR.ValidationError):

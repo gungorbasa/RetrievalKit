@@ -85,7 +85,11 @@ impl Bm25Index {
     }
 
     pub fn add_chunk(&mut self, chunk_id: ChunkId, text: &str, active: bool) {
-        self.remove_chunk_terms(chunk_id);
+        // Allocated chunk IDs are normally new and monotonic. Avoid scanning
+        // every term posting when there is no prior state to replace.
+        if self.chunk_lengths.contains_key(&chunk_id) {
+            self.remove_chunk_terms(chunk_id);
+        }
 
         let terms = tokenize(text, &self.config.stop_words);
         let length = terms.len();
@@ -96,10 +100,23 @@ impl Bm25Index {
 
         for (term, count) in term_counts {
             let term_postings = self.postings.entry(term).or_default();
-            term_postings.postings.push(Posting {
+            let posting = Posting {
                 chunk_id,
                 term_frequency: count,
-            });
+            };
+            if term_postings
+                .postings
+                .last()
+                .is_none_or(|last| last.chunk_id < chunk_id)
+            {
+                term_postings.postings.push(posting);
+            } else {
+                let insertion = term_postings
+                    .postings
+                    .binary_search_by_key(&chunk_id, |candidate| candidate.chunk_id)
+                    .expect_err("existing BM25 posting was removed before replacement");
+                term_postings.postings.insert(insertion, posting);
+            }
             if active {
                 term_postings.active_document_frequency += 1;
             }
@@ -232,7 +249,9 @@ impl Bm25Index {
 
         let query_terms = tokenize(query, &self.config.stop_words)
             .into_iter()
-            .collect::<BTreeSet<_>>();
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
         if query_terms.is_empty() || self.active_chunks.is_empty() {
             return Vec::new();
         }
@@ -243,9 +262,8 @@ impl Bm25Index {
         }
 
         let mut scores: HashMap<ChunkId, f32> = HashMap::new();
-        let mut matched_terms: HashMap<ChunkId, Vec<String>> = HashMap::new();
-        for term in query_terms {
-            let Some(term_postings) = self.postings.get(&term) else {
+        for term in &query_terms {
+            let Some(term_postings) = self.postings.get(term) else {
                 continue;
             };
             let document_frequency = term_postings.active_document_frequency;
@@ -271,10 +289,6 @@ impl Bm25Index {
                     self.config.b,
                 );
                 *scores.entry(posting.chunk_id).or_insert(0.0) += score;
-                matched_terms
-                    .entry(posting.chunk_id)
-                    .or_default()
-                    .push(term.clone());
             }
         }
 
@@ -283,10 +297,12 @@ impl Bm25Index {
             bounded_hits.push(Bm25Hit {
                 chunk_id,
                 score,
-                matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
+                matched_terms: Vec::new(),
             });
         }
-        bounded_hits.into_sorted_vec()
+        let mut hits = bounded_hits.into_sorted_vec();
+        self.attach_matched_terms(&mut hits, &query_terms);
+        hits
     }
 
     fn search_with_limit(
@@ -297,7 +313,9 @@ impl Bm25Index {
     ) -> Vec<Bm25Hit> {
         let query_terms = tokenize(query, &self.config.stop_words)
             .into_iter()
-            .collect::<BTreeSet<_>>();
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
 
         if query_terms.is_empty()
             || self.active_chunks.is_empty()
@@ -313,10 +331,9 @@ impl Bm25Index {
         }
 
         let mut scores: HashMap<ChunkId, f32> = HashMap::new();
-        let mut matched_terms: HashMap<ChunkId, Vec<String>> = HashMap::new();
 
-        for term in query_terms {
-            let Some(term_postings) = self.postings.get(&term) else {
+        for term in &query_terms {
+            let Some(term_postings) = self.postings.get(term) else {
                 continue;
             };
 
@@ -349,10 +366,6 @@ impl Bm25Index {
                     self.config.b,
                 );
                 *scores.entry(posting.chunk_id).or_insert(0.0) += score;
-                matched_terms
-                    .entry(posting.chunk_id)
-                    .or_default()
-                    .push(term.clone());
             }
         }
 
@@ -362,11 +375,13 @@ impl Bm25Index {
                 let hit = Bm25Hit {
                     chunk_id,
                     score,
-                    matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
+                    matched_terms: Vec::new(),
                 };
                 bounded_hits.push(hit);
             }
-            return bounded_hits.into_sorted_vec();
+            let mut hits = bounded_hits.into_sorted_vec();
+            self.attach_matched_terms(&mut hits, &query_terms);
+            return hits;
         }
 
         let mut hits = scores
@@ -374,11 +389,33 @@ impl Bm25Index {
             .map(|(chunk_id, score)| Bm25Hit {
                 chunk_id,
                 score,
-                matched_terms: matched_terms.remove(&chunk_id).unwrap_or_default(),
+                matched_terms: Vec::new(),
             })
             .collect::<Vec<_>>();
         sort_bm25_hits(&mut hits);
+        self.attach_matched_terms(&mut hits, &query_terms);
         hits
+    }
+
+    fn attach_matched_terms(&self, hits: &mut [Bm25Hit], query_terms: &[String]) {
+        if hits.is_empty() {
+            return;
+        }
+
+        for hit in hits {
+            for term in query_terms {
+                let Some(term_postings) = self.postings.get(term) else {
+                    continue;
+                };
+                if term_postings
+                    .postings
+                    .binary_search_by_key(&hit.chunk_id, |posting| posting.chunk_id)
+                    .is_ok()
+                {
+                    hit.matched_terms.push(term.clone());
+                }
+            }
+        }
     }
 
     pub fn estimated_payload_bytes(&self) -> usize {

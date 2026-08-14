@@ -1795,3 +1795,28 @@ target inside the supported fewer-than-50K envelope.
   thermal preflights were refused before setup and contributed no samples;
   collection resumed only after cooldown. The combined report is
   `docs/product/reports/apple-end-to-end-benchmark-v1-report.md`.
+
+## 2026-08-14 Hybrid Performance Milestone
+
+- A new off-by-default Rust stage profiler covers deterministic 25K and 49,999
+  I8/cosine weighted-hybrid retrieval with the Apple corpus text shape. It
+  reports filter planning, vector candidates, BM25 candidates, fusion,
+  hydration, and total time for unfiltered and indexed-filter scenarios.
+- The 49,999 baseline isolated BM25 at 41.348 ms of a 42.189 ms total P95;
+  fusion was 0.035 ms and hydration 0.009 ms. The bottleneck was cloning every
+  matched query term for every matching chunk before top-K selection.
+- BM25 now accumulates scores first and reconstructs matched-term traces only
+  for surviving hits using sorted posting lookup. New monotonic chunk IDs skip
+  unnecessary replacement scans, and unscoped hybrid queries share one indexed
+  filter plan across vector and keyword candidate generation.
+- Same-workload result digests stayed identical. Comparable optimized P95 is
+  6.015 ms at 25K and 13.009 ms at 49,999; three larger optimized sessions put
+  49,999 total P95 between 12.650 and 12.821 ms.
+- Three fresh 50K Mac public Swift/Core ML sessions passed the independent
+  Apple validator. Median-session P95 is 14.667 ms retrieval-only and 22.760 ms
+  direct text-to-results, down from the frozen 50.975 ms and 59.833 ms.
+- Do not replace or reinterpret the frozen iPhone evidence yet. Physical-iPhone
+  confirmation requires a newly rebuilt artifact, explicit device-execution
+  authorization, three fresh weighted-hybrid sessions, and independent
+  validation. Full methodology and limitations are in
+  `docs/product/reports/hybrid-performance-milestone-v1-report.md`.

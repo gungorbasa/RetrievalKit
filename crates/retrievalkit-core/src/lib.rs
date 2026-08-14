@@ -20,6 +20,9 @@ pub use database_builder::RetrievalDatabaseBuilder;
 pub use error::{Result, RetrievalKitError};
 pub use filter::Filter;
 pub use index::ExactVectorIndex;
+#[cfg(feature = "benchmark-instrumentation")]
+#[doc(hidden)]
+pub use index::{HybridSearchProfile, HybridStageDurations};
 pub use metadata::{Metadata, MetadataValue};
 pub use record_store::{
     ChunkIdentity, ChunkKey, CorpusId, FieldName, GenerationId, Record, RecordId, RecordStore,

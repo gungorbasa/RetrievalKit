@@ -23,10 +23,18 @@ Completed:
 - A public browser demo using live local embedding, RetrievalKit WASM retrieval,
   and browser generation over a versioned first-party corpus.
 - Synthetic, fixture-backed, macOS, iOS, and persistence benchmarks.
+- A benchmark-only 25K/49,999 hybrid stage profiler and a BM25 trace-allocation
+  optimization that brings the independently validated 50K Mac public-path
+  retrieval median-session P95 below the 15 ms qualification-boundary target.
 
 V1 implementation and distribution are complete. Remaining work is
 post-release automation repair, public-consumer validation, broader platform
 qualification, and optional evidence expansion.
+
+The post-release hybrid performance milestone is implemented and Mac-validated.
+Physical-iPhone confirmation remains required before replacing the frozen
+19.929 ms iPhone 50K hybrid result. See
+`docs/product/reports/hybrid-performance-milestone-v1-report.md`.
 
 The implementation and qualification plan for advertising RetrievalKit as a
 complete semantic, hybrid, and graph-scoped retrieval package is maintained in

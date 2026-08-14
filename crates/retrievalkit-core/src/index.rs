@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "benchmark-instrumentation")]
+use std::time::{Duration, Instant};
+
 #[cfg(not(target_arch = "wasm32"))]
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -58,6 +61,26 @@ const METADATA_FLOAT: u8 = 2;
 const METADATA_BOOLEAN: u8 = 3;
 const METADATA_TIMESTAMP_MILLIS: u8 = 4;
 static SNAPSHOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Benchmark-only timings for the production hybrid query path.
+#[cfg(feature = "benchmark-instrumentation")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HybridStageDurations {
+    pub filter: Duration,
+    pub vector: Duration,
+    pub bm25: Duration,
+    pub fusion: Duration,
+    pub hydration: Duration,
+    pub total: Duration,
+}
+
+/// Benchmark-only hybrid results plus stage timings.
+#[cfg(feature = "benchmark-instrumentation")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct HybridSearchProfile {
+    pub hits: Vec<HybridHit>,
+    pub stages: HybridStageDurations,
+}
 
 fn default_corpus_id() -> CorpusId {
     CorpusId::new("default").expect("the built-in corpus ID is valid")
@@ -1076,7 +1099,7 @@ impl ExactVectorIndex {
         let encoded_query = self.encode_query_embedding(embedding)?;
         let candidate_offsets = Some(self.scoped_offsets(scope, filter)?);
         if let Some(hits) =
-            self.search_i8_offsets(top_k, &encoded_query, filter, &candidate_offsets)?
+            self.search_i8_offsets(top_k, &encoded_query, filter, candidate_offsets.as_deref())?
         {
             return Ok(hits);
         }
@@ -1099,7 +1122,6 @@ impl ExactVectorIndex {
         if top_k == 0 {
             return Ok(Vec::new());
         }
-        let encoded_query = self.encode_query_embedding(embedding)?;
 
         let candidate_offsets = filter
             .map(|filter| {
@@ -1110,8 +1132,30 @@ impl ExactVectorIndex {
             .transpose()?
             .flatten();
 
+        self.search_vector_candidates_with_offsets(
+            embedding,
+            top_k,
+            filter,
+            candidate_offsets.as_deref(),
+        )
+    }
+
+    fn search_vector_candidates_with_offsets(
+        &self,
+        embedding: &[f32],
+        top_k: usize,
+        filter: Option<&Filter>,
+        candidate_offsets: Option<&[usize]>,
+    ) -> Result<Vec<SearchHit>> {
+        self.validate_dimension(embedding.len())?;
+
+        if top_k == 0 {
+            return Ok(Vec::new());
+        }
+        let encoded_query = self.encode_query_embedding(embedding)?;
+
         if let Some(hits) =
-            self.search_i8_offsets(top_k, &encoded_query, filter, &candidate_offsets)?
+            self.search_i8_offsets(top_k, &encoded_query, filter, candidate_offsets)?
         {
             return Ok(hits);
         }
@@ -1119,7 +1163,7 @@ impl ExactVectorIndex {
         let mut candidates = ScoredCandidateTopK::new(top_k);
         match candidate_offsets {
             Some(offsets) => {
-                for offset in offsets {
+                for offset in offsets.iter().copied() {
                     self.score_search_candidate(offset, filter, &encoded_query, &mut candidates)?;
                 }
             }
@@ -1140,7 +1184,7 @@ impl ExactVectorIndex {
         top_k: usize,
         encoded_query: &scoring::EncodedQuery,
         filter: Option<&Filter>,
-        candidate_offsets: &Option<Vec<usize>>,
+        candidate_offsets: Option<&[usize]>,
     ) -> Result<Option<Vec<SearchHit>>> {
         let Some((values, scales)) = self.retrieval.encoded_vectors.i8_scalar_quantized_parts()
         else {
@@ -1157,9 +1201,7 @@ impl ExactVectorIndex {
         };
 
         let mut candidates = ScoredCandidateTopK::new(top_k);
-        let offsets = candidate_offsets
-            .as_deref()
-            .unwrap_or(self.corpus.active_offsets.as_slice());
+        let offsets = candidate_offsets.unwrap_or(self.corpus.active_offsets.as_slice());
 
         match filter {
             Some(filter) => {
@@ -1296,15 +1338,31 @@ impl ExactVectorIndex {
             .as_deref()
             .map(|offsets| self.active_chunk_ids_for_offsets(offsets));
 
-        if allowed_chunk_ids
-            .as_ref()
-            .is_some_and(|allowed_chunk_ids| allowed_chunk_ids.is_empty())
-        {
+        self.keyword_search_candidates_with_allowed_chunks(
+            text,
+            top_k,
+            filter,
+            allowed_chunk_ids.as_ref(),
+        )
+    }
+
+    fn keyword_search_candidates_with_allowed_chunks(
+        &self,
+        text: &str,
+        top_k: usize,
+        filter: Option<&Filter>,
+        allowed_chunk_ids: Option<&HashSet<ChunkId>>,
+    ) -> Result<Vec<KeywordHit>> {
+        if top_k == 0 {
+            return Ok(Vec::new());
+        }
+
+        if allowed_chunk_ids.is_some_and(|allowed_chunk_ids| allowed_chunk_ids.is_empty()) {
             return Ok(Vec::new());
         }
 
         let bm25 = self.retrieval.require_bm25()?;
-        let bm25_hits = match (filter, allowed_chunk_ids.as_ref()) {
+        let bm25_hits = match (filter, allowed_chunk_ids) {
             (None, _) => bm25.search_top_k(text, top_k),
             (Some(_), Some(allowed_chunk_ids)) => {
                 bm25.search_top_k_in_chunks(text, top_k, allowed_chunk_ids)
@@ -1356,59 +1414,165 @@ impl ExactVectorIndex {
 
     /// Performs hybrid exact vector + BM25 search using the configured fusion strategy.
     pub fn hybrid_search(&self, query: &HybridQuery) -> Result<Vec<HybridHit>> {
-        if fusion_uses_vector(query.fusion) {
-            self.validate_dimension(query.embedding.len())?;
-        }
+        self.validate_hybrid_query(query)?;
         if query.top_k == 0 {
             return Ok(Vec::new());
         }
 
-        validate_hybrid_fusion(query.fusion)?;
+        let uses_vector = fusion_uses_vector(query.fusion) && query.vector_top_k > 0;
+        let uses_keyword = fusion_uses_keyword(query.fusion) && query.keyword_top_k > 0;
+        let filter_plan =
+            self.hybrid_filter_plan(query.filter.as_ref(), uses_vector, uses_keyword)?;
 
-        let vector_hits = if fusion_uses_vector(query.fusion) {
-            self.search_vector_candidates(
+        let vector_hits = if uses_vector {
+            self.search_vector_candidates_with_offsets(
                 &query.embedding,
                 query.vector_top_k,
                 query.filter.as_ref(),
+                filter_plan.candidate_offsets.as_deref(),
             )?
         } else {
             Vec::new()
         };
-        let keyword_hits = if fusion_uses_keyword(query.fusion) {
-            self.keyword_search_candidates(&query.text, query.keyword_top_k, query.filter.as_ref())?
+        let keyword_hits = if uses_keyword {
+            self.keyword_search_candidates_with_allowed_chunks(
+                &query.text,
+                query.keyword_top_k,
+                query.filter.as_ref(),
+                filter_plan.allowed_chunk_ids.as_ref(),
+            )?
         } else {
             Vec::new()
         };
 
-        let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
-        for (rank_index, hit) in vector_hits.iter().enumerate() {
-            let rank = rank_index + 1;
-            let candidate = candidates
-                .entry(hit.chunk_id)
-                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
-            candidate.document_id.clone_from(&hit.document_id);
-            candidate.vector_score = Some(hit.score);
-            candidate.vector_rank = Some(rank);
+        let candidates = fuse_hybrid_hits(&vector_hits, &keyword_hits, query.fusion)?;
+        Ok(self.materialize_hybrid_hits(candidates, query.top_k, query.fusion))
+    }
+
+    /// Measures the real production hybrid path without exposing profiling to wrappers.
+    #[cfg(feature = "benchmark-instrumentation")]
+    #[doc(hidden)]
+    pub fn profile_hybrid_search(&self, query: &HybridQuery) -> Result<HybridSearchProfile> {
+        let total_started = Instant::now();
+        self.validate_hybrid_query(query)?;
+        if query.top_k == 0 {
+            return Ok(HybridSearchProfile {
+                hits: Vec::new(),
+                stages: HybridStageDurations {
+                    filter: Duration::ZERO,
+                    vector: Duration::ZERO,
+                    bm25: Duration::ZERO,
+                    fusion: Duration::ZERO,
+                    hydration: Duration::ZERO,
+                    total: total_started.elapsed(),
+                },
+            });
         }
 
-        for (rank_index, hit) in keyword_hits.iter().enumerate() {
-            let rank = rank_index + 1;
-            let candidate = candidates
-                .entry(hit.chunk_id)
-                .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
-            candidate.document_id.clone_from(&hit.document_id);
-            candidate.keyword_score = Some(hit.score);
-            candidate.keyword_rank = Some(rank);
-            candidate.matched_terms.clone_from(&hit.matched_terms);
+        let uses_vector = fusion_uses_vector(query.fusion) && query.vector_top_k > 0;
+        let uses_keyword = fusion_uses_keyword(query.fusion) && query.keyword_top_k > 0;
+        let filter_started = Instant::now();
+        let filter_plan =
+            self.hybrid_filter_plan(query.filter.as_ref(), uses_vector, uses_keyword)?;
+        let filter = filter_started.elapsed();
+
+        let vector_started = Instant::now();
+        let vector_hits = if uses_vector {
+            self.search_vector_candidates_with_offsets(
+                &query.embedding,
+                query.vector_top_k,
+                query.filter.as_ref(),
+                filter_plan.candidate_offsets.as_deref(),
+            )?
+        } else {
+            Vec::new()
+        };
+        let vector = vector_started.elapsed();
+
+        let bm25_started = Instant::now();
+        let keyword_hits = if uses_keyword {
+            self.keyword_search_candidates_with_allowed_chunks(
+                &query.text,
+                query.keyword_top_k,
+                query.filter.as_ref(),
+                filter_plan.allowed_chunk_ids.as_ref(),
+            )?
+        } else {
+            Vec::new()
+        };
+        let bm25 = bm25_started.elapsed();
+
+        let fusion_started = Instant::now();
+        let candidates = fuse_hybrid_hits(&vector_hits, &keyword_hits, query.fusion)?;
+        let fusion = fusion_started.elapsed();
+
+        let hydration_started = Instant::now();
+        let hits = self.materialize_hybrid_hits(candidates, query.top_k, query.fusion);
+        let hydration = hydration_started.elapsed();
+
+        Ok(HybridSearchProfile {
+            hits,
+            stages: HybridStageDurations {
+                filter,
+                vector,
+                bm25,
+                fusion,
+                hydration,
+                total: total_started.elapsed(),
+            },
+        })
+    }
+
+    fn validate_hybrid_query(&self, query: &HybridQuery) -> Result<()> {
+        if fusion_uses_vector(query.fusion) {
+            self.validate_dimension(query.embedding.len())?;
         }
+        if query.top_k == 0 {
+            return Ok(());
+        }
+        validate_hybrid_fusion(query.fusion)
+    }
 
-        let mut candidates = candidates.into_values().collect::<Vec<_>>();
-        score_hybrid_candidates(&mut candidates, query.fusion)?;
-        sort_hybrid_candidates(&mut candidates);
+    fn hybrid_filter_plan(
+        &self,
+        filter: Option<&Filter>,
+        needs_vector_offsets: bool,
+        needs_keyword_chunks: bool,
+    ) -> Result<HybridFilterPlan> {
+        if !needs_vector_offsets && !needs_keyword_chunks {
+            return Ok(HybridFilterPlan {
+                candidate_offsets: None,
+                allowed_chunk_ids: None,
+            });
+        }
+        let candidate_offsets = filter
+            .map(|filter| {
+                self.retrieval
+                    .metadata_filter_index
+                    .candidate_offsets(filter)
+            })
+            .transpose()?
+            .flatten();
+        let allowed_chunk_ids = needs_keyword_chunks.then(|| {
+            candidate_offsets
+                .as_deref()
+                .map(|offsets| self.active_chunk_ids_for_offsets(offsets))
+        });
+        Ok(HybridFilterPlan {
+            candidate_offsets,
+            allowed_chunk_ids: allowed_chunk_ids.flatten(),
+        })
+    }
 
-        Ok(candidates
+    fn materialize_hybrid_hits(
+        &self,
+        candidates: Vec<HybridCandidate>,
+        top_k: usize,
+        fusion: HybridFusion,
+    ) -> Vec<HybridHit> {
+        candidates
             .into_iter()
-            .take(query.top_k)
+            .take(top_k)
             .filter_map(|candidate| {
                 let chunk = self.chunk(candidate.chunk_id)?;
                 if chunk.deleted {
@@ -1426,11 +1590,11 @@ impl ExactVectorIndex {
                         normalized_vector_score: candidate.normalized_vector_score,
                         normalized_keyword_score: candidate.normalized_keyword_score,
                         matched_terms: candidate.matched_terms,
-                        fusion: HybridFusionTrace::from(query.fusion),
+                        fusion: HybridFusionTrace::from(fusion),
                     },
                 })
             })
-            .collect())
+            .collect()
     }
 
     /// Performs exact vector and BM25 fusion only inside one candidate scope.
@@ -2673,6 +2837,11 @@ struct ScoredCandidate {
     score: f32,
 }
 
+struct HybridFilterPlan {
+    candidate_offsets: Option<Vec<usize>>,
+    allowed_chunk_ids: Option<HashSet<ChunkId>>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct HybridCandidate {
     chunk_id: ChunkId,
@@ -2702,6 +2871,39 @@ impl HybridCandidate {
             hybrid_score: 0.0,
         }
     }
+}
+
+fn fuse_hybrid_hits(
+    vector_hits: &[SearchHit],
+    keyword_hits: &[KeywordHit],
+    fusion: HybridFusion,
+) -> Result<Vec<HybridCandidate>> {
+    let mut candidates = BTreeMap::<ChunkId, HybridCandidate>::new();
+    for (rank_index, hit) in vector_hits.iter().enumerate() {
+        let rank = rank_index + 1;
+        let candidate = candidates
+            .entry(hit.chunk_id)
+            .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+        candidate.document_id.clone_from(&hit.document_id);
+        candidate.vector_score = Some(hit.score);
+        candidate.vector_rank = Some(rank);
+    }
+
+    for (rank_index, hit) in keyword_hits.iter().enumerate() {
+        let rank = rank_index + 1;
+        let candidate = candidates
+            .entry(hit.chunk_id)
+            .or_insert_with(|| HybridCandidate::new(hit.chunk_id, hit.document_id.clone()));
+        candidate.document_id.clone_from(&hit.document_id);
+        candidate.keyword_score = Some(hit.score);
+        candidate.keyword_rank = Some(rank);
+        candidate.matched_terms.clone_from(&hit.matched_terms);
+    }
+
+    let mut candidates = candidates.into_values().collect::<Vec<_>>();
+    score_hybrid_candidates(&mut candidates, fusion)?;
+    sort_hybrid_candidates(&mut candidates);
+    Ok(candidates)
 }
 
 #[derive(Clone, Copy)]
@@ -4927,6 +5129,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["doc-allowed"]
         );
+    }
+
+    #[cfg(feature = "benchmark-instrumentation")]
+    #[test]
+    fn profiled_hybrid_search_matches_production_hits() {
+        let mut index = ExactVectorIndex::new(2, VectorMetric::DotProduct);
+        let mut notes_document = document("doc-notes");
+        notes_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("notes".to_owned()),
+        );
+        index
+            .upsert_document(
+                notes_document,
+                vec![chunk_input("rare keyword", vec![3.0, 0.0])],
+            )
+            .unwrap();
+
+        let mut transcript_document = document("doc-transcript");
+        transcript_document.metadata.insert(
+            "source".to_owned(),
+            MetadataValue::String("transcript".to_owned()),
+        );
+        index
+            .upsert_document(
+                transcript_document,
+                vec![chunk_input("rare keyword fallback", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        let queries = [
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10),
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10).with_filter(Filter::Equals {
+                field: "source".to_owned(),
+                value: MetadataValue::String("transcript".to_owned()),
+            }),
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 1).with_rrf_k(60.0),
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10).with_alpha(1.0),
+            HybridQuery::new("rare keyword", Vec::new(), 10).with_alpha(0.0),
+            HybridQuery::new("rare keyword", vec![1.0, 0.0], 10).with_candidate_limits(0, 0),
+        ];
+
+        for query in queries {
+            let production_hits = index.hybrid_search(&query).unwrap();
+            let profiled_hits = index.profile_hybrid_search(&query).unwrap().hits;
+            assert_eq!(profiled_hits, production_hits);
+        }
     }
 
     #[test]

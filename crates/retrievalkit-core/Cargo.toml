@@ -7,6 +7,9 @@ repository.workspace = true
 
 [features]
 default = []
+# Off-by-default native profiling used only by the repository benchmark harness.
+# It does not change production search behavior or wrapper APIs.
+benchmark-instrumentation = []
 # Browser-only acceleration. Native targets keep their existing SimSIMD/NEON
 # paths even when workspace checks enable every feature.
 wasm-simd128 = []
@@ -35,3 +38,8 @@ harness = false
 [[bench]]
 name = "candidate_scope"
 harness = false
+
+[[bench]]
+name = "hybrid_stage_profile"
+harness = false
+required-features = ["benchmark-instrumentation"]

@@ -39,6 +39,27 @@ The shared public-API runner is the Swift package at
 `wrappers/swift/RetrievalKitAppleE2EBench`. The physical-device app is generated
 from `wrappers/swift/RetrievalKitAppleE2EIOSBench/project.yml` with XcodeGen.
 
+## Hybrid stage profiling
+
+The Rust-core diagnostic benchmark isolates filter planning, I8 vector
+candidate generation, BM25 candidate generation, fusion, hydration, and total
+hybrid retrieval at 25K and 49,999 chunks. It reuses this benchmark family's
+realistic text shape, runs unfiltered and indexed-filter scenarios, and keeps
+instrumentation behind an off-by-default feature:
+
+```bash
+RETRIEVALKIT_PROFILE_WARMUP=50 \
+RETRIEVALKIT_PROFILE_SAMPLES=300 \
+cargo bench -q -p retrievalkit-core \
+  --features benchmark-instrumentation \
+  --bench hybrid_stage_profile
+```
+
+This diagnostic excludes embedding and does not replace the independently
+validated public Swift/Core ML or physical-iPhone matrices. See
+`docs/product/reports/hybrid-performance-milestone-v1-report.md` for the first
+before/after result.
+
 ## Preparation
 
 Use Xcode's Swift toolchain; the standalone Command Line Tools Swift can be

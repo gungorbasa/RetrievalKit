@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "contract": "docs/product/apple-end-to-end-benchmark-contract-v1.md",
+  "dimension": 384,
+  "metric": "cosine",
+  "chunks_per_record": 4,
+  "database_encoding": "i8_scalar_quantized",
+  "top_k": 10,
+  "model_profiles": [
+    {
+      "id": "coreml-fp32-production-v1",
+      "classification": "production_control",
+      "runtime": "direct_coreml",
+      "compute_units": "all",
+      "source_model": "sentence-transformers/all-MiniLM-L6-v2",
+      "source_revision": "c9745ed1d9f207416be6d2e6f8de32d1f16199bf",
+      "artifact_commit": "405818d6afef1aaf2fc8da67da6caf20b55f0a28",
+      "artifact_path": "all-MiniLM-L6-v2-coreml-fp32-v1.tar",
+      "artifact_bytes": 90664960,
+      "artifact_sha256": "e54611cc957f38fe82f5d82715a8043fff308a022c55b5471d4602c723540b6f",
+      "weight_quantization": "none",
+      "output_precision": "f32",
+      "production_qualified": true
+    },
+    {
+      "id": "coreml-weight-only-q8-experimental-v1",
+      "classification": "experimental_candidate",
+      "runtime": "direct_coreml",
+      "compute_units": "all",
+      "source_model": "sentence-transformers/all-MiniLM-L6-v2",
+      "source_revision": "c9745ed1d9f207416be6d2e6f8de32d1f16199bf",
+      "artifact_commit": "617ce926c1f9e0289365d3e999474cc28b1645d4",
+      "manifest_sha256": "b81e0e9393a25630eda184cfa373f2f28eed08c2ed92ae3d4097504e5f7ab4b2",
+      "artifact_path": "coreml/all-MiniLM-L6-v2-q8.mlpackage",
+      "artifact_bytes": 22724832,
+      "artifact_sha256": "72c82477ad518acdf88f95727f1af695702a9e3da7ae48799902bac3adc55281",
+      "artifact_digest_kind": "canonical-tree-v1",
+      "published_manifest_artifact_bytes": 22724760,
+      "published_manifest_artifact_sha256": "f9f78284766a1dd8352d85e7663fb366a938304c76204828badd7e52c2f05292",
+      "published_manifest_matches_pinned_tree": false,
+      "weight_quantization": "weight_only_int8",
+      "compute_precision": "f16",
+      "output_precision": "f32",
+      "production_qualified": false
+    }
+  ],
+  "workloads": [
+    {
+      "id": "apple-e2e-10k-384d-i8-v1",
+      "classification": "supported_product",
+      "active_records": 2500,
+      "active_chunks": 10000,
+      "marketing_eligible": true,
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "required",
+      "iphone_execution": "required"
+    },
+    {
+      "id": "apple-e2e-50k-384d-i8-boundary-v1",
+      "classification": "qualification_boundary",
+      "active_records": 12500,
+      "active_chunks": 50000,
+      "marketing_eligible": true,
+      "marketing_label_required": "50K qualification boundary; V1 support remains fewer than 50K chunks",
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "required",
+      "iphone_execution": "required"
+    },
+    {
+      "id": "apple-e2e-100k-384d-i8-stress-v1",
+      "classification": "stress",
+      "active_records": 25000,
+      "active_chunks": 100000,
+      "marketing_eligible": false,
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "required",
+      "iphone_execution": "preflighted_query_only",
+      "iphone_forbidden_phases": [
+        "corpus_embedding",
+        "index_build",
+        "save",
+        "compaction",
+        "mutation",
+        "sustained_query"
+      ],
+      "unsafe_iphone_status": "not_run_memory_safety"
+    }
+  ]
+}

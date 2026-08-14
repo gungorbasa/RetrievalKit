@@ -31,6 +31,13 @@ pub use graph::retrievalkit_graph_ffi_abi_version;
 pub use memory_bench::{memory_benchmark_json, retrievalkit_bench_memory_json};
 pub use phase4_graph_free::retrievalkit_phase4_graph_free_regression_json;
 
+/// Returns the active native vector runtime capabilities as UTF-8 JSON.
+/// Free the returned string with `retrievalkit_string_free`.
+#[no_mangle]
+pub extern "C" fn retrievalkit_runtime_capabilities_json() -> *mut c_char {
+    json_to_c_string(&bench::runtime_capabilities_json())
+}
+
 const RETRIEVALKIT_STATUS_OK: i32 = 0;
 const RETRIEVALKIT_STATUS_INVALID_ARGUMENT: i32 = 1;
 const RETRIEVALKIT_STATUS_CORE_ERROR: i32 = 2;
@@ -2153,6 +2160,20 @@ mod tests {
         assert!(config.include_filtered);
         assert!(config.include_persistence);
         assert!(config.persist_bm25);
+    }
+
+    #[test]
+    fn runtime_capability_json_reports_dispatch_state() {
+        let pointer = retrievalkit_runtime_capabilities_json();
+        assert!(!pointer.is_null());
+        let raw = unsafe { CStr::from_ptr(pointer) }
+            .to_str()
+            .unwrap()
+            .to_owned();
+        unsafe { retrievalkit_string_free(pointer) };
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(value["simsimd"].is_string());
+        assert!(value["aarch64_dotprod"].is_boolean());
     }
 
     #[test]

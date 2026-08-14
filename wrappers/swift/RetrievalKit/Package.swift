@@ -10,6 +10,10 @@ let package = Package(
     ],
     products: [
         .library(name: "RetrievalKit", targets: ["RetrievalKit"]),
+        .library(
+            name: "RetrievalKitRuntimeDiagnostics",
+            targets: ["RetrievalKitRuntimeDiagnostics"]
+        ),
         .executable(name: "RetrievalKitDatabaseQuickstart", targets: ["RetrievalKitDatabaseQuickstart"]),
         .executable(name: "RetrievalKitRetrievalQuickstart", targets: ["RetrievalKitRetrievalQuickstart"])
     ],
@@ -25,6 +29,10 @@ let package = Package(
                 "RetrievalKitFFI",
                 .product(name: "RetrievalKitShared", package: "RetrievalKitShared")
             ]
+        ),
+        .target(
+            name: "RetrievalKitRuntimeDiagnostics",
+            dependencies: ["RetrievalKitFFI"]
         ),
         .executableTarget(
             name: "RetrievalKitDatabaseQuickstart",

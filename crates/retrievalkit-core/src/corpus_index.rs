@@ -265,15 +265,17 @@ impl CorpusIndex {
         let record_id = input.record.id.clone();
         let document_id = record_id.as_str().to_owned();
         let version = self.record_versions.get(&document_id).copied().unwrap_or(0) + 1;
-        let mut deactivated_offsets = Vec::new();
-        for (offset, chunk) in self.chunks.iter_mut().enumerate() {
-            if chunk.document_id == document_id && !chunk.deleted {
-                chunk.deleted = true;
-                deactivated_offsets.push(offset);
+        if version > 1 {
+            let mut deactivated_offsets = Vec::new();
+            for (offset, chunk) in self.chunks.iter_mut().enumerate() {
+                if chunk.document_id == document_id && !chunk.deleted {
+                    chunk.deleted = true;
+                    deactivated_offsets.push(offset);
+                }
             }
+            self.remove_active_offsets(&deactivated_offsets);
+            self.remove_chunk_identities_for_record(&record_id);
         }
-        self.remove_active_offsets(&deactivated_offsets);
-        self.remove_chunk_identities_for_record(&record_id);
 
         let mut chunk_ids = Vec::with_capacity(input.chunks.len());
         for chunk in input.chunks {

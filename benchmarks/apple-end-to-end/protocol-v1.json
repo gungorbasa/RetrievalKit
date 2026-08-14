@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "contract_version": "apple-end-to-end-v1",
+  "contract": "docs/product/apple-end-to-end-benchmark-contract-v1.md",
+  "build": {
+    "swift": "release",
+    "rust": "optimized",
+    "debugger_attached": false,
+    "graph_linked": false,
+    "onnx_runtime_linked": false
+  },
+  "devices": {
+    "mac": {
+      "hardware": "Apple M1 Max MacBook Pro",
+      "model_identifier": "MacBookPro18,4",
+      "architecture": "arm64",
+      "physical_required": true
+    },
+    "iphone": {
+      "hardware": "iPhone 17 Pro Max",
+      "model_identifier": "iPhone18,2",
+      "architecture": "arm64",
+      "physical_required": true,
+      "simulator_eligible": false
+    }
+  },
+  "query_suite": {
+    "distinct_queries": 100,
+    "maximum_tokens": 256,
+    "token_length_buckets": [
+      {"minimum": 1, "maximum": 16, "count": 20},
+      {"minimum": 17, "maximum": 32, "count": 35},
+      {"minimum": 33, "maximum": 64, "count": 25},
+      {"minimum": 65, "maximum": 128, "count": 15},
+      {"minimum": 129, "maximum": 256, "count": 5}
+    ],
+    "categories": [
+      {"id": "semantic_paraphrase", "count": 40},
+      {"id": "exact_name_or_identifier", "count": 30},
+      {"id": "semantic_plus_keyword", "count": 20},
+      {"id": "near_distractor_or_no_natural_match", "count": 10}
+    ],
+    "schedule": "deterministic_permutation_cycle"
+  },
+  "search": {
+    "modes": ["vector", "weighted_hybrid"],
+    "top_k": 10,
+    "hybrid": {
+      "alpha": 0.6,
+      "vector_candidates": 50,
+      "keyword_candidates": 50
+    }
+  },
+  "query_measurement": {
+    "warmups": 50,
+    "samples": 750,
+    "raw_unit": "integer_nanoseconds",
+    "clock": "monotonic",
+    "percentile": "nearest_rank",
+    "percentiles": [0.5, 0.95, 0.99],
+    "stages": ["embedding_total", "retrieval_total", "end_to_end_text_search"],
+    "direct_total_required": true,
+    "minimum_final_sessions": 3,
+    "comparison": "median_session_p95",
+    "pool_sessions": false,
+    "one_mode_per_fresh_process": true,
+    "setup_excluded": [
+      "model_acquisition",
+      "model_compilation",
+      "model_initialization",
+      "database_load",
+      "corpus_embedding",
+      "index_build",
+      "save"
+    ]
+  },
+  "iphone_validity": {
+    "foreground_required": true,
+    "network_disabled": true,
+    "low_power_mode": false,
+    "battery_minimum_percent": 50,
+    "battery_maximum_percent": 90,
+    "charging": false,
+    "thermal_start": ["nominal"],
+    "thermal_end": ["nominal", "fair"],
+    "thermal_abort": ["serious", "critical"]
+  },
+  "q8_prerequisite": {
+    "reference_profile": "coreml-fp32-production-v1",
+    "median_cosine_minimum": 0.995,
+    "mean_top10_overlap_minimum": 0.95,
+    "minimum_query_top10_overlap": 0.8,
+    "exact_top10_rate_reported": true,
+    "production_qualification_created": false
+  },
+  "iphone_100k_preflight": {
+    "required_mac_workload": "apple-e2e-100k-384d-i8-stress-v1",
+    "database_load_before_timing": true,
+    "model_and_database_resident_before_timing": true,
+    "memory_warning_before_timing": false,
+    "free_storage_database_multiplier": 3,
+    "free_storage_additional_bytes": 1073741824,
+    "unsafe_status": "not_run_memory_safety",
+    "abort_terminal_for_contract_version": true
+  },
+  "baseline_policy": {
+    "first_run": "observational",
+    "absolute_latency_gate": null,
+    "future_gate_requires_owner_freeze": true
+  }
+}

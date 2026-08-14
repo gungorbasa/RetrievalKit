@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "contract_version": "apple-end-to-end-v2",
+  "contract": "docs/product/apple-end-to-end-benchmark-contract-v2.md",
+  "inherits_unchanged_methodology_from": "protocol-v1.json",
+  "amendment": "physical iPhone sessions run USB-powered so CoreDevice can retain a reproducible wired control channel",
+  "devices": {
+    "mac": {
+      "hardware": "Apple M1 Max MacBook Pro",
+      "model_identifier": "MacBookPro18,4",
+      "architecture": "arm64",
+      "physical_required": true
+    },
+    "iphone": {
+      "hardware": "iPhone 17 Pro Max",
+      "model_identifier": "iPhone18,2",
+      "architecture": "arm64",
+      "physical_required": true,
+      "simulator_eligible": false
+    }
+  },
+  "search": {
+    "modes": ["vector", "weighted_hybrid"],
+    "top_k": 10,
+    "hybrid": {
+      "alpha": 0.6,
+      "vector_candidates": 50,
+      "keyword_candidates": 50
+    }
+  },
+  "iphone_validity": {
+    "foreground_required": true,
+    "network_disabled": true,
+    "control_transport": "wired_usb",
+    "power_condition": "usb_powered",
+    "low_power_mode": false,
+    "battery_minimum_percent": 50,
+    "battery_maximum_percent": 90,
+    "battery_state": ["charging", "full"],
+    "thermal_start": ["nominal"],
+    "thermal_end": ["nominal", "fair"],
+    "thermal_abort": ["serious", "critical"]
+  },
+  "q8_prerequisite": {
+    "reference_profile": "coreml-fp32-production-v1",
+    "median_cosine_minimum": 0.995,
+    "mean_top10_overlap_minimum": 0.95,
+    "minimum_query_top10_overlap": 0.8,
+    "exact_top10_rate_reported": true,
+    "production_qualification_created": false
+  },
+  "iphone_100k_preflight": {
+    "required_mac_workload": "apple-e2e-100k-384d-i8-stress-v1",
+    "database_load_before_timing": true,
+    "model_and_database_resident_before_timing": true,
+    "memory_warning_before_timing": false,
+    "free_storage_database_multiplier": 3,
+    "free_storage_additional_bytes": 1073741824,
+    "unsafe_status": "not_run_memory_safety",
+    "abort_terminal_for_contract_version": true
+  },
+  "baseline_policy": {
+    "first_run": "observational",
+    "absolute_latency_gate": null,
+    "future_gate_requires_owner_freeze": true
+  }
+}

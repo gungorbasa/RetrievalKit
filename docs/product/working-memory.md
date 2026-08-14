@@ -1656,3 +1656,142 @@ target inside the supported fewer-than-50K envelope.
   are release-validator inputs. After future README edits, run the bundled
   README asset audit, `benchmarks/publication/validate_readme.py`, and the
   README claim mutation tests before treating the change as complete.
+
+## 2026-08-12 On-Device AI Release-Confidence Exploration
+
+- This is product discovery, not an authorized RetrievalKit scope change or an
+  implementation decision. Current confidence is approximately `6/10`: strong
+  founder fit and real platform evidence, but unproven buyer density, urgency,
+  willingness to pay, and measurement repeatability.
+- The strongest thesis is an app-feature-level release gate for mobile AI, not
+  a generic eval platform, raw RAG/runtime SDK, device farm, production MLOps
+  control plane, or broad mobile release tool. Given a baseline and candidate
+  build, it would pair semantic/retrieval outcomes with model/runtime identity,
+  latency, peak memory, termination, thermal, and eventually reliable energy
+  evidence from physical devices, then publish an explainable PR/release result.
+- The initial customer hypothesis is a mobile engineering or AI-platform lead
+  at a team already shipping, or within roughly 12 months of shipping, a
+  material on-device AI feature. The first likely champion is a senior iOS or
+  Android engineer currently maintaining a bespoke test harness or performing
+  manual release sign-off. Indie developers and cloud-only AI products are not
+  the initial paid target.
+- The provisional wedge is an iOS-first, runtime-agnostic `On-Device AI
+  Readiness Audit`, with RAG/assistant workloads as the first measurable
+  profile and Android as a required validation direction rather than an
+  immediate device-fleet promise. Use customer-connected hardware or existing
+  device labs before considering ownership of a fleet. A later product should
+  be local-runner/customer-hosted by default so private builds, corpora,
+  prompts, and answers need not leave the customer's environment.
+- RetrievalKit is relevant evidence and an optional adapter: it already proves
+  deterministic corpus packs, exact retrieval ground truth, ranking traces,
+  cross-runtime conformance, separated latency measurement, and strict release
+  gates. The new product must remain runtime- and retrieval-engine-agnostic;
+  RetrievalKit must not become a prerequisite or absorb dashboard/device-lab
+  scope. Physical mobile-device memory, thermal, energy, and OOM behavior are
+  still unqualified in RetrievalKit and must not be implied by desktop results.
+- Retain the promotion gate: 20 relevant artifact-based interviews, 5 teams
+  supplying a real build and test corpus, 3 paid audits at a meaningful price,
+  and 2 explicit requests for continuous regression/CI use before rating the
+  opportunity `8/10`. Proposed additional kill signals are: fewer than 8 of 20
+  teams can show a recent painful release-confidence failure; teams will not
+  provide artifacts even on their own runners; audit results do not change a
+  release or model/device decision; setup exceeds roughly one engineer-day;
+  paired metrics cannot achieve an acceptably low false-failure rate; or demand
+  collapses to Android LiteRT model benchmarking already served by Google.
+- Current competitive facts: generic eval vendors already cover versioned
+  datasets, experiments, scoring, and CI; Google AI Edge Portal now benchmarks
+  LiteRT-LM performance on more than 120 Android device types; Firebase Test
+  Lab supplies Android/iOS device execution and CI integration; DeviceAI covers
+  runtime selection, OTA models, and fleet telemetry; and native Apple/Android
+  tools expose many raw metrics. The apparent gap is the integrated semantic
+  plus physical-device regression decision for an actual mobile app build,
+  especially iOS/cross-runtime and privacy-sensitive workflows. That gap is an
+  inference to validate, not a verified absence of competition.
+
+## 2026-08-13 Apple End-to-End Benchmark Contract Direction
+
+- The owner selected exact 10K, 50K, and 100K active-chunk workloads for a new
+  graph-free Apple text-to-result benchmark on the pinned Apple M1 Max MacBook
+  Pro and physical iPhone 17 Pro Max. The 10K lane is supported-product
+  evidence, 50K is an exact qualification boundary that does not change the
+  documented fewer-than-50K support envelope, and 100K is non-marketing stress
+  evidence only.
+- The production control is direct Core ML FP32 MiniLM with RetrievalKit I8
+  database storage. The candidate is the immutable direct Core ML weight-only
+  Q8 artifact from commit `617ce926c1f9e0289365d3e999474cc28b1645d4`,
+  also with I8 database storage. Q8 remains experimental and must pass its
+  frozen provider-quality prerequisite before its performance can be compared;
+  the benchmark cannot qualify or ship Q8.
+- The headline and only performance boundary directly measures a ready app's
+  public query text through tokenization/Core ML embedding, validation and I8
+  query quantization, vector or weighted-hybrid search, and decoded/hydrated
+  top-10 Swift results. Model acquisition/initialization, database load, corpus
+  embedding, index build/save, startup, memory, sustained throughput, and energy
+  are excluded. V1 establishes an observational baseline; later absolute
+  regression budgets require a separate owner freeze.
+- The new benchmark must not execute or write into the closed Phase 4 device
+  workload family. Its iPhone 100K lane is prebuilt-index, query-only, and
+  fail-closed: on-device corpus embedding, build, save, mutation, compaction,
+  and sustained execution are forbidden; unsafe preflight emits
+  `not_run_memory_safety` without loading the database. The normative draft is
+  `docs/product/apple-end-to-end-benchmark-contract-v1.md` with compact
+  descriptors under `benchmarks/apple-end-to-end/`.
+- Fail-closed acquisition found that the Q8 manifest at pinned commit
+  `617ce926c1f9e0289365d3e999474cc28b1645d4` claims a 22,724,760-byte
+  `f9f782...` canonical tree, while its three downloadable Core ML package
+  files are 22,724,832 bytes and hash to `72c824...`. Benchmark V1 pins the
+  downloadable tree, retains both identities in evidence, and cannot
+  production-qualify Q8 while this upstream inconsistency exists.
+
+## 2026-08-14 Apple End-to-End Benchmark Execution
+
+- The graph-free ready-app harness is implemented across the shared Swift
+  runner and a signed physical-device iOS app. Its sole timed boundary is query
+  text through public Core ML embedding and public RetrievalKit vector or
+  weighted-hybrid search to decoded/hydrated Swift top-10 results. The frozen
+  matrix is 10K/50K/100K chunks, FP32 production/Q8 experimental profiles, two
+  modes, three fresh sessions, 50 warmups, and 750 raw mixed-query samples.
+- All six profile/workload I8 indexes were built, validated, reloaded, and
+  replayed. Deterministic source hashes are `afe98dc...` (10K), `037fe9ca...`
+  (50K), and `3daf48c...` (100K); the common query document hash is
+  `0f86b198...`. Generated inputs, models, indexes, iPhone assets, and raw
+  reports remain under ignored `target/apple-end-to-end/` roots.
+- The frozen 42-query Q8 provider gate passed versus FP32: median cosine
+  `0.9990515950`, mean top-10 overlap `0.9595238095`, minimum overlap `0.80`.
+  Q8 remains experimental. A separate latency-corpus overlap diagnostic was
+  only `0.852` because the templated corpus has many near-ties; it is not
+  relevance evidence and does not replace BEIR/TREC qrels evaluation.
+- The complete 36-session Mac matrix on `MacBookPro18,4` M1 Max passed the
+  independent validator. FP32 direct-total median-session P95 is 7.011/9.552/
+  9.865 ms for vector and 15.190/59.833/142.565 ms for weighted hybrid at
+  10K/50K/100K. Q8 values are 5.781/6.348/6.743 ms and
+  12.585/55.348/139.886 ms. The 50K and 100K classifications remain boundary
+  and non-marketing stress respectively.
+- Execution exposed and fixed an optimized-build Swift FFI lifetime defect in
+  multi-chunk `VectorIndex.upsert`, where borrowed arena/embedding/metadata
+  pointers could outlive their temporary owners, plus O(n²) first-version
+  ingestion scans in Rust exact and corpus indexes. Runtime diagnostics now
+  record the actual SIMD backend and AArch64 dot-product availability.
+- The physical `iPhone18,2` app and six asset roots are installed. iPhone
+  V1 execution proved that an offline CoreDevice control channel requires USB,
+  which actively charges this device and makes the original not-charging rule
+  operationally incompatible with unattended fresh-process collection. The
+  owner approved the frozen V2 USB-powered amendment before the first accepted
+  iPhone session. V2 changes only the iPhone power/control condition, uses new
+  workload IDs, and cannot be described as unplugged-user, energy, or battery
+  evidence. Mac results remain V1.
+- The first nine official V2 iPhone reports (all FP32 10K modes and Q8 10K
+  vector) passed independent validation with battery 80%, powered state,
+  nominal starts, and nominal/fair ends. The next Q8 10K hybrid session stopped
+  before setup because thermal start was not nominal. Collection must resume
+  only after cooldown, retain the nine valid reports, and use an inter-session
+  cooldown rather than pushing through the thermal gate.
+- The complete 36-session USB-powered V2 iPhone matrix subsequently passed the
+  independent validator: 27,000 retained samples, 36 fresh process IDs, battery
+  80%/charging, nominal starts, 35 nominal and one fair end, and no memory
+  warnings. FP32 direct-total median-session P95 is 4.771/5.045/5.572 ms for
+  vector and 9.133/27.532/57.970 ms for weighted hybrid at 10K/50K/100K. Q8
+  values are 3.621/3.733/4.199 ms and 6.132/22.701/49.732 ms. Two non-nominal
+  thermal preflights were refused before setup and contributed no samples;
+  collection resumed only after cooldown. The combined report is
+  `docs/product/reports/apple-end-to-end-benchmark-v1-report.md`.

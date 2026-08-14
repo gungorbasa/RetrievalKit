@@ -657,6 +657,11 @@ impl RuntimeCapabilities {
     }
 }
 
+pub(crate) fn runtime_capabilities_json() -> String {
+    serde_json::to_string(&RuntimeCapabilities::detect())
+        .unwrap_or_else(|error| format!(r#"{{"error":"{error}"}}"#))
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct BenchmarkRun {
     pub(crate) chunks: usize,

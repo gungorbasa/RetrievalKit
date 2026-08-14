@@ -559,6 +559,13 @@ public actor VectorIndex {
               metadata_len: chunkMetadata[index].count
             )
           })
+        // `ffiChunks` borrows pointers owned by these temporary buffers. Keep
+        // all owners alive until the native call returns in optimized builds.
+        defer {
+          withExtendedLifetime(
+            (arena, documentMetadata, chunkMetadata, embeddingBuffers, ffiChunks)
+          ) {}
+        }
         var output = RetrievalKitChunkIdBuffer(values: nil, count: 0)
 
         var status = RetrievalKitStatus(code: 0, message: nil)

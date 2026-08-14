@@ -817,23 +817,25 @@ impl ExactVectorIndex {
             .unwrap_or(0)
             + 1;
 
-        let mut deactivated_offsets = Vec::new();
-        for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
-            if chunk.document_id == document_id {
-                if !chunk.deleted {
-                    self.retrieval
-                        .metadata_filter_index
-                        .remove(offset, &chunk.metadata);
-                    deactivated_offsets.push(offset);
-                }
-                chunk.deleted = true;
-                if let Some(bm25) = &mut self.retrieval.bm25 {
-                    bm25.deactivate_chunk(chunk.chunk_id);
+        if version > 1 {
+            let mut deactivated_offsets = Vec::new();
+            for (offset, chunk) in self.corpus.chunks.iter_mut().enumerate() {
+                if chunk.document_id == document_id {
+                    if !chunk.deleted {
+                        self.retrieval
+                            .metadata_filter_index
+                            .remove(offset, &chunk.metadata);
+                        deactivated_offsets.push(offset);
+                    }
+                    chunk.deleted = true;
+                    if let Some(bm25) = &mut self.retrieval.bm25 {
+                        bm25.deactivate_chunk(chunk.chunk_id);
+                    }
                 }
             }
+            self.remove_active_offsets(&deactivated_offsets);
+            self.remove_chunk_identities_for_record(&record.id);
         }
-        self.remove_active_offsets(&deactivated_offsets);
-        self.remove_chunk_identities_for_record(&record.id);
 
         let mut chunk_ids = Vec::with_capacity(chunk_inputs.len());
         for chunk_input in chunk_inputs {

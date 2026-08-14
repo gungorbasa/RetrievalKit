@@ -393,6 +393,10 @@ RetrievalKitFilter *retrievalkit_filter_any(
 
 void retrievalkit_filter_free(RetrievalKitFilter *filter);
 
+// Returns the active native vector runtime capabilities as UTF-8 JSON. The
+// caller owns the result and must free it with retrievalkit_string_free.
+char *retrievalkit_runtime_capabilities_json(void);
+
 // Runs the synthetic benchmark and returns a heap-allocated UTF-8 JSON string.
 //
 // Pass NULL or "" for the default config:

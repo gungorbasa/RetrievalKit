@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "contract": "docs/product/apple-end-to-end-benchmark-contract-v2.md",
+  "inherits_corpus_and_model_identity_from": "workloads-v1.json",
+  "dimension": 384,
+  "metric": "cosine",
+  "chunks_per_record": 4,
+  "database_encoding": "i8_scalar_quantized",
+  "top_k": 10,
+  "model_profiles": [
+    {
+      "id": "coreml-fp32-production-v1",
+      "classification": "production_control"
+    },
+    {
+      "id": "coreml-weight-only-q8-experimental-v1",
+      "classification": "experimental_candidate"
+    }
+  ],
+  "workloads": [
+    {
+      "id": "apple-e2e-10k-384d-i8-usb-powered-v2",
+      "classification": "supported_product",
+      "active_records": 2500,
+      "active_chunks": 10000,
+      "marketing_eligible": true,
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "unchanged_v1_evidence",
+      "iphone_execution": "required_usb_powered"
+    },
+    {
+      "id": "apple-e2e-50k-384d-i8-usb-powered-boundary-v2",
+      "classification": "qualification_boundary",
+      "active_records": 12500,
+      "active_chunks": 50000,
+      "marketing_eligible": true,
+      "marketing_label_required": "50K qualification boundary; V1 support remains fewer than 50K chunks",
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "unchanged_v1_evidence",
+      "iphone_execution": "required_usb_powered"
+    },
+    {
+      "id": "apple-e2e-100k-384d-i8-usb-powered-stress-v2",
+      "classification": "stress",
+      "active_records": 25000,
+      "active_chunks": 100000,
+      "marketing_eligible": false,
+      "supported_v1_capacity_changed": false,
+      "mac_execution": "unchanged_v1_evidence",
+      "iphone_execution": "preflighted_query_only_usb_powered",
+      "iphone_forbidden_phases": [
+        "corpus_embedding",
+        "index_build",
+        "save",
+        "compaction",
+        "mutation",
+        "sustained_query"
+      ],
+      "unsafe_iphone_status": "not_run_memory_safety"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import type {
   NativeGraphResult,
   NativeGraphScalar,
   NativeHybridHit,
+  NativeKeywordHit,
   NativeMetadataEntry,
   NativeMetadataValue,
   NativeNodeId,
@@ -19,6 +20,11 @@ import type {
 
 export type VectorMetric = "cosine" | "dotProduct";
 export type VectorEncoding = "f32" | "f16" | "bf16" | "i8";
+export interface Bm25Configuration {
+  readonly k1?: number;
+  readonly b?: number;
+  readonly stopWords?: readonly string[];
+}
 export interface TimestampMillis {
   readonly kind: "timestampMillis";
   readonly value: bigint;
@@ -134,6 +140,7 @@ export interface GraphBuilderOptions {
 export interface GraphRetrievalBuilderOptions extends GraphBuilderOptions {
   readonly metric?: VectorMetric;
   readonly encoding?: VectorEncoding;
+  readonly bm25?: Bm25Configuration;
 }
 
 export interface RecordNodeId {
@@ -223,7 +230,6 @@ export interface TextSearch {
   readonly text: string;
   readonly limit?: number;
   readonly where?: Filter;
-  readonly keywordCandidates?: number;
   readonly within?: GraphSelection;
 }
 export interface HybridSearch {
@@ -247,6 +253,7 @@ export interface SearchResult {
   readonly keywordScore?: number;
   readonly trace:
     | { readonly kind: "vector"; readonly vectorScore: number }
+    | { readonly kind: "keyword"; readonly matchedTerms: readonly string[] }
     | {
         readonly kind: "hybrid";
         readonly alpha: number;
@@ -431,7 +438,10 @@ export class GraphRetrievalDatabaseBuilder {
       options.corpusId,
       toNativeSchema(options.schema),
       options.metric ?? "cosine",
-      options.encoding ?? "i8"
+      options.encoding ?? "i8",
+      options.bm25?.k1 ?? 1.2,
+      options.bm25?.b ?? 0.75,
+      [...(options.bm25?.stopWords ?? [])]
     );
   }
   public async add(records: Iterable<GraphRetrievalRecordInput>): Promise<void> {
@@ -529,18 +539,9 @@ class RetrievalQueryView implements RetrievalOperations {
       case "text":
         return (
           await nativeCall(() =>
-            this.native.hybridSearch(
-              query.text,
-              undefined,
-              limit,
-              filter,
-              0,
-              0,
-              optionalPositiveInteger(query.keywordCandidates, "keywordCandidates"),
-              selection
-            )
+            this.native.keywordSearch(query.text, limit, filter, selection)
           )
-        ).map(fromNativeHybridHit);
+        ).map(fromNativeKeywordHit);
       case "hybrid": {
         const alpha = query.alpha ?? 0.6;
         return (
@@ -867,6 +868,16 @@ function fromNativeVectorHit(hit: NativeSearchHit): SearchResult {
     score: hit.score,
     vectorScore: hit.vectorScore,
     trace: { kind: "vector", vectorScore: hit.vectorScore }
+  };
+}
+function fromNativeKeywordHit(hit: NativeKeywordHit): SearchResult {
+  return {
+    documentId: hit.documentId,
+    text: hit.text,
+    metadata: fromNativeMetadata(hit.metadata),
+    score: hit.score,
+    keywordScore: hit.score,
+    trace: { kind: "keyword", matchedTerms: hit.matchedTerms }
   };
 }
 function fromNativeHybridHit(hit: NativeHybridHit): SearchResult {

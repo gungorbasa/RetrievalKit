@@ -36,6 +36,14 @@ export interface NativeSearchHit {
   vectorScore: number;
 }
 
+export interface NativeKeywordHit {
+  documentId: string;
+  text: string;
+  metadata: NativeMetadataEntry[];
+  score: number;
+  matchedTerms: string[];
+}
+
 export interface NativeHybridTrace {
   alpha: number;
   vectorRank?: number;

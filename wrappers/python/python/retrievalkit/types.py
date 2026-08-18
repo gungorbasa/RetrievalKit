@@ -30,12 +30,20 @@ RecordValue: TypeAlias = (
 class VectorIndexConfiguration:
     dimension: int | None = None
     metric: Literal["cosine", "dot_product"] = "cosine"
-    encoding: Literal["f32", "f16", "bf16", "i8", "binary"] = "i8"
+    encoding: Literal["f32", "f16", "bf16", "i8"] = "i8"
+
+
+@dataclass(frozen=True)
+class Bm25Configuration:
+    k1: float = 1.2
+    b: float = 0.75
+    stop_words: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class RetrievalConfiguration:
     semantic: VectorIndexConfiguration
+    bm25: Bm25Configuration = field(default_factory=Bm25Configuration)
 
 
 @dataclass(frozen=True)
@@ -181,6 +189,7 @@ class CompactionReport(TypedDict):
 
 __all__ = [
     "AddDocumentResult",
+    "Bm25Configuration",
     "ChunkInput",
     "CompactionReport",
     "DocumentInput",

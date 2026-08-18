@@ -179,6 +179,42 @@ describe("RetrievalDatabase", () => {
     });
     expect(vectorOnly.map((hit) => hit.documentId)).toEqual(["vector-doc"]);
     expect(textOnly.map((hit) => hit.documentId)).toEqual(["keyword-doc"]);
+    expect(textOnly[0]?.keywordScore).toBeGreaterThan(0);
+    expect(textOnly[0]?.trace).toMatchObject({
+      kind: "keyword",
+      matchedTerms: ["keyword", "rare"]
+    });
+  });
+
+  it("applies and persists BM25 configuration for direct text search", async () => {
+    const builder = new RetrievalDatabaseBuilder({
+      corpusId: "configured-bm25",
+      metric: "dotProduct",
+      encoding: "f32",
+      bm25: { k1: 1.7, b: 0.4, stopWords: ["THE"] }
+    });
+    await builder.add([
+      {
+        id: "configured",
+        text: "the durable keyword",
+        embedding: new Float32Array([1, 0])
+      }
+    ]);
+    const database = await builder.build();
+    databases.push(database);
+    expect(await database.search({ mode: "text", text: "the" })).toEqual([]);
+    expect(
+      (await database.search({ mode: "text", text: "durable" })).map(
+        (hit) => hit.documentId
+      )
+    ).toEqual(["configured"]);
+
+    const directory = await mkdtemp(join(tmpdir(), "retrievalkit-node-bm25-"));
+    directories.push(directory);
+    await database.save(directory);
+    const loaded = await RetrievalDatabase.load(directory);
+    databases.push(loaded);
+    expect(await loaded.search({ mode: "text", text: "the" })).toEqual([]);
   });
 
   it("persists, validates, and reloads with BM25 rebuilt", async () => {

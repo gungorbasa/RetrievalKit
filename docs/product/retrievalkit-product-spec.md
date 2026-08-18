@@ -84,7 +84,8 @@ V1 must include:
   local browser embedding, RetrievalKit WASM retrieval, and a browser SLM.
 - Local persistent index.
 - Exact vector search.
-- BM25 lexical scoring as the internal lexical component of hybrid search.
+- Embedding-free BM25 text search and BM25 lexical scoring as the lexical
+  component of hybrid search.
 - Hybrid ranking.
 - Metadata filtering.
 - Add/update/delete document operations.
@@ -630,12 +631,12 @@ GraphRetrievalDatabase = CorpusIndex + GraphEngine + RetrievalIndex
 ```
 
 Every retrieval-capable database builds exact-vector and BM25 state and supports
-both semantic and hybrid queries. Hybrid blending is selected at query time with
-`alpha`, where `1` is vector-only, `0` is BM25-only, and values between them use
-weighted normalized-score fusion. BM25 may be omitted from a compact persisted
-snapshot, but it is rebuilt from canonical chunk text when that snapshot is
-loaded. Keyword-only search remains an internal benchmark surface rather than a
-standalone high-level product mode. Graph-only builders accept neither vector
+embedding-only exact search, embedding-free BM25 text search, and text-plus-
+embedding hybrid search. Hybrid blending is selected at query time with `alpha`,
+where `1` is vector-only, `0` is BM25-only, and values between them use weighted
+normalized-score fusion. BM25 may be omitted from a compact persisted snapshot,
+but it is rebuilt from canonical chunk text with the persisted BM25 configuration
+when that snapshot is loaded. Graph-only builders accept neither vector
 configuration nor embeddings. Combined graph selections become opaque
 generation-bound candidate scopes consumed by the retrieval capability.
 Graph-only and combined databases may also materialize a selection as stable,
@@ -922,7 +923,7 @@ Required fields:
 
 ```json
 {
-  "format_version": 4,
+  "format_version": 5,
   "snapshot_id": "<safe-generation-id>",
   "created_with": "retrievalkit",
   "dimension": 384,
@@ -930,6 +931,11 @@ Required fields:
   "vector_count": 24000,
   "active_chunk_count": 23500,
   "has_bm25": true,
+  "bm25_configuration": {
+    "k1": 1.2,
+    "b": 0.75,
+    "stop_words": []
+  },
   "has_records": true,
   "vector_encoding": "f32",
   "vector_bytes": 36864000,
@@ -963,9 +969,10 @@ Load must fail clearly if:
 - file sizes do not match manifest counts.
 - compressed payloads fail to decompress.
 - decompressed file sizes do not match manifest counts when recorded.
-- checksum validation fails. Format V3 and V4 require SHA-256 checksums for
+- checksum validation fails. Format V3 through V5 require SHA-256 checksums for
   every persisted payload; V1/V2 remain readable without them. V4 adds the
-  canonical record payload and stable external/internal chunk mapping.
+  canonical record payload and stable external/internal chunk mapping. V5 adds
+  persisted BM25 configuration.
 - a tombstone byte is not exactly `0` or `1`.
 
 `chunks.bin` and `bm25.bin` may be compressed at rest. Loading must
@@ -1008,7 +1015,6 @@ pub enum VectorEncoding {
     F16,
     BF16,
     I8ScalarQuantized,
-    BinaryQuantized,
 }
 ```
 
@@ -1018,11 +1024,13 @@ Recommended support order:
 2. `F16`
 3. `BF16`
 4. `I8ScalarQuantized`
-5. `BinaryQuantized`
 
 Do not implement product quantization or int4 in V1 unless benchmarks prove they are required.
 
-`BinaryQuantized` means one bit per dimension. For example, a 768-dimensional embedding can be stored as 768 bits, or 96 bytes, before any metadata or alignment overhead. This is a size-constrained candidate retrieval format and must be benchmarked against `F32` exact search before becoming a default.
+Binary quantization remains deferred research. It must not appear in a public
+enum, wrapper input, manifest, or benchmark matrix until a complete storage,
+scoring, persistence, and recall implementation passes the same release gates
+as the supported encodings.
 
 #### F32 Encoding
 
@@ -1173,13 +1181,21 @@ V1 tokenizer:
 - ASCII fallback acceptable for first prototype
 - configurable stopword list
 
+V1 does not stem, lemmatize, normalize accents, or select language-specific
+analyzers. Unicode word segmentation and lowercase matching remain deterministic
+across wrappers. Language-aware analysis is added only after versioned relevance
+fixtures demonstrate a material quality need and the selected implementation
+preserves persistence compatibility and deterministic ranking.
+
 ## Search Modes
 
-The V1 SDK supports exact vector search and hybrid search.
+The V1 SDK supports exact vector search, embedding-free BM25 search, and
+text-plus-embedding hybrid search through one overloaded query family.
 
 ```rust
 pub enum SearchMode {
     Exact,
+    Keyword,
     Hybrid,
 }
 ```
@@ -1757,12 +1773,14 @@ lock serializes writers to the same directory, including across processes, so a
 crash cannot leave a stale logical lock and concurrent cleanup cannot remove the
 published generation.
 
-Format V4 manifests include SHA-256 checksums for vectors, chunks, canonical
-records, BM25 when present, and tombstones. Rust `validate_dir`, Swift `VectorIndex.validate(at:)`,
+Format V5 manifests retain V4 canonical-record and checksum behavior and add the
+validated BM25 `k1`, `b`, and normalized stop-word configuration required to
+rebuild identical lexical state. Format V4 manifests include SHA-256 checksums
+for vectors, chunks, canonical records, BM25 when present, and tombstones. Rust `validate_dir`, Swift `VectorIndex.validate(at:)`,
 and Python `Index.validate(path)` run the same complete validation path used by
 load. Checksum failures identify the damaged file and instruct callers to
-restore or rebuild the index. V1, V2, and V3 indexes remain readable; their next
-save publishes a checksummed V4 snapshot.
+restore or rebuild the index. V1 through V4 indexes remain readable; their next
+save publishes a checksummed V5 snapshot.
 
 ## Speed Requirements
 
@@ -1897,7 +1915,6 @@ F32
 F16
 BF16
 I8ScalarQuantized
-BinaryQuantized
 ```
 
 Metrics:

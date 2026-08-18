@@ -4,9 +4,9 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use retrievalkit_core::{
-    CorpusId, Document, HybridHit, HybridQuery, Metadata, Record, RecordChunkInput,
-    RetrievalDatabase, RetrievalDatabaseBuilder as RustRetrievalDatabaseBuilder, SearchHit,
-    SearchQuery,
+    Bm25Config, CorpusId, Document, HybridHit, HybridQuery, KeywordHit, KeywordQuery, Metadata,
+    Record, RecordChunkInput, RetrievalDatabase,
+    RetrievalDatabaseBuilder as RustRetrievalDatabaseBuilder, SearchHit, SearchQuery,
 };
 use serde::Deserialize;
 
@@ -43,15 +43,30 @@ impl PyRetrievalDatabaseBuilder {
     #[pyo3(signature = (
         corpus_id,
         metric = "cosine",
-        encoding = "i8"
+        encoding = "i8",
+        k1 = 1.2,
+        b = 0.75,
+        stop_words = Vec::new()
     ))]
-    fn new(corpus_id: String, metric: &str, encoding: &str) -> PyResult<Self> {
+    fn new(
+        corpus_id: String,
+        metric: &str,
+        encoding: &str,
+        k1: f32,
+        b: f32,
+        stop_words: Vec<String>,
+    ) -> PyResult<Self> {
+        let bm25 = Bm25Config::try_new(k1, b, stop_words).map_err(py_error)?;
         Ok(Self {
-            builder: Some(RustRetrievalDatabaseBuilder::new(
-                CorpusId::new(corpus_id).map_err(py_error)?,
-                parse_metric(metric)?,
-                parse_encoding(encoding)?,
-            )),
+            builder: Some(
+                RustRetrievalDatabaseBuilder::new(
+                    CorpusId::new(corpus_id).map_err(py_error)?,
+                    parse_metric(metric)?,
+                    parse_encoding(encoding)?,
+                )
+                .try_with_bm25_config(bm25)
+                .map_err(py_error)?,
+            ),
         })
     }
 
@@ -179,6 +194,23 @@ impl PyRetrievalDatabase {
         search_hits_to_py(py, database, &hits)
     }
 
+    #[pyo3(signature = (text, *, limit = 10, r#where = None))]
+    fn keyword_search(
+        &self,
+        py: Python<'_>,
+        text: String,
+        limit: usize,
+        r#where: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let mut query = KeywordQuery::new(text, limit);
+        if let Some(filter) = parse_optional_filter(r#where)? {
+            query = query.with_filter(filter);
+        }
+        let database = self.require_database()?;
+        let hits = py.detach(move || database.keyword_search(&query).map_err(py_error))?;
+        keyword_hits_to_py(py, database, &hits)
+    }
+
     #[pyo3(signature = (
         text,
         embedding,
@@ -243,6 +275,28 @@ fn search_hits_to_py(
             .chunk(hit.chunk_id)
             .ok_or_else(|| RetrievalKitError::new_err("search hit referenced a missing chunk"))?;
         result.append(search_hit_to_py(py, hit, chunk)?)?;
+    }
+    Ok(result.into_any().unbind())
+}
+
+fn keyword_hits_to_py(
+    py: Python<'_>,
+    database: &RetrievalDatabase,
+    hits: &[KeywordHit],
+) -> PyResult<Py<PyAny>> {
+    let result = PyList::empty(py);
+    for hit in hits {
+        let chunk = database
+            .chunk(hit.chunk_id)
+            .ok_or_else(|| RetrievalKitError::new_err("keyword hit referenced a missing chunk"))?;
+        let item = PyDict::new(py);
+        item.set_item("chunk_id", hit.chunk_id)?;
+        item.set_item("document_id", &hit.document_id)?;
+        item.set_item("text", &chunk.text)?;
+        item.set_item("metadata", crate::metadata_to_py(py, &chunk.metadata)?)?;
+        item.set_item("score", hit.score)?;
+        item.set_item("matched_terms", &hit.matched_terms)?;
+        result.append(item)?;
     }
     Ok(result.into_any().unbind())
 }

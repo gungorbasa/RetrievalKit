@@ -99,6 +99,8 @@ let hybrid = try await database.search(
 The first document embedding fixes the database dimension. Every retrieval
 database builds exact-vector and BM25 state. `alpha` is query-time: `1` is
 vector-only, `0` is BM25-only, and intermediate values are hybrid.
+Pass `bm25: BM25Configuration(k1:b:stopWords:)` to the builder to configure
+lexical scoring; Rust validates and persists the exact configuration.
 Every result returns effective metadata (chunk values override document
 values). Hybrid traces expose `alpha`, source ranks, normalized scores, and
 matched terms. Returned hits already passed any filter.

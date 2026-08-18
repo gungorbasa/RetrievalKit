@@ -1,7 +1,7 @@
 use crate::{
-    ChunkKey, CorpusId, Document, IndexConfig, Metadata, Record, RecordChunkInput, RecordId,
-    RecordType, Result, RetrievalConfiguration, RetrievalDatabase, RetrievalKitError,
-    VectorEncoding, VectorMetric,
+    Bm25Config, ChunkKey, CorpusId, Document, HybridRetrievalConfiguration, IndexConfig, Metadata,
+    Record, RecordChunkInput, RecordId, RecordType, Result, RetrievalConfiguration,
+    RetrievalDatabase, RetrievalKitError, VectorEncoding, VectorMetric,
 };
 
 const DOCUMENT_RECORD_TYPE: &str = "Document";
@@ -16,6 +16,7 @@ pub struct RetrievalDatabaseBuilder {
     corpus_id: CorpusId,
     metric: VectorMetric,
     encoding: VectorEncoding,
+    bm25: Bm25Config,
     database: Option<RetrievalDatabase>,
     pending: Vec<PendingRecord>,
 }
@@ -33,9 +34,16 @@ impl RetrievalDatabaseBuilder {
             corpus_id,
             metric,
             encoding,
+            bm25: Bm25Config::default(),
             database: None,
             pending: Vec::new(),
         }
+    }
+
+    pub fn try_with_bm25_config(mut self, configuration: Bm25Config) -> Result<Self> {
+        configuration.validate()?;
+        self.bm25 = configuration;
+        Ok(self)
     }
 
     /// Adds one public document and derives its canonical record/chunk model in
@@ -109,7 +117,11 @@ impl RetrievalDatabaseBuilder {
         }
 
         let vector = IndexConfig::new(dimension, self.metric).with_vector_encoding(self.encoding);
-        let configuration = RetrievalConfiguration::semantic(vector);
+        let configuration = RetrievalConfiguration::semantic(vector).with_hybrid_configuration(
+            HybridRetrievalConfiguration {
+                bm25: self.bm25.clone(),
+            },
+        );
         let mut database = RetrievalDatabase::new(configuration, self.corpus_id.clone())?;
         for input in &self.pending {
             database.upsert_record(

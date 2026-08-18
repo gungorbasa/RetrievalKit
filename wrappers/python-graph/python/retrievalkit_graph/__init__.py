@@ -30,6 +30,7 @@ from .graph import (
     UnexpectedEmbeddingError,
 )
 from .graph_types import (
+    Bm25Configuration,
     Chunk,
     Filter,
     GraphCandidateProjection,
@@ -38,6 +39,7 @@ from .graph_types import (
     GraphChunkNode,
     GraphFileSizeReport,
     GraphHybridHit,
+    GraphKeywordHit,
     GraphMatch,
     GraphNode,
     GraphQueryLimits,
@@ -62,6 +64,7 @@ from .graph_types import (
 )
 
 __all__ = [
+    "Bm25Configuration",
     "Chunk",
     "Filter",
     "GraphCancellationToken",
@@ -75,6 +78,7 @@ __all__ = [
     "GraphError",
     "GraphFileSizeReport",
     "GraphHybridHit",
+    "GraphKeywordHit",
     "GraphMatch",
     "GraphNode",
     "GraphQueries",

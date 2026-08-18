@@ -700,6 +700,26 @@ final class RetrievalKitGraphTests: XCTestCase {
     XCTAssertTrue(hybrid.first?.trace.matchedTerms.contains("native") == true)
   }
 
+  func testCombinedDatabaseAppliesConfiguredBM25StopWords() async throws {
+    let builder = try GraphRetrievalDatabase.Builder(
+      corpusID: "configured-graph-bm25",
+      graph: capabilitySchema(),
+      encoding: .f32,
+      bm25: BM25Configuration(k1: 1.7, b: 0.4, stopWords: ["NATIVE"])
+    )
+    let rust = capabilityInput(id: "rust", title: "Rust", text: "native retrieval")
+    try await builder.upsert(
+      rust.record,
+      documents: [EmbeddedDocument(id: "summary", text: rust.chunks[0].text, embedding: [1, 0])]
+    )
+    let database = try await builder.build()
+
+    let stopped = try await database.search(text: "native")
+    let retrieval = try await database.search(text: "retrieval")
+    XCTAssertTrue(stopped.isEmpty)
+    XCTAssertEqual(retrieval.map(\.recordID), ["rust"])
+  }
+
   func testCombinedDatabaseRejectsSelectionFromAnotherCorpus() async throws {
     let graphBuilder = try GraphDatabase.Builder(
       corpusID: "source-corpus",

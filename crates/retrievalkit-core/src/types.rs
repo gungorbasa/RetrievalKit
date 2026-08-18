@@ -340,28 +340,13 @@ pub enum VectorMetric {
 /// Stored vector representation used by an index.
 ///
 /// Public callers can continue to provide `f32` embeddings while the index
-/// chooses a storage/scoring representation. `BinaryQuantized` represents the
-/// future 1-bit-per-dimension form, such as 768 bits for a 768-dimensional
-/// embedding.
+/// chooses a supported storage/scoring representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VectorEncoding {
     F32,
     F16,
     BF16,
     I8ScalarQuantized,
-    BinaryQuantized,
-}
-
-impl VectorEncoding {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::F32 => "F32",
-            Self::F16 => "F16",
-            Self::BF16 => "BF16",
-            Self::I8ScalarQuantized => "I8ScalarQuantized",
-            Self::BinaryQuantized => "BinaryQuantized",
-        }
-    }
 }
 
 /// Approximate byte breakdown for the currently loaded index payload.

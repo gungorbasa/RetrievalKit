@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 
 use jni::objects::{JClass, JFloatArray, JObject, JObjectArray, JString, JValue};
-use jni::sys::{jboolean, jint, jlong, JNI_FALSE};
+use jni::sys::{jboolean, jfloat, jint, jlong, JNI_FALSE};
 use jni::JNIEnv;
-use retrievalkit_core::{FieldName, Metadata, Record, RecordId, RecordType, RecordValue};
+use retrievalkit_core::{
+    Bm25Config, FieldName, Metadata, Record, RecordId, RecordType, RecordValue,
+};
 use retrievalkit_graph::{
     Cardinality, ChunkNodeSchema, Direction, DuplicateReferencePolicy, FieldPath, GraphDatabase,
     GraphDatabaseBuilder, GraphError, GraphQuery, GraphResult, GraphRetrievalDatabase,
@@ -14,8 +16,9 @@ use retrievalkit_graph::{
 
 use crate::base::{
     filter, float_array, insert_resource, java_list, lock_resource, metadata, metadata_value,
-    method_int, method_object, remove_resource, resource, string, string_array, vector_encoding,
-    vector_metric, with_env, with_env_object, BoundaryError, BoundaryResult, Resource,
+    method_int, method_object, remove_resource, resource, string, string_array, strings_from_array,
+    vector_encoding, vector_metric, with_env, with_env_object, BoundaryError, BoundaryResult,
+    Resource,
 };
 
 impl From<GraphError> for BoundaryError {
@@ -502,6 +505,9 @@ pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_createGraphRet
     schema: JObject<'_>,
     metric: jint,
     encoding: jint,
+    bm25_k1: jfloat,
+    bm25_b: jfloat,
+    stop_words: JObjectArray<'_>,
 ) -> jlong {
     with_env(&mut env, 0, |env| {
         let corpus_id = retrievalkit_core::CorpusId::new(string(env, &JObject::from(corpus_id))?)?;
@@ -512,7 +518,12 @@ pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_createGraphRet
                 schema,
                 vector_metric(metric)?,
                 vector_encoding(encoding)?,
-            ),
+            )
+            .try_with_bm25_config(Bm25Config::try_new(
+                bm25_k1,
+                bm25_b,
+                strings_from_array(env, &stop_words)?,
+            )?)?,
         )))
     })
 }

@@ -36,6 +36,7 @@ export {
   type RetrievalKitWasmAdapter
 } from "./adapter.js";
 export type {
+  Bm25Configuration,
   CandidateProjection,
   ChunkNodeId,
   DocumentInput,
@@ -55,6 +56,7 @@ export type {
   GraphTruncationReason,
   HybridSearch,
   HybridTrace,
+  KeywordTrace,
   Metadata,
   MetadataValue,
   RecordNodeId,

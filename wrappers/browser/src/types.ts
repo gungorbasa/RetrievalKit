@@ -1,5 +1,10 @@
 export type VectorMetric = "cosine" | "dotProduct";
 export type VectorEncoding = "f32" | "f16" | "bf16" | "i8";
+export interface Bm25Configuration {
+  readonly k1?: number;
+  readonly b?: number;
+  readonly stopWords?: readonly string[];
+}
 
 export interface TimestampMillis {
   readonly kind: "timestampMillis";
@@ -45,6 +50,7 @@ export interface RetrievalBuilderOptions {
   readonly corpusId: string;
   readonly metric?: VectorMetric;
   readonly encoding?: VectorEncoding;
+  readonly bm25?: Bm25Configuration;
 }
 
 export interface SearchControl {
@@ -69,7 +75,6 @@ export interface TextSearch {
   readonly text: string;
   readonly limit?: number;
   readonly where?: Filter;
-  readonly keywordCandidates?: number;
   readonly within?: GraphSelectionReference;
 }
 
@@ -92,6 +97,11 @@ export interface VectorTrace {
   readonly vectorScore: number;
 }
 
+export interface KeywordTrace {
+  readonly kind: "keyword";
+  readonly matchedTerms: readonly string[];
+}
+
 export interface HybridTrace {
   readonly kind: "hybrid";
   readonly alpha: number;
@@ -109,7 +119,7 @@ export interface SearchResult {
   readonly score: number;
   readonly vectorScore?: number;
   readonly keywordScore?: number;
-  readonly trace: VectorTrace | HybridTrace;
+  readonly trace: VectorTrace | KeywordTrace | HybridTrace;
 }
 
 export interface RecordValueMap {
@@ -181,6 +191,7 @@ export interface GraphBuilderOptions {
 export interface GraphRetrievalBuilderOptions extends GraphBuilderOptions {
   readonly metric?: VectorMetric;
   readonly encoding?: VectorEncoding;
+  readonly bm25?: Bm25Configuration;
 }
 
 export interface RecordNodeId {

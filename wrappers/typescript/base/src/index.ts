@@ -2,6 +2,7 @@ import { binding, type NativeRetrievalHandle } from "./binding.js";
 import type {
   NativeFilter,
   NativeHybridHit,
+  NativeKeywordHit,
   NativeMetadataEntry,
   NativeMetadataValue,
   NativeSearchHit
@@ -9,6 +10,11 @@ import type {
 
 export type VectorMetric = "cosine" | "dotProduct";
 export type VectorEncoding = "f32" | "f16" | "bf16" | "i8";
+export interface Bm25Configuration {
+  readonly k1?: number;
+  readonly b?: number;
+  readonly stopWords?: readonly string[];
+}
 
 export interface TimestampMillis {
   readonly kind: "timestampMillis";
@@ -96,6 +102,7 @@ export interface RetrievalBuilderOptions {
   readonly corpusId: string;
   readonly metric?: VectorMetric;
   readonly encoding?: VectorEncoding;
+  readonly bm25?: Bm25Configuration;
 }
 
 export interface VectorSearch {
@@ -110,7 +117,6 @@ export interface TextSearch {
   readonly text: string;
   readonly limit?: number;
   readonly where?: Filter;
-  readonly keywordCandidates?: number;
 }
 
 export interface HybridSearch {
@@ -131,6 +137,11 @@ export interface VectorTrace {
   readonly vectorScore: number;
 }
 
+export interface KeywordTrace {
+  readonly kind: "keyword";
+  readonly matchedTerms: readonly string[];
+}
+
 export interface HybridTrace {
   readonly kind: "hybrid";
   readonly alpha: number;
@@ -148,7 +159,7 @@ export interface SearchResult {
   readonly score: number;
   readonly vectorScore?: number;
   readonly keywordScore?: number;
-  readonly trace: VectorTrace | HybridTrace;
+  readonly trace: VectorTrace | KeywordTrace | HybridTrace;
 }
 
 export interface FileSizeReport {
@@ -187,7 +198,10 @@ export class RetrievalDatabaseBuilder {
     this.#native = new binding.NativeRetrievalHandle(
       options.corpusId,
       options.metric ?? "cosine",
-      options.encoding ?? "i8"
+      options.encoding ?? "i8",
+      options.bm25?.k1 ?? 1.2,
+      options.bm25?.b ?? 0.75,
+      [...(options.bm25?.stopWords ?? [])]
     );
   }
 
@@ -269,17 +283,9 @@ export abstract class RetrievalDatabase {
       }
       case "text": {
         const hits = await nativeCall(() =>
-          nativeFor(this).hybridSearch(
-            query.text,
-            undefined,
-            limit,
-            where,
-            0,
-            0,
-            optionalPositiveInteger(query.keywordCandidates, "keywordCandidates")
-          )
+          nativeFor(this).keywordSearch(query.text, limit, where)
         );
-        return hits.map(fromNativeHybridHit);
+        return hits.map(fromNativeKeywordHit);
       }
       case "hybrid": {
         const alpha = query.alpha ?? 0.6;
@@ -446,6 +452,17 @@ function fromNativeVectorHit(hit: NativeSearchHit): SearchResult {
     score: hit.score,
     vectorScore: hit.vectorScore,
     trace: { kind: "vector", vectorScore: hit.vectorScore }
+  };
+}
+
+function fromNativeKeywordHit(hit: NativeKeywordHit): SearchResult {
+  return {
+    documentId: hit.documentId,
+    text: hit.text,
+    metadata: fromNativeMetadata(hit.metadata),
+    score: hit.score,
+    keywordScore: hit.score,
+    trace: { kind: "keyword", matchedTerms: hit.matchedTerms }
   };
 }
 

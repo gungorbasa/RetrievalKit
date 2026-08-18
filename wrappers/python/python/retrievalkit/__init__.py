@@ -37,6 +37,7 @@ from .retrieval import (
 )
 from .types import (
     AddDocumentResult,
+    Bm25Configuration,
     ChunkInput,
     CompactionReport,
     Document,
@@ -114,6 +115,7 @@ def hybrid_search_text(
 
 __all__ = [
     "AddDocumentResult",
+    "Bm25Configuration",
     "ChunkInput",
     "CompactionReport",
     "CorruptIndexError",

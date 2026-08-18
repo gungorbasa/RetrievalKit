@@ -81,6 +81,24 @@ final class RetrievalKitTests: XCTestCase {
     }
   }
 
+  func testProgressiveDatabaseAppliesConfiguredBM25StopWords() async throws {
+    let builder = try RetrievalDatabase.Builder(
+      corpusID: "configured-bm25",
+      encoding: .f32,
+      bm25: BM25Configuration(k1: 1.7, b: 0.4, stopWords: ["THE"])
+    )
+    try await builder.upsert(
+      Document(id: "configured", text: "the durable keyword"),
+      embedding: [1, 0]
+    )
+    let database = try await builder.build()
+
+    let stopped = try await database.search(text: "the")
+    let durable = try await database.search(text: "durable")
+    XCTAssertTrue(stopped.isEmpty)
+    XCTAssertEqual(durable.map(\.documentID), ["configured"])
+  }
+
   func testExactSearchReturnsIndexedChunk() async throws {
     let index = try VectorIndex(dimension: 3)
 

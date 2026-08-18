@@ -208,6 +208,14 @@ RetrievalKitRetrievalBuilder *retrievalkit_retrieval_builder_new(
     uint32_t encoding,
     const char *corpus_id,
     RetrievalKitStatus *status);
+RetrievalKitRetrievalBuilder *retrievalkit_retrieval_builder_new_with_bm25(
+    uint32_t metric,
+    uint32_t encoding,
+    const char *corpus_id,
+    float bm25_k1,
+    float bm25_b,
+    const char *stop_words_json,
+    RetrievalKitStatus *status);
 bool retrievalkit_retrieval_builder_upsert_document(
     RetrievalKitRetrievalBuilder *builder,
     const char *document_id,

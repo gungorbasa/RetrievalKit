@@ -7,6 +7,7 @@ from typing import NoReturn
 import pytest
 
 from retrievalkit_graph import (
+    Bm25Configuration,
     GraphCancellationToken,
     GraphCancelledError,
     GraphCandidateProjection,
@@ -89,7 +90,8 @@ def retrieval_configuration() -> RetrievalConfiguration:
             dimension=2,
             metric="dot_product",
             encoding="f32",
-        )
+        ),
+        bm25=Bm25Configuration(k1=1.7, b=0.4, stop_words=("graph",)),
     )
 
 
@@ -210,6 +212,11 @@ def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None
         [1.0, 0.0], within=selection, where={"tenant": "blue"}
     )
     assert [hit["document_id"] for hit in scoped] == ["beta", "gamma"]
+    assert [
+        hit["document_id"]
+        for hit in database.retrieval.keyword_search("gamma", within=selection)
+    ] == ["gamma"]
+    assert database.retrieval.keyword_search("graph", within=selection) == []
     hybrid = database.retrieval.hybrid_search(
         "gamma", [0.0, 1.0], within=selection, where={"tenant": "blue"}
     )
@@ -228,6 +235,7 @@ def test_graph_retrieval_keeps_query_namespaces_separate(tmp_path: Path) -> None
         loaded.retrieval.semantic_search([0.0, 1.0], limit=1)[0]["document_id"]
         == "gamma"
     )
+    assert loaded.retrieval.keyword_search("graph") == []
 
 
 def test_candidate_projection_is_filtered_stable_and_lexically_ordered() -> None:

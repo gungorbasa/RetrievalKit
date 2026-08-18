@@ -55,6 +55,18 @@ public enum VectorEncoding: Sendable {
   }
 }
 
+public struct BM25Configuration: Equatable, Sendable {
+  public var k1: Float
+  public var b: Float
+  public var stopWords: [String]
+
+  public init(k1: Float = 1.2, b: Float = 0.75, stopWords: [String] = []) {
+    self.k1 = k1
+    self.b = b
+    self.stopWords = stopWords
+  }
+}
+
 extension RetrievalKitShared.MetadataValue {
   fileprivate func ffiValue(arena: CStringArena) -> RetrievalKitMetadataValue {
     switch self {
@@ -808,9 +820,11 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
 
 public struct RetrievalConfiguration: Equatable, Sendable {
   public var semantic: VectorIndexConfiguration
+  public var bm25: BM25Configuration
 
-  public init(semantic: VectorIndexConfiguration) {
+  public init(semantic: VectorIndexConfiguration, bm25: BM25Configuration = .init()) {
     self.semantic = semantic
+    self.bm25 = bm25
   }
 }
 
@@ -932,13 +946,17 @@ public actor RetrievalDatabase {
     public init(
       corpusID: CorpusID = "default",
       metric: VectorMetric = .cosine,
-      encoding: VectorEncoding = .i8ScalarQuantized
+      encoding: VectorEncoding = .i8ScalarQuantized,
+      bm25: BM25Configuration = .init()
     ) throws {
+      let stopWordsJSON = String(decoding: try JSONEncoder().encode(bm25.stopWords), as: UTF8.self)
       self.handle = UInt(
         bitPattern: try FFI.withStatusPointer { status in
           corpusID.rawValue.withCString { corpus in
-            retrievalkit_retrieval_builder_new(
-              metric.ffiValue, encoding.ffiValue, corpus, status)
+            stopWordsJSON.withCString { stopWords in
+              retrievalkit_retrieval_builder_new_with_bm25(
+                metric.ffiValue, encoding.ffiValue, corpus, bm25.k1, bm25.b, stopWords, status)
+            }
           }
         })
     }

@@ -5,6 +5,7 @@ import type {
   NativeFileSizeReport,
   NativeFilter,
   NativeHybridHit,
+  NativeKeywordHit,
   NativeSearchHit
 } from "./native-types.js";
 
@@ -18,6 +19,11 @@ export interface NativeRetrievalHandle {
     topK: number,
     filter?: NativeFilter
   ): Promise<NativeSearchHit[]>;
+  keywordSearch(
+    text: string,
+    topK: number,
+    filter?: NativeFilter
+  ): Promise<NativeKeywordHit[]>;
   hybridSearch(
     text: string,
     embedding: Float32Array | undefined,
@@ -32,7 +38,14 @@ export interface NativeRetrievalHandle {
 }
 
 interface NativeRetrievalConstructor {
-  new (corpusId: string, metric: string, encoding: string): NativeRetrievalHandle;
+  new (
+    corpusId: string,
+    metric: string,
+    encoding: string,
+    bm25K1: number,
+    bm25B: number,
+    stopWords: string[]
+  ): NativeRetrievalHandle;
   empty(): NativeRetrievalHandle;
 }
 

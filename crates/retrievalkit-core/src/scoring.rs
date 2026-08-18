@@ -27,9 +27,6 @@ impl EncodedVectorStore {
                 values: Vec::new(),
                 scales: Vec::new(),
             }),
-            VectorEncoding::BinaryQuantized => Err(RetrievalKitError::UnsupportedVectorEncoding {
-                encoding: encoding.as_str().to_owned(),
-            }),
         }
     }
 
@@ -258,9 +255,6 @@ impl EncodedVectorStore {
                         .collect(),
                 })
             }
-            VectorEncoding::BinaryQuantized => Err(RetrievalKitError::UnsupportedVectorEncoding {
-                encoding: encoding.as_str().to_owned(),
-            }),
         }
     }
 }
@@ -324,9 +318,6 @@ pub(crate) fn encode_query_owned(
         VectorEncoding::I8ScalarQuantized => Ok(EncodedQuery::I8ScalarQuantized(
             encode_i8_scalar_quantized(&embedding),
         )),
-        VectorEncoding::BinaryQuantized => Err(RetrievalKitError::UnsupportedVectorEncoding {
-            encoding: encoding.as_str().to_owned(),
-        }),
     }
 }
 
@@ -887,16 +878,6 @@ mod tests {
         assert_close(
             simd_dot_product_i8(&left, &right),
             scalar_dot_product_i8(&left, &right),
-        );
-    }
-
-    #[test]
-    fn unsupported_vector_encodings_return_errors() {
-        assert_eq!(
-            EncodedVectorStore::new(VectorEncoding::BinaryQuantized).unwrap_err(),
-            RetrievalKitError::UnsupportedVectorEncoding {
-                encoding: "BinaryQuantized".to_owned()
-            }
         );
     }
 

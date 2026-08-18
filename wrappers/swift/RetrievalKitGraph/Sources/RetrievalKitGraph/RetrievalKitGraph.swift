@@ -31,6 +31,18 @@ public enum GraphVectorEncoding: Sendable {
   }
 }
 
+public struct BM25Configuration: Equatable, Sendable {
+  public var k1: Float
+  public var b: Float
+  public var stopWords: [String]
+
+  public init(k1: Float = 1.2, b: Float = 0.75, stopWords: [String] = []) {
+    self.k1 = k1
+    self.b = b
+    self.stopWords = stopWords
+  }
+}
+
 public enum GraphValue: Equatable, Sendable, Codable {
   case null
   case bool(Bool)
@@ -1492,9 +1504,11 @@ public struct VectorIndexConfiguration: Equatable, Sendable {
 }
 public struct RetrievalConfiguration: Equatable, Sendable {
   public var semantic: VectorIndexConfiguration
+  public var bm25: BM25Configuration
 
-  public init(semantic: VectorIndexConfiguration) {
+  public init(semantic: VectorIndexConfiguration, bm25: BM25Configuration = .init()) {
     self.semantic = semantic
+    self.bm25 = bm25
   }
 }
 
@@ -2046,15 +2060,20 @@ public actor GraphRetrievalDatabase {
       corpusID: CorpusID = "default",
       graph schema: GraphSchema,
       metric: GraphMetric = .cosine,
-      encoding: GraphVectorEncoding = .i8ScalarQuantized
+      encoding: GraphVectorEncoding = .i8ScalarQuantized,
+      bm25: BM25Configuration = .init()
     ) throws {
       let schemaJSON = String(decoding: try JSONEncoder().encode(schema), as: UTF8.self)
+      let stopWordsJSON = String(decoding: try JSONEncoder().encode(bm25.stopWords), as: UTF8.self)
       self.handle = UInt(
         bitPattern: try Native.pointer { status in
           corpusID.rawValue.withCString { corpus in
             schemaJSON.withCString {
-              retrievalkit_graph_retrieval_builder_new(
-                metric.ffi, encoding.ffi, corpus, $0, status)
+              let schema = $0
+              return stopWordsJSON.withCString { stopWords in
+                retrievalkit_graph_retrieval_builder_new_with_bm25(
+                  metric.ffi, encoding.ffi, corpus, schema, bm25.k1, bm25.b, stopWords, status)
+              }
             }
           }
         })

@@ -37,7 +37,8 @@ use crate::types::{
     SearchTrace, StoredChunk, VectorEncoding, VectorMetric,
 };
 
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
+const CANONICAL_RECORD_FORMAT_VERSION: u32 = 4;
 const CHECKSUM_FORMAT_VERSION: u32 = 3;
 const TRANSACTIONAL_FORMAT_VERSION: u32 = 2;
 const LEGACY_FORMAT_VERSION: u32 = 1;
@@ -141,6 +142,7 @@ impl ExactVectorIndex {
     /// Creates an empty exact vector index with a fixed embedding dimension.
     pub fn new(dimension: usize, metric: VectorMetric) -> Self {
         Self::with_bm25_config(dimension, metric, Bm25Config::default())
+            .expect("the built-in BM25 configuration is valid")
     }
 
     /// Creates an empty exact vector index with configured vector storage.
@@ -179,14 +181,13 @@ impl ExactVectorIndex {
         dimension: usize,
         metric: VectorMetric,
         bm25_config: Bm25Config,
-    ) -> Self {
+    ) -> Result<Self> {
         Self::from_parts(
             dimension,
             metric,
             VectorEncoding::I8ScalarQuantized,
             bm25_config,
         )
-        .expect("I8 scalar-quantized vector encoding is supported")
     }
 
     fn from_parts(
@@ -469,6 +470,7 @@ impl ExactVectorIndex {
             active_chunk_count: self.active_chunk_count(),
             retrieval_mode: self.retrieval.mode(),
             has_bm25: include_bm25,
+            bm25_configuration: Some(self.retrieval.require_bm25()?.config().clone()),
             has_records: true,
             vector_encoding: self.retrieval.vector_encoding,
             vector_bytes: self.retrieval.encoded_vectors.estimated_payload_bytes(),
@@ -633,12 +635,17 @@ impl ExactVectorIndex {
             None
         };
 
+        let bm25_configuration = manifest.bm25_configuration.clone().unwrap_or_default();
         let vector = IndexConfig {
             dimension: manifest.dimension,
             metric: manifest.metric,
             vector_encoding: manifest.vector_encoding,
         };
-        let configuration = RetrievalConfiguration::semantic(vector);
+        let configuration = RetrievalConfiguration::semantic(vector).with_hybrid_configuration(
+            crate::retrieval_index::HybridRetrievalConfiguration {
+                bm25: bm25_configuration.clone(),
+            },
+        );
         let mut index = Self::try_with_retrieval_configuration_in_corpus(
             configuration,
             manifest.corpus_id.clone(),
@@ -674,7 +681,7 @@ impl ExactVectorIndex {
         let rebuild_bm25 = persisted_bm25.is_none();
         if let Some(persisted_bm25) = persisted_bm25 {
             index.retrieval.bm25 = Some(Bm25Index::from_persisted(
-                Bm25Config::default(),
+                bm25_configuration,
                 persisted_bm25,
             )?);
         }
@@ -1794,7 +1801,7 @@ impl ExactVectorIndex {
         let Some(bm25) = &mut self.retrieval.bm25 else {
             return;
         };
-        *bm25 = Bm25Index::new(Bm25Config::default());
+        *bm25 = Bm25Index::new(bm25.config().clone());
         for chunk in &self.corpus.chunks {
             bm25.add_chunk(chunk.chunk_id, &chunk.text, !chunk.deleted);
         }
@@ -1876,6 +1883,8 @@ struct PersistedManifest {
     #[serde(default)]
     retrieval_mode: crate::retrieval_index::RetrievalMode,
     has_bm25: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bm25_configuration: Option<Bm25Config>,
     #[serde(default)]
     has_records: bool,
     vector_encoding: VectorEncoding,
@@ -1941,6 +1950,7 @@ impl PersistedManifest {
             LEGACY_FORMAT_VERSION
                 | TRANSACTIONAL_FORMAT_VERSION
                 | CHECKSUM_FORMAT_VERSION
+                | CANONICAL_RECORD_FORMAT_VERSION
                 | FORMAT_VERSION
         ) {
             return Err(RetrievalKitError::InvalidFormat {
@@ -1951,7 +1961,10 @@ impl PersistedManifest {
         match (self.format_version, &self.snapshot_id) {
             (LEGACY_FORMAT_VERSION, None) => {}
             (
-                TRANSACTIONAL_FORMAT_VERSION | CHECKSUM_FORMAT_VERSION | FORMAT_VERSION,
+                TRANSACTIONAL_FORMAT_VERSION
+                | CHECKSUM_FORMAT_VERSION
+                | CANONICAL_RECORD_FORMAT_VERSION
+                | FORMAT_VERSION,
                 Some(snapshot_id),
             ) if valid_snapshot_id(snapshot_id) => {}
             (LEGACY_FORMAT_VERSION, Some(_)) => {
@@ -1959,7 +1972,13 @@ impl PersistedManifest {
                     message: "legacy format must not reference a snapshot generation".to_owned(),
                 });
             }
-            (TRANSACTIONAL_FORMAT_VERSION | CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, _) => {
+            (
+                TRANSACTIONAL_FORMAT_VERSION
+                | CHECKSUM_FORMAT_VERSION
+                | CANONICAL_RECORD_FORMAT_VERSION
+                | FORMAT_VERSION,
+                _,
+            ) => {
                 return Err(RetrievalKitError::InvalidFormat {
                     message: format!(
                         "format version {} requires a safe snapshot_id",
@@ -1974,6 +1993,22 @@ impl PersistedManifest {
             return Err(RetrievalKitError::InvalidFormat {
                 message: format!("unsupported index creator '{}'", self.created_with),
             });
+        }
+
+        match (&self.bm25_configuration, self.format_version) {
+            (Some(configuration), _) => {
+                configuration
+                    .validate()
+                    .map_err(|error| RetrievalKitError::InvalidFormat {
+                        message: format!("invalid persisted BM25 configuration: {error}"),
+                    })?
+            }
+            (None, FORMAT_VERSION) => {
+                return Err(RetrievalKitError::InvalidFormat {
+                    message: "format version 5 requires bm25_configuration".to_owned(),
+                });
+            }
+            (None, _) => {}
         }
 
         if !self.has_bm25 && self.bm25_bytes != 0 {
@@ -2008,10 +2043,11 @@ impl PersistedManifest {
         }
 
         match (self.format_version, &self.checksums) {
-            (CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, Some(checksums)) => {
-                checksums.validate(self.has_bm25, self.has_records)?
-            }
-            (CHECKSUM_FORMAT_VERSION | FORMAT_VERSION, None) => {
+            (
+                CHECKSUM_FORMAT_VERSION | CANONICAL_RECORD_FORMAT_VERSION | FORMAT_VERSION,
+                Some(checksums),
+            ) => checksums.validate(self.has_bm25, self.has_records)?,
+            (CHECKSUM_FORMAT_VERSION | CANONICAL_RECORD_FORMAT_VERSION | FORMAT_VERSION, None) => {
                 return Err(RetrievalKitError::InvalidFormat {
                     message: format!("format version {} requires checksums", self.format_version),
                 });
@@ -3876,6 +3912,40 @@ mod tests {
     }
 
     #[test]
+    fn loader_defaults_missing_v4_bm25_configuration_and_upgrades_on_save() {
+        let directory = temp_index_dir("v4-without-bm25-configuration");
+        let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("legacy lexical data", vec![1.0, 0.0])],
+            )
+            .unwrap();
+        index.save_to_dir(&directory).unwrap();
+
+        let manifest_path = directory.join(MANIFEST_FILE);
+        let mut manifest: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        manifest.format_version = CANONICAL_RECORD_FORMAT_VERSION;
+        manifest.bm25_configuration = None;
+        write_json_file(&manifest_path, &manifest).unwrap();
+
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert_eq!(
+            loaded
+                .keyword_search(&KeywordQuery::new("lexical", 1))
+                .unwrap()
+                .len(),
+            1
+        );
+        loaded.save_to_dir(&directory).unwrap();
+        let upgraded: PersistedManifest = read_json_file(&manifest_path).unwrap();
+        assert_eq!(upgraded.format_version, FORMAT_VERSION);
+        assert_eq!(upgraded.bm25_configuration, Some(Bm25Config::default()));
+
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
     fn failed_snapshot_save_preserves_previous_generation_at_every_checkpoint() {
         let directory = temp_index_dir("transactional-save-failures");
         let mut index = ExactVectorIndex::new(2, VectorMetric::Cosine);
@@ -4095,6 +4165,50 @@ mod tests {
             .unwrap();
         assert_eq!(keyword_hits.len(), 1);
         assert_eq!(keyword_hits[0].chunk_id, 0);
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn bm25_configuration_round_trips_and_controls_rebuilds() {
+        let directory = temp_index_dir("bm25-configuration");
+        let bm25 = Bm25Config::try_new(1.7, 0.4, vec!["THE".to_owned()]).unwrap();
+        let mut index = ExactVectorIndex::try_with_config_and_bm25(
+            IndexConfig::new(2, VectorMetric::DotProduct),
+            bm25.clone(),
+        )
+        .unwrap();
+        index
+            .upsert_document(
+                document("doc-1"),
+                vec![chunk_input("the durable keyword", vec![1.0, 0.0])],
+            )
+            .unwrap();
+
+        assert!(index
+            .keyword_search(&KeywordQuery::new("the", 10))
+            .unwrap()
+            .is_empty());
+        index
+            .save_to_dir_with_options(&directory, IndexPersistenceOptions::vector_only())
+            .unwrap();
+
+        let manifest: PersistedManifest = read_json_file(&directory.join(MANIFEST_FILE)).unwrap();
+        assert_eq!(manifest.bm25_configuration.as_ref(), Some(&bm25));
+        assert!(!manifest.has_bm25);
+
+        let loaded = ExactVectorIndex::load_from_dir(&directory).unwrap();
+        assert!(loaded
+            .keyword_search(&KeywordQuery::new("the", 10))
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            loaded
+                .keyword_search(&KeywordQuery::new("durable", 10))
+                .unwrap()
+                .len(),
+            1
+        );
 
         let _ = std::fs::remove_dir_all(directory);
     }
@@ -4636,22 +4750,6 @@ mod tests {
         assert_eq!(
             hits.iter().map(|hit| hit.chunk_id).collect::<Vec<_>>(),
             vec![2]
-        );
-    }
-
-    #[test]
-    fn index_config_rejects_not_yet_supported_encodings() {
-        let error = ExactVectorIndex::try_with_config(
-            IndexConfig::new(2, VectorMetric::Cosine)
-                .with_vector_encoding(VectorEncoding::BinaryQuantized),
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            RetrievalKitError::UnsupportedVectorEncoding {
-                encoding: "BinaryQuantized".to_owned()
-            }
         );
     }
 

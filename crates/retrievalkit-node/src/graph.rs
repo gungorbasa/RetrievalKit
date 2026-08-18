@@ -5,8 +5,8 @@ use napi::bindgen_prelude::{AsyncTask, Float32Array, Task};
 use napi::{Env, Result};
 use napi_derive::napi;
 use retrievalkit_core::{
-    ChunkIdentity, CorpusChunkInput, CorpusId, EmbeddedDocument, FieldName, HybridQuery, Record,
-    RecordId, RecordInput, RecordType, SearchQuery,
+    Bm25Config, ChunkIdentity, CorpusChunkInput, CorpusId, EmbeddedDocument, FieldName,
+    HybridQuery, KeywordQuery, Record, RecordId, RecordInput, RecordType, SearchQuery,
 };
 use retrievalkit_graph::{
     Cardinality, ChunkNodeSchema, Direction, DuplicateReferencePolicy, FieldPath,
@@ -21,7 +21,9 @@ use crate::common::{
     state_error, tagged_error, NativeFilter, NativeMetadataEntry, NativeRecordField,
     NativeRecordInput, OwnedRecordInput,
 };
-use crate::retrieval::{hybrid_hits, search_hits, NativeHybridHit, NativeSearchHit};
+use crate::retrieval::{
+    hybrid_hits, keyword_hits, search_hits, NativeHybridHit, NativeKeywordHit, NativeSearchHit,
+};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -563,12 +565,16 @@ pub struct NativeGraphHandle {
 #[napi]
 impl NativeGraphHandle {
     #[napi(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         kind: String,
         corpus_id: String,
         schema: NativeGraphSchema,
         metric: Option<String>,
         encoding: Option<String>,
+        bm25_k1: Option<f64>,
+        bm25_b: Option<f64>,
+        stop_words: Option<Vec<String>>,
     ) -> Result<Self> {
         let corpus_id = CorpusId::new(corpus_id).map_err(core_error)?;
         let schema = schema.into_core()?;
@@ -577,12 +583,22 @@ impl NativeGraphHandle {
                 GraphState::GraphBuilding(Box::new(GraphDatabaseBuilder::new(corpus_id, schema)))
             }
             "combined" => {
-                GraphState::CombinedBuilding(Box::new(GraphRetrievalDatabaseBuilder::new(
-                    corpus_id,
-                    schema,
-                    parse_metric(metric.as_deref().unwrap_or("cosine"))?,
-                    parse_encoding(encoding.as_deref().unwrap_or("i8"))?,
-                )))
+                let bm25 = Bm25Config::try_new(
+                    bm25_k1.unwrap_or(1.2) as f32,
+                    bm25_b.unwrap_or(0.75) as f32,
+                    stop_words.unwrap_or_default(),
+                )
+                .map_err(core_error)?;
+                GraphState::CombinedBuilding(Box::new(
+                    GraphRetrievalDatabaseBuilder::new(
+                        corpus_id,
+                        schema,
+                        parse_metric(metric.as_deref().unwrap_or("cosine"))?,
+                        parse_encoding(encoding.as_deref().unwrap_or("i8"))?,
+                    )
+                    .try_with_bm25_config(bm25)
+                    .map_err(graph_error)?,
+                ))
             }
             actual => {
                 return Err(invalid_boundary(
@@ -705,6 +721,24 @@ impl NativeGraphHandle {
         Ok(AsyncTask::new(GraphSemanticSearchTask {
             shared: Arc::clone(&self.shared),
             embedding: embedding.to_vec(),
+            top_k: top_k as usize,
+            filter: filter.map(NativeFilter::into_core).transpose()?,
+            selection: selection.map(|value| Arc::clone(&value.result)),
+        }))
+    }
+
+    #[napi]
+    pub fn keyword_search(
+        &self,
+        text: String,
+        top_k: u32,
+        filter: Option<NativeFilter>,
+        selection: Option<&NativeGraphSelection>,
+    ) -> Result<AsyncTask<GraphKeywordSearchTask>> {
+        self.shared.require_open()?;
+        Ok(AsyncTask::new(GraphKeywordSearchTask {
+            shared: Arc::clone(&self.shared),
+            text,
             top_k: top_k as usize,
             filter: filter.map(NativeFilter::into_core).transpose()?,
             selection: selection.map(|value| Arc::clone(&value.result)),
@@ -1100,6 +1134,44 @@ impl Task for GraphSemanticSearchTask {
         }
         .map_err(graph_error)?;
         search_hits(database.retrieval(), hits)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+pub struct GraphKeywordSearchTask {
+    shared: Arc<GraphShared>,
+    text: String,
+    top_k: usize,
+    filter: Option<retrievalkit_core::Filter>,
+    selection: Option<Arc<Mutex<Option<GraphResult>>>>,
+}
+
+impl Task for GraphKeywordSearchTask {
+    type Output = Vec<NativeKeywordHit>;
+    type JsValue = Vec<NativeKeywordHit>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.shared.require_open()?;
+        let state = lock_graph(&self.shared)?;
+        let GraphState::CombinedReady(database) = &*state else {
+            return Err(state_error(
+                "retrieval search requires a combined graph-retrieval database",
+            ));
+        };
+        let mut query = KeywordQuery::new(std::mem::take(&mut self.text), self.top_k);
+        if let Some(filter) = self.filter.take() {
+            query = query.with_filter(filter);
+        }
+        let hits = if let Some(selection) = &self.selection {
+            database.keyword_search_in_selection(&query, &require_selection(selection)?)
+        } else {
+            database.keyword_search(&query)
+        }
+        .map_err(graph_error)?;
+        keyword_hits(database.retrieval(), hits)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

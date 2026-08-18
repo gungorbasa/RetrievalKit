@@ -14,7 +14,7 @@ use crate::types::ChunkId;
 const BM25_MAGIC: &[u8; 4] = b"VKBM";
 const BM25_FORMAT_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bm25Config {
     /// Term frequency saturation parameter. V1 default is `1.2`.
     pub k1: f32,
@@ -22,6 +22,59 @@ pub struct Bm25Config {
     pub b: f32,
     /// Lowercased terms ignored during indexing and query tokenization.
     pub stop_words: BTreeSet<String>,
+}
+
+impl Bm25Config {
+    /// Creates and validates BM25 parameters while normalizing stop words with
+    /// the same Unicode word segmentation and lowercase policy used at query time.
+    pub fn try_new(k1: f32, b: f32, stop_words: impl IntoIterator<Item = String>) -> Result<Self> {
+        if !k1.is_finite() || k1 <= 0.0 {
+            return Err(RetrievalKitError::InvalidQuery {
+                parameter: "bm25.k1",
+                message: "k1 must be finite and greater than zero".to_owned(),
+            });
+        }
+        if !b.is_finite() || !(0.0..=1.0).contains(&b) {
+            return Err(RetrievalKitError::InvalidQuery {
+                parameter: "bm25.b",
+                message: "b must be finite and between 0 and 1".to_owned(),
+            });
+        }
+
+        let mut normalized = BTreeSet::new();
+        for value in stop_words {
+            let terms = value
+                .unicode_words()
+                .map(str::to_lowercase)
+                .collect::<Vec<_>>();
+            if terms.len() != 1 {
+                return Err(RetrievalKitError::InvalidQuery {
+                    parameter: "bm25.stop_words",
+                    message: format!(
+                        "each stop word must contain exactly one Unicode word; got '{value}'"
+                    ),
+                });
+            }
+            normalized.insert(terms.into_iter().next().expect("one normalized stop word"));
+        }
+
+        Ok(Self {
+            k1,
+            b,
+            stop_words: normalized,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let normalized = Self::try_new(self.k1, self.b, self.stop_words.iter().cloned())?;
+        if normalized.stop_words != self.stop_words {
+            return Err(RetrievalKitError::InvalidQuery {
+                parameter: "bm25.stop_words",
+                message: "stop words must be normalized lowercase Unicode words".to_owned(),
+            });
+        }
+        Ok(())
+    }
 }
 
 impl Default for Bm25Config {
@@ -833,6 +886,19 @@ fn tokenize(text: &str, stop_words: &BTreeSet<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bm25_configuration_validates_and_normalizes_public_inputs() {
+        let configuration =
+            Bm25Config::try_new(1.7, 0.4, vec!["THE".to_owned(), "ÖZEL".to_owned()]).unwrap();
+        assert_eq!(
+            configuration.stop_words,
+            BTreeSet::from(["the".to_owned(), "özel".to_owned()])
+        );
+        assert!(Bm25Config::try_new(0.0, 0.75, Vec::new()).is_err());
+        assert!(Bm25Config::try_new(1.2, 1.1, Vec::new()).is_err());
+        assert!(Bm25Config::try_new(1.2, 0.75, vec!["two words".to_owned()]).is_err());
+    }
 
     #[test]
     fn bm25_search_returns_matched_terms() {

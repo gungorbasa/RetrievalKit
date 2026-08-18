@@ -31,6 +31,7 @@ from .graph_types import (
     GraphChunkIdentity,
     GraphFileSizeReport,
     GraphHybridHit,
+    GraphKeywordHit,
     GraphMatch,
     GraphNode,
     GraphQueryLimits,
@@ -151,11 +152,15 @@ class GraphRetrievalDatabaseBuilder:
         if retrieval is not None:
             metric = retrieval.semantic.metric
             encoding = retrieval.semantic.encoding
+        bm25 = retrieval.bm25 if retrieval is not None else None
         self._native = _GraphRetrievalDatabaseBuilder(
             corpus_id,
             _schema_json(graph),
             metric,
             encoding,
+            1.2 if bm25 is None else bm25.k1,
+            0.75 if bm25 is None else bm25.b,
+            [] if bm25 is None else list(bm25.stop_words),
         )
 
     @overload
@@ -365,6 +370,23 @@ class GraphRetrievalQueries:
     ) -> list[GraphSearchHit]:
         return self._native.search(
             embedding,
+            limit=limit,
+            where=where,
+            selection=None if within is None else within._native,
+        )
+
+    def keyword_search(
+        self,
+        text: str,
+        *,
+        limit: int = 10,
+        where: Filter | None = None,
+        within: GraphSelection | None = None,
+    ) -> list[GraphKeywordHit]:
+        """Perform embedding-free BM25 search, optionally within a graph selection."""
+
+        return self._native.keyword_search(
+            text,
             limit=limit,
             where=where,
             selection=None if within is None else within._native,

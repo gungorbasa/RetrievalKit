@@ -11,8 +11,8 @@ use dto::{
 use error::{BoundaryError, Result};
 use js_sys::Float32Array;
 use retrievalkit_core::{
-    CorpusChunkInput, CorpusId, HybridQuery, KeywordQuery, RecordInput, RetrievalDatabaseBuilder,
-    SearchQuery, VectorEncoding, VectorMetric,
+    Bm25Config, CorpusChunkInput, CorpusId, HybridQuery, KeywordQuery, RecordInput,
+    RetrievalDatabaseBuilder, SearchQuery, VectorEncoding, VectorMetric,
 };
 use retrievalkit_graph::{
     GraphDatabase as CoreGraphDatabase, GraphDatabaseBuilder, GraphResult,
@@ -67,13 +67,22 @@ impl WasmRetrievalDatabase {
         corpus_id: String,
         metric: String,
         encoding: String,
+        bm25_k1: f32,
+        bm25_b: f32,
+        stop_words: JsValue,
     ) -> std::result::Result<Self, JsError> {
+        let stop_words: Vec<String> = from_js(stop_words)?;
+        let bm25 = Bm25Config::try_new(bm25_k1, bm25_b, stop_words).map_err(BoundaryError::core)?;
         Ok(Self {
-            state: RetrievalState::Building(RetrievalDatabaseBuilder::new(
-                CorpusId::new(corpus_id).map_err(BoundaryError::core)?,
-                parse_metric(&metric)?,
-                parse_encoding(&encoding)?,
-            )),
+            state: RetrievalState::Building(
+                RetrievalDatabaseBuilder::new(
+                    CorpusId::new(corpus_id).map_err(BoundaryError::core)?,
+                    parse_metric(&metric)?,
+                    parse_encoding(&encoding)?,
+                )
+                .try_with_bm25_config(bm25)
+                .map_err(BoundaryError::core)?,
+            ),
         })
     }
 
@@ -368,15 +377,24 @@ impl WasmGraphRetrievalDatabase {
         schema: JsValue,
         metric: String,
         encoding: String,
+        bm25_k1: f32,
+        bm25_b: f32,
+        stop_words: JsValue,
     ) -> std::result::Result<Self, JsError> {
         let schema: GraphSchemaDto = from_js(schema)?;
+        let stop_words: Vec<String> = from_js(stop_words)?;
+        let bm25 = Bm25Config::try_new(bm25_k1, bm25_b, stop_words).map_err(BoundaryError::core)?;
         Ok(Self {
-            state: GraphRetrievalState::Building(Box::new(GraphRetrievalDatabaseBuilder::new(
-                CorpusId::new(corpus_id).map_err(BoundaryError::core)?,
-                schema.into_core()?,
-                parse_metric(&metric)?,
-                parse_encoding(&encoding)?,
-            ))),
+            state: GraphRetrievalState::Building(Box::new(
+                GraphRetrievalDatabaseBuilder::new(
+                    CorpusId::new(corpus_id).map_err(BoundaryError::core)?,
+                    schema.into_core()?,
+                    parse_metric(&metric)?,
+                    parse_encoding(&encoding)?,
+                )
+                .try_with_bm25_config(bm25)
+                .map_err(|error| BoundaryError::invalid("bm25", error.to_string()))?,
+            )),
             selections: BTreeMap::new(),
             next_selection_id: 0,
         })
@@ -604,10 +622,9 @@ fn parse_encoding(value: &str) -> Result<VectorEncoding> {
         "f16" => Ok(VectorEncoding::F16),
         "bf16" => Ok(VectorEncoding::BF16),
         "i8" => Ok(VectorEncoding::I8ScalarQuantized),
-        "binary" => Ok(VectorEncoding::BinaryQuantized),
         actual => Err(BoundaryError::invalid(
             "encoding",
-            format!("expected f32, f16, bf16, i8, or binary; got '{actual}'"),
+            format!("expected f32, f16, bf16, or i8; got '{actual}'"),
         )),
     }
 }

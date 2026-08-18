@@ -3,9 +3,9 @@
 > [RetrievalKit](../../../README.md) › SDKs › Swift graph aggregate
 
 RetrievalKit with schema-driven graph capabilities included. This package links
-the aggregate `RetrievalKitGraphFFI` artifact, including semantic and hybrid
-retrieval. Install it instead of the base `RetrievalKit` native artifact; never
-link both native artifacts into one app.
+the aggregate `RetrievalKitGraphFFI` artifact, including semantic, embedding-
+free BM25, and hybrid retrieval. Install it instead of the base `RetrievalKit`
+native artifact; never link both native artifacts into one app.
 
 Add the root Swift package at version `0.1.0`, then select the
 `RetrievalKitGraph` product.
@@ -78,6 +78,10 @@ let hits = try await database.search(
     limit: 10
 )
 ```
+
+Combined builders accept `bm25: BM25Configuration(k1:b:stopWords:)`; the same
+Rust-owned configuration applies to unscoped and graph-scoped text retrieval
+and survives persistence.
 
 Exact, keyword, and hybrid hits return effective metadata using the shared
 `MetadataValue` type. Hybrid traces expose `alpha`; graph scope constrains the

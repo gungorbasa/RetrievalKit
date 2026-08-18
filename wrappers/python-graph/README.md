@@ -116,6 +116,10 @@ the generation/corpus checks, metadata-filter intersection, and the reported
 source-node and before/after candidate counts.
 Hybrid `alpha` is query-time: `1` is vector-only, `0` is BM25-only, and the
 default is `0.6`.
+`database.retrieval.keyword_search(text, within=selection)` performs direct,
+embedding-free BM25 retrieval. `RetrievalConfiguration.bm25` configures `k1`,
+`b`, and stop words for both unscoped and graph-scoped search, and the exact
+configuration survives persistence.
 Every retrieval hit includes effective metadata. Hybrid traces expose `alpha`,
 source ranks, normalized scores, and matched terms; graph scope only constrains
 the candidate set.

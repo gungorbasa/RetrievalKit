@@ -5,8 +5,8 @@ use napi::bindgen_prelude::{AsyncTask, Float32Array, Task};
 use napi::{Env, Result};
 use napi_derive::napi;
 use retrievalkit_core::{
-    CorpusId, Document, HybridFusionTrace, HybridHit, HybridQuery, IndexFileSizeReport,
-    RetrievalDatabase, RetrievalDatabaseBuilder, SearchHit, SearchQuery,
+    Bm25Config, CorpusId, Document, HybridFusionTrace, HybridHit, HybridQuery, IndexFileSizeReport,
+    KeywordHit, KeywordQuery, RetrievalDatabase, RetrievalDatabaseBuilder, SearchHit, SearchQuery,
 };
 
 use crate::common::{
@@ -49,6 +49,16 @@ pub struct NativeSearchHit {
     pub metadata: Vec<NativeMetadataEntry>,
     pub score: f64,
     pub vector_score: f64,
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct NativeKeywordHit {
+    pub document_id: String,
+    pub text: String,
+    pub metadata: Vec<NativeMetadataEntry>,
+    pub score: f64,
+    pub matched_terms: Vec<String>,
 }
 
 #[napi(object)]
@@ -129,15 +139,27 @@ pub struct NativeRetrievalHandle {
 #[napi]
 impl NativeRetrievalHandle {
     #[napi(constructor)]
-    pub fn new(corpus_id: String, metric: String, encoding: String) -> Result<Self> {
+    pub fn new(
+        corpus_id: String,
+        metric: String,
+        encoding: String,
+        bm25_k1: f64,
+        bm25_b: f64,
+        stop_words: Vec<String>,
+    ) -> Result<Self> {
         let corpus_id = CorpusId::new(corpus_id).map_err(core_error)?;
         let metric = parse_metric(&metric)?;
         let encoding = parse_encoding(&encoding)?;
         Ok(Self {
             shared: Arc::new(RetrievalShared {
-                state: Mutex::new(RetrievalState::Building(RetrievalDatabaseBuilder::new(
-                    corpus_id, metric, encoding,
-                ))),
+                state: Mutex::new(RetrievalState::Building(
+                    RetrievalDatabaseBuilder::new(corpus_id, metric, encoding)
+                        .try_with_bm25_config(
+                            Bm25Config::try_new(bm25_k1 as f32, bm25_b as f32, stop_words)
+                                .map_err(core_error)?,
+                        )
+                        .map_err(core_error)?,
+                )),
                 closed: AtomicBool::new(false),
             }),
         })
@@ -216,6 +238,22 @@ impl NativeRetrievalHandle {
         Ok(AsyncTask::new(SemanticSearchTask {
             shared: Arc::clone(&self.shared),
             embedding: embedding.to_vec(),
+            top_k: top_k as usize,
+            filter: filter.map(NativeFilter::into_core).transpose()?,
+        }))
+    }
+
+    #[napi]
+    pub fn keyword_search(
+        &self,
+        text: String,
+        top_k: u32,
+        filter: Option<NativeFilter>,
+    ) -> Result<AsyncTask<KeywordSearchTask>> {
+        self.shared.require_open()?;
+        Ok(AsyncTask::new(KeywordSearchTask {
+            shared: Arc::clone(&self.shared),
+            text,
             top_k: top_k as usize,
             filter: filter.map(NativeFilter::into_core).transpose()?,
         }))
@@ -479,6 +517,40 @@ impl Task for SemanticSearchTask {
     }
 }
 
+pub struct KeywordSearchTask {
+    shared: Arc<RetrievalShared>,
+    text: String,
+    top_k: usize,
+    filter: Option<retrievalkit_core::Filter>,
+}
+
+impl Task for KeywordSearchTask {
+    type Output = Vec<NativeKeywordHit>;
+    type JsValue = Vec<NativeKeywordHit>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.shared.require_open()?;
+        let state = self.shared.state.lock().map_err(|_| {
+            state_error("retrieval database lock was poisoned by a previous native failure")
+        })?;
+        let RetrievalState::Ready(database) = &*state else {
+            return Err(state_error(
+                "search requires a built or loaded retrieval database",
+            ));
+        };
+        let mut query = KeywordQuery::new(std::mem::take(&mut self.text), self.top_k);
+        if let Some(filter) = self.filter.take() {
+            query = query.with_filter(filter);
+        }
+        let hits = database.keyword_search(&query).map_err(core_error)?;
+        keyword_hits(database, hits)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
 pub struct HybridSearchTask {
     shared: Arc<RetrievalShared>,
     text: String,
@@ -571,6 +643,26 @@ pub(crate) fn search_hits(
                 metadata: metadata_to_native(&chunk.metadata),
                 score: f64::from(hit.score),
                 vector_score: f64::from(hit.trace.vector_score),
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn keyword_hits(
+    database: &RetrievalDatabase,
+    hits: Vec<KeywordHit>,
+) -> Result<Vec<NativeKeywordHit>> {
+    hits.into_iter()
+        .map(|hit| {
+            let chunk = database.chunk(hit.chunk_id).ok_or_else(|| {
+                state_error("Rust returned a keyword hit whose canonical chunk is unavailable")
+            })?;
+            Ok(NativeKeywordHit {
+                document_id: hit.document_id,
+                text: chunk.text.clone(),
+                metadata: metadata_to_native(&chunk.metadata),
+                score: f64::from(hit.score),
+                matched_terms: hit.matched_terms,
             })
         })
         .collect()

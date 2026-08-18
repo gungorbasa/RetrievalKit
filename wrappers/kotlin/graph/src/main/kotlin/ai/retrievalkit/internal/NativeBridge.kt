@@ -11,7 +11,14 @@ internal object NativeBridge {
         NativeLibraryLoader.load("retrievalkit_jni_graph")
     }
 
-    @JvmStatic external fun createRetrievalBuilder(corpusId: String, metric: Int, encoding: Int): Long
+    @JvmStatic external fun createRetrievalBuilder(
+        corpusId: String,
+        metric: Int,
+        encoding: Int,
+        bm25K1: Float,
+        bm25B: Float,
+        stopWords: Array<String>,
+    ): Long
     @JvmStatic external fun retrievalBuilderUpsert(
         handle: Long,
         document: NativeDocument,
@@ -28,6 +35,13 @@ internal object NativeBridge {
         filter: Filter?,
         selectionHandle: Long,
     ): Array<NativeSearchHit>
+    @JvmStatic external fun keywordSearch(
+        handle: Long,
+        text: String,
+        limit: Int,
+        filter: Filter?,
+        selectionHandle: Long,
+    ): Array<NativeKeywordHit>
     @JvmStatic external fun hybridSearch(
         handle: Long,
         text: String,
@@ -51,6 +65,9 @@ internal object NativeBridge {
         schema: GraphSchema,
         metric: Int,
         encoding: Int,
+        bm25K1: Float,
+        bm25B: Float,
+        stopWords: Array<String>,
     ): Long
     @JvmStatic external fun graphRetrievalBuilderUpsert(
         handle: Long,

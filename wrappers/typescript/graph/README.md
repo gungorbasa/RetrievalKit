@@ -19,6 +19,9 @@ It contains two products:
 - `GraphDatabase`: canonical corpus plus graph; no vectors or BM25.
 - `GraphRetrievalDatabase`: one canonical corpus with graph and retrieval.
 
+`GraphRetrievalDatabaseBuilder` accepts `bm25: { k1, b, stopWords }`; Rust
+applies it to unscoped and graph-scoped BM25 and preserves it across reloads.
+
 ## Quickstart
 
 Builders use ordinary records. `GraphDatabaseBuilder.add()` accepts graph-only

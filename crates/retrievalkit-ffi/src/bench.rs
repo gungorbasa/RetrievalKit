@@ -488,7 +488,6 @@ fn encoding_name(encoding: VectorEncoding) -> &'static str {
         VectorEncoding::F16 => "f16",
         VectorEncoding::BF16 => "bf16",
         VectorEncoding::I8ScalarQuantized => "i8-scalar-quantized",
-        VectorEncoding::BinaryQuantized => "binary-quantized",
     }
 }
 

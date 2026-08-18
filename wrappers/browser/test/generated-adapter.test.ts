@@ -16,6 +16,24 @@ import {
 
 class FakeRetrievalDatabase implements GeneratedRetrievalDatabase {
   public static vectorError: Error | undefined;
+  public static constructorArguments?: readonly unknown[];
+  public constructor(
+    corpusId: string,
+    metric: string,
+    encoding: string,
+    bm25K1: number,
+    bm25B: number,
+    stopWords: readonly string[]
+  ) {
+    FakeRetrievalDatabase.constructorArguments = [
+      corpusId,
+      metric,
+      encoding,
+      bm25K1,
+      bm25B,
+      stopWords
+    ];
+  }
   public addRecordsBatch(): number {
     return 0;
   }
@@ -56,6 +74,26 @@ class FakeGraphDatabase implements GeneratedGraphDatabase {
 
 class FakeGraphRetrievalDatabase implements GeneratedGraphRetrievalDatabase {
   public static records?: unknown;
+  public static constructorArguments?: readonly unknown[];
+  public constructor(
+    corpusId: string,
+    schema: unknown,
+    metric: string,
+    encoding: string,
+    bm25K1: number,
+    bm25B: number,
+    stopWords: readonly string[]
+  ) {
+    FakeGraphRetrievalDatabase.constructorArguments = [
+      corpusId,
+      schema,
+      metric,
+      encoding,
+      bm25K1,
+      bm25B,
+      stopWords
+    ];
+  }
   public addRecordsBatch(records: unknown): number {
     FakeGraphRetrievalDatabase.records = records;
     return 0;
@@ -98,6 +136,53 @@ const module: GeneratedWasmModule = {
 };
 
 describe("generated WASM adapter", () => {
+  it("forwards BM25 configuration to retrieval and graph-retrieval WASM", async () => {
+    const adapter = createGeneratedWasmAdapter(module);
+    const signal = new AbortController().signal;
+    await adapter.initialize(signal);
+    await adapter.createDatabase(
+      {
+        kind: "retrieval",
+        options: {
+          corpusId: "configured",
+          metric: "dotProduct",
+          encoding: "f32",
+          bm25: { k1: 1.7, b: 0.4, stopWords: ["THE"] }
+        }
+      },
+      signal
+    );
+    expect(FakeRetrievalDatabase.constructorArguments).toEqual([
+      "configured",
+      "dotProduct",
+      "f32",
+      1.7,
+      0.4,
+      ["THE"]
+    ]);
+
+    await adapter.createDatabase(
+      {
+        kind: "graphRetrieval",
+        options: {
+          corpusId: "configured-graph",
+          schema: { recordNodes: [{ recordType: "note", nodeType: "Note" }] },
+          bm25: { k1: 1.5, b: 0.6, stopWords: ["A"] }
+        }
+      },
+      signal
+    );
+    expect(FakeGraphRetrievalDatabase.constructorArguments).toMatchObject([
+      "configured-graph",
+      expect.anything(),
+      "cosine",
+      "i8",
+      1.5,
+      0.6,
+      ["A"]
+    ]);
+  });
+
   it("selects SIMD128 only when the Worker validates browser support", async () => {
     let portableLoads = 0;
     let simdLoads = 0;

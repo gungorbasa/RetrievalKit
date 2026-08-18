@@ -4,7 +4,7 @@ RetrievalKit is one local retrieval system with two alternative retrieval
 distributions and one independent embedding distribution:
 
 - Install `retrievalkit-graph` when records have useful relationships. It
-  already includes semantic and hybrid retrieval.
+  already includes semantic, embedding-free BM25, and hybrid retrieval.
 - Install the smaller `retrievalkit` distribution when the corpus is a flat
   collection and graph traversal would add no value.
 - Install `retrievalkit-embedding` independently when the application needs
@@ -48,15 +48,17 @@ Windows source portability checks are CI evidence, not published wheel support.
 | Your data and question | Use | Why |
 |---|---|---|
 | Notes belong to projects, messages belong to threads, or documents cite one another | `retrievalkit-graph` with `GraphRetrievalDatabase` | Traverse relationships to choose candidates, then rank those candidates |
-| Records form a flat collection | `retrievalkit` with `RetrievalDatabase` | Get semantic and hybrid retrieval without defining a graph |
+| Records form a flat collection | `retrievalkit` with `RetrievalDatabase` | Get semantic, embedding-free BM25, and hybrid retrieval without defining a graph |
 | You have query text and an embedding | Hybrid search | Meaning and exact keyword evidence can support each other |
+| You have query text but no embedding | BM25 search | Rank deterministic lexical matches without running an embedding model |
 | You have only an embedding, or wording should not matter | Semantic search | Rank by vector similarity alone |
-| You need hard tenant, status, type, or date rules | Metadata filters | Filters are constraints and work with either retrieval mode |
+| You need hard tenant, status, type, or date rules | Metadata filters | Filters are constraints and work with every retrieval mode |
 | You only need traversal and candidate projection | `GraphDatabase` | Avoid retrieval configuration and embeddings entirely |
 
 Hybrid search is the normal default for app and document search. Semantic-only
-search is a query variation for cases where keyword evidence is unavailable or
-deliberately irrelevant; it is not a different database architecture.
+and BM25-only search are query variations for cases where one source is
+unavailable or deliberately irrelevant; neither is a different database
+architecture.
 
 ## Complete product: graph-scoped hybrid search
 

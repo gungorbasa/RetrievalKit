@@ -7,9 +7,9 @@ use jni::objects::{JClass, JFloatArray, JLongArray, JObject, JObjectArray, JStri
 use jni::sys::{jboolean, jfloat, jint, jlong, JNI_FALSE};
 use jni::JNIEnv;
 use retrievalkit_core::{
-    Filter, HybridFusionTrace, HybridHit, HybridQuery, IndexPersistenceOptions, Metadata,
-    MetadataValue, RetrievalDatabase, RetrievalDatabaseBuilder, RetrievalKitError, SearchHit,
-    SearchQuery, VectorEncoding, VectorMetric,
+    Bm25Config, Filter, HybridFusionTrace, HybridHit, HybridQuery, IndexPersistenceOptions,
+    KeywordHit, KeywordQuery, Metadata, MetadataValue, RetrievalDatabase, RetrievalDatabaseBuilder,
+    RetrievalKitError, SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
 
 #[cfg(feature = "graph")]
@@ -425,6 +425,19 @@ fn positive_limit(name: &'static str, value: jint) -> BoundaryResult<usize> {
         })
 }
 
+pub(crate) fn strings_from_array(
+    env: &mut JNIEnv<'_>,
+    values: &JObjectArray<'_>,
+) -> BoundaryResult<Vec<String>> {
+    let length = env.get_array_length(values)?;
+    let mut output = Vec::with_capacity(length as usize);
+    for index in 0..length {
+        let value = env.get_object_array_element(values, index)?;
+        output.push(string(env, &value)?);
+    }
+    Ok(output)
+}
+
 #[no_mangle]
 pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_createRetrievalBuilder(
     mut env: JNIEnv<'_>,
@@ -432,6 +445,9 @@ pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_createRetrieva
     corpus_id: JString<'_>,
     metric: jint,
     encoding: jint,
+    bm25_k1: jfloat,
+    bm25_b: jfloat,
+    stop_words: JObjectArray<'_>,
 ) -> jlong {
     with_env(&mut env, 0, |env| {
         let corpus_id = string(env, &JObject::from(corpus_id))?;
@@ -439,7 +455,12 @@ pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_createRetrieva
             retrievalkit_core::CorpusId::new(corpus_id)?,
             vector_metric(metric)?,
             vector_encoding(encoding)?,
-        );
+        )
+        .try_with_bm25_config(Bm25Config::try_new(
+            bm25_k1,
+            bm25_b,
+            strings_from_array(env, &stop_words)?,
+        )?)?;
         insert_resource(Resource::RetrievalBuilder(Box::new(builder)))
     })
 }
@@ -564,6 +585,7 @@ fn selection_result(handle: jlong) -> BoundaryResult<retrievalkit_graph::GraphRe
 
 type HitPayload = (String, String, String, Metadata);
 type SearchResponse = (Vec<SearchHit>, Vec<HitPayload>);
+type KeywordResponse = (Vec<KeywordHit>, Vec<HitPayload>);
 type HybridResponse = (Vec<HybridHit>, Vec<HitPayload>);
 
 fn run_semantic(
@@ -648,6 +670,91 @@ pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_semanticSearch
         }
         let (hits, payloads) = run_semantic(handle, &query, selection_handle)?;
         search_results(env, &hits, &payloads)
+    })
+}
+
+fn run_keyword(
+    handle: jlong,
+    query: &KeywordQuery,
+    selection_handle: jlong,
+) -> BoundaryResult<KeywordResponse> {
+    #[cfg(feature = "graph")]
+    let selection = (selection_handle != 0)
+        .then(|| selection_result(selection_handle))
+        .transpose()?;
+    #[cfg(not(feature = "graph"))]
+    if selection_handle != 0 {
+        return Err(BoundaryError::invalid(
+            "the graph-free native aggregate cannot accept graph selections",
+        ));
+    }
+    let resource = resource(handle)?;
+    let resource = lock_resource(&resource)?;
+    let (hits, corpus) = match &*resource {
+        Resource::Retrieval(database) if selection_handle == 0 => {
+            (database.keyword_search(query)?, database.corpus())
+        }
+        #[cfg(feature = "graph")]
+        Resource::GraphRetrieval(database) => {
+            let hits = match selection {
+                Some(selection) => database.keyword_search_in_selection(query, &selection)?,
+                None => database.keyword_search(query)?,
+            };
+            (hits, database.corpus())
+        }
+        Resource::Retrieval(_) => {
+            return Err(BoundaryError::invalid(
+                "a graph selection cannot scope a base RetrievalDatabase",
+            ))
+        }
+        _ => {
+            return Err(BoundaryError::invalid(format!(
+                "native handle {handle} has no retrieval capability"
+            )))
+        }
+    };
+    let mut payloads = Vec::with_capacity(hits.len());
+    for hit in &hits {
+        let chunk = corpus.chunk(hit.chunk_id).ok_or_else(|| {
+            BoundaryError::native(format!(
+                "ranked chunk {} could not be hydrated from the canonical corpus",
+                hit.chunk_id
+            ))
+        })?;
+        let identity = corpus.chunk_identity(hit.chunk_id).ok_or_else(|| {
+            BoundaryError::native(format!(
+                "ranked chunk {} has no stable canonical identity",
+                hit.chunk_id
+            ))
+        })?;
+        payloads.push((
+            identity.record_id.as_str().to_owned(),
+            identity.chunk_key.as_str().to_owned(),
+            chunk.text.clone(),
+            chunk.metadata.clone(),
+        ));
+    }
+    Ok((hits, payloads))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ai_retrievalkit_internal_NativeBridge_keywordSearch<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    text: JString<'local>,
+    limit: jint,
+    filter_object: JObject<'local>,
+    selection_handle: jlong,
+) -> JObject<'local> {
+    with_env_object(&mut env, |env| {
+        let text = string(env, &JObject::from(text))?;
+        let mut query = KeywordQuery::new(text, positive_limit("limit", limit)?);
+        if let Some(filter) = filter(env, &filter_object)? {
+            query = query.with_filter(filter);
+        }
+        let (hits, payloads) = run_keyword(handle, &query, selection_handle)?;
+        keyword_results(env, &hits, &payloads)
     })
 }
 
@@ -902,6 +1009,36 @@ fn search_results<'local>(
                 JValue::Float(hit.score),
                 JValue::Float(hit.trace.vector_score),
                 JValue::Object(&metadata),
+            ],
+        )?;
+        env.set_object_array_element(&array, index as i32, object)?;
+    }
+    Ok(JObject::from(array))
+}
+
+fn keyword_results<'local>(
+    env: &mut JNIEnv<'local>,
+    hits: &[KeywordHit],
+    payloads: &[(String, String, String, Metadata)],
+) -> BoundaryResult<JObject<'local>> {
+    let class = env.find_class("ai/retrievalkit/internal/NativeKeywordHit")?;
+    let array = env.new_object_array(hits.len() as i32, &class, JObject::null())?;
+    for (index, (hit, payload)) in hits.iter().zip(payloads).enumerate() {
+        let record_id = JObject::from(env.new_string(&payload.0)?);
+        let chunk_key = JObject::from(env.new_string(&payload.1)?);
+        let text = JObject::from(env.new_string(&payload.2)?);
+        let metadata = JObject::from(metadata_objects(env, &payload.3)?);
+        let matched_terms = JObject::from(string_array(env, &hit.matched_terms)?);
+        let object = env.new_object(
+            &class,
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;F[Lai/retrievalkit/internal/NativeMetadataEntry;[Ljava/lang/String;)V",
+            &[
+                JValue::Object(&record_id),
+                JValue::Object(&chunk_key),
+                JValue::Object(&text),
+                JValue::Float(hit.score),
+                JValue::Object(&metadata),
+                JValue::Object(&matched_terms),
             ],
         )?;
         env.set_object_array_element(&array, index as i32, object)?;

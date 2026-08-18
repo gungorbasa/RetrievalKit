@@ -3,8 +3,8 @@ use std::path::Path;
 use std::slice;
 
 use retrievalkit_core::{
-    CandidateScope, ChunkKey, CorpusId, EmbeddedDocument, ExactVectorIndex, HybridHit, HybridQuery,
-    IndexConfig, KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput,
+    Bm25Config, CandidateScope, ChunkKey, CorpusId, EmbeddedDocument, ExactVectorIndex, HybridHit,
+    HybridQuery, IndexConfig, KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput,
     RecordInput as CoreRecordInput, SearchHit, SearchQuery,
 };
 use retrievalkit_graph::{
@@ -328,6 +328,38 @@ pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_new(
             parse_metric(metric)?,
             parse_encoding_code(encoding)?,
         );
+        Ok(Box::into_raw(Box::new(RetrievalKitGraphRetrievalBuilder {
+            builder,
+        })))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_graph_retrieval_builder_new_with_bm25(
+    metric: u32,
+    encoding: u32,
+    corpus_id: *const c_char,
+    schema_json: *const c_char,
+    bm25_k1: f32,
+    bm25_b: f32,
+    stop_words_json: *const c_char,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitGraphRetrievalBuilder {
+    ffi_ptr(status, || {
+        let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
+        let schema = decode_schema(unsafe { read_c_string(schema_json, "schema_json") }?)?;
+        let stop_words_json = unsafe { read_c_string(stop_words_json, "stop_words_json")? };
+        let stop_words =
+            serde_json::from_str::<Vec<String>>(&stop_words_json).map_err(|error| {
+                FfiError::invalid_argument(format!("invalid stop_words_json: {error}"))
+            })?;
+        let builder = GraphRetrievalDatabaseBuilder::new(
+            corpus_id,
+            schema,
+            parse_metric(metric)?,
+            parse_encoding_code(encoding)?,
+        )
+        .try_with_bm25_config(Bm25Config::try_new(bm25_k1, bm25_b, stop_words)?)?;
         Ok(Box::into_raw(Box::new(RetrievalKitGraphRetrievalBuilder {
             builder,
         })))

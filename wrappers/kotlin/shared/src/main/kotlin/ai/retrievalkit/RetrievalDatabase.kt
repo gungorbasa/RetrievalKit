@@ -53,7 +53,13 @@ public class RetrievalDatabase private constructor(nativeHandle: Long) : AutoClo
         text: String,
         limit: Int = 10,
         filter: Filter? = null,
-    ): List<HybridHit> = search(text, null, limit, 0.0f, filter)
+    ): List<KeywordHit> = NativeBridge.keywordSearch(
+        handle.requireOpen("RetrievalDatabase"),
+        text,
+        limit,
+        filter,
+        0,
+    ).map { it.publicValue() }
 
     public fun delete(recordId: String): Int =
         NativeBridge.deleteRecord(handle.requireOpen("RetrievalDatabase"), recordId)
@@ -78,9 +84,17 @@ public class RetrievalDatabase private constructor(nativeHandle: Long) : AutoClo
         corpusId: String,
         metric: VectorMetric = VectorMetric.COSINE,
         encoding: VectorEncoding = VectorEncoding.I8_SCALAR_QUANTIZED,
+        bm25: Bm25Configuration = Bm25Configuration(),
     ) : AutoCloseable {
         private val handle = NativeHandle(
-            NativeBridge.createRetrievalBuilder(corpusId, metric.ordinal, encoding.ordinal),
+            NativeBridge.createRetrievalBuilder(
+                corpusId,
+                metric.ordinal,
+                encoding.ordinal,
+                bm25.k1,
+                bm25.b,
+                bm25.stopWords.toTypedArray(),
+            ),
             NativeBridge::closeHandle,
         )
         private var consumed = false

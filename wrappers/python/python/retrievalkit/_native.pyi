@@ -39,6 +39,9 @@ class _RetrievalDatabaseBuilder:
         corpus_id: str,
         metric: str = "cosine",
         encoding: str = "i8",
+        k1: float = 1.2,
+        b: float = 0.75,
+        stop_words: list[str] = ...,
     ) -> None: ...
     def upsert_document(
         self,
@@ -65,6 +68,13 @@ class _RetrievalDatabase:
         limit: int = 10,
         where: Filter | None = None,
     ) -> list[SearchHit]: ...
+    def keyword_search(
+        self,
+        text: str,
+        *,
+        limit: int = 10,
+        where: Filter | None = None,
+    ) -> list[KeywordHit]: ...
     def hybrid_search(
         self,
         text: str,

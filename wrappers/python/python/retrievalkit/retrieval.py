@@ -15,6 +15,7 @@ from .types import (
     FileSizeReport,
     Filter,
     HybridHit,
+    KeywordHit,
     MetadataValue,
     RecordInput,
     RecordValue,
@@ -46,10 +47,14 @@ class RetrievalDatabaseBuilder:
         if retrieval is not None:
             metric = retrieval.semantic.metric
             encoding = retrieval.semantic.encoding
+        bm25 = retrieval.bm25 if retrieval is not None else None
         self._native = _RetrievalDatabaseBuilder(
             corpus_id,
             metric,
             encoding,
+            1.2 if bm25 is None else bm25.k1,
+            0.75 if bm25 is None else bm25.b,
+            [] if bm25 is None else list(bm25.stop_words),
         )
 
     @overload
@@ -130,6 +135,17 @@ class RetrievalQueries:
         where: Filter | None = None,
     ) -> list[SearchHit]:
         return self._native.semantic_search(embedding, limit=limit, where=where)
+
+    def keyword_search(
+        self,
+        text: str,
+        *,
+        limit: int = 10,
+        where: Filter | None = None,
+    ) -> list[KeywordHit]:
+        """Perform embedding-free BM25 search."""
+
+        return self._native.keyword_search(text, limit=limit, where=where)
 
     def hybrid_search(
         self,

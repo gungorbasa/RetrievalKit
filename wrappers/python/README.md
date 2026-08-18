@@ -56,7 +56,20 @@ hits = database.retrieval.semantic_search(
 The first embedding fixes the dimension in Rust. Rust also derives the hidden
 canonical record and chunk identity, so the common path has no dimension,
 chunk-key, or embedding-map bookkeeping. Every retrieval database exposes both
-`semantic_search(...)` and `hybrid_search(...)`.
+`semantic_search(...)`, embedding-free `keyword_search(...)`, and
+`hybrid_search(...)`.
+
+BM25 scoring is configured when the database is built and is preserved across
+save/load, including compact snapshots that rebuild lexical state:
+
+```python
+from retrievalkit import Bm25Configuration, RetrievalConfiguration, VectorIndexConfiguration
+
+retrieval = RetrievalConfiguration(
+    semantic=VectorIndexConfiguration(),
+    bm25=Bm25Configuration(k1=1.4, b=0.7, stop_words=("the", "a")),
+)
+```
 
 The existing `RecordInput` plus `embeddings={chunk_key: vector}` methods remain
 available as an advanced compatibility surface for applications that already

@@ -9,6 +9,7 @@ import {
   GraphRetrievalDatabaseBuilder,
   RetrievalKitLifecycleError,
   RetrievalKitStaleSelectionError,
+  type Bm25Configuration,
   type GraphSchema
 } from "../src/index.js";
 
@@ -88,12 +89,16 @@ function records() {
   ];
 }
 
-async function combined(corpusId = "node-graph-tests"): Promise<GraphRetrievalDatabase> {
+async function combined(
+  corpusId = "node-graph-tests",
+  bm25?: Bm25Configuration
+): Promise<GraphRetrievalDatabase> {
   const builder = new GraphRetrievalDatabaseBuilder({
     corpusId,
     schema,
     metric: "dotProduct",
-    encoding: "f32"
+    encoding: "f32",
+    ...(bm25 === undefined ? {} : { bm25 })
   });
   await builder.add(records());
   const database = await builder.build();
@@ -243,6 +248,32 @@ describe("graph aggregate", () => {
     databases.push(loaded);
     const hits = await loaded.retrieval.search({ mode: "text", text: "retrieval", limit: 1 });
     expect(hits[0]?.documentId).toBe("gamma");
+  });
+
+  it("applies persisted BM25 configuration to scoped and unscoped text search", async () => {
+    const database = await combined("graph-configured-bm25", {
+      k1: 1.7,
+      b: 0.4,
+      stopWords: ["GRAPH"]
+    });
+    expect(await database.retrieval.search({ mode: "text", text: "graph" })).toEqual([]);
+    const selection = await database.graph.query({
+      seed: {
+        kind: "nodes",
+        nodes: [{ kind: "record", nodeType: "Topic", recordId: "beta" }]
+      }
+    });
+    expect(
+      await database.retrieval.search({ mode: "text", text: "graph", within: selection })
+    ).toEqual([]);
+    await selection.close();
+
+    const directory = await mkdtemp(join(tmpdir(), "retrievalkit-node-graph-bm25-"));
+    directories.push(directory);
+    await database.save(directory);
+    const loaded = await GraphRetrievalDatabase.load(directory);
+    databases.push(loaded);
+    expect(await loaded.retrieval.search({ mode: "text", text: "graph" })).toEqual([]);
   });
 
   it("rejects cross-corpus projection in Rust and closes all owners", async () => {

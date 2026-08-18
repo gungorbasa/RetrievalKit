@@ -86,6 +86,7 @@ class GraphDatabaseTest {
             schema = schema,
             metric = VectorMetric.DOT_PRODUCT,
             encoding = VectorEncoding.F32,
+            bm25 = Bm25Configuration(k1 = 1.7f, b = 0.4f, stopWords = setOf("ILK")),
         ).use { builder ->
             builder.upsert(
                 listOf(
@@ -94,6 +95,7 @@ class GraphDatabaseTest {
                 ),
             )
             builder.build().use { database ->
+                assertTrue(database.search("ilk").isEmpty())
                 val selection = database.query(
                     GraphQuery(GraphSeed.Nodes(listOf(GraphNodeId("Topic", "iki")))),
                 )

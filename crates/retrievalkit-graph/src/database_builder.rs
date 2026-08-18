@@ -1,7 +1,7 @@
 use retrievalkit_core::{
-    ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, EmbeddedDocument, Metadata, Record,
-    RecordChunkInput, RecordInput, RetrievalDatabaseBuilder, RetrievalKitError, VectorEncoding,
-    VectorMetric,
+    Bm25Config, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, EmbeddedDocument, Metadata,
+    Record, RecordChunkInput, RecordInput, RetrievalDatabaseBuilder, RetrievalKitError,
+    VectorEncoding, VectorMetric,
 };
 
 use crate::{GraphDatabase, GraphRetrievalDatabase, GraphSchema, Result};
@@ -69,6 +69,14 @@ impl GraphRetrievalDatabaseBuilder {
             retrieval: RetrievalDatabaseBuilder::new(corpus_id, metric, encoding),
             schema,
         }
+    }
+
+    pub fn try_with_bm25_config(mut self, configuration: Bm25Config) -> Result<Self> {
+        self.retrieval = self
+            .retrieval
+            .try_with_bm25_config(configuration)
+            .map_err(crate::GraphError::from)?;
+        Ok(self)
     }
 
     pub fn upsert_record(

@@ -347,9 +347,8 @@ pub(crate) fn parse_encoding(encoding: &str) -> PyResult<VectorEncoding> {
         "f16" => Ok(VectorEncoding::F16),
         "bf16" => Ok(VectorEncoding::BF16),
         "i8" | "i8_scalar_quantized" | "i8scalarquantized" => Ok(VectorEncoding::I8ScalarQuantized),
-        "binary" | "binary_quantized" | "binaryquantized" => Ok(VectorEncoding::BinaryQuantized),
         _ => Err(PyValueError::new_err(format!(
-            "unsupported encoding '{encoding}'; expected 'f32', 'f16', 'bf16', 'i8', or 'binary'"
+            "unsupported encoding '{encoding}'; expected 'f32', 'f16', 'bf16', or 'i8'"
         ))),
     }
 }

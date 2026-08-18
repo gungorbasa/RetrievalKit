@@ -7,9 +7,9 @@ use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyInt, PyList, PyString};
 use retrievalkit_core::{
-    ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, HybridHit, HybridQuery,
-    Metadata, Record, RecordChunkInput, RecordId, RecordInput, RetrievalKitError as CoreError,
-    SearchHit, SearchQuery,
+    Bm25Config, ChunkIdentity, ChunkKey, CorpusChunkInput, CorpusId, CorpusIndex, HybridHit,
+    HybridQuery, KeywordHit, KeywordQuery, Metadata, Record, RecordChunkInput, RecordId,
+    RecordInput, RetrievalKitError as CoreError, SearchHit, SearchQuery,
 };
 use retrievalkit_graph::{
     CancellationToken, Direction, GraphCandidateProjection, GraphDatabase,
@@ -204,16 +204,32 @@ impl PyGraphRetrievalDatabaseBuilder {
         corpus_id,
         schema_json,
         metric = "cosine",
-        encoding = "i8"
+        encoding = "i8",
+        k1 = 1.2,
+        b = 0.75,
+        stop_words = Vec::new()
     ))]
-    fn new(corpus_id: String, schema_json: String, metric: &str, encoding: &str) -> PyResult<Self> {
+    fn new(
+        corpus_id: String,
+        schema_json: String,
+        metric: &str,
+        encoding: &str,
+        k1: f32,
+        b: f32,
+        stop_words: Vec<String>,
+    ) -> PyResult<Self> {
+        let bm25 = Bm25Config::try_new(k1, b, stop_words).map_err(py_error)?;
         Ok(Self {
-            builder: Some(RustGraphRetrievalDatabaseBuilder::new(
-                CorpusId::new(corpus_id).map_err(core_error)?,
-                parse_schema(&schema_json)?,
-                parse_metric(metric)?,
-                parse_encoding(encoding)?,
-            )),
+            builder: Some(
+                RustGraphRetrievalDatabaseBuilder::new(
+                    CorpusId::new(corpus_id).map_err(core_error)?,
+                    parse_schema(&schema_json)?,
+                    parse_metric(metric)?,
+                    parse_encoding(encoding)?,
+                )
+                .try_with_bm25_config(bm25)
+                .map_err(graph_error)?,
+            ),
         })
     }
 
@@ -551,6 +567,36 @@ impl PyGraphRetrievalDatabase {
             })
             .map_err(graph_error)?;
         graph_search_hits_to_py(py, database.corpus(), &hits)
+    }
+
+    #[pyo3(signature = (text, *, limit = 10, r#where = None, selection = None))]
+    fn keyword_search(
+        &self,
+        py: Python<'_>,
+        text: String,
+        limit: usize,
+        r#where: Option<&Bound<'_, PyAny>>,
+        selection: Option<&PyGraphSelection>,
+    ) -> PyResult<Py<PyAny>> {
+        let mut query = KeywordQuery::new(text, limit);
+        if let Some(filter) = parse_optional_filter(r#where)? {
+            query = query.with_filter(filter);
+        }
+        let database = self.require_database()?;
+        let selection = selection
+            .map(|selection| {
+                selection.result.as_ref().ok_or_else(|| {
+                    StaleGraphSelectionError::new_err("graph selection has been closed")
+                })
+            })
+            .transpose()?;
+        let hits = py
+            .detach(move || match selection {
+                Some(selection) => database.keyword_search_in_selection(&query, selection),
+                None => database.keyword_search(&query),
+            })
+            .map_err(graph_error)?;
+        graph_keyword_hits_to_py(py, database.corpus(), &hits)
     }
 
     #[pyo3(signature = (
@@ -995,6 +1041,28 @@ fn graph_search_hits_to_py(
             .chunk(hit.chunk_id)
             .ok_or_else(|| RetrievalKitError::new_err("search hit referenced a missing chunk"))?;
         result.append(search_hit_to_py(py, hit, chunk)?)?;
+    }
+    Ok(result.into_any().unbind())
+}
+
+fn graph_keyword_hits_to_py(
+    py: Python<'_>,
+    corpus: &CorpusIndex,
+    hits: &[KeywordHit],
+) -> PyResult<Py<PyAny>> {
+    let result = PyList::empty(py);
+    for hit in hits {
+        let chunk = corpus
+            .chunk(hit.chunk_id)
+            .ok_or_else(|| RetrievalKitError::new_err("keyword hit referenced a missing chunk"))?;
+        let item = PyDict::new(py);
+        item.set_item("chunk_id", hit.chunk_id)?;
+        item.set_item("document_id", &hit.document_id)?;
+        item.set_item("text", &chunk.text)?;
+        item.set_item("metadata", metadata_to_py(py, &chunk.metadata)?)?;
+        item.set_item("score", hit.score)?;
+        item.set_item("matched_terms", &hit.matched_terms)?;
+        result.append(item)?;
     }
     Ok(result.into_any().unbind())
 }

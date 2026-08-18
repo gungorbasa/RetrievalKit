@@ -59,14 +59,13 @@ public class GraphRetrievalDatabase private constructor(nativeHandle: Long) : Au
         limit: Int = 10,
         filter: Filter? = null,
         within: GraphSelection? = null,
-    ): List<HybridHit> = search(
-        text = text,
-        embedding = null,
-        limit = limit,
-        alpha = 0.0f,
-        filter = filter,
-        within = within,
-    )
+    ): List<KeywordHit> = NativeBridge.keywordSearch(
+        handle.requireOpen("GraphRetrievalDatabase"),
+        text,
+        limit,
+        filter,
+        within?.handle?.requireOpen("GraphSelection") ?: 0,
+    ).map { it.publicValue() }
 
     public fun projectCandidates(
         selection: GraphSelection,
@@ -103,6 +102,7 @@ public class GraphRetrievalDatabase private constructor(nativeHandle: Long) : Au
         schema: GraphSchema,
         metric: VectorMetric = VectorMetric.COSINE,
         encoding: VectorEncoding = VectorEncoding.I8_SCALAR_QUANTIZED,
+        bm25: Bm25Configuration = Bm25Configuration(),
     ) : AutoCloseable {
         private val handle = NativeHandle(
             NativeBridge.createGraphRetrievalBuilder(
@@ -110,6 +110,9 @@ public class GraphRetrievalDatabase private constructor(nativeHandle: Long) : Au
                 schema,
                 metric.ordinal,
                 encoding.ordinal,
+                bm25.k1,
+                bm25.b,
+                bm25.stopWords.toTypedArray(),
             ),
             NativeBridge::closeHandle,
         )

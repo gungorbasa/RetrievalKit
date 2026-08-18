@@ -37,7 +37,8 @@ Encoded vector search must be tested against exact f32 search.
 
 ## BM25 Search
 
-BM25 should be a first-class internal lexical component, not a fallback text scan.
+BM25 is a first-class Rust-owned lexical component and a public embedding-free
+query mode, not a fallback text scan or wrapper reimplementation.
 
 - Maintain a real inverted index.
 - Tokenize deterministically.

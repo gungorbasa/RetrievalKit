@@ -5,8 +5,8 @@ use std::ptr;
 use std::slice;
 
 use retrievalkit_core::{
-    ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex, Filter,
-    HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery,
+    Bm25Config, ChunkInput, ChunkKey, CompactionReport, CorpusId, Document, ExactVectorIndex,
+    Filter, HybridHit, HybridQuery, IndexConfig, IndexPersistenceOptions, KeywordHit, KeywordQuery,
     Metadata, MetadataValue, Record, RecordChunkInput, RetrievalDatabase, RetrievalDatabaseBuilder,
     SearchHit, SearchQuery, VectorEncoding, VectorMetric,
 };
@@ -335,6 +335,39 @@ pub unsafe extern "C" fn retrievalkit_retrieval_builder_new(
             parse_metric(metric)?,
             parse_encoding_code(encoding)?,
         );
+        Ok(Box::into_raw(Box::new(RetrievalKitRetrievalBuilder {
+            builder,
+        })))
+    })
+}
+
+/// Creates a retrieval builder with explicit BM25 scoring and stop-word configuration.
+///
+/// # Safety
+/// String and status pointers must be valid for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn retrievalkit_retrieval_builder_new_with_bm25(
+    metric: u32,
+    encoding: u32,
+    corpus_id: *const c_char,
+    bm25_k1: c_float,
+    bm25_b: c_float,
+    stop_words_json: *const c_char,
+    status: *mut RetrievalKitStatus,
+) -> *mut RetrievalKitRetrievalBuilder {
+    ffi_ptr(status, || {
+        let corpus_id = CorpusId::new(unsafe { read_c_string(corpus_id, "corpus_id") }?)?;
+        let stop_words_json = unsafe { read_c_string(stop_words_json, "stop_words_json")? };
+        let stop_words =
+            serde_json::from_str::<Vec<String>>(&stop_words_json).map_err(|error| {
+                FfiError::invalid_argument(format!("invalid stop_words_json: {error}"))
+            })?;
+        let builder = RetrievalDatabaseBuilder::new(
+            corpus_id,
+            parse_metric(metric)?,
+            parse_encoding_code(encoding)?,
+        )
+        .try_with_bm25_config(Bm25Config::try_new(bm25_k1, bm25_b, stop_words)?)?;
         Ok(Box::into_raw(Box::new(RetrievalKitRetrievalBuilder {
             builder,
         })))

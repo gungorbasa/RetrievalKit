@@ -68,6 +68,7 @@ pub struct RetrievalIndex {
 
 impl RetrievalIndex {
     pub fn new(configuration: RetrievalConfiguration) -> Result<Self> {
+        configuration.hybrid.bm25.validate()?;
         let mode = configuration.mode();
         let vector = configuration.vector();
         let bm25 = Some(Bm25Index::new(configuration.hybrid.bm25.clone()));

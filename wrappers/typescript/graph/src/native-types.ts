@@ -151,6 +151,13 @@ export interface NativeSearchHit {
   score: number;
   vectorScore: number;
 }
+export interface NativeKeywordHit {
+  documentId: string;
+  text: string;
+  metadata: NativeMetadataEntry[];
+  score: number;
+  matchedTerms: string[];
+}
 export interface NativeHybridHit {
   documentId: string;
   text: string;

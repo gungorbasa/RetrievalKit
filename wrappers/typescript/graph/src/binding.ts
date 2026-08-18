@@ -8,6 +8,7 @@ import type {
   NativeGraphResult,
   NativeGraphSchema,
   NativeHybridHit,
+  NativeKeywordHit,
   NativeSearchHit
 } from "./native-types.js";
 
@@ -34,6 +35,12 @@ export interface NativeGraphHandle {
     filter: NativeFilter | undefined,
     selection?: NativeGraphSelection
   ): Promise<NativeSearchHit[]>;
+  keywordSearch(
+    text: string,
+    topK: number,
+    filter: NativeFilter | undefined,
+    selection?: NativeGraphSelection
+  ): Promise<NativeKeywordHit[]>;
   hybridSearch(
     text: string,
     embedding: Float32Array | undefined,
@@ -53,7 +60,10 @@ interface NativeGraphConstructor {
     corpusId: string,
     schema: NativeGraphSchema,
     metric?: string,
-    encoding?: string
+    encoding?: string,
+    bm25K1?: number,
+    bm25B?: number,
+    stopWords?: string[]
   ): NativeGraphHandle;
   empty(): NativeGraphHandle;
 }

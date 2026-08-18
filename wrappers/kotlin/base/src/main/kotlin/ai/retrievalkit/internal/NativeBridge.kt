@@ -11,6 +11,9 @@ internal object NativeBridge {
         corpusId: String,
         metric: Int,
         encoding: Int,
+        bm25K1: Float,
+        bm25B: Float,
+        stopWords: Array<String>,
     ): Long
 
     @JvmStatic external fun retrievalBuilderUpsert(
@@ -31,6 +34,14 @@ internal object NativeBridge {
         filter: Filter?,
         selectionHandle: Long,
     ): Array<NativeSearchHit>
+
+    @JvmStatic external fun keywordSearch(
+        handle: Long,
+        text: String,
+        limit: Int,
+        filter: Filter?,
+        selectionHandle: Long,
+    ): Array<NativeKeywordHit>
 
     @JvmStatic external fun hybridSearch(
         handle: Long,

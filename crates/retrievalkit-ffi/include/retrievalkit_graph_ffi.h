@@ -60,6 +60,16 @@ RetrievalKitGraphRetrievalBuilder *retrievalkit_graph_retrieval_builder_new(
     const char *schema_json,
     RetrievalKitStatus *status
 );
+RetrievalKitGraphRetrievalBuilder *retrievalkit_graph_retrieval_builder_new_with_bm25(
+    uint32_t metric,
+    uint32_t encoding,
+    const char *corpus_id,
+    const char *schema_json,
+    float bm25_k1,
+    float bm25_b,
+    const char *stop_words_json,
+    RetrievalKitStatus *status
+);
 bool retrievalkit_graph_retrieval_builder_upsert_record_json(
     RetrievalKitGraphRetrievalBuilder *builder,
     const char *record_json,

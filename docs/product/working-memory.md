@@ -791,9 +791,9 @@ Approximate vector-only sizes for `24K` vectors:
   feature detection reports support. SimSIMD still reports
   `neon,neon_f16,dynamic`, not `neon_i8`, because this machine has
   `FEAT_DotProd=1` but `FEAT_I8MM=0`; keep RetrievalKit's guarded fallback path.
-- `BinaryQuantized` is a future size-constrained candidate retrieval option.
-  It may be necessary for `768d + data <20 MB`, but needs recall benchmarking
-  before use.
+- Binary quantization remains deferred size research, but it is not a public
+  `VectorEncoding` case or wrapper input. It must earn a complete storage,
+  scoring, persistence, and recall implementation before returning to an API.
 
 ## Recent Benchmark Takeaways
 
@@ -1820,3 +1820,24 @@ target inside the supported fewer-than-50K envelope.
   authorization, three fresh weighted-hybrid sessions, and independent
   validation. Full methodology and limitations are in
   `docs/product/reports/hybrid-performance-milestone-v1-report.md`.
+
+## 2026-08-18 Retrieval Parity Hardening
+
+- Every retrieval wrapper now exposes the same build-time BM25 configuration:
+  validated `k1`, `b`, and normalized stop words. Format V5 persists that
+  configuration even when compact snapshots omit `bm25.bin`, so lexical state
+  rebuilds with identical behavior. V1-V4 snapshots remain readable with the
+  historical defaults and upgrade to V5 on their next save.
+- Python base and graph packages now expose direct embedding-free
+  `keyword_search`, matching Rust and Swift's named lexical methods. TypeScript
+  and browser/WASM keep their idiomatic overloaded `search({ mode: "text" })`
+  surface, but now route it to Rust's direct BM25 query instead of simulating it
+  through hybrid search with `alpha = 0`. Kotlin's text overload is likewise a
+  direct BM25 query.
+- The unimplemented `BinaryQuantized` public enum/input was removed from Rust
+  and every boundary. Binary encoding remains deferred until the full
+  implementation and release evidence exist.
+- BM25 language analysis remains deliberately limited to deterministic Unicode
+  word segmentation and lowercase matching. Stemming, lemmatization, accent
+  normalization, and language-specific analyzers require versioned relevance
+  fixtures plus persistence/determinism evidence before product adoption.

@@ -43,7 +43,7 @@ RetrievalDatabase.Builder("notes").use { builder ->
     builder.upsert(Document("one", "Local search"), floatArrayOf(1f, 0f))
     builder.build().use { database ->
         database.search(floatArrayOf(1f, 0f))
-        database.search("local") // alpha = 0, no embedding required
+        database.search("local") // direct BM25, no embedding required
         database.search("local", floatArrayOf(1f, 0f), alpha = 0.6f)
     }
 }
@@ -52,6 +52,10 @@ RetrievalDatabase.Builder("notes").use { builder ->
 Base builders accept `Iterable<EmbeddedDocument>`, graph-only builders accept
 `Iterable<Record>`, and combined builders accept
 `Iterable<GraphRecordInput>` for bulk ingestion without keyed embedding maps.
+
+Pass `bm25 = Bm25Configuration(k1 = 1.4f, b = 0.7f, stopWords = setOf("the"))`
+to a retrieval-capable builder to configure lexical scoring. Rust validates and
+persists the configuration.
 
 `alpha = 1` uses vector-only candidate generation, `alpha = 0` uses BM25-only
 candidate generation, and intermediate values use both. Rust owns alpha

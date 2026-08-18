@@ -14,6 +14,12 @@ public enum class VectorEncoding {
     I8_SCALAR_QUANTIZED,
 }
 
+public data class Bm25Configuration(
+    public val k1: Float = 1.2f,
+    public val b: Float = 0.75f,
+    public val stopWords: Set<String> = emptySet(),
+)
+
 public sealed interface MetadataValue {
     public data class Text(public val value: String) : MetadataValue
     public data class Integer(public val value: Long) : MetadataValue
@@ -63,6 +69,15 @@ public data class SearchHit(
     public val score: Float,
     public val metadata: Metadata,
     public val trace: SearchTrace,
+)
+
+public data class KeywordHit(
+    public val documentId: String,
+    public val recordId: String,
+    public val text: String,
+    public val score: Float,
+    public val metadata: Metadata,
+    public val matchedTerms: List<String>,
 )
 
 public data class HybridTrace(

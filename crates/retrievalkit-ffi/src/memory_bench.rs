@@ -580,7 +580,6 @@ mod encoding_json {
             VectorEncoding::F16 => "f16",
             VectorEncoding::BF16 => "bf16",
             VectorEncoding::I8ScalarQuantized => "i8",
-            VectorEncoding::BinaryQuantized => "binary",
         })
     }
 

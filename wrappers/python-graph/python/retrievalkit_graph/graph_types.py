@@ -48,6 +48,15 @@ class SearchHit(TypedDict):
     trace: SearchTrace
 
 
+class KeywordHit(TypedDict):
+    chunk_id: int
+    document_id: str
+    text: str
+    metadata: Metadata
+    score: float
+    matched_terms: list[str]
+
+
 class HybridTrace(TypedDict):
     alpha: float
     vector_rank: int | None
@@ -73,12 +82,20 @@ class HybridHit(TypedDict):
 class VectorIndexConfiguration:
     dimension: int | None = None
     metric: Literal["cosine", "dot_product"] = "cosine"
-    encoding: Literal["f32", "f16", "bf16", "i8", "binary"] = "i8"
+    encoding: Literal["f32", "f16", "bf16", "i8"] = "i8"
+
+
+@dataclass(frozen=True)
+class Bm25Configuration:
+    k1: float = 1.2
+    b: float = 0.75
+    stop_words: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class RetrievalConfiguration:
     semantic: VectorIndexConfiguration
+    bm25: Bm25Configuration = field(default_factory=Bm25Configuration)
 
 
 GraphValue: TypeAlias = (
@@ -254,11 +271,13 @@ class GraphFileSizeReport(TypedDict):
 
 
 GraphSearchHit: TypeAlias = SearchHit
+GraphKeywordHit: TypeAlias = KeywordHit
 GraphHybridHit: TypeAlias = HybridHit
 
 
 __all__ = [
     "Chunk",
+    "Bm25Configuration",
     "GraphCardinality",
     "GraphCandidateProjection",
     "GraphChunkIdentity",
@@ -269,6 +288,7 @@ __all__ = [
     "GraphEdgeProvenance",
     "GraphFileSizeReport",
     "GraphHybridHit",
+    "GraphKeywordHit",
     "GraphMatch",
     "GraphMissingTargetPolicy",
     "GraphNode",

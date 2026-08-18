@@ -991,9 +991,6 @@ fn benchmark_kernel(
         VectorEncoding::F16 => benchmark_f16_kernel(config, dimension),
         VectorEncoding::BF16 => benchmark_bf16_kernel(config, dimension),
         VectorEncoding::I8ScalarQuantized => benchmark_i8_kernel(config, dimension),
-        VectorEncoding::BinaryQuantized => {
-            panic!("BinaryQuantized is not supported by kernel benchmark")
-        }
     }
 }
 
@@ -1879,7 +1876,6 @@ fn encoding_name(encoding: VectorEncoding) -> &'static str {
         VectorEncoding::F16 => "f16",
         VectorEncoding::BF16 => "bf16",
         VectorEncoding::I8ScalarQuantized => "i8-scalar-quantized",
-        VectorEncoding::BinaryQuantized => "binary-quantized",
     }
 }
 
@@ -1942,17 +1938,13 @@ fn encoded_bytes_per_value(encoding: VectorEncoding) -> usize {
         VectorEncoding::F32 => 4,
         VectorEncoding::F16 | VectorEncoding::BF16 => 2,
         VectorEncoding::I8ScalarQuantized => 1,
-        VectorEncoding::BinaryQuantized => 0,
     }
 }
 
 fn encoded_sidecar_bytes_per_vector(encoding: VectorEncoding) -> usize {
     match encoding {
         VectorEncoding::I8ScalarQuantized => std::mem::size_of::<f32>(),
-        VectorEncoding::F32
-        | VectorEncoding::F16
-        | VectorEncoding::BF16
-        | VectorEncoding::BinaryQuantized => 0,
+        VectorEncoding::F32 | VectorEncoding::F16 | VectorEncoding::BF16 => 0,
     }
 }
 

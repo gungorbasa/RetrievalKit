@@ -51,9 +51,12 @@ try {
 `search()` is the single retrieval family:
 
 - `{ mode: "vector", embedding }` performs exact vector search.
-- `{ mode: "text", text }` performs BM25-only search (`alpha = 0`).
+- `{ mode: "text", text }` calls Rust's direct embedding-free BM25 search.
 - `{ mode: "hybrid", text, embedding?, alpha }` uses Rust-owned candidate
   generation and fusion. At `alpha = 0`, the embedding may be omitted.
+
+Builders accept `bm25: { k1, b, stopWords }`. The validated configuration is
+owned and persisted by Rust, including when compact snapshots rebuild BM25.
 
 The first document embedding fixes the dimension in Rust. Add documents in
 bulk before `build()`. Embeddings always remain caller-provided

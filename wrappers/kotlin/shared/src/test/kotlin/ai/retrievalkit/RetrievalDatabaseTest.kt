@@ -34,6 +34,7 @@ class RetrievalDatabaseTest {
             corpusId = "unicode",
             metric = VectorMetric.DOT_PRODUCT,
             encoding = VectorEncoding.F32,
+            bm25 = Bm25Configuration(k1 = 1.7f, b = 0.4f, stopWords = setOf("ONLY")),
         ).use { builder ->
             builder.upsert(documents)
             builder.build().use { database ->
@@ -44,7 +45,8 @@ class RetrievalDatabaseTest {
 
                 val keyword = database.search("keyword", limit = 1)
                 assertEquals("second", keyword.single().documentId)
-                assertEquals(0f, keyword.single().trace.alpha)
+                assertEquals(listOf("keyword"), keyword.single().matchedTerms)
+                assertTrue(database.search("only").isEmpty())
 
                 val filtered = database.search(
                     embedding = floatArrayOf(1f, 0f),
@@ -58,6 +60,7 @@ class RetrievalDatabaseTest {
         RetrievalDatabase.validate(directory)
         RetrievalDatabase.load(directory).use { loaded ->
             assertEquals("second", loaded.search("keyword", limit = 1).single().documentId)
+            assertTrue(loaded.search("only").isEmpty())
             assertFailsWith<InvalidDimensionException> {
                 loaded.search(floatArrayOf(1f), limit = 1)
             }

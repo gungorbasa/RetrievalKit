@@ -74,7 +74,10 @@ export interface GeneratedWasmModule {
   readonly RetrievalDatabase: new (
     corpusId: string,
     metric: string,
-    encoding: string
+    encoding: string,
+    bm25K1: number,
+    bm25B: number,
+    stopWords: readonly string[]
   ) => GeneratedRetrievalDatabase;
   readonly GraphDatabase: new (
     corpusId: string,
@@ -84,7 +87,10 @@ export interface GeneratedWasmModule {
     corpusId: string,
     schema: unknown,
     metric: string,
-    encoding: string
+    encoding: string,
+    bm25K1: number,
+    bm25B: number,
+    stopWords: readonly string[]
   ) => GeneratedGraphRetrievalDatabase;
 }
 
@@ -207,7 +213,10 @@ class GeneratedWasmAdapter implements RetrievalKitWasmAdapter {
             value: new module.RetrievalDatabase(
               request.options.corpusId,
               request.options.metric ?? "cosine",
-              request.options.encoding ?? "i8"
+              request.options.encoding ?? "i8",
+              request.options.bm25?.k1 ?? 1.2,
+              request.options.bm25?.b ?? 0.75,
+              request.options.bm25?.stopWords ?? []
             )
           };
         case "graph":
@@ -225,7 +234,10 @@ class GeneratedWasmAdapter implements RetrievalKitWasmAdapter {
               request.options.corpusId,
               graphSchemaDto(request.options.schema),
               request.options.metric ?? "cosine",
-              request.options.encoding ?? "i8"
+              request.options.encoding ?? "i8",
+              request.options.bm25?.k1 ?? 1.2,
+              request.options.bm25?.b ?? 0.75,
+              request.options.bm25?.stopWords ?? []
             )
           };
       }
@@ -743,8 +755,7 @@ function keywordResults(value: unknown): readonly SearchResult[] {
       score: number(hit.score, "score"),
       keywordScore: number(hit.score, "score"),
       trace: {
-        kind: "hybrid",
-        alpha: 0,
+        kind: "keyword",
         matchedTerms: stringArray(hit.matchedTerms, "matchedTerms")
       }
     };

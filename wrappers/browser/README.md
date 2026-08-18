@@ -127,6 +127,9 @@ const hybrid = await database.search({
 });
 ```
 
+Retrieval builders accept `bm25: { k1, b, stopWords }`. Rust validates the
+configuration and uses it for text-only and hybrid ranking.
+
 Documents are flattened into one contiguous `Float32Array` per add operation.
 The wrapper transfers an owned copy to the Worker, so the caller's arrays are
 not detached. Query embeddings follow the same rule.

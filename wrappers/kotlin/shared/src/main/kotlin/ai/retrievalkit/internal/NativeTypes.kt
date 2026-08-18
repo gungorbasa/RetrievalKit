@@ -3,6 +3,7 @@ package ai.retrievalkit.internal
 import ai.retrievalkit.Document
 import ai.retrievalkit.HybridHit
 import ai.retrievalkit.HybridTrace
+import ai.retrievalkit.KeywordHit
 import ai.retrievalkit.Metadata
 import ai.retrievalkit.MetadataValue
 import ai.retrievalkit.SearchHit
@@ -64,6 +65,24 @@ internal data class NativeSearchHit(
         score = score,
         metadata = metadata.toMetadata(),
         trace = SearchTrace(vectorScore),
+    )
+}
+
+internal data class NativeKeywordHit(
+    val recordId: String,
+    val chunkKey: String,
+    val text: String,
+    val score: Float,
+    val metadata: Array<NativeMetadataEntry>,
+    val matchedTerms: Array<String>,
+) {
+    fun publicValue(): KeywordHit = KeywordHit(
+        documentId = chunkKey,
+        recordId = recordId,
+        text = text,
+        score = score,
+        metadata = metadata.toMetadata(),
+        matchedTerms = matchedTerms.toList(),
     )
 }
 

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from retrievalkit import (
+    Bm25Configuration,
     ChunkInput,
     CorruptIndexError,
     DimensionMismatchError,
@@ -115,7 +116,8 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
                 dimension=2,
                 metric="dot_product",
                 encoding="f32",
-            )
+            ),
+            bm25=Bm25Configuration(k1=1.7, b=0.4, stop_words=("the",)),
         ),
     )
     chunk_ids = builder.upsert(
@@ -126,7 +128,7 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
                 "fields": {"title": "Alpha"},
                 "metadata": {"tenant": "blue"},
             },
-            "chunks": [{"key": "summary", "text": "alpha retrieval"}],
+            "chunks": [{"key": "summary", "text": "the alpha retrieval"}],
         },
         embeddings={"summary": [1.0, 0.0]},
     )
@@ -135,6 +137,8 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
 
     hits = database.retrieval.semantic_search([1.0, 0.0], where={"tenant": "blue"})
     assert [hit["document_id"] for hit in hits] == ["alpha"]
+    assert database.retrieval.keyword_search("alpha")[0]["document_id"] == "alpha"
+    assert database.retrieval.keyword_search("the") == []
     assert (
         database.retrieval.hybrid_search("alpha", [1.0, 0.0])[0]["document_id"]
         == "alpha"
@@ -145,7 +149,11 @@ def test_retrieval_database_uses_capability_separated_api(tmp_path) -> None:
     database.save(tmp_path)
     RetrievalDatabase.validate(tmp_path)
     loaded = RetrievalDatabase.load(tmp_path)
-    assert loaded.retrieval.semantic_search([1.0, 0.0])[0]["text"] == "alpha retrieval"
+    assert (
+        loaded.retrieval.semantic_search([1.0, 0.0])[0]["text"]
+        == "the alpha retrieval"
+    )
+    assert loaded.retrieval.keyword_search("the") == []
 
 
 def test_progressive_retrieval_builder_infers_dimension_and_hides_identity() -> None:

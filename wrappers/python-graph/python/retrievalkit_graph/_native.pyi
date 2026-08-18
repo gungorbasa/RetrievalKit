@@ -8,6 +8,7 @@ from .graph_types import (
     GraphDirection,
     GraphScalar,
     HybridHit,
+    KeywordHit,
     SearchHit,
 )
 
@@ -53,6 +54,9 @@ class _GraphRetrievalDatabaseBuilder:
         schema_json: str,
         metric: str = "cosine",
         encoding: str = "i8",
+        k1: float = 1.2,
+        b: float = 0.75,
+        stop_words: list[str] = ...,
     ) -> None: ...
     def upsert_record(
         self,
@@ -142,6 +146,14 @@ class _GraphRetrievalDatabase:
         where: Filter | None = None,
         selection: _GraphSelection | None = None,
     ) -> list[SearchHit]: ...
+    def keyword_search(
+        self,
+        text: str,
+        *,
+        limit: int = 10,
+        where: Filter | None = None,
+        selection: _GraphSelection | None = None,
+    ) -> list[KeywordHit]: ...
     def hybrid_search(
         self,
         text: str,

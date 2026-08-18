@@ -435,10 +435,9 @@ pub(crate) fn parse_encoding(value: &str) -> Result<retrievalkit_core::VectorEnc
         "f16" => Ok(retrievalkit_core::VectorEncoding::F16),
         "bf16" => Ok(retrievalkit_core::VectorEncoding::BF16),
         "i8" => Ok(retrievalkit_core::VectorEncoding::I8ScalarQuantized),
-        "binary" => Ok(retrievalkit_core::VectorEncoding::BinaryQuantized),
         actual => Err(invalid_boundary(
             "encoding",
-            &format!("expected f32, f16, bf16, i8, or binary; got '{actual}'"),
+            &format!("expected f32, f16, bf16, or i8; got '{actual}'"),
         )),
     }
 }
